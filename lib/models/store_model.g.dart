@@ -21,6 +21,8 @@ class StoreModelAdapter extends TypeAdapter<StoreModel> {
       name: fields[1] as String,
       category: fields[2] as String,
       city: fields[3] as String,
+      updatedAt: fields[11] as String,
+      lastSynced: fields[12] as DateTime,
       address: fields[4] as String?,
       latitude: fields[5] as double?,
       longitude: fields[6] as double?,
@@ -28,8 +30,6 @@ class StoreModelAdapter extends TypeAdapter<StoreModel> {
       isOpen: fields[8] as bool,
       rating: fields[9] as double?,
       deliveryTimeMinutes: fields[10] as int?,
-      updatedAt: fields[11] as String,
-      lastSynced: fields[12] as DateTime,
     );
   }
 

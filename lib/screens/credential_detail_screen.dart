@@ -96,8 +96,8 @@ class _CredentialDetailScreenState extends State<CredentialDetailScreen> {
   String _decryptField(String encrypted) {
     try {
       if (encrypted.isEmpty) {
-      return '';
-    }
+        return '';
+      }
 
       // Check if it looks like base64
       final base64Regex = RegExp(r'^[A-Za-z0-9+/=]+$');

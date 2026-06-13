@@ -37,6 +37,7 @@ class DefaultFirebaseOptions {
     authDomain: 'erode-super-app.firebaseapp.com',
     storageBucket: 'erode-super-app.firebasestorage.app',
     measurementId: 'G-S1SK2TW95E',
+    databaseURL: 'https://erode-super-app-default-rtdb.firebaseio.com',
   );
 
   static const FirebaseOptions android = FirebaseOptions(

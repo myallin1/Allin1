@@ -1,10 +1,40 @@
 {
   "project_info": {
     "project_number": "357526153693",
+    "firebase_url": "https://erode-super-app-default-rtdb.firebaseio.com",
     "project_id": "erode-super-app",
     "storage_bucket": "erode-super-app.firebasestorage.app"
   },
   "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:357526153693:android:52a73ef55b9073544aee34",
+        "android_client_info": {
+          "package_name": "com.njtech.admininallin1"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "357526153693-02b0behmsf3k720jujg3e8j82frj04q7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC_GWgATZDWeKL0rk9YJAtA6ubWdUP7ROY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "357526153693-02b0behmsf3k720jujg3e8j82frj04q7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
     {
       "client_info": {
         "mobilesdk_app_id": "1:357526153693:android:d3356697afadca7b4aee34",
@@ -14,11 +44,85 @@
       },
       "oauth_client": [
         {
-          "client_id": "357526153693-lot8tk43a7ibj5evdmivi561h8vdt8n1.apps.googleusercontent.com",
+          "client_id": "357526153693-946ci9ftc76nahg6f09kov4tt3dl49i6.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.njtech.allin1",
-            "certificate_hash": "f444a3b7ed46fdafe11f23431c7630a9fa3fa492"
+            "certificate_hash": "d52e6496c707ab671543bef27e3007bca879a667"
+          }
+        },
+        {
+          "client_id": "357526153693-02b0behmsf3k720jujg3e8j82frj04q7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC_GWgATZDWeKL0rk9YJAtA6ubWdUP7ROY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "357526153693-02b0behmsf3k720jujg3e8j82frj04q7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:357526153693:android:7e71dc52bbaec2e74aee34",
+        "android_client_info": {
+          "package_name": "com.njtech.heroallin1"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "357526153693-1vek5p1e97ditmcsih1gvg67m8spe0pd.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.njtech.heroallin1",
+            "certificate_hash": "d52e6496c707ab671543bef27e3007bca879a667"
+          }
+        },
+        {
+          "client_id": "357526153693-02b0behmsf3k720jujg3e8j82frj04q7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC_GWgATZDWeKL0rk9YJAtA6ubWdUP7ROY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "357526153693-02b0behmsf3k720jujg3e8j82frj04q7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:357526153693:android:078b09a3ccc29cf64aee34",
+        "android_client_info": {
+          "package_name": "com.njtech.myallin1"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "357526153693-4roph0ocpi0otlm2k55ir0du6uo11ejm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.njtech.myallin1",
+            "certificate_hash": "d52e6496c707ab671543bef27e3007bca879a667"
           }
         },
         {

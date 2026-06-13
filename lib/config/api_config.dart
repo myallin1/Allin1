@@ -8,6 +8,8 @@
 // Version: 1.0.0
 // ================================================================
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 /// Primary API configuration for the Allin1 Super App commerce backend.
 ///
 /// This class provides:
@@ -42,6 +44,11 @@ abstract final class ApiConfig {
 
   /// Qwen Access Token (to be injected from local storage session)
   static String? qwenAccessToken;
+
+  /// Ola Maps API Key (Krutrim)
+  /// Loaded from the local `.env` file via flutter_dotenv.
+  static String get olaMapsApiKey =>
+      (dotenv.env['OLA_MAPS_API_KEY'] ?? '').trim();
 
   // ================================================================
   // Timeout Configuration (milliseconds)

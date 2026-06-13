@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../services/auth_service.dart';
 import '../services/session_service.dart';
+import 'auth/profile_setup_screen.dart';
 import 'dashboard_screen.dart';
 
 // ── Theme ──────────────────────────────────────────────────────
@@ -64,7 +65,7 @@ class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
   bool _loading = false;
   String _error = '';
-  UserType _selectedUserType = UserType.user; // Default to passenger/user
+  UserType _selectedUserType = UserType.customer; // Default to customer
   bool _needsPhoneNumber = false;
   final TextEditingController _phoneController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
@@ -117,16 +118,19 @@ class _LoginScreenState extends State<LoginScreen>
       }
 
       if (result.success && result.user != null) {
-        // Check if phone number is missing in Firestore
-        final userData = await authService.getUserData(result.user!.uid);
-        final phone = userData?['phone'] as String? ?? '';
-
-        if (phone.isEmpty) {
+        if (result.requiresProfileSetup) {
           setState(() {
             _loading = false;
-            _needsPhoneNumber = true;
-            _currentUser = result.user;
           });
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute<void>(
+              builder: (_) => ProfileSetupScreen(
+                preferredRole: _selectedUserType == UserType.hero
+                    ? UserType.hero
+                    : UserType.customer,
+              ),
+            ),
+          );
         } else {
           _navigateAfterLogin();
         }
@@ -135,6 +139,16 @@ class _LoginScreenState extends State<LoginScreen>
           _loading = false;
           _error = result.error ?? 'Google sign-in failed';
         });
+        if (_selectedUserType == UserType.admin && mounted) {
+          debugPrint('Admin login warning: ${result.error ?? 'Unknown admin Google sign-in error'}');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.error ?? 'Admin login failed'),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (!mounted) {
@@ -144,6 +158,16 @@ class _LoginScreenState extends State<LoginScreen>
         _loading = false;
         _error = 'Sign-in failed. Please try again.\n$e';
       });
+      if (_selectedUserType == UserType.admin) {
+        debugPrint('Admin login warning: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Admin login failed: $e'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -161,7 +185,7 @@ class _LoginScreenState extends State<LoginScreen>
       if (result.user != null) {
         // Navigate directly to Dashboard after successful guest login
         if (mounted) {
-          _selectedUserType = UserType.user;
+          _selectedUserType = UserType.customer;
           _navigateAfterLogin();
         }
       }
@@ -388,25 +412,26 @@ class _LoginScreenState extends State<LoginScreen>
         const SizedBox(height: 8),
         Row(
           children: [
-            // Rider Button
+            // Hero Button
             Expanded(
               child: _userTypeButton(
                 icon: Icons.directions_car,
-                label: 'Rider',
-                isSelected: _selectedUserType == UserType.rider,
+                label: 'Hero',
+                isSelected: _selectedUserType == UserType.hero,
                 color: kGreen,
-                onTap: () => setState(() => _selectedUserType = UserType.rider),
+                onTap: () => setState(() => _selectedUserType = UserType.hero),
               ),
             ),
             const SizedBox(width: 8),
-            // User/Passenger Button
+            // Customer Button
             Expanded(
               child: _userTypeButton(
                 icon: Icons.person,
-                label: 'User',
-                isSelected: _selectedUserType == UserType.user,
+                label: 'Customer',
+                isSelected: _selectedUserType == UserType.customer,
                 color: kPurple,
-                onTap: () => setState(() => _selectedUserType = UserType.user),
+                onTap: () =>
+                    setState(() => _selectedUserType = UserType.customer),
               ),
             ),
             const SizedBox(width: 8),
@@ -432,8 +457,8 @@ class _LoginScreenState extends State<LoginScreen>
     Color color;
 
     switch (_selectedUserType) {
-      case UserType.rider:
-        label = 'Rider';
+      case UserType.hero:
+        label = 'Hero';
         icon = Icons.directions_car;
         color = kGreen;
         break;
@@ -442,8 +467,8 @@ class _LoginScreenState extends State<LoginScreen>
         icon = Icons.admin_panel_settings;
         color = kOrange;
         break;
-      case UserType.user:
-        label = 'User';
+      case UserType.customer:
+        label = 'Customer';
         icon = Icons.person;
         color = kPurple;
         break;
@@ -596,7 +621,10 @@ class _LoginScreenState extends State<LoginScreen>
             ),
 
             // ── Guest Button ──────────────────────────────────
-            _guestButton(),
+            Visibility(
+              visible: false,
+              child: _guestButton(),
+            ),
           ],
 
           // ── Error ────────────────────────────────────────

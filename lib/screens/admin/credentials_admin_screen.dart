@@ -1290,10 +1290,7 @@ class _AdminManagedViewState extends State<_AdminManagedView> {
         );
       }
     }
-
   }
-
-
 
   Future<void> _updateAdminCredential({
     required String docId,
@@ -1305,7 +1302,6 @@ class _AdminManagedViewState extends State<_AdminManagedView> {
     String? notes,
   }) async {
     try {
-
       // Encrypt fields
       String encryptedUsername = username;
       String encryptedPassword = password;
@@ -1337,7 +1333,6 @@ class _AdminManagedViewState extends State<_AdminManagedView> {
       });
 
       if (mounted) {
-
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Credential updated successfully'),
@@ -1348,7 +1343,6 @@ class _AdminManagedViewState extends State<_AdminManagedView> {
       }
     } catch (e) {
       if (mounted) {
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error updating credential: $e'),

@@ -8,7 +8,7 @@ class SellerLoginScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const LoginScreen(
-      presetUserType: UserType.user,
+      presetUserType: UserType.customer,
       lockUserType: true,
       lockedUserLabel: 'Seller',
       title: 'Seller Login',
@@ -24,10 +24,10 @@ class RiderLoginScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const LoginScreen(
-      presetUserType: UserType.rider,
+      presetUserType: UserType.hero,
       lockUserType: true,
-      lockedUserLabel: 'Rider',
-      title: 'Rider Login',
+      lockedUserLabel: 'Hero',
+      title: 'Hero Login',
       subtitle: 'Manage rides, deliveries, and earnings',
       postLoginRoute: '/rider-portal',
     );
@@ -56,7 +56,7 @@ class CustomerLoginScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const LoginScreen(
-      presetUserType: UserType.user,
+      presetUserType: UserType.customer,
       lockUserType: true,
       lockedUserLabel: 'Customer',
       title: 'Customer Login',

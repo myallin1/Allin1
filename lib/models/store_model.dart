@@ -56,6 +56,8 @@ class StoreModel extends HiveObject {
     required this.name,
     required this.category,
     required this.city,
+    required this.updatedAt,
+    required this.lastSynced,
     this.address,
     this.latitude,
     this.longitude,
@@ -63,8 +65,6 @@ class StoreModel extends HiveObject {
     this.isOpen = true,
     this.rating,
     this.deliveryTimeMinutes,
-    required this.updatedAt,
-    required this.lastSynced,
   });
 
   factory StoreModel.fromJson(Map<String, dynamic> json) => StoreModel(
@@ -79,7 +79,8 @@ class StoreModel extends HiveObject {
         isOpen: (json['is_open'] as bool?) ?? true,
         rating: (json['rating'] as num?)?.toDouble(),
         deliveryTimeMinutes: json['delivery_time_minutes'] as int?,
-        updatedAt: (json['updated_at'] as String?) ?? DateTime.now().toIso8601String(),
+        updatedAt:
+            (json['updated_at'] as String?) ?? DateTime.now().toIso8601String(),
         lastSynced: DateTime.now(),
       );
 

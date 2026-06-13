@@ -1,411 +1,400 @@
-// ================================================================
-// Order Tracking Screen
-// Allin1 Super App - Allin1
+﻿// ================================================================
+// order_tracking_screen.dart — Real Order Tracking
+// Super App · Dark/Pink premium theme · May 2026
 // ================================================================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-const Color kSurface = Color(0xFF0D0D18);
-const Color kCard = Color(0xFF141420);
-const Color kCard2 = Color(0xFF1A1A28);
-const Color kPurple = Color(0xFF7B6FE0);
-const Color kGreen = Color(0xFF3DBA6F);
-const Color kGold = Color(0xFFF5C542);
-const Color kRed = Color(0xFFE05555);
-const Color kOrange = Color(0xFFE07C6F);
-const Color kText = Color(0xFFEEEEF5);
-const Color kMuted = Color(0xFF7777A0);
-const Color kBorder = Color(0x267B6FE0);
+const _kBg     = Color(0xFF0C0A14);
+const _kCard   = Color(0xFF1C1929);
+const _kPink   = Color(0xFFFF4FA3);
+const _kPinkD  = Color(0xFFBE2A7A);
+const _kText   = Color(0xFFFFFFFF);
+const _kMuted  = Color(0xFF7A7890);
+const _kBorder = Color(0xFF2E2845);
+
+class CartItem {
+  final String name;
+  final int qty;
+  final double price;
+  const CartItem({required this.name, required this.qty, required this.price});
+  Map<String, dynamic> toMap() =>
+      {'name': name, 'qty': qty, 'price': price, 'subtotal': qty * price};
+}
 
 class OrderTrackingScreen extends StatefulWidget {
-  final String orderId;
-
-  const OrderTrackingScreen({required this.orderId, super.key});
-
+  final List<CartItem> items;
+  final double total;
+  final String storeType;
+  const OrderTrackingScreen({
+    super.key,
+    required this.items,
+    required this.total,
+    required this.storeType,
+  });
   @override
   State<OrderTrackingScreen> createState() => _OrderTrackingScreenState();
-
-  @override
-  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
-    super.debugFillProperties(properties);
-    properties.add(StringProperty('orderId', orderId));
-  }
 }
 
 class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
+  String? _orderId;
+  bool _uploading = true;
+  String? _error;
+  Stream<DocumentSnapshot>? _orderStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _pushOrderToFirebase();
+  }
+
+  Future<void> _pushOrderToFirebase() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid ?? 'guest';
+      final ref = await FirebaseFirestore.instance.collection('orders').add({
+        'customerId': uid,
+        'storeType': widget.storeType,
+        'items': widget.items.map((e) => e.toMap()).toList(),
+        'total': widget.total,
+        'status': 'placed',
+        'heroId': null,
+        'heroName': null,
+        'heroPhone': null,
+        'placedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      if (!mounted) return;
+      setState(() {
+        _orderId = ref.id;
+        _uploading = false;
+        _orderStream = ref.snapshots();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _uploading = false;
+        _error = e.toString();
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: _kBg,
       appBar: AppBar(
-        backgroundColor: kSurface,
+        backgroundColor: _kBg,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: kText),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _kText, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
-          'Order Tracking',
-          style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w600),
-        ),
-      ),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('orders')
-            .doc(widget.orderId)
-            .snapshots(),
-        builder: (ctx, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: kGold),
-            );
-          }
-
-          if (!snapshot.hasData || !snapshot.data!.exists) {
-            return Center(
-              child: Text(
-                'Order not found',
-                style: GoogleFonts.outfit(color: kMuted),
-              ),
-            );
-          }
-
-          final order = snapshot.data!.data()! as Map<String, dynamic>;
-          return _buildContent(order, context);
-        },
-      ),
-    );
-  }
-
-  Widget _buildContent(Map<String, dynamic> order, BuildContext context) {
-    final status = order['status'] as String? ?? 'pending';
-    final paymentStatus = order['paymentStatus'] as String? ?? 'pending';
-    final items = order['items'] as List<dynamic>? ?? [];
-    final total = (order['total'] as num?)?.toDouble() ?? 0;
-    final address = order['deliveryAddress'] as String? ?? '';
-    final estimatedTime = order['estimatedTime'] as String? ?? '';
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildProgressBar(status),
-          const SizedBox(height: 24),
-          _buildOrderDetails(items, total, address, estimatedTime),
-          const SizedBox(height: 20),
-          _buildActionButtons(status, paymentStatus, total, context),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProgressBar(String status) {
-    final stages = ['placed', 'accepted', 'ontheway', 'delivered'];
-    final currentIndex = stages.indexOf(status);
-    final labels = ['Order Placed', 'Accepted', 'On the Way', 'Delivered'];
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: kCard2,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kBorder),
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List.generate(4, (index) {
-              final isCompleted = index <= currentIndex;
-              final isActive = index == currentIndex;
-
-              return Column(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: isCompleted ? kGreen : kCard,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color:
-                            isActive ? kGold : (isCompleted ? kGreen : kMuted),
-                        width: 2,
-                      ),
-                    ),
-                    child: isCompleted
-                        ? const Icon(Icons.check, color: Colors.white, size: 18)
-                        : (isActive
-                            ? Container(
-                                width: 12,
-                                height: 12,
-                                decoration: const BoxDecoration(
-                                  color: kGold,
-                                  shape: BoxShape.circle,
-                                ),
-                              )
-                            : null),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    labels[index],
-                    style: GoogleFonts.outfit(
-                      color: isCompleted ? kText : kMuted,
-                      fontSize: 10,
-                    ),
-                  ),
-                ],
-              );
-            }),
-          ),
-          // Progress line
-          const SizedBox(height: 12),
-          Row(
-            children: List.generate(3, (index) {
-              final isFilled = index < currentIndex;
-              return Expanded(
-                child: Container(
-                  height: 3,
-                  color: isFilled ? kGreen : kBorder,
-                ),
-              );
-            }),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOrderDetails(
-    List<dynamic> items,
-    double total,
-    String address,
-    String estimatedTime,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: kCard2,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: kBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'ORDER DETAILS',
+        title: Text('Order Tracking',
             style: GoogleFonts.outfit(
-              color: kMuted,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1,
-            ),
-          ),
-          const SizedBox(height: 12),
+                color: _kText, fontSize: 18, fontWeight: FontWeight.w800)),
+        centerTitle: true,
+      ),
+      body: _uploading
+          ? _buildUploading()
+          : _error != null
+              ? _buildError()
+              : _buildTracking(),
+    );
+  }
 
-          // Items
-          ...items.map((item) {
-            final itemMap = item as Map<String, dynamic>;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Text(
-                    itemMap['emoji']?.toString() ?? '📦',
-                    style: const TextStyle(fontSize: 18),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '${itemMap['name']} x${itemMap['quantity']}',
-                      style: GoogleFonts.outfit(color: kText, fontSize: 14),
-                    ),
-                  ),
-                  Text(
-                    '₹${(itemMap['price'] as num).toStringAsFixed(0)}',
-                    style: GoogleFonts.outfit(color: kText),
-                  ),
-                ],
-              ),
-            );
-          }),
+  Widget _buildUploading() => const Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          CircularProgressIndicator(color: _kPink),
+          SizedBox(height: 16),
+          Text('Placing your order…', style: TextStyle(color: _kMuted, fontSize: 14)),
+        ]),
+      );
 
-          const Divider(color: kBorder),
-
-          // Total
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Total',
+  Widget _buildError() => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.error_outline_rounded, color: _kPink, size: 48),
+            const SizedBox(height: 12),
+            Text('Failed to place order',
                 style: GoogleFonts.outfit(
-                  color: kText,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              Text(
-                '₹${total.toStringAsFixed(0)}',
-                style: GoogleFonts.outfit(
-                  color: kGold,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          // Address
-          if (address.isNotEmpty) ...[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.location_on, color: kMuted, size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    address,
-                    style: GoogleFonts.outfit(color: kMuted, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
+                    color: _kText, fontSize: 16, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
-          ],
+            Text(_error ?? '',
+                style: GoogleFonts.outfit(color: _kMuted, fontSize: 12),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: _kPink),
+              onPressed: () {
+                setState(() { _uploading = true; _error = null; });
+                _pushOrderToFirebase();
+              },
+              child: Text('Retry',
+                  style: GoogleFonts.outfit(
+                      color: Colors.white, fontWeight: FontWeight.w700)),
+            ),
+          ]),
+        ),
+      );
 
-          // Estimated time
-          if (estimatedTime.isNotEmpty) ...[
-            Row(
-              children: [
-                const Icon(Icons.access_time, color: kMuted, size: 16),
-                const SizedBox(width: 8),
-                Text(
-                  'Estimated: $estimatedTime',
-                  style: GoogleFonts.outfit(color: kMuted, fontSize: 12),
+  Widget _buildTracking() {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: _orderStream,
+      builder: (ctx, snap) {
+        final data     = snap.data?.data() as Map<String, dynamic>?;
+        final status   = data?['status']   as String? ?? 'placed';
+        final heroName = data?['heroName'] as String?;
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _buildBanner(status, heroName),
+            const SizedBox(height: 20),
+            _buildTimeline(status),
+            const SizedBox(height: 20),
+            _buildSummary(),
+            const SizedBox(height: 20),
+            _buildSoundbox(),
+            const SizedBox(height: 20),
+            if (status != 'delivered') _buildOrderId(),
+          ]),
+        );
+      },
+    );
+  }
+
+  Widget _buildBanner(String status, String? heroName) {
+    final assigned = status != 'placed';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: assigned
+              ? [const Color(0xFF1A3A2A), const Color(0xFF0F2A1A)]
+              : [_kPink.withValues(alpha: 0.18), _kPinkD.withValues(alpha: 0.10)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+            color: assigned
+                ? Colors.green.withValues(alpha: 0.4)
+                : _kPink.withValues(alpha: 0.35),
+            width: 1.5),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: (assigned ? Colors.green : _kPink).withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              assigned
+                  ? Icons.delivery_dining_rounded
+                  : Icons.check_circle_outline_rounded,
+              color: assigned ? Colors.greenAccent : _kPink,
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(
+                assigned ? 'Hero Assigned! 🎉' : 'Order Confirmed ✅',
+                style: GoogleFonts.outfit(
+                    color: _kText, fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                assigned
+                    ? '${heroName ?? 'Your Hero'} is on the way!'
+                    : 'Waiting for a Parcel Hero to accept…',
+                style: GoogleFonts.outfit(color: _kMuted, fontSize: 12),
+              ),
+            ]),
+          ),
+        ]),
+        if (!assigned) ...[
+          const SizedBox(height: 14),
+          LinearProgressIndicator(
+            backgroundColor: _kBorder,
+            color: _kPink,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          const SizedBox(height: 8),
+          Text('This usually takes 1–3 minutes',
+              style: GoogleFonts.outfit(color: _kMuted, fontSize: 11)),
+        ],
+      ]),
+    );
+  }
+
+  Widget _buildTimeline(String status) {
+    const steps = [
+      _Step('placed',    'Order Placed',     Icons.shopping_bag_outlined),
+      _Step('assigned',  'Hero Assigned',    Icons.person_pin_circle_rounded),
+      _Step('picked',    'Parcel Picked Up', Icons.inventory_2_rounded),
+      _Step('delivered', 'Delivered',        Icons.home_rounded),
+    ];
+    const ord = {'placed': 0, 'assigned': 1, 'picked': 2, 'delivered': 3};
+    final cur  = ord[status] ?? 0;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: _kCard,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _kBorder),
+      ),
+      child: Column(
+        children: List.generate(steps.length, (i) {
+          final done   = i <= cur;
+          final active = i == cur;
+          final isLast = i == steps.length - 1;
+          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Column(children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 400),
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: done
+                      ? (active ? _kPink : Colors.green.withValues(alpha: 0.8))
+                      : _kBorder,
+                  boxShadow: active
+                      ? [BoxShadow(
+                            color: _kPink.withValues(alpha: 0.45),
+                            blurRadius: 12, spreadRadius: 1)]
+                      : [],
                 ),
-              ],
+                child: Icon(
+                  done ? (active ? steps[i].icon : Icons.check_rounded)
+                       : steps[i].icon,
+                  color: done ? Colors.white : _kMuted, size: 18),
+              ),
+              if (!isLast)
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 400),
+                  width: 2, height: 36,
+                  color: i < cur
+                      ? Colors.green.withValues(alpha: 0.6)
+                      : _kBorder,
+                ),
+            ]),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 6, bottom: 8),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(steps[i].label,
+                      style: GoogleFonts.outfit(
+                          color: done ? _kText : _kMuted,
+                          fontSize: 13,
+                          fontWeight: active ? FontWeight.w800 : FontWeight.w500)),
+                  if (active && status == 'placed')
+                    Text('Searching for nearby heroes…',
+                        style: GoogleFonts.outfit(color: _kPink, fontSize: 11)),
+                ]),
+              ),
             ),
-          ],
-        ],
+          ]);
+        }),
       ),
     );
   }
 
-  Widget _buildActionButtons(
-    String status,
-    String paymentStatus,
-    double total,
-    BuildContext context,
-  ) {
-    return Column(
-      children: [
-        // Cancel button (only if pending)
-        if (status == 'pending')
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: _cancelOrder,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: kRed,
-                side: const BorderSide(color: kRed),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              child: Text(
-                'Cancel Order',
-                style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ),
-
-        if (status == 'pending') const SizedBox(height: 12),
-
-        // Contact vendor
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: _contactVendor,
-            icon: const Icon(Icons.chat_bubble_outline),
-            label: const Text('Contact Vendor'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kGreen,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-          ),
-        ),
-
-        // Pay Now button (if delivered but not paid)
-        if (status == 'delivered' && paymentStatus != 'paid') ...[
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => Navigator.pushNamed(
-                context,
-                '/payment',
-                arguments: total,
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: kGold,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              child: Text(
-                'Pay Now • ₹${total.toStringAsFixed(0)}',
-                style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Future<void> _cancelOrder() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: kCard2,
-        title: Text('Cancel Order?', style: GoogleFonts.outfit(color: kText)),
-        content: Text(
-          'Are you sure you want to cancel this order?',
-          style: GoogleFonts.outfit(color: kMuted),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('No', style: GoogleFonts.outfit(color: kMuted)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Yes, Cancel', style: GoogleFonts.outfit(color: kRed)),
-          ),
-        ],
+  Widget _buildSummary() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: _kCard,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _kBorder),
       ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Order Summary',
+            style: GoogleFonts.outfit(
+                color: _kText, fontSize: 14, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 12),
+        ...widget.items.map((item) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(children: [
+            Text('${item.qty}×',
+                style: GoogleFonts.outfit(
+                    color: _kPink, fontSize: 13, fontWeight: FontWeight.w700)),
+            const SizedBox(width: 8),
+            Expanded(child: Text(item.name,
+                style: GoogleFonts.outfit(color: _kText, fontSize: 13))),
+            Text('₹${(item.qty * item.price).toStringAsFixed(0)}',
+                style: GoogleFonts.outfit(color: _kMuted, fontSize: 13)),
+          ]),
+        )),
+        const Divider(color: _kBorder, height: 20),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text('Total',
+              style: GoogleFonts.outfit(
+                  color: _kText, fontSize: 15, fontWeight: FontWeight.w800)),
+          Text('₹${widget.total.toStringAsFixed(0)}',
+              style: GoogleFonts.outfit(
+                  color: _kPink, fontSize: 16, fontWeight: FontWeight.w900)),
+        ]),
+      ]),
     );
-
-    if (confirm ?? false) {
-      await FirebaseFirestore.instance
-          .collection('orders')
-          .doc(widget.orderId)
-          .update({'status': 'cancelled'});
-
-      if (mounted) {
-        Navigator.pop(context);
-      }
-    }
   }
 
-  Future<void> _contactVendor() async {
-    final waUrl = Uri.parse('https://wa.me/918681869091');
-    if (await canLaunchUrl(waUrl)) {
-      await launchUrl(waUrl, mode: LaunchMode.externalApplication);
-    }
+  Widget _buildSoundbox() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [
+          _kPink.withValues(alpha: 0.14),
+          _kPinkD.withValues(alpha: 0.08),
+        ]),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _kPink.withValues(alpha: 0.3), width: 1.5),
+      ),
+      child: Row(children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: _kPink.withValues(alpha: 0.18), shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.volume_up_rounded, color: _kPink, size: 24),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Soundbox Payment',
+                style: GoogleFonts.outfit(
+                    color: _kText, fontSize: 14, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Text(
+              "Pay via UPI/QR to our Soundbox when the Hero arrives. "
+              "You'll hear a voice confirmation on delivery.",
+              style: GoogleFonts.outfit(color: _kMuted, fontSize: 11),
+            ),
+          ]),
+        ),
+      ]),
+    );
   }
+
+  Widget _buildOrderId() => Center(
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Text('Order ID: ${_orderId ?? "—"}',
+              style: GoogleFonts.outfit(color: _kMuted, fontSize: 11)),
+        ),
+      );
+}
+
+class _Step {
+  final String id, label;
+  final IconData icon;
+  const _Step(this.id, this.label, this.icon);
 }

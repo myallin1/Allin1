@@ -23,13 +23,13 @@ class RewardModelAdapter extends TypeAdapter<RewardModel> {
       emoji: fields[3] as String,
       coins: fields[4] as int,
       channel: fields[5] as String,
+      updatedAt: fields[11] as String,
+      lastSynced: fields[12] as DateTime,
       taskUrl: fields[6] as String?,
       internalAction: fields[7] as String?,
       isHot: fields[8] as bool,
       status: fields[9] as String,
       expiresAt: fields[10] as String?,
-      updatedAt: fields[11] as String,
-      lastSynced: fields[12] as DateTime,
     );
   }
 

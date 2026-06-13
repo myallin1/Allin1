@@ -1,5 +1,5 @@
 // lib/main_seller.dart
-// Allin1 — SELLER Web App Entry Point
+// Allin1 — SELLER App Entry Point (Food/E-commerce Pipeline)
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
 import 'screens/seller_dashboard_screen.dart';
+import 'screens/seller_menu_setup_screen.dart';
+import 'screens/seller_onboarding_screen.dart';
 import 'screens/seller_screen.dart';
 import 'services/session_service.dart';
 
@@ -36,7 +38,7 @@ class SellerApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (_) => const LoginScreen(
-              presetUserType: UserType.rider,
+              presetUserType: UserType.customer,
               lockUserType: true,
               title: 'Seller Login',
               subtitle: 'Manage your Allin1 store',
@@ -45,6 +47,16 @@ class SellerApp extends StatelessWidget {
             ),
         '/seller-home': (_) => const SellerDashboardScreen(),
         '/seller-store': (_) => const SellerScreen(),
+        '/seller-onboarding': (_) => const SellerOnboardingScreen(),
+      },
+      onGenerateRoute: (settings) {
+        if (settings.name == '/seller-menu-setup') {
+          final sellerId = settings.arguments as String;
+          return MaterialPageRoute(
+            builder: (_) => SellerMenuSetupScreen(sellerId: sellerId),
+          );
+        }
+        return null;
       },
     );
   }

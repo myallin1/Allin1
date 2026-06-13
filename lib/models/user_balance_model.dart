@@ -41,13 +41,13 @@ class UserBalanceModel extends HiveObject {
 
   UserBalanceModel({
     required this.userId,
+    required this.updatedAt,
+    required this.lastSynced,
     this.pendingCoins = 0,
     this.verifiedCoins = 0,
     this.walletRupees = 0.0,
     this.lifetimeCoins = 0,
     this.completedTaskCount = 0,
-    required this.updatedAt,
-    required this.lastSynced,
   });
 
   /// Total coins (pending + verified)
@@ -74,8 +74,8 @@ class UserBalanceModel extends HiveObject {
         lifetimeCoins: (json['lifetime_coins'] as num?)?.toInt() ?? 0,
         completedTaskCount:
             (json['completed_task_count'] as num?)?.toInt() ?? 0,
-        updatedAt: (json['updated_at'] as String?) ??
-            DateTime.now().toIso8601String(),
+        updatedAt:
+            (json['updated_at'] as String?) ?? DateTime.now().toIso8601String(),
         lastSynced: DateTime.now(),
       );
 

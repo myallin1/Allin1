@@ -15,6 +15,8 @@ class CustomerLoginScreen extends StatefulWidget {
 }
 
 class _CustomerLoginScreenState extends State<CustomerLoginScreen> {
+  static const String _googleWebClientId =
+      '357526153693-02b0behmsf3k720jujg3e8j82frj04q7.apps.googleusercontent.com';
   static const Color _bg = Color(0xFF0D0D0D);
   static const Color _border = Color(0xFF2C2C2C);
 
@@ -24,10 +26,9 @@ class _CustomerLoginScreenState extends State<CustomerLoginScreen> {
     setState(() => _isLoading = true);
     try {
       final GoogleSignIn googleSignIn = GoogleSignIn(
-        clientId: kIsWeb
-            ? '357526153693-02b0behmsf3k720jujg3e8j82frj04q7.apps.googleusercontent.com'
-            : null,
-        scopes: ['email', 'profile'],
+        clientId: kIsWeb ? _googleWebClientId : null,
+        serverClientId: kIsWeb ? null : _googleWebClientId,
+        scopes: const ['email', 'profile'],
       );
 
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
@@ -45,7 +46,11 @@ class _CustomerLoginScreenState extends State<CustomerLoginScreen> {
         idToken: googleAuth.idToken,
       );
 
-      final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+      final userCredential =
+          await FirebaseAuth.instance.signInWithCredential(credential);
+
+      // 🔥 Force refresh to fetch latest claims
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
 
       // ── Local-First: kick off background delta-sync after login ──
       final uid = userCredential.user?.uid;
@@ -225,27 +230,30 @@ class _CustomerLoginScreenState extends State<CustomerLoginScreen> {
               const SizedBox(height: 16),
 
               // ── Guest Mode ──
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    '/dashboard',
-                    (route) => false,
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    side: const BorderSide(color: _border),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+              Visibility(
+                visible: false,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      '/dashboard',
+                      (route) => false,
                     ),
-                  ),
-                  child: const Text(
-                    'Continue as Guest',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      side: const BorderSide(color: _border),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: const Text(
+                      'Continue as Guest',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),

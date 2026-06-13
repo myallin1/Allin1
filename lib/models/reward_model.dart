@@ -60,13 +60,13 @@ class RewardModel extends HiveObject {
     required this.emoji,
     required this.coins,
     required this.channel,
+    required this.updatedAt,
+    required this.lastSynced,
     this.taskUrl,
     this.internalAction,
     this.isHot = false,
     this.status = 'available',
     this.expiresAt,
-    required this.updatedAt,
-    required this.lastSynced,
   });
 
   RewardStatus get rewardStatus {
@@ -98,7 +98,8 @@ class RewardModel extends HiveObject {
         isHot: (json['is_hot'] as bool?) ?? false,
         status: (json['status'] as String?) ?? 'available',
         expiresAt: json['expires_at'] as String?,
-        updatedAt: (json['updated_at'] as String?) ?? DateTime.now().toIso8601String(),
+        updatedAt:
+            (json['updated_at'] as String?) ?? DateTime.now().toIso8601String(),
         lastSynced: DateTime.now(),
       );
 

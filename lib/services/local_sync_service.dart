@@ -16,7 +16,9 @@
 
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:http/http.dart' as http;
 
@@ -36,10 +38,11 @@ const String _kRewardsSyncKey = 'rewards_last_sync';
 const String _kBalanceSyncKey = 'balance_last_sync';
 
 // ── TrailBase Configuration ───────────────────────────────────────────────────
-// TODO(CEO): Replace with your Google VM's public IP once TrailBase is deployed.
+// Set TRAILBASE_URL in your .env file once your backend is deployed.
 // Format: 'http://<VM_PUBLIC_IP>:4000/api/v1'  (no trailing slash)
 // Example: 'http://34.100.200.50:4000/api/v1'
-const String _kTrailBaseUrl = 'https://trailbase.erode-app.com/api/v1';
+// Leave blank or omit to disable sync (app runs on cached/empty data).
+final String _kTrailBaseUrl = (dotenv.env['TRAILBASE_URL'] ?? '').trim();
 
 // Delta sync window: max age before forcing a full re-sync (24 hours)
 const Duration _kMaxSyncAge = Duration(hours: 24);
@@ -116,12 +119,17 @@ class LocalSyncService {
   Future<_BoxSyncResult> syncStores(String city) async {
     _assertInitialized();
 
+    if (_kTrailBaseUrl.isEmpty) {
+      debugPrint('[LocalSync] TrailBase URL not configured — skipping store sync.');
+      return const _BoxSyncResult(recordsSynced: 0);
+    }
+
     final lastSync = _getLastSync(_kStoresSyncKey);
 
     // Respect cooldown — don't hammer the server
     if (lastSync != null && _withinCooldown(lastSync)) {
       debugPrint('[LocalSync] Stores within cooldown, using cache.');
-      return _BoxSyncResult(recordsSynced: 0);
+      return const _BoxSyncResult(recordsSynced: 0);
     }
 
     try {
@@ -132,7 +140,7 @@ class LocalSyncService {
 
       final records = await _deltaFetch(endpoint);
       if (records == null) {
-        return _BoxSyncResult(recordsSynced: 0);
+        return const _BoxSyncResult(recordsSynced: 0);
       }
 
       int synced = 0;
@@ -160,10 +168,15 @@ class LocalSyncService {
   Future<_BoxSyncResult> syncRewards(String userId) async {
     _assertInitialized();
 
+    if (_kTrailBaseUrl.isEmpty) {
+      debugPrint('[LocalSync] TrailBase URL not configured — skipping reward sync.');
+      return const _BoxSyncResult(recordsSynced: 0);
+    }
+
     final lastSync = _getLastSync(_kRewardsSyncKey);
     if (lastSync != null && _withinCooldown(lastSync)) {
       debugPrint('[LocalSync] Rewards within cooldown, using cache.');
-      return _BoxSyncResult(recordsSynced: 0);
+      return const _BoxSyncResult(recordsSynced: 0);
     }
 
     try {
@@ -174,7 +187,7 @@ class LocalSyncService {
 
       final records = await _deltaFetch(endpoint);
       if (records == null) {
-        return _BoxSyncResult(recordsSynced: 0);
+        return const _BoxSyncResult(recordsSynced: 0);
       }
 
       int synced = 0;
@@ -202,10 +215,15 @@ class LocalSyncService {
   Future<_BoxSyncResult> syncUserBalance(String userId) async {
     _assertInitialized();
 
+    if (_kTrailBaseUrl.isEmpty) {
+      debugPrint('[LocalSync] TrailBase URL not configured — skipping balance sync.');
+      return const _BoxSyncResult(recordsSynced: 0);
+    }
+
     final lastSync = _getLastSync('${_kBalanceSyncKey}_$userId');
     if (lastSync != null && _withinCooldown(lastSync)) {
       debugPrint('[LocalSync] Balance within cooldown, using cache.');
-      return _BoxSyncResult(recordsSynced: 0);
+      return const _BoxSyncResult(recordsSynced: 0);
     }
 
     try {
@@ -222,12 +240,12 @@ class LocalSyncService {
         await _balanceBox.put(userId, balance);
         await _setLastSync('${_kBalanceSyncKey}_$userId');
         debugPrint('[LocalSync] Balance synced for $userId');
-        return _BoxSyncResult(recordsSynced: 1);
+        return const _BoxSyncResult(recordsSynced: 1);
       } else if (response.statusCode == 404) {
         // User not in TrailBase yet — seed with empty balance
         final empty = UserBalanceModel.empty(userId);
         await _balanceBox.put(userId, empty);
-        return _BoxSyncResult(recordsSynced: 1);
+        return const _BoxSyncResult(recordsSynced: 1);
       } else {
         return _BoxSyncResult(
           recordsSynced: 0,
@@ -266,9 +284,8 @@ class LocalSyncService {
   }
 
   /// Returns rewards filtered by status.
-  List<RewardModel> getAvailableRewards() => getRewards()
-      .where((r) => r.status == 'available')
-      .toList();
+  List<RewardModel> getAvailableRewards() =>
+      getRewards().where((r) => r.status == 'available').toList();
 
   /// Returns the cached balance for a user (or null if not yet synced).
   UserBalanceModel? getUserBalance(String userId) {
@@ -311,7 +328,8 @@ class LocalSyncService {
   Future<void> invalidateAll() async {
     _assertInitialized();
     await _metaBox.clear();
-    debugPrint('[LocalSync] Sync timestamps invalidated — full sync on next call.');
+    debugPrint(
+        '[LocalSync] Sync timestamps invalidated — full sync on next call.',);
   }
 
   // ── Internal Helpers ──────────────────────────────────────────────────────

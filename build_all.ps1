@@ -2,58 +2,87 @@
 Set-Location "C:\Projects\all in one"
 $env:PATH = "C:\Program Files\nodejs;" + $env:PATH
 $FIREBASE = "C:\Users\nijja\AppData\Roaming\npm\firebase.cmd"
+
+function Build-WebTarget {
+  param(
+    [string]$Label,
+    [string]$TargetFile,
+    [string]$OutputDir,
+    [string]$ManifestName,
+    [string]$ManifestShortName
+  )
+
+  Write-Host "[BUILD] $Label" -ForegroundColor Cyan
+
+  if (Test-Path $OutputDir) {
+    Remove-Item $OutputDir -Recurse -Force
+  }
+
+  flutter build web --release --target=$TargetFile
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "$Label build failed" -ForegroundColor Red
+    exit 1
+  }
+
+  New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
+  Copy-Item "build\web\*" $OutputDir -Recurse -Force
+
+  $mainJs = Join-Path $OutputDir "main.dart.js"
+  if (-not (Test-Path $mainJs)) {
+    Write-Host "$Label output is invalid: missing main.dart.js in $OutputDir" -ForegroundColor Red
+    exit 1
+  }
+
+  $manifestPath = Join-Path $OutputDir "manifest.json"
+  if (Test-Path $manifestPath) {
+    $manifest = Get-Content $manifestPath -Raw
+    $manifest = $manifest -replace '"name":\s*"[^"]*"', "`"name`": `"$ManifestName`""
+    $manifest = $manifest -replace '"short_name":\s*"[^"]*"', "`"short_name`": `"$ManifestShortName`""
+    $manifest | Set-Content $manifestPath
+  }
+
+  Write-Host "$Label OK -> $OutputDir" -ForegroundColor Green
+}
+
 Write-Host "=== ALLIN1 FULL BUILD ===" -ForegroundColor Cyan
+flutter clean
+if ($LASTEXITCODE -ne 0) { exit 1 }
+
 flutter pub get
 if ($LASTEXITCODE -ne 0) { exit 1 }
 
-Write-Host "[2/6] CUSTOMER" -ForegroundColor Green
-flutter build web --release --target=lib/main_customer.dart
-if ($LASTEXITCODE -ne 0) { Write-Host "FAILED" -ForegroundColor Red; exit 1 }
-if (Test-Path "build\customer") { Remove-Item "build\customer" -Recurse -Force }
-Copy-Item "build\web" "build\customer" -Recurse -Force
-$m = Get-Content "build\customer\manifest.json" -Raw
-$m = $m -replace '"name":\s*"[^"]*"', '"name": "Allin1 - Order and Ride"'
-$m = $m -replace '"short_name":\s*"[^"]*"', '"short_name": "Allin1"'
-$m | Set-Content "build\customer\manifest.json"
-Write-Host "CUSTOMER OK" -ForegroundColor Green
+Build-WebTarget `
+  -Label "CUSTOMER" `
+  -TargetFile "lib/main_customer.dart" `
+  -OutputDir "build/web_customer" `
+  -ManifestName "Allin1 - Order and Ride" `
+  -ManifestShortName "Allin1"
 
-Write-Host "[3/6] HERO" -ForegroundColor Blue
-flutter build web --release --target=lib/main_captain.dart
-if ($LASTEXITCODE -ne 0) { Write-Host "FAILED" -ForegroundColor Red; exit 1 }
-if (Test-Path "build\captain") { Remove-Item "build\captain" -Recurse -Force }
-Copy-Item "build\web" "build\captain" -Recurse -Force
-$m = Get-Content "build\captain\manifest.json" -Raw
-$m = $m -replace '"name":\s*"[^"]*"', '"name": "Allin1 Hero"'
-$m = $m -replace '"short_name":\s*"[^"]*"', '"short_name": "Hero"'
-$m | Set-Content "build\captain\manifest.json"
-Write-Host "HERO OK" -ForegroundColor Blue
+Build-WebTarget `
+  -Label "HERO" `
+  -TargetFile "lib/main_hero.dart" `
+  -OutputDir "build/web_hero" `
+  -ManifestName "Allin1 Hero" `
+  -ManifestShortName "Hero"
 
-Write-Host "[4/6] GROW" -ForegroundColor Magenta
-flutter build web --release --target=lib/main_seller.dart
-if ($LASTEXITCODE -ne 0) { Write-Host "FAILED" -ForegroundColor Red; exit 1 }
-if (Test-Path "build\seller") { Remove-Item "build\seller" -Recurse -Force }
-Copy-Item "build\web" "build\seller" -Recurse -Force
-$m = Get-Content "build\seller\manifest.json" -Raw
-$m = $m -replace '"name":\s*"[^"]*"', '"name": "Allin1 Grow"'
-$m = $m -replace '"short_name":\s*"[^"]*"', '"short_name": "Grow"'
-$m | Set-Content "build\seller\manifest.json"
-Write-Host "GROW OK" -ForegroundColor Magenta
+Build-WebTarget `
+  -Label "SELLER" `
+  -TargetFile "lib/main_seller.dart" `
+  -OutputDir "build/web_seller" `
+  -ManifestName "Allin1 Grow" `
+  -ManifestShortName "Grow"
 
-Write-Host "[5/6] HQ" -ForegroundColor Red
-flutter build web --release --target=lib/main_admin.dart
-if ($LASTEXITCODE -ne 0) { Write-Host "FAILED" -ForegroundColor Red; exit 1 }
-if (Test-Path "build\admin") { Remove-Item "build\admin" -Recurse -Force }
-Copy-Item "build\web" "build\admin" -Recurse -Force
-$m = Get-Content "build\admin\manifest.json" -Raw
-$m = $m -replace '"name":\s*"[^"]*"', '"name": "Allin1 HQ"'
-$m = $m -replace '"short_name":\s*"[^"]*"', '"short_name": "HQ"'
-$m | Set-Content "build\admin\manifest.json"
-Write-Host "HQ OK" -ForegroundColor Red
+Build-WebTarget `
+  -Label "ADMIN" `
+  -TargetFile "lib/main_admin.dart" `
+  -OutputDir "build/web_admin" `
+  -ManifestName "Allin1 HQ" `
+  -ManifestShortName "HQ"
 
-Write-Host "[6/6] Deploying..." -ForegroundColor Cyan
+Write-Host "[DEPLOY] Firebase Hosting" -ForegroundColor Cyan
 & $FIREBASE deploy --only hosting --project erode-super-app
 
-Write-Host "Customer -> https://my-allin1.web.app"   -ForegroundColor Green
+Write-Host "Customer -> https://my-allin1.web.app" -ForegroundColor Green
 Write-Host "Hero     -> https://hero-allin1.web.app" -ForegroundColor Blue
 Write-Host "Seller   -> https://grow-allin1.web.app" -ForegroundColor Magenta
-Write-Host "Admin    -> https://hq-allin1.web.app"   -ForegroundColor Red
+Write-Host "Admin    -> https://hq-allin1.web.app" -ForegroundColor Red

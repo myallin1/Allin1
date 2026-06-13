@@ -1,13 +1,14 @@
 {
-  "name": "Allin1 — Order & Ride",
+  "name": "NJ BAPX · Allin1",
   "short_name": "Allin1",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0D0D0D",
-  "theme_color": "#FF6B35",
-  "description": "Food, Grocery, Bike Taxi & Tech in Erode",
+  "background_color": "#0C0A14",
+  "theme_color": "#FF4FA3",
+  "description": "Erode's Super App — Food, Grocery, Bike Taxi & Tech by NJ TECH",
   "orientation": "portrait-primary",
   "prefer_related_applications": false,
+  "categories": ["shopping", "food", "lifestyle"],
   "icons": [
     {
       "src": "icons/Icon-192.png",

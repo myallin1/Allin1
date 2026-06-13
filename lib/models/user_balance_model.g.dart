@@ -18,13 +18,13 @@ class UserBalanceModelAdapter extends TypeAdapter<UserBalanceModel> {
     };
     return UserBalanceModel(
       userId: fields[0] as String,
+      updatedAt: fields[6] as String,
+      lastSynced: fields[7] as DateTime,
       pendingCoins: fields[1] as int,
       verifiedCoins: fields[2] as int,
       walletRupees: fields[3] as double,
       lifetimeCoins: fields[4] as int,
       completedTaskCount: fields[5] as int,
-      updatedAt: fields[6] as String,
-      lastSynced: fields[7] as DateTime,
     );
   }
 

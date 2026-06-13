@@ -3,6 +3,7 @@
 // Allin1 Super App v1.0
 // ================================================================
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -27,6 +28,8 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
 
   // Form controllers for Rider Commission
   final _bikeTaxiController = TextEditingController();
+  final _baseFareController = TextEditingController(); // ₹ base fare
+  final _perKmFareController = TextEditingController(); // ₹ per km
   final _autoController = TextEditingController();
   final _carController = TextEditingController();
   final _deliveryController = TextEditingController();
@@ -46,6 +49,7 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
 
   // Form controllers for Platform Fee
   final _gatewayFeeController = TextEditingController();
+  final _coinValueCtrl = TextEditingController(text: '100');
   bool _upiZeroFee = true;
 
   // Form controllers for Delivery Settings
@@ -65,6 +69,8 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
   void dispose() {
     // Dispose all controllers
     _bikeTaxiController.dispose();
+    _baseFareController.dispose();
+    _perKmFareController.dispose();
     _autoController.dispose();
     _carController.dispose();
     _deliveryController.dispose();
@@ -80,6 +86,7 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
     _minOrderController.dispose();
     _flatFeeController.dispose();
     _gatewayFeeController.dispose();
+    _coinValueCtrl.dispose();
     _baseDeliveryController.dispose();
     _freeDeliveryController.dispose();
     _perKmController.dispose();
@@ -112,6 +119,25 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
     // Rider Commission
     _bikeTaxiController.text =
         settings.riderCommission.bikeTaxiPercent.toString();
+    // Load bike taxi fare rates directly from Firestore top-level fields
+    FirebaseFirestore.instance
+        .collection('platformSettings')
+        .doc('global')
+        .get()
+        .then((doc) {
+      if (doc.exists && mounted) {
+        final d = doc.data() ?? {};
+        setState(() {
+          _baseFareController.text =
+              (d['bikeTaxiBaseFare'] as num?)?.toString() ?? '25';
+          _perKmFareController.text =
+              (d['bikeTaxiPerKm'] as num?)?.toString() ?? '12';
+        });
+      }
+    }).catchError((_) {
+      _baseFareController.text = '25';
+      _perKmFareController.text = '12';
+    });
     _autoController.text = settings.riderCommission.autoPercent.toString();
     _carController.text = settings.riderCommission.carPercent.toString();
     _deliveryController.text =
@@ -145,6 +171,22 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
     _gatewayFeeController.text =
         settings.platformFee.paymentGatewayFee.toString();
     _upiZeroFee = settings.platformFee.upiZeroFee;
+
+    // Load coinValue from platformSettings/global
+    FirebaseFirestore.instance
+        .collection('platformSettings')
+        .doc('global')
+        .get()
+        .then((doc) {
+      if (doc.exists && mounted) {
+        final d = doc.data() ?? {};
+        setState(() {
+          _coinValueCtrl.text = (d['coinValue'] ?? 100).toString();
+        });
+      }
+    }).catchError((_) {
+      _coinValueCtrl.text = '100';
+    });
 
     // Delivery Settings
     _baseDeliveryController.text =
@@ -214,6 +256,19 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
       );
 
       await _settingsService.updateSettings(updatedSettings, adminId: adminId);
+
+      // Also save fare rates as top-level fields for BookingScreen to read
+      await FirebaseFirestore.instance
+          .collection('platformSettings')
+          .doc('global')
+          .set(
+        {
+          'bikeTaxiBaseFare': double.tryParse(_baseFareController.text) ?? 25.0,
+          'bikeTaxiPerKm': double.tryParse(_perKmFareController.text) ?? 12.0,
+          'coinValue': int.tryParse(_coinValueCtrl.text) ?? 100,
+        },
+        SetOptions(merge: true),
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -371,6 +426,7 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
     required String label,
     String? prefix,
     String? suffix,
+    String? hintText,
     TextInputType? keyboardType,
   }) {
     return Padding(
@@ -380,6 +436,7 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
         keyboardType: keyboardType ?? TextInputType.number,
         decoration: InputDecoration(
           labelText: label,
+          hintText: hintText,
           prefixText: prefix,
           suffixText: suffix,
           border: const OutlineInputBorder(),
@@ -399,6 +456,38 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildSectionHeader('Rider Commission', Icons.motorcycle),
+            const Divider(),
+            // ── Bike Taxi Fare Rates ─────────────────────────
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '🏍️ Bike Taxi Fare Rates',
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF16213E),
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildTextField(
+                    controller: _baseFareController,
+                    label: 'Base Fare',
+                    prefix: '₹',
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildTextField(
+                    controller: _perKmFareController,
+                    label: 'Per KM Rate',
+                    prefix: '₹',
+                  ),
+                ),
+              ],
+            ),
             const Divider(),
             Row(
               children: [
@@ -576,6 +665,14 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
               controller: _gatewayFeeController,
               label: 'Payment Gateway Fee',
               suffix: '%',
+            ),
+            const SizedBox(height: 12),
+            _buildTextField(
+              controller: _coinValueCtrl,
+              label: '🪙 Coin Value (1 INR = ? Coins)',
+              hintText: '100',
+              suffix: 'coins',
+              keyboardType: TextInputType.number,
             ),
             SwitchListTile(
               title: const Text('Zero UPI Fees'),

@@ -1,22 +1,21 @@
 {
-  "projects": {},
+  "projects": {
+    "default": "erode-super-app"
+  },
   "targets": {
     "erode-super-app": {
       "hosting": {
-        "admin": [
-          "adminhq-allin1"
+        "seller": [
+          "grow-allin1"
         ],
-        "my-allin1": [
+        "customer": [
           "my-allin1"
         ],
-        "hero-allin1": [
+        "hero": [
           "hero-allin1"
         ],
-        "hq-allin1": [
+        "admin": [
           "hq-allin1"
-        ],
-        "grow-allin1": [
-          "grow-allin1"
         ]
       }
     }

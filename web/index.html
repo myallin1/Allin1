@@ -18,8 +18,8 @@
   <meta name="supported-color-schemes" content="dark light">
 
   <!-- Primary Meta Tags -->
-  <title>Allin1 — Order & Ride</title>
-  <meta name="title" content="Allin1 Super App - All-in-One Commerce Platform">
+  <title>NJ BAPX · Allin1 — نم்ம ஊரு ஆப்</title>
+  <meta name="title" content="NJ BAPX · Allin1 — Erode's Super App">
   <meta name="description" content="Allin1 Super App — Food, Grocery, Bike Taxi & Tech in Erode">
   <meta name="keywords"
     content="Allin1, food delivery, grocery, bike taxi, tech accessories, Tamil, NJ TECH, online shopping, 16th Road, Fresh">
@@ -32,18 +32,18 @@
   <meta name="distribution" content="global">
 
   <!-- Theme Colors -->
-  <meta name="theme-color" content="#FF6B35" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#FF6B35" media="(prefers-color-scheme: light)">
-  <meta name="msapplication-navbutton-color" content="#FF6B35">
+  <meta name="theme-color" content="#FF4FA3" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#FF4FA3" media="(prefers-color-scheme: light)">
+  <meta name="msapplication-navbutton-color" content="#FF4FA3">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
   <!-- PWA Meta Tags -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Allin1">
-  <meta name="application-name" content="Allin1 Super App">
+  <meta name="application-name" content="NJ BAPX · Allin1">
   <meta name="msapplication-starturl" content="/">
-  <meta name="msapplication-TileColor" content="#7B6FE0">
+  <meta name="msapplication-TileColor" content="#FF4FA3">
   <meta name="msapplication-TileImage" content="icons/Icon-192.png">
   <meta name="msapplication-config" content="none">
 
@@ -53,7 +53,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="icons/Icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/Icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="icons/Icon-512.png">
-  <link rel="mask-icon" href="icons/Icon-192.png" color="#7B6FE0">
+  <link rel="mask-icon" href="icons/Icon-192.png" color="#FF4FA3">
 
   <!-- Manifest -->
   <link rel="manifest" href="manifest.json">
@@ -107,6 +107,9 @@
   <!-- Note: NotoSansTamil font is loaded via Google Fonts CSS below, not local file -->
 
   <meta name="google-signin-client_id" content="357526153693-02b0behmsf3k720jujg3e8j82frj04q7.apps.googleusercontent.com">
+  
+  <!-- Ola Maps API Key: Loaded securely via flutter_dotenv from .env (not exposed in HTML) -->
+
   <!-- PWA Splash Screen Styles -->
   <style>
     .splash-screen {
@@ -377,6 +380,93 @@
 
 <body>
   <div id="recaptcha-container"></div>
+
+  <!--
+    ================================================================
+    T3: APK DOWNLOAD LINKS — CEO DEPLOYMENT GUIDE
+    ================================================================
+    HOW TO PUBLISH NEW APK BUILDS:
+      1. Build the APKs:
+           flutter build apk --flavor customer --release
+           flutter build apk --flavor hero    --release
+           flutter build apk --flavor admin   --release
+      2. Rename the outputs:
+           build/app/outputs/flutter-apk/app-customer-release.apk  →  customer_app.apk
+           build/app/outputs/flutter-apk/app-hero-release.apk      →  hero_app.apk
+           build/app/outputs/flutter-apk/app-admin-release.apk     →  admin_app.apk
+      3. Drop all 3 files into:  web/   (same folder as this index.html)
+      4. Run:  firebase deploy
+      5. Done! All 3 download buttons below immediately serve the new APKs.
+    ================================================================
+  -->
+
+  <!-- APK Download Floating Banner (hidden until Flutter frame, shown on landing) -->
+  <div id="apk-download-bar" style="
+    display: none;
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #1A1A26 0%, #20202E 100%);
+    border: 1px solid rgba(255,79,163,0.35);
+    border-radius: 18px;
+    padding: 16px 20px;
+    max-width: 360px;
+    width: calc(100% - 40px);
+    box-shadow: 0 8px 32px rgba(255,79,163,0.18);
+    z-index: 88888;
+    font-family: 'Segoe UI', sans-serif;
+  ">
+    <p style="margin:0 0 12px 0; color:#EEEEF5; font-size:13px; font-weight:700; text-align:center;">
+      📲 Download NJ TECH Apps
+    </p>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <a href="https://github.com/myallin1/Allin1-update-release/releases/download/v1.0.0/customer_app.apk" download="customer_app.apk" style="
+        display:flex; align-items:center; justify-content:center; gap:8px;
+        background:linear-gradient(135deg,#FF4FA3,#BE2A7A);
+        color:#fff; text-decoration:none; font-size:13px; font-weight:700;
+        padding:10px 16px; border-radius:12px;">
+        🛒 Download Customer App
+      </a>
+      <a href="https://github.com/myallin1/Allin1-update-release/releases/download/v1.0.0/hero_app.apk" download="hero_app.apk" style="
+        display:flex; align-items:center; justify-content:center; gap:8px;
+        background:linear-gradient(135deg,#7B6FE0,#5A50C8);
+        color:#fff; text-decoration:none; font-size:13px; font-weight:700;
+        padding:10px 16px; border-radius:12px;">
+        🏍️ Download Hero App
+      </a>
+      <!-- Admin APK excluded from public banner — distributed separately -->
+    </div>
+    <button id="apk-bar-dismiss" style="
+      display:block; margin:10px auto 0; background:transparent;
+      border:none; color:#7777A0; font-size:11px; cursor:pointer;">
+      Dismiss
+    </button>
+  </div>
+
+  <script>
+    // T3: Show APK download bar after Flutter first frame so it doesn't
+    // block the splash screen. Dismisses for 24h via localStorage.
+    window.addEventListener('flutter-first-frame', function () {
+      var bar = document.getElementById('apk-download-bar');
+      var dismissed = localStorage.getItem('apk-bar-dismissed');
+      var dismissedAt = parseInt(dismissed || '0', 10);
+      var now = Date.now();
+      if (!dismissed || (now - dismissedAt) > 86400000) {
+        setTimeout(function () {
+          if (bar) bar.style.display = 'block';
+        }, 3000);
+      }
+    });
+    var dismissBtn = document.getElementById('apk-bar-dismiss');
+    if (dismissBtn) {
+      dismissBtn.addEventListener('click', function () {
+        var bar = document.getElementById('apk-download-bar');
+        if (bar) bar.style.display = 'none';
+        localStorage.setItem('apk-bar-dismissed', String(Date.now()));
+      });
+    }
+  </script>
   <!-- PWA Install Prompt -->
   <div id="pwa-install-prompt" class="pwa-prompt"
     style="display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #1A1A26 0%, #20202E 100%); border: 1px solid rgba(123, 111, 224, 0.3); border-radius: 16px; padding: 20px; max-width: 340px; box-shadow: 0 10px 40px rgba(0,0,0,0.4); z-index: 99999;">
@@ -471,7 +561,7 @@
         onerror="this.style.display='none'">
     </div>
     <div class="splash-title" style="background:linear-gradient(135deg,#FFD700,#FF6B35);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;">NJ BAPX</div>
-    <div class="splash-subtitle" style="color:#7777A0;font-size:13px;">Allin1 Super App · Erode</div>
+    <div class="splash-subtitle" style="color:#7777A0;font-size:13px;">my allin1 · Erode</div>
     <div class="splash-tagline">Powered by NJ TECH</div>
     <div class="splash-loader" aria-hidden="true"></div>
     <div class="splash-status">Loading...</div>
@@ -517,37 +607,44 @@
     })();
   </script>
 
-  <!-- Flutter Bootstrap -->
-  <script src="flutter_bootstrap.js" async></script>
-
-  <!-- Service Worker Registration -->
+  <!-- ── PWA Auto-Update: Force fresh code on new deploy ──────────── -->
   <script>
+    // ── WebGL context loss recovery: force repaint on resume ──
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        window.dispatchEvent(new Event('resize'));
+      }
+    });
+
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function () {
-        navigator.serviceWorker.register('flutter_service_worker.js?v=20260316001')
-          .then(function (registration) {
-            console.log('ServiceWorker registration successful:', registration.scope);
-          })
-          .catch(function (err) {
-            console.log('ServiceWorker registration failed:', err);
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshing) return;
+        refreshing = true;
+        window.location.reload();
+      });
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/flutter_service_worker.js')
+          .then(reg => {
+            reg.addEventListener('updatefound', () => {
+              const newWorker = reg.installing;
+              if (newWorker) {
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    if (confirm('🚀 New version available! Tap OK to update.')) {
+                      newWorker.postMessage({ action: 'skipWaiting' });
+                    }
+                  }
+                });
+              }
+            });
           });
       });
     }
   </script>
 
-  <!-- Analytics (Optional - Add your tracking ID) -->
-  <script>
-    // Google Analytics placeholder
-    // Replace with your actual GA4 measurement ID
-    window.dataLayer = window.dataLayer || [];
-    function gtag() { dataLayer.push(arguments); }
-    // gtag('js', new Date());
-    // gtag('config', 'G-XXXXXXXXXX');
-  </script>
-  <!-- Force HTML Renderer for Flutter Web -->
-  <script>
-    window.flutterWebRenderer = 'html';
-  </script>
+  <!-- Flutter Bootstrap -->
+  <script src="flutter_bootstrap.js" async></script>
 </body>
 
 </html>

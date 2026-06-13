@@ -5,6 +5,7 @@
 // ================================================================
 
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -80,16 +81,38 @@ class _FunTask {
 }
 
 class _LocalAd {
-  final String emoji, shop, offer, category, phone;
+  final String id, emoji, shop, offer, category, phone, actionUrl;
+  final int? coinsReward;
   final Color color;
   const _LocalAd({
+    required this.id,
     required this.emoji,
     required this.shop,
     required this.offer,
     required this.category,
     required this.phone,
+    required this.actionUrl,
     required this.color,
+    this.coinsReward,
   });
+
+  factory _LocalAd.fromFirestore(String docId, Map<String, dynamic> d) =>
+      _LocalAd(
+        id: docId,
+        emoji: d['emoji'] as String? ?? '📢',
+        shop: d['shop'] as String? ?? 'Local Shop',
+        offer: d['offer'] as String? ?? '',
+        category: d['category'] as String? ?? 'General',
+        phone: d['phone'] as String? ?? '',
+        actionUrl: d['actionUrl'] as String? ?? '',
+        coinsReward: (d['coinsReward'] as num?)?.toInt(),
+        color: Color(d['color'] as int? ?? 0xFF6C63FF),
+      );
+
+  void trackView() {
+    // Track view locally for analytics
+    debugPrint('Ad viewed: $id - $shop');
+  }
 }
 
 class _Earner {
@@ -251,42 +274,7 @@ const _funTasks = [
   ),
 ];
 
-// ── Local Erode Ads ───────────────────────────────────────────
-const _localAds = [
-  _LocalAd(
-    emoji: '🧵',
-    shop: 'Erode Tex City',
-    offer: '20% Discount on all sarees & dress materials this weekend!',
-    category: 'Textiles',
-    phone: '9876543210',
-    color: Color(0xFF6C63FF),
-  ),
-  _LocalAd(
-    emoji: '📱',
-    shop: 'Sri Amman Mobiles',
-    offer:
-        'Flash Sale! iPhones & Samsung at unbeatable prices. Exchange available.',
-    category: 'Electronics',
-    phone: '9988776655',
-    color: Color(0xFFFF6B35),
-  ),
-  _LocalAd(
-    emoji: '🍽️',
-    shop: 'Sree Annapoorna Hotel',
-    offer: 'Unlimited meals @ Rs.120! Special Erode Kari Dosa now available.',
-    category: 'Food',
-    phone: '9123456789',
-    color: Color(0xFF00C853),
-  ),
-  _LocalAd(
-    emoji: '🏍️',
-    shop: 'Chamunda Auto Spares',
-    offer: '15% off on all bike spares. Free installation above Rs.500.',
-    category: 'Auto',
-    phone: '9765432100',
-    color: Color(0xFFFFBB00),
-  ),
-];
+// ── Local Erode Ads — now live from Firestore ads collection ──
 
 // ── Leaderboard ───────────────────────────────────────────────
 const _earners = [
@@ -332,6 +320,10 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
   int _carouselIdx = 0;
   Timer? _carouselTimer;
 
+  // Task completion tracking
+  Map<String, String> _taskStatuses = {};
+  // Key: adId, Value: pending/approved/rejected
+
   @override
   void initState() {
     super.initState();
@@ -339,10 +331,138 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
     _carouselTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (mounted) {
         setState(
-          () => _carouselIdx = (_carouselIdx + 1) % _localAds.length,
-        );
+          () => _carouselIdx = _carouselIdx + 1,
+        ); // mod done in StreamBuilder
       }
     });
+    _loadTaskStatuses();
+  }
+
+  // Load all user task completions ONCE
+  Future<void> _loadTaskStatuses() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      return;
+    }
+
+    final query = await FirebaseFirestore.instance
+        .collection('task_completions')
+        .where('userId', isEqualTo: uid)
+        .get();
+
+    final Map<String, String> statuses = {};
+    for (final doc in query.docs) {
+      final adId = doc.data()['adId'] as String;
+      final status = doc.data()['status'] as String;
+      statuses[adId] = status;
+    }
+
+    if (mounted) {
+      setState(() => _taskStatuses = statuses);
+    }
+  }
+
+  // Mark task as done
+  Future<void> _markTaskDone(_LocalAd ad) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      return;
+    }
+
+    final adId = ad.id;
+    final docId = '${uid}_$adId';
+
+    await FirebaseFirestore.instance
+        .collection('task_completions')
+        .doc(docId)
+        .set({
+      'userId': uid,
+      'userName': FirebaseAuth.instance.currentUser?.displayName ?? '',
+      'userEmail': FirebaseAuth.instance.currentUser?.email ?? '',
+      'adId': adId,
+      'adTitle': ad.shop,
+      'actionUrl': ad.actionUrl,
+      'coinsReward': ad.coinsReward ?? 50,
+      'status': 'pending',
+      'submittedAt': FieldValue.serverTimestamp(),
+    });
+
+    // Update pending_coins
+    await FirebaseFirestore.instance.collection('users').doc(uid).set(
+      {
+        'pending_coins': FieldValue.increment(ad.coinsReward ?? 50),
+      },
+      SetOptions(merge: true),
+    );
+
+    if (mounted) {
+      setState(() => _taskStatuses[adId] = 'pending');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('🟡 Submitted! Pending approval.'),
+          backgroundColor: Color(0xFFFFBB00),
+        ),
+      );
+    }
+  }
+
+  // Status widget builder
+  Widget _buildTaskStatus(_LocalAd ad, String adId) {
+    final status = _taskStatuses[adId];
+
+    if (status == 'pending') {
+      return Chip(
+        label: const Text('🟡 Pending Approval'),
+        backgroundColor: const Color(0xFFFFBB00).withValues(alpha: 0.2),
+        labelStyle: const TextStyle(
+          color: Color(0xFFFFBB00),
+          fontSize: 11,
+        ),
+      );
+    } else if (status == 'approved') {
+      return Chip(
+        label: const Text('✅ Coins Added!'),
+        backgroundColor: const Color(0xFF00C853).withValues(alpha: 0.2),
+        labelStyle: const TextStyle(
+          color: Color(0xFF00C853),
+          fontSize: 11,
+        ),
+      );
+    } else if (status == 'rejected') {
+      return Chip(
+        label: const Text('❌ Not Approved'),
+        backgroundColor: const Color(0xFFFF5252).withValues(alpha: 0.2),
+        labelStyle: const TextStyle(
+          color: Color(0xFFFF5252),
+          fontSize: 11,
+        ),
+      );
+    }
+
+    // No status — show button
+    return ElevatedButton.icon(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF00C853),
+        minimumSize: const Size(double.infinity, 36),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      icon: const Icon(
+        Icons.check_circle_outline,
+        size: 16,
+        color: Colors.white,
+      ),
+      label: const Text(
+        '✅ Mark as Done',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+        ),
+      ),
+      onPressed: () => _markTaskDone(ad),
+    );
   }
 
   @override
@@ -374,7 +494,9 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
         );
       }
     } else {
-      if (mounted) _snack('Browser open aagavillai. Try again!', _red);
+      if (mounted) {
+        _snack('Browser open aagavillai. Try again!', _red);
+      }
     }
   }
 
@@ -1318,36 +1440,39 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
       );
 
   // ================================================================
-  // TAB 3 — FUN & GAMES (ListView)
+  // TAB 3 — FUN & GAMES + Paytm Scratchcards + Gift Cards + Quiz
   // ================================================================
-  Widget _buildFunTab() => ListView.builder(
+  Widget _buildFunTab() => ListView(
         padding: const EdgeInsets.all(14),
-        itemCount: _funTasks.length + 1,
-        itemBuilder: (_, i) {
-          if (i == 0) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '🎮 Quick Wins',
-                    style: GoogleFonts.outfit(
-                      fontSize: 15,
-                      color: _text,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  Text(
-                    'Fast coins while waiting for rides',
-                    style: GoogleFonts.outfit(fontSize: 10, color: _muted),
-                  ),
-                ],
-              ),
-            );
-          }
-          return _buildFunCard(_funTasks[i - 1]);
-        },
+              Text('🎮 Quick Wins', style: GoogleFonts.outfit(
+                  fontSize: 15, color: _text, fontWeight: FontWeight.w800)),
+              Text('Fast coins while waiting for rides',
+                  style: GoogleFonts.outfit(fontSize: 10, color: _muted)),
+            ]),
+          ),
+          ..._funTasks.map(_buildFunCard),
+          const SizedBox(height: 24),
+          _rewardsSectionHeader('🪙 Paytm Scratchcards',
+              'Win real cashback every day!', _gold),
+          const SizedBox(height: 10),
+          _buildPaytmScratchSection(),
+          const SizedBox(height: 24),
+          _rewardsSectionHeader('🎁 Accessories Gift Cards',
+              'Exclusive NJ Tech goodies & vouchers', _purple),
+          const SizedBox(height: 10),
+          _buildAccessoriesGiftSection(),
+          const SizedBox(height: 24),
+          _rewardsSectionHeader('🧠 30-Days Quiz Challenge',
+              'Answer daily — climb the leaderboard!', _orange),
+          const SizedBox(height: 10),
+          _buildQuizSection(),
+          const SizedBox(height: 20),
+        ],
       );
 
   Widget _buildFunCard(_FunTask t) => Container(
@@ -1492,203 +1617,292 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
       );
 
   // ================================================================
-  // LOCAL ADS CAROUSEL (Auto-play 3s)
+  // LOCAL ADS CAROUSEL — Live from Firestore ads collection
   // ================================================================
   Widget _buildLocalAdsCarousel() {
-    final ad = _localAds[_carouselIdx];
-    return Container(
-      margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                '📍 Erode Flash Ads',
-                style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  color: _text,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                'Local deals near you',
-                style: GoogleFonts.outfit(
-                  fontSize: 9,
-                  color: _muted,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 500),
-            transitionBuilder: (child, anim) => FadeTransition(
-              opacity: anim,
-              child: SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0.08, 0),
-                  end: Offset.zero,
-                ).animate(anim),
-                child: child,
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('ads')
+          .where('isActive', isEqualTo: true)
+          .orderBy('createdAt', descending: true)
+          .limit(10)
+          .snapshots(),
+      builder: (context, snap) {
+        // Loading
+        if (snap.connectionState == ConnectionState.waiting) {
+          return Container(
+            height: 80,
+            margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+            decoration: BoxDecoration(
+              color: _card,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _border),
+            ),
+            child: const Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: _gold),
               ),
             ),
-            child: Container(
-              key: ValueKey(_carouselIdx),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    ad.color.withValues(alpha: 0.12),
-                    _card,
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: ad.color.withValues(alpha: 0.4),
-                  width: 1.5,
-                ),
-              ),
-              child: Row(
+          );
+        }
+        // No ads — hide gracefully
+        final docs = snap.data?.docs ?? [];
+        if (docs.isEmpty) return const SizedBox.shrink();
+
+        final ads = docs
+            .map(
+              (d) => _LocalAd.fromFirestore(
+                  d.id, d.data()! as Map<String, dynamic>,),
+            )
+            .toList();
+        final idx = _carouselIdx % ads.length;
+        final ad = ads[idx];
+
+        // Track view — fire once per carousel change, non-blocking
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          ad.trackView();
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          docs[idx]
+              .reference
+              .update({'views': FieldValue.increment(1)}).catchError((_) {});
+        });
+        return Container(
+          margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  // Shop icon
-                  Container(
-                    width: 58,
-                    height: 58,
-                    decoration: BoxDecoration(
-                      color: ad.color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: ad.color.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        ad.emoji,
-                        style: const TextStyle(fontSize: 28),
-                      ),
+                  Text(
+                    '📍 Erode Flash Ads',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      color: _text,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  const Spacer(),
+                  Text(
+                    'Local deals near you',
+                    style: GoogleFonts.outfit(
+                      fontSize: 9,
+                      color: _muted,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 500),
+                transitionBuilder: (child, anim) => FadeTransition(
+                  opacity: anim,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0.08, 0),
+                      end: Offset.zero,
+                    ).animate(anim),
+                    child: child,
+                  ),
+                ),
+                child: GestureDetector(
+                  onTap: () async {
+                    if (ad.actionUrl.isNotEmpty) {
+                      final uri = Uri.parse(ad.actionUrl);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      }
+                    }
+                  },
+                  child: Container(
+                    key: ValueKey(_carouselIdx),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          ad.color.withValues(alpha: 0.12),
+                          _card,
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: ad.color.withValues(alpha: 0.4),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Row(
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
+                        // Shop icon
+                        Container(
+                          width: 58,
+                          height: 58,
+                          decoration: BoxDecoration(
+                            color: ad.color.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: ad.color.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              ad.emoji,
+                              style: const TextStyle(fontSize: 28),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: ad.color.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                    child: Text(
+                                      ad.category,
+                                      style: TextStyle(
+                                        fontSize: 8,
+                                        color: ad.color,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  // Carousel dots
+                                  Row(
+                                    children: List.generate(
+                                      ads.length,
+                                      (i) => AnimatedContainer(
+                                        duration:
+                                            const Duration(milliseconds: 300),
+                                        width: i == _carouselIdx ? 14 : 5,
+                                        height: 5,
+                                        margin: const EdgeInsets.only(left: 3),
+                                        decoration: BoxDecoration(
+                                          color: i == _carouselIdx
+                                              ? ad.color
+                                              : _card2,
+                                          borderRadius:
+                                              BorderRadius.circular(3),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              decoration: BoxDecoration(
-                                color: ad.color.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(5),
-                              ),
-                              child: Text(
-                                ad.category,
-                                style: TextStyle(
-                                  fontSize: 8,
-                                  color: ad.color,
+                              const SizedBox(height: 4),
+                              Text(
+                                ad.shop,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 14,
+                                  color: _text,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
-                            ),
-                            const Spacer(),
-                            // Carousel dots
-                            Row(
-                              children: List.generate(
-                                _localAds.length,
-                                (i) => AnimatedContainer(
-                                  duration: const Duration(milliseconds: 300),
-                                  width: i == _carouselIdx ? 14 : 5,
-                                  height: 5,
-                                  margin: const EdgeInsets.only(left: 3),
+                              const SizedBox(height: 2),
+                              Text(
+                                ad.offer,
+                                style: GoogleFonts.notoSansTamil(
+                                  fontSize: 10,
+                                  color: _muted,
+                                  height: 1.3,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 8),
+                              GestureDetector(
+                                onTap: () async {
+                                  // Track click — increment Firestore ads/{id}.clicks
+                                  try {
+                                    final docRef = docs[idx].reference;
+                                    await FirebaseFirestore.instance
+                                        .runTransaction((txn) async {
+                                      final s = await txn.get(docRef);
+                                      txn.update(docRef, {
+                                        'clicks': ((s.data() as Map<String,
+                                                        dynamic>?)?['clicks']
+                                                    as int? ??
+                                                0) +
+                                            1,
+                                      });
+                                    });
+                                  } catch (_) {}
+                                  // Launch phone call
+                                  if (ad.phone.isNotEmpty) {
+                                    final uri = Uri.parse('tel:${ad.phone}');
+                                    if (await canLaunchUrl(uri)) {
+                                      await launchUrl(uri);
+                                    }
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color:
-                                        i == _carouselIdx ? ad.color : _card2,
-                                    borderRadius: BorderRadius.circular(3),
+                                    color: ad.color,
+                                    borderRadius: BorderRadius.circular(9),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: ad.color.withValues(alpha: 0.3),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.phone,
+                                        size: 12,
+                                        color: Colors.white,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Call Now',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 11,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          ad.shop,
-                          style: GoogleFonts.outfit(
-                            fontSize: 14,
-                            color: _text,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          ad.offer,
-                          style: GoogleFonts.notoSansTamil(
-                            fontSize: 10,
-                            color: _muted,
-                            height: 1.3,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 8),
-                        GestureDetector(
-                          onTap: () => _snack(
-                            'WhatsApp ${ad.shop} — Coming soon!',
-                            _green,
-                          ),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF25D366),
-                              borderRadius: BorderRadius.circular(9),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFF25D366)
-                                      .withValues(alpha: 0.3),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Text(
-                                  '💬',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'WhatsApp Now',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 11,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ],
-                            ),
+                              const SizedBox(height: 8),
+                              // Task completion status/button
+                              _buildTaskStatus(ad, docs[idx].id),
+                            ],
                           ),
                         ),
                       ],
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
+        );
+      }, // close builder
+    ); // close StreamBuilder
+  } // end _buildLocalAdsCarousel
 
   // ── Helper snackbar ───────────────────────────────────────
   void _snack(String msg, Color color) {
@@ -1709,5 +1923,156 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
         duration: const Duration(seconds: 3),
       ),
     );
+}
+
+  // ================================================================
+  // SECTION HELPERS — Paytm / Gift Cards / Quiz
+  // ================================================================
+
+  Widget _rewardsSectionHeader(String title, String sub, Color color) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title, style: GoogleFonts.outfit(
+            fontSize: 15, color: _text, fontWeight: FontWeight.w800)),
+        Text(sub, style: GoogleFonts.outfit(fontSize: 10, color: _muted)),
+      ]);
+
+  // ── Paytm Scratch Cards ──────────────────────────────────────
+  Widget _buildPaytmScratchSection() {
+    const cards = [
+      ('₹10 Cashback', '🪙', 'Scratch & Win', _gold),
+      ('₹25 Cashback', '💰', 'Limited Today', _green),
+      ('₹50 Cashback', '🎰', 'Lucky Draw', _orange),
+    ];
+    return Row(children: cards.map((c) {
+      final (amount, emoji, tag, col) = c;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => _snack('Open Paytm app to scratch your $amount card!', col),
+          child: Container(
+            margin: const EdgeInsets.only(right: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: col.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: col.withValues(alpha: 0.35)),
+            ),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text(emoji, style: const TextStyle(fontSize: 28)),
+              const SizedBox(height: 6),
+              Text(amount, style: GoogleFonts.outfit(
+                  color: col, fontSize: 12, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 2),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: col.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(tag, style: TextStyle(
+                    color: col, fontSize: 8, fontWeight: FontWeight.w700)),
+              ),
+            ]),
+          ),
+        ),
+      );
+    }).toList());
+  }
+
+  // ── Accessories Gift Cards ────────────────────────────────────
+  Widget _buildAccessoriesGiftSection() {
+    const items = [
+      ('🎧', 'Earphones', '₹199 Gift Card', Color(0xFF6C63FF)),
+      ('📱', 'Phone Case', '₹99 Gift Card', Color(0xFF00C853)),
+      ('🔋', 'Power Bank', '₹299 Gift Card', Color(0xFFFF4FA3)),
+      ('💡', 'Smart Bulb', '₹149 Gift Card', Color(0xFFFF8A00)),
+    ];
+    return GridView.count(
+      crossAxisCount: 2,
+      crossAxisSpacing: 10,
+      mainAxisSpacing: 10,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      childAspectRatio: 2.8,
+      children: items.map((item) {
+        final (emoji, name, card, col) = item;
+        return GestureDetector(
+          onTap: () => _snack('$name gift card coming soon! Stay tuned 🎁', col),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: col.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: col.withValues(alpha: 0.3)),
+            ),
+            child: Row(children: [
+              Text(emoji, style: const TextStyle(fontSize: 22)),
+              const SizedBox(width: 8),
+              Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                Text(name, style: GoogleFonts.outfit(
+                    color: _text, fontSize: 11, fontWeight: FontWeight.w700),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(card, style: TextStyle(
+                    color: col, fontSize: 9, fontWeight: FontWeight.w600)),
+              ])),
+            ]),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // ── 30-Days Quiz Section ─────────────────────────────────────
+  Widget _buildQuizSection() {
+    const quizzes = [
+      ('Day 1–7', '🟢', 'Beginner Round', '50 Coins/day', Color(0xFF00C853)),
+      ('Day 8–20', '🟡', 'Intermediate', '100 Coins/day', Color(0xFFFFBB00)),
+      ('Day 21–30', '🔴', 'Expert Level', '200 Coins/day', Color(0xFFFF5252)),
+    ];
+    return Column(children: quizzes.map((q) {
+      final (days, dot, level, reward, col) = q;
+      return Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: col.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: col.withValues(alpha: 0.3)),
+        ),
+        child: Row(children: [
+          Text(dot, style: const TextStyle(fontSize: 18)),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(level, style: GoogleFonts.outfit(
+                color: _text, fontSize: 13, fontWeight: FontWeight.w800)),
+            Text(days, style: TextStyle(color: _muted, fontSize: 11)),
+          ])),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text('🪙 $reward', style: GoogleFonts.outfit(
+                color: col, fontSize: 11, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            GestureDetector(
+              onTap: () => _snack('Quiz for $level starts soon! 🧠', col),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: col,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [BoxShadow(
+                      color: col.withValues(alpha: 0.35), blurRadius: 6)],
+                ),
+                child: Text('Play Now', style: GoogleFonts.outfit(
+                    color: Colors.black, fontSize: 10,
+                    fontWeight: FontWeight.w800)),
+              ),
+            ),
+          ]),
+        ]),
+      );
+    }).toList());
   }
 }

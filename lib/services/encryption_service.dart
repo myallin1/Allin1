@@ -37,7 +37,6 @@ class EncryptionService {
   /// Number of PBKDF2 iterations for key derivation
   static const int _pbkdf2Iterations = 10000;
 
-
   // ================================================================
   // Private Properties
   // ================================================================

@@ -9,7 +9,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'credential_service.dart';
 
-enum UserType { rider, user, admin }
+enum UserType { customer, hero, admin }
 
 class SessionService {
   static final SessionService _instance = SessionService._internal();
@@ -21,13 +21,13 @@ class SessionService {
   static const String _rememberMeKey = 'rememberMe';
   static const String _userDataKey = 'userData';
 
-  late Box<dynamic> _sessionBox;
+  Box<dynamic>? _sessionBox;
 
   // ================================================================
   // Initialize Session Storage
   // ================================================================
   Future<void> init() async {
-    _sessionBox = await Hive.openBox(_sessionBoxName);
+    _sessionBox ??= await Hive.openBox(_sessionBoxName);
   }
 
   // ================================================================
@@ -41,12 +41,12 @@ class SessionService {
     String? phoneNumber,
     bool rememberMe = false,
   }) async {
-    if (!_sessionBox.isOpen) {
+    if (_sessionBox == null || !_sessionBox!.isOpen) {
       await init();
     }
 
-    await _sessionBox.put(_userTypeKey, userType.index);
-    await _sessionBox.put(_rememberMeKey, rememberMe);
+    await _sessionBox!.put(_userTypeKey, userType.index);
+    await _sessionBox!.put(_rememberMeKey, rememberMe);
 
     final userData = {
       'uid': uid,
@@ -54,17 +54,17 @@ class SessionService {
       'displayName': displayName ?? '',
       'phoneNumber': phoneNumber ?? '',
     };
-    await _sessionBox.put(_userDataKey, jsonEncode(userData));
+    await _sessionBox!.put(_userDataKey, jsonEncode(userData));
   }
 
   // ================================================================
   // Get Current User Type
   // ================================================================
   UserType? getCurrentUserType() {
-    if (!_sessionBox.isOpen) {
+    if (_sessionBox == null || !_sessionBox!.isOpen) {
       return null;
     }
-    final index = _sessionBox.get(_userTypeKey) as int?;
+    final index = _sessionBox!.get(_userTypeKey) as int?;
     if (index == null) {
       return null;
     }
@@ -75,10 +75,10 @@ class SessionService {
   // Get Current User Data
   // ================================================================
   Map<String, dynamic>? getCurrentUserData() {
-    if (!_sessionBox.isOpen) {
+    if (_sessionBox == null || !_sessionBox!.isOpen) {
       return null;
     }
-    final data = _sessionBox.get(_userDataKey) as String?;
+    final data = _sessionBox!.get(_userDataKey) as String?;
     if (data == null) {
       return null;
     }
@@ -89,10 +89,10 @@ class SessionService {
   // Check if Remember Me is Enabled
   // ================================================================
   bool isRememberMeEnabled() {
-    if (!_sessionBox.isOpen) {
+    if (_sessionBox == null || !_sessionBox!.isOpen) {
       return false;
     }
-    return _sessionBox.get(_rememberMeKey, defaultValue: false) as bool? ??
+    return _sessionBox!.get(_rememberMeKey, defaultValue: false) as bool? ??
         false;
   }
 
@@ -122,7 +122,7 @@ class SessionService {
   // Clear Session (Logout)
   // ================================================================
   Future<void> clearSession() async {
-    if (!_sessionBox.isOpen) {
+    if (_sessionBox == null || !_sessionBox!.isOpen) {
       await init();
     }
 
@@ -134,7 +134,7 @@ class SessionService {
       // Ignore cache clearing errors
     }
 
-    await _sessionBox.clear();
+    await _sessionBox!.clear();
     await FirebaseAuth.instance.signOut();
   }
 
@@ -142,10 +142,10 @@ class SessionService {
   // Save User Type
   // ================================================================
   Future<void> setUserType(UserType userType) async {
-    if (!_sessionBox.isOpen) {
+    if (_sessionBox == null || !_sessionBox!.isOpen) {
       await init();
     }
-    await _sessionBox.put(_userTypeKey, userType.index);
+    await _sessionBox!.put(_userTypeKey, userType.index);
   }
 
   // ================================================================
@@ -156,16 +156,26 @@ class SessionService {
   }
 
   // ================================================================
-  // Check if Rider
+  // Check if Hero (Driver)
   // ================================================================
-  bool isRider() {
-    return getCurrentUserType() == UserType.rider;
+  bool isHero() {
+    return getCurrentUserType() == UserType.hero;
   }
 
+  // Legacy aliases — kept for backward compatibility
+  @Deprecated('Use isHero() instead')
+  bool isCaptain() => isHero();
+  @Deprecated('Use isHero() instead')
+  bool isRider() => isHero();
+
   // ================================================================
-  // Check if Regular User
+  // Check if Customer
   // ================================================================
-  bool isRegularUser() {
-    return getCurrentUserType() == UserType.user;
+  bool isCustomer() {
+    return getCurrentUserType() == UserType.customer;
   }
+
+  // Legacy alias — kept for backward compatibility
+  @Deprecated('Use isCustomer() instead')
+  bool isRegularUser() => isCustomer();
 }

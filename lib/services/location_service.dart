@@ -57,7 +57,7 @@ class LocationService {
 
       _currentPosition = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
+          accuracy: LocationAccuracy.high, // bestForNavigation only needed during active ride
           timeLimit: Duration(seconds: 15),
         ),
       );
@@ -118,10 +118,14 @@ class LocationService {
   // ================================================================
   // Stream Location Updates (for real-time tracking)
   // ================================================================
-  Stream<Position> getLocationStream() {
-    const LocationSettings locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.high,
-      distanceFilter: 10, // meters
+  Stream<Position> getLocationStream({bool highAccuracy = false}) {
+    final locationSettings = LocationSettings(
+      // Use bestForNavigation only during active ride (caller passes highAccuracy:true)
+      // High accuracy for radar/online state — saves significant battery
+      accuracy: highAccuracy
+          ? LocationAccuracy.bestForNavigation
+          : LocationAccuracy.high,
+      distanceFilter: highAccuracy ? 5 : 10, // meters
     );
 
     return Geolocator.getPositionStream(locationSettings: locationSettings);

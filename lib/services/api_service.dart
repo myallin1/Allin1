@@ -862,7 +862,9 @@ class _ResponseInterceptor extends Interceptor {
 
   @override
   void onResponse(
-      Response<dynamic> response, ResponseInterceptorHandler handler,) {
+    Response<dynamic> response,
+    ResponseInterceptorHandler handler,
+  ) {
     _log(
       LogLevel.debug,
       'Response: ${response.statusCode} for ${response.requestOptions.uri}',

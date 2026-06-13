@@ -1,5 +1,9 @@
 // ================================================================
-// BikeTaxiScreen v3.0 — Allin1 Super App
+// DEPRECATED — DO NOT USE
+// This file is deprecated. Use lib/screens/bike_taxi/bike_booking_screen.dart instead.
+// Kept for reference only. Do not modify.
+//
+// Original: BikeTaxiScreen v3.0 — Allin1 Super App
 // FIXED for flutter_map ^8.2.2 + latlong2 ^0.9.1
 // CTO Verified: All API changes applied ✅
 // CTO Verified: All API changes applied
@@ -146,6 +150,9 @@ class BikeTaxiScreen extends StatefulWidget {
 class _BikeTaxiScreenState extends State<BikeTaxiScreen>
     with TickerProviderStateMixin {
   final MapController _mapCtrl = MapController();
+  bool _mapReady = false;
+  LatLng? _pendingMapCenter;
+  double? _pendingMapZoom;
 
   int _rideIdx = 0;
   bool _showFare = false;
@@ -224,13 +231,53 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
     if (!_pickupSet || !_dropSet) {
       return;
     }
+    if (!_mapReady) {
+      _pendingMapCenter = LatLng(
+        (_pickupPos.latitude + _dropPos.latitude) / 2,
+        (_pickupPos.longitude + _dropPos.longitude) / 2,
+      );
+      _pendingMapZoom = 13.5;
+      return;
+    }
     final bounds = LatLngBounds.fromPoints([_pickupPos, _dropPos]);
-    _mapCtrl.fitCamera(
-      CameraFit.bounds(
-        bounds: bounds,
-        padding: const EdgeInsets.all(60),
-      ),
-    );
+    try {
+      _mapCtrl.fitCamera(
+        CameraFit.bounds(
+          bounds: bounds,
+          padding: const EdgeInsets.all(60),
+        ),
+      );
+      _pendingMapCenter = null;
+      _pendingMapZoom = null;
+    } catch (e) {
+      debugPrint('[BikeTaxiScreen] Map fit failed: $e');
+    }
+  }
+
+  void _moveMap(LatLng center, double zoom) {
+    _pendingMapCenter = center;
+    _pendingMapZoom = zoom;
+    if (!_mapReady) {
+      debugPrint('[BikeTaxiScreen] Map move queued until ready');
+      return;
+    }
+    try {
+      _mapCtrl.move(center, zoom);
+      _pendingMapCenter = null;
+      _pendingMapZoom = null;
+    } catch (e) {
+      debugPrint('[BikeTaxiScreen] Map move failed: $e');
+    }
+  }
+
+  void _handleMapReady() {
+    _mapReady = true;
+    final center = _pendingMapCenter;
+    if (_pickupSet && _dropSet) {
+      _fitMap();
+    } else if (center != null) {
+      _moveMap(center, _pendingMapZoom ?? 13.5);
+    }
   }
 
   // Build bezier-curve route (3-point quadratic)
@@ -316,7 +363,7 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
           _pickupPos = LatLng(position.latitude, position.longitude);
         });
         _onChanged();
-        _mapCtrl.move(_pickupPos, 14);
+        _moveMap(_pickupPos, 14);
       }
     } catch (e) {
       setState(() => _pickupCtrl.text = '');
@@ -463,7 +510,7 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
                     _mapBtn(
                       icon: Icons.my_location,
                       color: kGreen,
-                      onTap: () => _mapCtrl.move(kErodeCenter, 14),
+                      onTap: () => _moveMap(kErodeCenter, 14),
                     ),
                   ],
                 ),
@@ -487,12 +534,13 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
   Widget _buildMap(List<LatLng> route) {
     return FlutterMap(
       mapController: _mapCtrl,
-      options: const MapOptions(
+      options: MapOptions(
         initialCenter: kErodeCenter,
         initialZoom: 13.5,
         minZoom: 10,
         maxZoom: 18,
-        interactionOptions: InteractionOptions(
+        onMapReady: _handleMapReady,
+        interactionOptions: const InteractionOptions(
           flags: InteractiveFlag.pinchZoom | InteractiveFlag.drag,
         ),
       ),
@@ -1201,7 +1249,7 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
     return GestureDetector(
       onTap: () async {
         final uri = Uri.parse(
-          'https://wa.me/918681869091?text=${Uri.encodeComponent('I want to join as an Allin1 Hero! 🏍️')}',
+          'https://wa.me/919597879191?text=${Uri.encodeComponent('I want to join as an Allin1 Hero! 🏍️')}',
         );
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri);

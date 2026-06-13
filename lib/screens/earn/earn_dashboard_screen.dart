@@ -160,7 +160,9 @@ class _EarnDashboardScreenState extends State<EarnDashboardScreen>
 
   // ── Load wallet ───────────────────────────────────────────────
   Future<void> _loadCoins() async {
-    if (_user == null) return;
+    if (_user == null) {
+      return;
+    }
     try {
       final doc = await FirebaseFirestore.instance
           .collection('users')
@@ -183,7 +185,9 @@ class _EarnDashboardScreenState extends State<EarnDashboardScreen>
 
   // ── Load completed tasks ──────────────────────────────────────
   Future<void> _loadCompletedTasks() async {
-    if (_user == null) return;
+    if (_user == null) {
+      return;
+    }
     try {
       final snap = await FirebaseFirestore.instance
           .collection('coin_transactions')
@@ -231,7 +235,9 @@ class _EarnDashboardScreenState extends State<EarnDashboardScreen>
 
   // ── Record task initiated (pending admin verification) ────────
   Future<void> _recordTaskInitiated(_EarnTask task) async {
-    if (_user == null) return;
+    if (_user == null) {
+      return;
+    }
     try {
       final clearing = DateTime.now().add(const Duration(days: 32));
       await FirebaseFirestore.instance.collection('coin_transactions').add({
@@ -266,7 +272,7 @@ class _EarnDashboardScreenState extends State<EarnDashboardScreen>
         _showSnack('Book a ride to earn ${task.coins} coins!', _gold);
         break;
       case 'profile':
-        Navigator.pushNamed(context, '/profile');
+        await Navigator.pushNamed(context, '/profile');
         break;
       default:
         _showSnack('Coming soon!', _muted);
@@ -990,7 +996,9 @@ class _EarnDashboardScreenState extends State<EarnDashboardScreen>
   }
 
   Future<void> _requestWithdraw(double rupees) async {
-    if (_user == null) return;
+    if (_user == null) {
+      return;
+    }
     try {
       await FirebaseFirestore.instance.collection('withdrawal_requests').add({
         'userId': _user!.uid,

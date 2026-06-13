@@ -157,10 +157,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   // ================================================================
   String get _userTypeDisplayName {
     switch (_userType) {
-      case UserType.rider:
-        return 'Rider (Driver)';
-      case UserType.user:
-        return 'Passenger (User)';
+      case UserType.hero:
+        return 'Hero (Driver)';
+      case UserType.customer:
+        return 'Customer';
       case UserType.admin:
         return 'Admin';
     }
@@ -171,9 +171,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   // ================================================================
   IconData get _userTypeIcon {
     switch (_userType) {
-      case UserType.rider:
+      case UserType.hero:
         return Icons.directions_car;
-      case UserType.user:
+      case UserType.customer:
         return Icons.person;
       case UserType.admin:
         return Icons.admin_panel_settings;
@@ -185,9 +185,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   // ================================================================
   Color get _userTypeColor {
     switch (_userType) {
-      case UserType.rider:
+      case UserType.hero:
         return kGreen;
-      case UserType.user:
+      case UserType.customer:
         return kPurple;
       case UserType.admin:
         return kOrange;

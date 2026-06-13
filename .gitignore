@@ -50,7 +50,18 @@ firebase.exe
 firestore.rules
 firebase.json
 
+# 🚨 CRITICAL: Service account key - NEVER commit this file
+/backend-admin/serviceAccountKey.json
+
+# 🔐 Signing: keystore credentials — NEVER commit
+/android/key.properties
+
 # Local temporary files
 *_output.txt
 *.txt
 *.exe
+
+# 🔐 Environment variables (API keys, secrets) — NEVER commit
+.env
+.env.local
+.env.*.local

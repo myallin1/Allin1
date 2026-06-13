@@ -39,7 +39,7 @@ class CartItem {
         name: json['name'] as String,
         emoji: json['emoji'] as String,
         category: json['category'] as String,
-        price: (json['price'] as num).toDouble(),
+        price: (json['price'] as num?)?.toDouble() ?? 0,
         quantity: (json['quantity'] as num?)?.toInt() ?? 1,
       );
 }

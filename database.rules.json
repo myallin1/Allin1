@@ -1,0 +1,58 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "active_ride_requests": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$requestId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "hero_pings": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$heroId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "$requestId": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      }
+    },
+    "signals": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "pending_rides": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "ride_signals": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "online_heroes": {
+      ".read": "auth != null",
+      "$heroId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $heroId"
+      }
+    },
+    "live_locations": {
+      ".read": "auth != null",
+      "$rideId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "dispute_reports": {
+      ".read": "auth != null",
+      "$reportId": {
+        ".write": "auth != null"
+      }
+    }
+  }
+}

@@ -210,6 +210,16 @@ class AnalyticsService {
   /// Firebase Analytics observer for screen tracking
   FirebaseAnalyticsObserver? _observer;
 
+  /// Get the analytics observer
+  FirebaseAnalyticsObserver getObserver() {
+    if (_observer == null) {
+      // Return a basic observer if not initialized to avoid crashes
+      // though typically initialize() should be called first.
+      return FirebaseAnalyticsObserver(analytics: FirebaseAnalytics.instance);
+    }
+    return _observer!;
+  }
+
   /// Firebase Crashlytics instance
   FirebaseCrashlytics? _crashlytics;
 

@@ -337,7 +337,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             onPressed: () async {
               await SessionService().clearSession();
               if (context.mounted) {
-              await Navigator.of(context).pushNamedAndRemoveUntil(
+                await Navigator.of(context).pushNamedAndRemoveUntil(
                   '/login',
                   (route) => false,
                 );
