@@ -11,6 +11,8 @@ import 'package:scratcher/scratcher.dart';
 
 import '../widgets/promo_overlay.dart';
 import '../widgets/soundbox_easter_egg_overlay.dart';
+import '../widgets/banner_slider.dart';
+import 'guru_chat_screen.dart';
 
 const Color _paytmBlue = Color(0xFF00BAF2);
 const Color _paytmDarkBlue = Color(0xFF002970);
@@ -180,12 +182,58 @@ class _RewardsScreenState extends State<RewardsScreen>
                       ),
                     ),
                   ),
+                  const SizedBox(height: 24),
+                  const BannerAdsSlider(
+                    height: 240,
+                    imageUrls: [
+                      'https://images.unsplash.com/photo-1555664424-778a1e5e1b48?w=800&q=80',
+                      'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=800&q=80',
+                    ],
+                  ),
+                  const SizedBox(height: 40),
                 ],
               ),
             ),
           ),
         ),
         const RewardsSoundboxOverlay(),
+        // Floating Guru Bot — bottom-left
+        Positioned(
+          left: 16,
+          bottom: 20,
+          child: GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const GuruChatScreen()),
+              );
+            },
+            child: Container(
+              width: 60, height: 60,
+              decoration: BoxDecoration(
+                color: Colors.white, shape: BoxShape.circle,
+                border: Border.all(color: _paytmBlue.withValues(alpha: 0.35), width: 2),
+                boxShadow: [BoxShadow(
+                    color: _paytmBlue.withValues(alpha: 0.25),
+                    blurRadius: 16, spreadRadius: 2)],
+              ),
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/images/assistant.gif',
+                  width: 46, height: 46,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Text('🤖', style: TextStyle(fontSize: 28)),
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Floating Gift Box — bottom-right
+        Positioned(
+          right: 16,
+          bottom: 20,
+          child: _RewardsFloatingGiftBox(onTap: _openPaytmQuizScratchDialog),
+        ),
       ],
     );
   }
@@ -1007,5 +1055,66 @@ class _RewardOfferTile extends StatelessWidget {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<PromoOfferItem>('offer', offer));
     properties.add(ObjectFlagProperty<VoidCallback>.has('onClaim', onClaim));
+  }
+}
+
+// ================================================================
+// FLOATING GIFT BOX — Rewards Tab
+// ================================================================
+class _RewardsFloatingGiftBox extends StatefulWidget {
+  final VoidCallback onTap;
+  const _RewardsFloatingGiftBox({required this.onTap});
+  @override
+  State<_RewardsFloatingGiftBox> createState() => _RewardsFloatingGiftBoxState();
+}
+
+class _RewardsFloatingGiftBoxState extends State<_RewardsFloatingGiftBox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _glow;
+  late final Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _glow = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1200))
+      ..repeat(reverse: true);
+    _pulse = Tween<double>(begin: 0.85, end: 1.08).animate(
+        CurvedAnimation(parent: _glow, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() { _glow.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (_, __) => Transform.scale(
+        scale: _pulse.value,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: Container(
+            width: 60, height: 60,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const RadialGradient(colors: [
+                Color(0xFFFFDD00), Color(0xFFFF9800),
+              ]),
+              boxShadow: [
+                BoxShadow(
+                    color: const Color(0xFFFFBB00)
+                        .withValues(alpha: 0.5 + 0.35 * _pulse.value),
+                    blurRadius: 22,
+                    spreadRadius: 4),
+              ],
+            ),
+            child: const Center(
+              child: Text('🎁', style: TextStyle(fontSize: 28)),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

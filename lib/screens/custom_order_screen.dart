@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'biriyani_menu_screen.dart';
+import 'hero_buddy_form_screen.dart';
 
 // ── Theme tokens ─────────────────────────────────────────────────
 const Color _coBg      = Color(0xFF0C0A14);
@@ -275,12 +276,16 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
                 child: Row(children: [
                   Expanded(
                     child: _ActionBtn(
-                      emoji: '💬',
-                      label: 'WhatsApp',
-                      sublabel: 'Send voice note',
-                      grad: const LinearGradient(
-                          colors: [Color(0xFF25D366), Color(0xFF128C7E)]),
-                      onTap: _openWhatsApp,
+                      emoji: '📝',
+                      label: 'Multi-Task',
+                      sublabel: 'Add multiple items',
+                      grad: const LinearGradient(colors: [Color(0xFF7A5CFF), Color(0xFF00C4FF)]),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const HeroBuddyFormScreen()),
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(width: 12),

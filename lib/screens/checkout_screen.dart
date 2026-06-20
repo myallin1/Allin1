@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../services/hive_cache.dart';
+
 // ============================================================
 //  CHECKOUT SCREEN — Allin1 Super App
 //  Coder 2.0 | Web-Safe | Zero external packages
@@ -61,6 +63,28 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   double get _total => _subtotal + _deliveryFee + _platformFee;
 
   // ── Payment Processing ───────────────────────────────────
+  int _coinsToUse = 0;
+
+  Future<bool> _canRedeemCoins(int requestedCoins) async {
+    if (requestedCoins <= 0) return true;
+
+    final todayKey = 'redeemed_${DateTime.now().toIso8601String().substring(0, 10)}';
+    final redeemedToday = (HiveCache.get(todayKey) as int?) ?? 0;
+
+    if (redeemedToday + requestedCoins > 20) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You can only use up to 20 NJ Coins per day.'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return false;
+    }
+    return true;
+  }
 
   void _showPaymentSheet() {
     showModalBottomSheet<void>(
@@ -75,6 +99,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Future<void> _processPayment(String method) async {
+    if (!await _canRedeemCoins(_coinsToUse)) return;
+
     // 1. Close the bottom sheet
     if (mounted) {
       Navigator.of(context).pop();
@@ -91,7 +117,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       Navigator.of(context).pop();
     }
 
-    // 5. Show success then navigate
+    // 5. Update daily coin usage counter
+    final todayKey = 'redeemed_${DateTime.now().toIso8601String().substring(0, 10)}';
+    final redeemedToday = (HiveCache.get(todayKey) as int?) ?? 0;
+    HiveCache.put(todayKey, redeemedToday + _coinsToUse);
+
+    // 6. Show success then navigate
     await Future<void>.delayed(const Duration(milliseconds: 150));
     if (mounted) {
       _showSuccessAndNavigate(method);

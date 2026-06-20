@@ -44,6 +44,11 @@ class MapService extends ChangeNotifier {
   Future<void> initialize() async {
     if (_isInitialized) return;
 
+    if (kIsWeb) {
+      debugPrint('[MapService] Skipping native map init on Web');
+      return;
+    }
+
     try {
       debugPrint('[MapService] Starting initialization');
       _olaProvider = OlaMapsProvider();

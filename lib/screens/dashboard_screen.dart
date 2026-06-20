@@ -18,6 +18,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/pwa_cache_platform_stub.dart'
     if (dart.library.html) '../services/pwa_cache_platform_web.dart';
 
+import '../widgets/banner_slider.dart';
 import 'bike_taxi/bike_booking_screen.dart';
 import 'store_layout_screen.dart';
 import 'car_wash_screen.dart';
@@ -159,6 +160,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_silentBackupIfNeeded());
+  }
+
+  Future<void> _silentBackupIfNeeded() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      final lastBackupStr = HiveCache.get('lastCoinsBackupDate') as String?;
+      final now = DateTime.now();
+      bool shouldBackup = false;
+
+      if (lastBackupStr == null) {
+        shouldBackup = true;
+      } else {
+        final lastBackup = DateTime.parse(lastBackupStr);
+        if (now.difference(lastBackup).inHours >= 24) {
+          shouldBackup = true;
+        }
+      }
+
+      if (!shouldBackup) return;
+
+      final currentCoins = (HiveCache.get(HiveCache.kWalletBalance) as num?)?.toDouble() ?? 0.0;
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .set({
+            'njCoinsBackup': currentCoins,
+            'lastCoinsBackupAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+
+      HiveCache.put('lastCoinsBackupDate', now.toIso8601String());
+
+      debugPrint('[Dashboard] Silent backup completed: ${currentCoins.toStringAsFixed(0)} coins');
+    } catch (e) {
+      debugPrint('[Dashboard] Silent backup failed: $e');
+    }
+  }
+
   // ── Tab switch — saves last tab to PrefsCache ────────────────
   void _goTab(int i) {
     setState(() => _navIndex = i);
@@ -267,15 +312,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SosScreen(),
               ],
             ),
-            if (_navIndex == 0) _FloatingGuruBot(
-              onTap: () => _goTab(3),
-            ),
-            if (_navIndex == 0)
-              Positioned(
-                right: 16,
-                bottom: 14,
-                child: _FloatingGiftBox(onTap: _showScratchCardModal),
-              ),
           ],
         ),
         bottomNavigationBar: _buildBottomNav(),
@@ -314,22 +350,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ]),
       ]),
       actions: [
-        Container(
-          margin: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-              color: kGreen.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: kGreen.withValues(alpha: 0.4)),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Container(width: 6, height: 6,
-                decoration: const BoxDecoration(
-                    color: kGreen, shape: BoxShape.circle)),
-            const SizedBox(width: 4),
-            Text('Live', style: GoogleFonts.outfit(
-                color: kGreen, fontSize: 10, fontWeight: FontWeight.w700)),
-          ]),
+        StreamBuilder<DocumentSnapshot>(
+          stream: _userStream,
+          builder: (context, snap) {
+            final data = snap.hasData && snap.data!.exists
+                ? (snap.data!.data() as Map<String, dynamic>?) ?? {}
+                : <String, dynamic>{};
+            final bal = (data['walletBalance'] as num?)?.toDouble() ?? 0.0;
+
+            if (snap.hasData) {
+              HiveCache.put(HiveCache.kWalletBalance, bal, ttl: HiveCache.ttlWalletBalance);
+            }
+
+            return GestureDetector(
+              onTap: () {
+                showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: kBg,
+                  shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+                  builder: (_) => _WalletSheet(user: _user),
+                );
+              },
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                decoration: BoxDecoration(
+                  color: kPink.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: kPink.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.account_balance_wallet_rounded, color: kPink, size: 14),
+                    const SizedBox(width: 4),
+                    Text('A1 ₹${bal.toStringAsFixed(0)}', style: GoogleFonts.outfit(color: kPink, fontWeight: FontWeight.w800, fontSize: 13)),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
         IconButton(
           icon: const Icon(Icons.notifications_outlined, color: kText, size: 24),
@@ -405,8 +467,16 @@ class _HomeTab extends StatelessWidget {
       physics: const BouncingScrollPhysics(),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const SizedBox(height: 12),
-        _buildWalletCard(),
-        const SizedBox(height: 16),
+        // Top Half-Screen Banner Ads
+        const BannerAdsSlider(
+          height: 240,
+          imageUrls: [
+            'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=800&q=80',
+            'https://images.unsplash.com/photo-1546054454-aa26e2b734c7?w=800&q=80',
+            'https://images.unsplash.com/photo-1555664424-778a1e5e1b48?w=800&q=80',
+          ],
+        ),
+        const SizedBox(height: 20),
         _buildNJTechBanner(context),
         const SizedBox(height: 20),
         Padding(
@@ -421,138 +491,16 @@ class _HomeTab extends StatelessWidget {
         _buildFeaturedShop(context),
         const SizedBox(height: 10),
         _buildPromoCards(context),
+        const SizedBox(height: 20),
+        const BannerAdsSlider(
+          height: 240,
+          imageUrls: [
+            'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=800&q=80',
+            'https://images.unsplash.com/photo-1546054454-aa26e2b734c7?w=800&q=80',
+          ],
+        ),
         const SizedBox(height: 100),
       ]),
-    );
-  }
-
-  // ── Wallet Card — optimistic: uses lifted stream, caches to Hive ─
-  Widget _buildWalletCard() {
-    return StreamBuilder<DocumentSnapshot>(
-      stream: userStream,
-      builder: (context, snap) {
-        final data = snap.hasData && snap.data!.exists
-            ? (snap.data!.data()! as Map<String, dynamic>)
-            : <String, dynamic>{};
-        final bal = (data['walletBalance'] as num?)?.toDouble() ?? 0.0;
-
-        // Cache fresh balance to Hive whenever Firestore delivers data
-        if (snap.hasData) {
-          HiveCache.put(
-            HiveCache.kWalletBalance,
-            bal,
-            ttl: HiveCache.ttlWalletBalance,
-          );
-        }
-
-        // RBAC: only admins may tap or transfer
-        final role    = (data['role'] as String?) ?? 'customer';
-        final isAdmin = role == 'admin';
-
-        final card = Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [kPink, kPinkDark],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [BoxShadow(
-                color: kPink.withValues(alpha: 0.28),
-                blurRadius: 14, offset: const Offset(0, 6))],
-          ),
-          child: Row(children: [
-            Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(children: [
-                  const Text('₹', style: TextStyle(
-                      color: Colors.white70, fontSize: 13,
-                      fontWeight: FontWeight.w700)),
-                  const SizedBox(width: 4),
-                  Text('Allin1 Wallet', style: GoogleFonts.outfit(
-                      color: Colors.white70, fontSize: 11,
-                      fontWeight: FontWeight.w600)),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: kGreen.withValues(alpha: 0.25),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: kGreen.withValues(alpha: 0.5)),
-                    ),
-                    child: Text('Active', style: GoogleFonts.outfit(
-                        color: Colors.white, fontSize: 9,
-                        fontWeight: FontWeight.w700)),
-                  ),
-                ]),
-                const SizedBox(height: 4),
-                Text('₹ ${bal.toStringAsFixed(2)}',
-                    style: GoogleFonts.outfit(
-                        color: Colors.white, fontSize: 22,
-                        fontWeight: FontWeight.w900)),
-                if (!isAdmin) ...[
-                  const SizedBox(height: 3),
-                  Text('Read-only · Contact admin to add funds',
-                      style: GoogleFonts.outfit(
-                          color: Colors.white54, fontSize: 9)),
-                ],
-              ],
-            )),
-            if (isAdmin)
-              GestureDetector(
-                onTap: () => _showAddMoney(context, user),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Text('Transfer', style: GoogleFonts.outfit(
-                        color: Colors.white, fontSize: 12,
-                        fontWeight: FontWeight.w700)),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.arrow_forward_rounded,
-                        color: Colors.white, size: 14),
-                  ]),
-                ),
-              )
-            else
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.lock_outline_rounded,
-                    color: Colors.white54, size: 16),
-              ),
-          ]),
-        );
-
-        return isAdmin
-            ? GestureDetector(
-                onTap: () => _showAddMoney(context, user),
-                child: card)
-            : card;
-      },
-    );
-  }
-
-  void _showAddMoney(BuildContext context, User? user) {
-    showModalBottomSheet<void>(
-      context: context, isScrollControlled: true,
-      backgroundColor: kBg,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (_) => _WalletSheet(user: user),
     );
   }
 
@@ -639,7 +587,7 @@ class _HomeTab extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: cols,
-        childAspectRatio: cols == 5 ? 1.0 : 1.4,
+        childAspectRatio: cols == 5 ? 1.0 : 0.85,
         crossAxisSpacing: 8,
         mainAxisSpacing: 8,
       ),
@@ -1246,69 +1194,6 @@ class _ProfileDrawer extends StatelessWidget {
 }
 
 // ================================================================
-// FLOATING GURU AI BOT — Draggable
-// ================================================================
-class _FloatingGuruBot extends StatefulWidget {
-  final VoidCallback onTap;
-  const _FloatingGuruBot({required this.onTap});
-  @override
-  State<_FloatingGuruBot> createState() => _FloatingGuruBotState();
-}
-
-class _FloatingGuruBotState extends State<_FloatingGuruBot> {
-  double _x = 0, _y = 0;
-  bool _placed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    if (!_placed) { _x = size.width - 90; _y = size.height * 0.5; _placed = true; }
-
-    return Positioned(
-      left: _x, top: _y,
-      child: GestureDetector(
-        onPanUpdate: (d) => setState(() {
-          _x = (_x + d.delta.dx).clamp(0, size.width - 80);
-          _y = (_y + d.delta.dy).clamp(0, size.height - 80);
-        }),
-        onTap: widget.onTap,
-        child: Stack(clipBehavior: Clip.none, children: [
-          Container(
-            width: 60, height: 60,
-            decoration: BoxDecoration(
-              color: kBg, shape: BoxShape.circle,
-              border: Border.all(color: kPink.withValues(alpha: 0.35), width: 2),
-              boxShadow: [BoxShadow(
-                  color: kPink.withValues(alpha: 0.25),
-                  blurRadius: 16, spreadRadius: 2)],
-            ),
-            // ✅ Replaced with local CEO Asset GIF
-            child: Center(
-              child: Image.asset(
-                'assets/images/assistant.gif',
-                width: 46, height: 46,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Text('💬', style: TextStyle(fontSize: 28)),
-              ),
-            ),
-          ),
-          Positioned(top: -6, right: -4,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              decoration: BoxDecoration(
-                color: kGreen, borderRadius: BorderRadius.circular(8)),
-              child: Text('FREE', style: GoogleFonts.outfit(
-                  color: Colors.white, fontSize: 7,
-                  fontWeight: FontWeight.w800)),
-            ),
-          ),
-        ]),
-      ),
-    );
-  }
-}
-
-// ================================================================
 // CHECK FOR UPDATES
 // ================================================================
 Future<void> _checkForUpdates(BuildContext context) async {
@@ -1784,67 +1669,6 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
                       ),
                     ),
                   ]),
-      ),
-    );
-  }
-}
-
-// ================================================================
-// FLOATING GIFT BOX
-// ================================================================
-class _FloatingGiftBox extends StatefulWidget {
-  final VoidCallback onTap;
-  const _FloatingGiftBox({required this.onTap});
-  @override
-  State<_FloatingGiftBox> createState() => _FloatingGiftBoxState();
-}
-
-class _FloatingGiftBoxState extends State<_FloatingGiftBox>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _glow;
-  late final Animation<double> _pulse;
-
-  @override
-  void initState() {
-    super.initState();
-    _glow = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1200))
-      ..repeat(reverse: true);
-    _pulse = Tween<double>(begin: 0.85, end: 1.08).animate(
-        CurvedAnimation(parent: _glow, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() { _glow.dispose(); super.dispose(); }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _pulse,
-      builder: (_, __) => Transform.scale(
-        scale: _pulse.value,
-        child: GestureDetector(
-          onTap: widget.onTap,
-          child: Container(
-            width: 60, height: 60,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const RadialGradient(colors: [
-                Color(0xFFFFDD00), Color(0xFFFF9800),
-              ]),
-              boxShadow: [
-                BoxShadow(
-                    color: const Color(0xFFFFBB00)
-                        .withValues(alpha: 0.5 + 0.35 * _pulse.value),
-                    blurRadius: 22,
-                    spreadRadius: 4),
-              ],
-            ),
-            child: const Center(
-              child: Text('🎁', style: TextStyle(fontSize: 28)),
-            ),
-          ),
-        ),
       ),
     );
   }
