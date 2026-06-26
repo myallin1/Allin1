@@ -26,8 +26,6 @@ class RideHistoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.phoneNumber ?? '';
-
     return Scaffold(
       backgroundColor: kBg,
       body: SafeArea(
@@ -40,9 +38,9 @@ class RideHistoryScreen extends StatelessWidget {
               child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('rides')
-                    .where('customerPhone', isEqualTo: uid)
+                    .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
                     .orderBy('createdAt', descending: true)
-                    .limit(50)
+                    .limit(20)
                     .snapshots(),
                 builder: (ctx, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {

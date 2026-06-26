@@ -96,8 +96,9 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
 
   // ─── LOCAL DETERMINISTIC OTP GENERATOR (NO DB REQUIRED) ───
   String _generateLocalOtp(String docId) {
-    if (docId.isEmpty) return '1234';
-    final hash = docId.hashCode.abs();
+    final cleanId = docId.trim().replaceAll(RegExp(r'\s+'), '');
+    if (cleanId.isEmpty) return '1234';
+    final hash = cleanId.hashCode.abs();
     return (1000 + (hash % 9000)).toString(); // Generates 1000-9999
   }
   // ──────────────────────────────────────────────────────────
@@ -368,7 +369,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       _locationSubscription = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
-          distanceFilter: 10,
+          distanceFilter: 15,
         ),
       ).listen((position) {
         if (mounted) {
@@ -389,6 +390,20 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
 
             _currentPosition = position;
           });
+          // Write live location to RTDB
+          if (widget.rideDocId.isNotEmpty) {
+            unawaited(
+              FirebaseDatabase.instance
+                  .ref()
+                  .child('live_locations/${widget.rideDocId}')
+                  .set({
+                'lat': position.latitude,
+                'lng': position.longitude,
+                'heading': bearingDegrees,
+                'updatedAt': ServerValue.timestamp,
+              }),
+            );
+          }
           _animateCaptainMarkerTo(position, bearingDegrees);
           if (_routePoints.isEmpty) {
             unawaited(_loadRoadRoute());
@@ -542,14 +557,11 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
     final enteredOtp = _otpController.text.trim();
     if (_rideOtpCode.isNotEmpty && enteredOtp != _rideOtpCode) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content:
-                Text('Enter the correct OTP from the customer to start ride.'),
-            backgroundColor: _red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('❌ OTP mismatch! Expected: $_rideOtpCode'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ));
       }
       return;
     }

@@ -116,14 +116,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   final _user = FirebaseAuth.instance.currentUser;
 
-  // ── Single stream instance — never recreated on rebuild ──────
-  late final Stream<DocumentSnapshot> _userStream = _user != null
-      ? FirebaseFirestore.instance
-          .collection('users')
-          .doc(_user!.uid)
-          .snapshots()
-      : const Stream.empty();
-
   // ── Classic Rewards promo state ──────────────────────────────
   List<PromoOfferItem> _promoOffers = const [
     PromoOfferItem(
@@ -145,6 +137,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       buttonLabel: 'Book Now',      statusLabel: 'New Users',
     ),
   ];
+
+  bool _updateAvailable = true; // Set to true to test the glow.
 
   Future<void> _claimPromo(String offerId) async {
     setState(() {
@@ -297,19 +291,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
             IndexedStack(
               index: _navIndex,
               children: [
-                _HomeTab(
-                  onTileTap: _tap,
-                  onNJServiceTap: _tap,
-                  user: _user,
-                  userStream: _userStream,
+                KeepAliveTab(
+                  child: _HomeTab(
+                    onTileTap: _tap,
+                    onNJServiceTap: _tap,
+                    user: _user,
+                    userStream: const Stream.empty(),
+                  ),
                 ),
-                RewardsScreen(
-                  promoOffers: _promoOffers,
-                  onClaimPromo: _claimPromo,
+                KeepAliveTab(
+                  child: RewardsScreen(
+                    promoOffers: _promoOffers,
+                    onClaimPromo: _claimPromo,
+                  ),
                 ),
-                const PlayZoneScreen(),
-                const GuruChatScreen(),
-                const SosScreen(),
+                const KeepAliveTab(child: PlayZoneScreen()),
+                const KeepAliveTab(child: GuruChatScreen()),
+                const KeepAliveTab(child: SosScreen()),
               ],
             ),
           ],
@@ -321,82 +319,81 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   PreferredSizeWidget _buildAppBar() {
     final name = _user?.displayName ?? 'User';
+    final firstName = name.split(' ').first;
+
     return AppBar(
       backgroundColor: kBg,
       elevation: 0,
       surfaceTintColor: Colors.transparent,
+      titleSpacing: 0,
       leading: IconButton(
-        icon: const Icon(Icons.menu_rounded, color: kText, size: 26),
+        icon: Icon(Icons.menu_rounded, color: kPink, size: 26),
         onPressed: () => _scaffoldKey.currentState?.openDrawer(),
       ),
-      title: Row(children: [
-        CircleAvatar(
-          radius: 18,
-          backgroundColor: kPink,
-          child: Text(
-            name.isNotEmpty ? name[0].toUpperCase() : 'U',
-            style: const TextStyle(color: Colors.white,
-                fontWeight: FontWeight.w800, fontSize: 15),
+      title: Row(
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: kPink,
+            child: Text(
+              firstName.isNotEmpty ? firstName[0].toUpperCase() : 'U',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Hi, $firstName',
+                  style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w700, fontSize: 14),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const Text(
+                  'Erode, TN',
+                  style: TextStyle(color: kMuted, fontSize: 9, letterSpacing: 0.5),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        if (_updateAvailable)
+          _GlowingUpdateButton(
+            onTap: () {
+              setState(() => _updateAvailable = false);
+              _checkForUpdates(context);
+            }
+          ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: kPinkBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: kPink.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.wallet_rounded, size: 16, color: kPink),
+              const SizedBox(width: 4),
+              Text(
+                '₹0',
+                style: TextStyle(color: kPink, fontWeight: FontWeight.w700, fontSize: 13),
+              ),
+            ],
           ),
         ),
-        const SizedBox(width: 10),
-        Column(crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min, children: [
-          Text('Hello, ${name.split(' ').first}!',
-              style: GoogleFonts.outfit(
-                  color: kText, fontWeight: FontWeight.w700, fontSize: 16)),
-          Text('Erode, Tamil Nadu',
-              style: const TextStyle(color: kMuted, fontSize: 11)),
-        ]),
-      ]),
-      actions: [
-        StreamBuilder<DocumentSnapshot>(
-          stream: _userStream,
-          builder: (context, snap) {
-            final data = snap.hasData && snap.data!.exists
-                ? (snap.data!.data() as Map<String, dynamic>?) ?? {}
-                : <String, dynamic>{};
-            final bal = (data['walletBalance'] as num?)?.toDouble() ?? 0.0;
-
-            if (snap.hasData) {
-              HiveCache.put(HiveCache.kWalletBalance, bal, ttl: HiveCache.ttlWalletBalance);
-            }
-
-            return GestureDetector(
-              onTap: () {
-                showModalBottomSheet<void>(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: kBg,
-                  shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-                  builder: (_) => _WalletSheet(user: _user),
-                );
-              },
-              child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                decoration: BoxDecoration(
-                  color: kPink.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: kPink.withValues(alpha: 0.4)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.account_balance_wallet_rounded, color: kPink, size: 14),
-                    const SizedBox(width: 4),
-                    Text('A1 ₹${bal.toStringAsFixed(0)}', style: GoogleFonts.outfit(color: kPink, fontWeight: FontWeight.w800, fontSize: 13)),
-                  ],
-                ),
-              ),
-            );
-          },
+        const SizedBox(width: 8),
+        GestureDetector(
+          onTap: () => _showApkSheet(context),
+          child: const Icon(Icons.notifications_outlined, color: kText, size: 22),
         ),
-        IconButton(
-          icon: const Icon(Icons.notifications_outlined, color: kText, size: 24),
-          onPressed: () => _showApkSheet(context),
-        ),
+        const SizedBox(width: 16),
       ],
     );
   }
@@ -1199,8 +1196,8 @@ class _ProfileDrawer extends StatelessWidget {
 Future<void> _checkForUpdates(BuildContext context) async {
   final navigator = Navigator.of(context, rootNavigator: true);
   final msg = kIsWeb
-      ? 'Clearing cache & refreshing app…'
-      : 'Checking Shorebird OTA updates…';
+      ? 'Please wait, app is updating...'
+      : 'Checking for updates...';
 
   showDialog<void>(
     context: navigator.context,
@@ -1854,5 +1851,76 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
           const SizedBox(height: 20),
       ]),
     );
+  }
+}
+
+// ================================================================
+// GLOWING UPDATE BUTTON
+// ================================================================
+class _GlowingUpdateButton extends StatefulWidget {
+  final VoidCallback onTap;
+  const _GlowingUpdateButton({required this.onTap});
+  @override
+  State<_GlowingUpdateButton> createState() => _GlowingUpdateButtonState();
+}
+class _GlowingUpdateButtonState extends State<_GlowingUpdateButton> with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _glow;
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat(reverse: true);
+    _glow = Tween<double>(begin: 2.0, end: 8.0).animate(_ctrl);
+  }
+  @override
+  void dispose() { _ctrl.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _glow,
+      builder: (context, child) {
+        return GestureDetector(
+          onTap: widget.onTap,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: kGold,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(color: kGold.withValues(alpha: 0.6), blurRadius: _glow.value, spreadRadius: _glow.value / 2)
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.system_update_alt_rounded, color: Colors.black, size: 12),
+                const SizedBox(width: 4),
+                Text('UPDATE', style: GoogleFonts.outfit(color: Colors.black, fontSize: 10, fontWeight: FontWeight.w900)),
+              ],
+            ),
+          ),
+        );
+      }
+    );
+  }
+}
+
+// ================================================================
+// KEEP ALIVE WRAPPER
+// ================================================================
+class KeepAliveTab extends StatefulWidget {
+  final Widget child;
+  const KeepAliveTab({super.key, required this.child});
+  @override
+  State<KeepAliveTab> createState() => _KeepAliveTabState();
+}
+class _KeepAliveTabState extends State<KeepAliveTab> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }

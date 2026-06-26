@@ -1343,7 +1343,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       // ── P0 FIX 1: Clock-skew-tolerant expiry check (5s buffer) ──
       final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt() ?? 0;
       final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
-      if (nowMs > pingExpiresAt + 5000) {
+      
+      // 🚀 FIX: Only enforce expiry check if pingExpiresAt was explicitly provided (>0)
+      if (pingExpiresAt > 0 && nowMs > pingExpiresAt + 5000) {
         // 5-second tolerance for device clock skew
         debugPrint('[HeroHomeScreen] Ping expired, cannot accept');
         if (mounted) setState(() => _accepting = false);
@@ -4255,11 +4257,18 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
   @override
   void initState() {
     super.initState();
-    final pingExpiresAt = (widget.pingData['pingExpiresAt'] as num?)?.toInt() ?? 0;
+    int pingExpiresAt = (widget.pingData['pingExpiresAt'] as num?)?.toInt() ?? 0;
+    
+    // 🚀 FIX: Fallback for Push Notifications (Firestore data doesn't have pingExpiresAt)
+    if (pingExpiresAt == 0) {
+      pingExpiresAt = DateTime.now().toUtc().millisecondsSinceEpoch + 15000; // 15s from now
+    }
+    
     final remainingMs =
         (pingExpiresAt - DateTime.now().toUtc().millisecondsSinceEpoch)
             .clamp(0, 15000);
     _remainingSec = (remainingMs / 1000).ceil();
+    
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) {
         t.cancel();

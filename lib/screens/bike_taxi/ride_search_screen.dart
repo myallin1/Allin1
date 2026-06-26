@@ -100,8 +100,17 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     if (existingRideDocId != null && existingRideDocId.trim().isNotEmpty) {
       _rideDocId = existingRideDocId.trim();
       _requestId = existingRideDocId.trim();
+      _rideOtp = _generateLocalOtp(_rideDocId);
     }
     _startRideCreation();
+  }
+
+  // ─── LOCAL DETERMINISTIC OTP GENERATOR (NO DB REQUIRED) ───
+  String _generateLocalOtp(String docId) {
+    final cleanId = docId.trim().replaceAll(RegExp(r'\s+'), '');
+    if (cleanId.isEmpty) return '1234';
+    final hash = cleanId.hashCode.abs();
+    return (1000 + (hash % 9000)).toString();
   }
 
   @override
