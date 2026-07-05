@@ -55,6 +55,11 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   static const Color _muted = Color(0xFF7777A0);
   static const Color _border = Color(0x1AFFFFFF);
 
+  bool get _isCargoRide {
+    final type = (widget.ride.vehicleType ?? '').trim().toLowerCase();
+    return type == 'lorry' || type == 'mini_truck';
+  }
+
   // ── State ────────────────────────────────────────────────────
   String _rideStatus = '';
   bool _isLoading = true;
@@ -942,11 +947,11 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       case 'started':
       case 'in_progress':
         badgeColor = _green;
-        statusText = 'Navigate to Destination';
+        statusText = _isCargoRide ? 'Navigate to Drop' : 'Navigate to Destination';
         break;
       case 'completed':
         badgeColor = _muted;
-        statusText = 'Collect Payment';
+        statusText = _isCargoRide ? 'Delivery Complete' : 'Collect Payment';
         break;
       case 'paid':
         badgeColor = _green;
@@ -1238,12 +1243,12 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
               ),
               child: Text(
                 isAccepted
-                    ? 'ARRIVED'
+                    ? (_isCargoRide ? 'PARCEL PICKED' : 'ARRIVED')
                     : (isArrived
                         ? (_verifyingOtp
                             ? 'VERIFYING OTP...'
                             : 'VERIFY OTP & START')
-                        : 'END RIDE'),
+                        : (_isCargoRide ? 'DELIVERED' : 'END RIDE')),
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,

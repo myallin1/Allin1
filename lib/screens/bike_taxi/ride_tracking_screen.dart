@@ -55,6 +55,11 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   static const Color _muted = Color(0xFF8F5A78);
   static const Color _border = Color(0x33FF4FA3);
 
+  bool get _isCargoRide {
+    final type = (widget.ride.vehicleType ?? '').trim().toLowerCase();
+    return type == 'lorry' || type == 'mini_truck';
+  }
+
   String _rideStatus = 'arriving';
   bool _completed = false;
   String? _paymentStatus;
@@ -118,11 +123,11 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     }
   }
 
-  bool get _isPaymentSettled =>
-      _paymentStatus == 'completed' ||
-      _paymentStatus == 'paid' ||
-      _paymentStatus == 'paid_by_wallet' ||
-      _paymentStatus == 'paid_offline_p2p';
+  bool get _isPaymentSettled {
+    final status = _paymentStatus?.trim() ?? '';
+    // Added 'settled' and 'confirmed' to sync with Hero and Admin app updates
+    return ['completed', 'paid', 'paid_by_wallet', 'paid_offline_p2p', 'settled', 'confirmed'].contains(status);
+  }
 
   LatLng? _pickupTarget() {
     if (widget.ride.pickupLatitude == null ||
@@ -1050,7 +1055,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   Widget _arrivalBanner() {
     final String title =
         _rideStatus == 'started' || _rideStatus == 'in_progress'
-            ? 'Ride started'
+            ? (_isCargoRide ? 'Goods picked up' : 'Ride started')
             : 'Driver arriving...';
 
     return Container(
