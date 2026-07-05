@@ -778,8 +778,12 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
           FirebaseFirestore.instance.collection('rides').doc(widget.rideDocId);
       final rideSnap = await rideRef.get();
       final rideData = rideSnap.data() ?? <String, dynamic>{};
-      // Idempotency guard: skip if already settled
-      if (rideData['paymentStatus'] == 'settled' || rideData['paymentStatus'] == 'paid') {
+      // Idempotency guard: skip if already settled or paid via wallet
+      // ('paid_by_wallet' already credited the hero in the customer's
+      // wallet transaction — crediting again here would double-pay).
+      if (rideData['paymentStatus'] == 'settled' ||
+          rideData['paymentStatus'] == 'paid' ||
+          rideData['paymentStatus'] == 'paid_by_wallet') {
         debugPrint('[HeroRideScreen] Payment already processed — skipping markPaymentReceived');
         return;
       }

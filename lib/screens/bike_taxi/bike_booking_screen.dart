@@ -437,6 +437,12 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         return 'car';
       case 'parcel':
         return 'parcel';
+      case 'mini_truck':
+      case 'mini-truck':
+      case 'truck':
+        return 'mini_truck';
+      case 'lorry':
+        return 'lorry';
       case 'emergency_manpower':
       case 'manpower':
         return 'emergency_manpower';

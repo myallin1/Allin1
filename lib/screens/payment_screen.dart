@@ -50,7 +50,7 @@ class PaymentScreen extends StatefulWidget {
 }
 
 class _PaymentScreenState extends State<PaymentScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   double _fare = 0;
   double _walletBal = 0;
   bool _payingWallet = false;
@@ -66,6 +66,7 @@ class _PaymentScreenState extends State<PaymentScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _fare = widget.amount ?? 45.0;
     _successCtrl = AnimationController(
       vsync: this,
@@ -81,9 +82,36 @@ class _PaymentScreenState extends State<PaymentScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _rideSubscription?.cancel();
     _successCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _awaitingHeroConfirmation) {
+      _checkPaymentStatus();
+    }
+  }
+
+  Future<void> _checkPaymentStatus() async {
+    final rideDocId = _rideDocId;
+    if (rideDocId == null) return;
+    final snap = await FirebaseFirestore.instance.collection('rides').doc(rideDocId).get();
+    final data = snap.data();
+    if (data == null) return;
+    final paymentStatus = (data['paymentStatus'] as String? ?? '').trim();
+    if (['paid', 'paid_by_wallet', 'paid_offline_p2p', 'completed', 'settled'].contains(paymentStatus)) {
+      if (!_paid) {
+        setState(() {
+          _paid = true;
+          _awaitingHeroConfirmation = false;
+        });
+        _successCtrl.forward();
+        _snack('Payment confirmed! Thank you.', _green);
+      }
+    }
   }
 
   String? get _rideDocId {
@@ -127,6 +155,7 @@ class _PaymentScreenState extends State<PaymentScreen>
             'paid_by_wallet',
             'paid_offline_p2p',
             'completed',
+            'settled',
           }.contains(paymentStatus);
 
           if (liveFare != null && liveFare > 0 && liveFare != _fare) {
@@ -285,7 +314,7 @@ class _PaymentScreenState extends State<PaymentScreen>
     final transactionRef =
         'NJTECH${safeRideId.isNotEmpty ? safeRideId : DateTime.now().millisecondsSinceEpoch}';
     final uri = Uri.parse(
-      'upi://pay?pa=njtech@oksbi'
+      'upi://pay?pa=919597879191@ybl'
       '&pn=NJTECH'
       '&mc=0000'
       '&tr=$transactionRef'

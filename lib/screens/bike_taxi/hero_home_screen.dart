@@ -1218,6 +1218,30 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
       debugPrint('[HeroHomeScreen] RTDB ping received: $requestId');
 
+      // ── CATEGORY FILTER: Only show rides matching hero's vehicle ──
+      final requestedCategory = (pingData['category'] as String?)?.trim().toLowerCase() ??
+          (pingData['vehicleType'] as String?)?.trim().toLowerCase() ?? '';
+      // Ensure _vehicleType is converted to lowercase for comparison
+      final heroCategory = _vehicleType.trim().toLowerCase();
+
+      // ── SMART MODE: parcel requests are accepted by BOTH parcel and bike
+      // heroes — must mirror the customer-side filter in ride_search_screen,
+      // otherwise bike heroes get pinged for parcels but silently drop them.
+      bool categoryMatch = true;
+      if (requestedCategory.isNotEmpty && heroCategory.isNotEmpty) {
+        if (requestedCategory == 'parcel') {
+          categoryMatch = heroCategory == 'parcel' || heroCategory == 'bike';
+        } else {
+          categoryMatch = heroCategory == requestedCategory;
+        }
+      }
+      if (!categoryMatch) {
+        debugPrint('[HeroHomeScreen] Skipping ping: requested $requestedCategory, hero $heroCategory');
+        // Silently remove the ping to clean up RTDB node
+        FirebaseDatabase.instance.ref('hero_pings/${_user!.uid}/$requestId').remove();
+        return;
+      }
+
       // Notification: only if global listener hasn't fired yet
       if (!kIsWeb && !HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
         debugPrint('[HeroHomeScreen] Notification already fired by global listener. Showing dialog only.');
