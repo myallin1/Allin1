@@ -109,8 +109,14 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   String _generateLocalOtp(String docId) {
     final cleanId = docId.trim().replaceAll(RegExp(r'\s+'), '');
     if (cleanId.isEmpty) return '1234';
-    final hash = cleanId.hashCode.abs();
-    return (1000 + (hash % 9000)).toString();
+    // Platform-independent checksum — avoids String.hashCode, which
+    // differs between native (VM) and web (dart2js/dart2wasm) builds,
+    // causing OTP mismatches between mobile app and PWA.
+    int checksum = 0;
+    for (int i = 0; i < cleanId.length; i++) {
+      checksum = (checksum * 31 + cleanId.codeUnitAt(i)) & 0x7FFFFFFF;
+    }
+    return (1000 + (checksum % 9000)).toString();
   }
 
   @override
