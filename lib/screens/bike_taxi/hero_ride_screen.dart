@@ -558,7 +558,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
     if (_rideOtpCode.isNotEmpty && enteredOtp != _rideOtpCode) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('❌ OTP mismatch! Expected: $_rideOtpCode'),
+          content: const Text('❌ Incorrect OTP, please ask the customer to confirm'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ));
