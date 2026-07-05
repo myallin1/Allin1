@@ -61,9 +61,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   double _walletTotal = 0;
   bool _walletLoading = true;
 
+  // Cached stream — this badge is always mounted (lives in the AppBar,
+  // shown on every tab), so without caching it tears down and reattaches
+  // a Firestore listener on every unrelated setState() rebuild.
+  late final Stream<QuerySnapshot> _pendingHeroApprovalsStream;
+
   @override
   void initState() {
     super.initState();
+    _pendingHeroApprovalsStream = FirebaseFirestore.instance
+        .collection('heroes')
+        .where('approvalStatus', isEqualTo: 'pending')
+        .snapshots();
     // Use unawaited if we don't want to block, or just call it since it handles its own state
     _computeWalletTotal();
   }
@@ -543,10 +552,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               right: 4,
               top: 4,
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('heroes')
-                    .where('approvalStatus', isEqualTo: 'pending')
-                    .snapshots(),
+                stream: _pendingHeroApprovalsStream,
                 builder: (context, snap) {
                   final count = snap.data?.docs.length ?? 0;
                   if (count == 0) return const SizedBox.shrink();
