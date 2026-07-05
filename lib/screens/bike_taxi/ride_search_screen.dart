@@ -409,7 +409,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         'estimatedFare': widget.ride.estimatedFare ?? widget.ride.fare ?? 0,
         'tipAmount': _selectedTipAmount,
         'vehicleType': widget.ride.vehicleType ?? 'bike',
-        'category': (widget.ride.vehicleType ?? 'bike').trim().toLowerCase(),
+        'category': _normalizeCategoryKey(widget.ride.vehicleType ?? 'bike'),
         'pingExpiresAt': pingExpiresAt,
         'status': 'pinging',
       });
