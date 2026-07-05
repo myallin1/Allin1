@@ -215,18 +215,21 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   }
 
   String _normalizeHeroVehicleType(String? value) {
-    final normalized = value?.trim().toLowerCase() ?? '';
-    if (normalized.contains('auto')) return 'auto';
-    // T3 fix: emergency_manpower must NOT collapse to 'bike' — it is its own category
-    if (normalized.contains('emergency') || normalized.contains('manpower')) {
-      return 'emergency_manpower';
+    switch (value?.trim().toLowerCase() ?? '') {
+      case 'auto': return 'auto';
+      case 'emergency_manpower':
+      case 'manpower': return 'emergency_manpower';
+      case 'mini_truck':
+      case 'mini-truck':
+      case 'truck': return 'mini_truck';
+      case 'lorry': return 'lorry';
+      case 'parcel': return 'parcel';
+      case 'cab':
+      case 'car':
+      case 'mini': return 'car';
+      case 'bike':
+      default: return 'bike';
     }
-    if (normalized.contains('car') ||
-        normalized.contains('cab') ||
-        normalized.contains('truck')) {
-      return 'car';
-    }
-    return 'bike';
   }
 
   String _assetForHeroVehicleType(String? vehicleType) {

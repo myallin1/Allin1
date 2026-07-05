@@ -159,6 +159,33 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     await _startSequentialPinging();
   }
 
+  /// Must match the canonical keys used in hero registration:
+  /// bike / auto / car / parcel / mini_truck / lorry / emergency_manpower
+  String _normalizeCategoryKey(String vehicleType) {
+    switch (vehicleType.trim().toLowerCase()) {
+      case 'auto':
+        return 'auto';
+      case 'cab':
+      case 'car':
+      case 'mini':
+        return 'car';
+      case 'parcel':
+        return 'parcel';
+      case 'mini_truck':
+      case 'mini-truck':
+      case 'truck':
+        return 'mini_truck';
+      case 'lorry':
+        return 'lorry';
+      case 'emergency_manpower':
+      case 'manpower':
+        return 'emergency_manpower';
+      case 'bike':
+      default:
+        return 'bike';
+    }
+  }
+
   Future<void> _fetchNearbyHeroes() async {
     try {
       final pickupLat = widget.ride.pickupLatitude ?? 11.3410;
@@ -192,6 +219,11 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       final pickupLocation = LatLng(pickupLat, pickupLng);
       final List<Map<String, dynamic>> validHeroes = [];
 
+      // ── FIX: compute the requested category ONCE, before the loop ──
+      final requestedCategory =
+          _normalizeCategoryKey(widget.ride.vehicleType ?? 'bike');
+      debugPrint('🔥 [CATEGORY FILTER] Requested category: $requestedCategory');
+
       for (final entry in onlineData.entries) {
         final heroId = entry.key.toString();
         final data = entry.value as Map<dynamic, dynamic>?;
@@ -217,6 +249,28 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         final isAvailable = data['isAvailable'] as bool?;
         if (isAvailable == false) {
           debugPrint('🔥 [REJECTED] Hero $heroId rejected because isAvailable=false');
+          continue;
+        }
+
+        final heroCategory =
+            _normalizeCategoryKey((data['vehicleType'] as String?) ?? 'bike');
+
+        // ── SMART MODE LOGIC: Parcel requests go to BOTH Parcel and Bike heroes ──
+        bool categoryMatch = false;
+        if (requestedCategory == 'parcel') {
+          categoryMatch = (heroCategory == 'parcel' || heroCategory == 'bike');
+          if (categoryMatch && heroCategory == 'bike') {
+            debugPrint('🔥 [SMART MODE] Hero $heroId matched via bike-fallback for parcel request');
+          }
+        } else {
+          categoryMatch = (heroCategory == requestedCategory);
+        }
+
+        if (!categoryMatch) {
+          debugPrint(
+            '🔥 [REJECTED] Hero $heroId rejected: category mismatch '
+            '(hero=$heroCategory, requested=$requestedCategory)',
+          );
           continue;
         }
 
