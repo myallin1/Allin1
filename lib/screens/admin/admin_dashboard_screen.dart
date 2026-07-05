@@ -12,6 +12,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'ads_management_screen.dart';
+import 'admin_hero_dispatch_screen.dart';
+import 'admin_ride_tracking_screen.dart';
 import 'approved_heroes_screen.dart';
 import 'commission_settings_screen.dart';
 import 'credentials_admin_screen.dart';
@@ -593,6 +595,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           tooltip: 'Download Latest App',
         ),
         IconButton(
+          icon: const Icon(Icons.map_rounded, color: Color(0xFFFF4FA3), size: 22),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminHeroDispatchScreen()),
+          ),
+          tooltip: 'Dispatch Heroes',
+        ),
+        IconButton(
+          icon: const Icon(Icons.timeline_rounded, color: Color(0xFFFF4FA3), size: 22),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminRideTrackingScreen()),
+          ),
+          tooltip: 'Track Active Rides',
+        ),
+        IconButton(
           icon: const Icon(Icons.logout, color: _red, size: 20),
           onPressed: _showLogoutDialog,
           tooltip: 'Logout',
@@ -688,10 +706,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               final actualFare = (d['actualFare'] as num?)?.toDouble();
               final tipAmount = (d['tipAmount'] as num?)?.toDouble();
               final estFare = (d['fare'] as num?)?.toDouble();
-              earningsToday += finalFare ??
-                  ((actualFare ?? 0) + (tipAmount ?? 0)) ??
-                  estFare ??
-                  0.0;
+              if (finalFare != null) {
+                earningsToday += finalFare;
+              } else if (actualFare != null) {
+                earningsToday += actualFare + (tipAmount ?? 0.0);
+              } else {
+                earningsToday += estFare ?? 0.0;
+              }
             }
           }
         }
