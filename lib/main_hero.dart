@@ -104,12 +104,14 @@ void _initGlobalHeroPingListener() {
       }
 
       // Fire local notification using the new v5 channel configuration
+      // Note: playAlertTone: false here — ringtone will be triggered by _showRideRequestDialog
+      // AFTER the dialog is visible, so it loops continuously while the hero sees it.
       if (!kIsWeb) {
         try {
           await HeroRideNotificationService.showRideAssigned(
             rideId: requestId,
             data: Map<String, dynamic>.from(pingData),
-            playAlertTone: true,
+            playAlertTone: false,
           );
           debugPrint('[GlobalPing] 🔔 Notification fired for: $requestId');
         } catch (e) {

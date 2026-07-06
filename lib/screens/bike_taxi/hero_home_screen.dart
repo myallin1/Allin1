@@ -1339,6 +1339,13 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       }
       if (mounted) setState(() => _isShowingRideDialog = false);
     });
+    // Start looping ringtone AFTER dialog is visible (not before).
+    // This ensures the alert plays continuously while the hero sees the dialog,
+    // and stops only when they accept/reject/timeout.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isShowingRideDialog) return;
+      _playIncomingRideAlertSafe(looping: true);
+    });
   }
 
   Future<void> _rejectRide(String requestId) async {

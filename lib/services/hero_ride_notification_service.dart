@@ -162,7 +162,7 @@ class HeroRideNotificationService {
         // 0ms delay, vibrate 1sec, pause 0.5sec, vibrate 1sec, pause 0.5sec, vibrate 1sec
         vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
         ticker: 'New ride assigned',
-        timeoutAfter: 120000,
+        timeoutAfter: 15000,
         sound: const RawResourceAndroidNotificationSound('ride_alert'),
         audioAttributesUsage: AudioAttributesUsage.alarm,
         actions: const [
