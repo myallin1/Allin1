@@ -118,18 +118,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // ── Classic Rewards promo state ──────────────────────────────
   List<PromoOfferItem> _promoOffers = const [
-    PromoOfferItem(
-      id: 'quiz',    title: 'Daily Quiz Reward',
-      subtitle: 'Answer 5 questions · Win Free Tempered Glass!',
-      icon: Icons.quiz_rounded,     claimed: false,
-      buttonLabel: 'Play Quiz',     statusLabel: 'Today Only',
-    ),
-    PromoOfferItem(
-      id: 'refer',   title: '₹50 Referral Bonus',
-      subtitle: 'Refer a friend · Both get ₹50 wallet cash',
-      icon: Icons.person_add_rounded, claimed: false,
-      buttonLabel: 'Refer Now',     statusLabel: 'Unlimited',
-    ),
+    // ── V2: Daily Quiz & Referral cards temporarily hidden ──
+    // Re-enable these two entries to bring the cards back.
+    // PromoOfferItem(
+    //   id: 'quiz',    title: 'Daily Quiz Reward',
+    //   subtitle: 'Answer 5 questions · Win Free Tempered Glass!',
+    //   icon: Icons.quiz_rounded,     claimed: false,
+    //   buttonLabel: 'Play Quiz',     statusLabel: 'Today Only',
+    // ),
+    // PromoOfferItem(
+    //   id: 'refer',   title: '₹50 Referral Bonus',
+    //   subtitle: 'Refer a friend · Both get ₹50 wallet cash',
+    //   icon: Icons.person_add_rounded, claimed: false,
+    //   buttonLabel: 'Refer Now',     statusLabel: 'Unlimited',
+    // ),
     PromoOfferItem(
       id: 'firstride', title: 'First Ride FREE 🛵',
       subtitle: 'New user? Your first taxi ride is on us!',
@@ -158,7 +160,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     unawaited(_silentBackupIfNeeded());
+    // Auto-show the daily Paytm Soundbox scratch card once per calendar day.
+    // Runs after first frame so a bottom sheet can be shown safely.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (!_alreadyScratchedToday()) {
+        _showScratchCardModal();
+      }
+    });
   }
+
+  // ── Daily scratch gate (local, calendar-day) ─────────────────
+  String _todayKey() {
+    final n = DateTime.now();
+    return '${n.year}-${n.month.toString().padLeft(2, '0')}-'
+        '${n.day.toString().padLeft(2, '0')}';
+  }
+
+  bool _alreadyScratchedToday() =>
+      (HiveCache.get('last_scratch_date') as String?) == _todayKey();
 
   Future<void> _silentBackupIfNeeded() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -211,28 +231,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _navigate(const NjTechBroadbandWebView());
   }
 
-  // ── Scratch Card gifts pool ─────────────────────────────────
-  static const _scratchGifts = [
-    ('🎉', '₹50 Wallet Cash', 'Credited to your NJ Wallet!'),
-    ('🛵', 'Free Taxi Ride', 'One free bike ride — use today!'),
-    ('🏅', '500 NJ Coins', 'Coins added to your account!'),
-    ('🎁', '10% Off Next Order', 'Valid on any custom order!'),
-    ('☕', 'Free Coffee Voucher', 'Redeem at partner cafes!'),
-    ('📦', 'Mystery Box', 'Surprise gift delivered to you!'),
-    ('💎', '1000 NJ Coins JACKPOT', 'You hit the jackpot! 🎊'),
-    ('🚀', 'Priority Delivery', 'Your next delivery is FREE!'),
-    ('🧃', '₹25 Wallet Cash', 'Small gift, big love! 💕'),
-    ('🎯', 'Double Coins Today', 'Earn 2x coins all day!'),
-  ];
-
   void _showScratchCardModal() {
-    final gifts = List.of(_scratchGifts)..shuffle();
-    final gift = gifts.first;
+    // Mark today as used so the card auto-shows at most once per calendar day,
+    // whether or not the customer fully scratches it.
+    HiveCache.put('last_scratch_date', _todayKey());
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _ScratchCardModal(gift: gift),
+      builder: (_) => const _ScratchCardModal(),
     );
   }
 
@@ -1675,8 +1682,7 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
 // SCRATCH CARD MODAL
 // ================================================================
 class _ScratchCardModal extends StatefulWidget {
-  final (String, String, String) gift;
-  const _ScratchCardModal({required this.gift});
+  const _ScratchCardModal();
   @override
   State<_ScratchCardModal> createState() => _ScratchCardModalState();
 }
@@ -1685,9 +1691,19 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
   bool   _revealed = false;
   double _progress = 0;
 
+  Future<void> _callToClaim() async {
+    final uri = Uri.parse('tel:+918681869091');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final (emoji, title, subtitle) = widget.gift;
+    // Single universal reward — no random selection, no wallet/coin credit.
+    const emoji = '🎉';
+    const title = 'You won a Paytm Soundbox!';
+    const subtitle = 'Tap below to claim your reward';
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 32),
       decoration: BoxDecoration(
@@ -1791,61 +1807,26 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
         if (_revealed)
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
-            child: Row(children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    // Capture context BEFORE pop — safe async pattern
-                    final ctx = context;
-                    Navigator.of(ctx).pop();
-                    Future.delayed(const Duration(milliseconds: 300), () {
-                      if (!ctx.mounted) return;
-                      final gifts = List<(String, String, String)>.of(
-                          _DashboardScreenState._scratchGifts)
-                        ..shuffle();
-                      showModalBottomSheet<void>(
-                        context: ctx,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (_) => _ScratchCardModal(gift: gifts.first),
-                      );
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: kPink.withValues(alpha: 0.3)),
-                    ),
-                    child: Center(child: Text('🎁 Next Card',
-                        style: GoogleFonts.outfit(
-                            color: kPink, fontSize: 13,
-                            fontWeight: FontWeight.w700))),
+            child: SizedBox(
+              width: double.infinity,
+              child: GestureDetector(
+                onTap: _callToClaim,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  decoration: BoxDecoration(
+                    color: kGold,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [BoxShadow(
+                        color: kGold.withValues(alpha: 0.4),
+                        blurRadius: 10)],
                   ),
+                  child: Center(child: Text('📞 Call to Claim',
+                      style: GoogleFonts.outfit(
+                          color: Colors.black,
+                          fontSize: 15, fontWeight: FontWeight.w800))),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    decoration: BoxDecoration(
-                      color: kGold,
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: [BoxShadow(
-                          color: kGold.withValues(alpha: 0.4),
-                          blurRadius: 10)],
-                    ),
-                    child: Center(child: Text('✅ Claim!',
-                        style: GoogleFonts.outfit(
-                            color: Colors.black,
-                            fontSize: 13, fontWeight: FontWeight.w800))),
-                  ),
-                ),
-              ),
-            ]),
+            ),
           )
         else
           const SizedBox(height: 20),
