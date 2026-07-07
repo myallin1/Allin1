@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'ads_management_screen.dart';
 import 'admin_hero_dispatch_screen.dart';
+import 'admin_new_orders_screen.dart';
 import 'admin_ride_tracking_screen.dart';
 import 'approved_heroes_screen.dart';
 import 'commission_settings_screen.dart';
@@ -55,6 +56,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     {'icon': Icons.dashboard_outlined, 'label': 'Overview'},
     {'icon': Icons.electric_bike_outlined, 'label': 'Rides'},
     {'icon': Icons.people_outline, 'label': 'Customers'},
+    {'icon': Icons.assignment_late_outlined, 'label': 'New Orders'},
   ];
 
   // Cached wallet total — computed once on load to avoid massive reads
@@ -454,7 +456,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ? _buildDashboard()
                 : _selectedTab == 1
                     ? _buildRidesList()
-                    : const CustomerRidesScreen(),
+                    : _selectedTab == 2
+                        ? const CustomerRidesScreen()
+                        : const AdminNewOrdersScreen(),
           ),
           if (_isLoggingOut)
             const ColoredBox(
