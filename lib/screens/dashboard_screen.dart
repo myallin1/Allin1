@@ -1,16 +1,18 @@
 // ================================================================
 // dashboard_screen.dart — Allin1 Super App Customer Dashboard
-// Premium Pink UI — Rebuilt from CEO QA Screenshots — May 2026
-// Patches: stream lift, optimistic wallet, cache layer, error feedback
+// Premium Pink UI — Mega Cards Revamp — June 2026
+// Patches: stream lift, optimistic wallet, cache layer, error feedback, zero deprecation
 // ================================================================
 
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:colorful_iconify_flutter/icons/fluent_emoji_flat.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:scratcher/scratcher.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -20,15 +22,16 @@ import '../services/pwa_cache_platform_stub.dart'
 
 import '../widgets/banner_slider.dart';
 import 'bike_taxi/bike_booking_screen.dart';
+import 'custom_food_order_screen.dart';
 import 'store_layout_screen.dart';
 import 'car_wash_screen.dart';
 import 'coming_soon_screen.dart';
 import 'construction_screen.dart';
 import 'custom_order_screen.dart';
+import 'printing_service_screen.dart';
 import 'guru_chat_screen.dart';
 import 'nj_tech_service_screen.dart';
 import 'nj_tech_store_screen.dart';
-import 'notifications_screen.dart';
 import 'play_zone_screen.dart';
 import 'profile_screen.dart';
 import 'rewards_screen.dart';
@@ -58,48 +61,24 @@ const Color kPurple   = Color(0xFF7B6FE0);
 const Color kBorder   = Color(0xFFEEEEF5);
 const Color kRed      = Color(0xFFFF5252);
 
-// ── Service Tile Model ───────────────────────────────────────────
-class _Tile {
-  final String id, title, subtitle, emoji, badge;
-  final Color color;
-  final bool isLive;
-  const _Tile({
-    required this.id, required this.title, required this.subtitle,
-    required this.emoji, required this.badge, required this.color,
-    this.isLive = false,
-  });
-}
-
-const _tiles = [
-  _Tile(id:'taxi',        title:'Taxi',                    subtitle:'Fast rides in Erode',
-        emoji:'🚕', badge:'LIVE', color:kTeal,   isLive:true),
-  _Tile(id:'broadband',   title:'Broadband / WiFi',        subtitle:'Manage your internet service',
-        emoji:'📶', badge:'LIVE', color:kBlue,   isLive:true),
-  // Food Delivery — hidden until ready
-  // _Tile(id:'food', title:'Food Delivery', subtitle:'16th Road specials', emoji:'🍔', badge:'', color:kPink),
-  // Grocery — hidden until ready
-  // _Tile(id:'grocery', title:'Grocery', subtitle:'Fresh and fast', emoji:'🛒', badge:'', color:kGreen),
-  _Tile(id:'njtech',      title:'NJ Tech Store',           subtitle:'Mobile · Spares · Repairs',
-        emoji:'🔋', badge:'NJ TECH', color:kPink),
-  _Tile(id:'carwash',     title:'Car Service & Water Wash',subtitle:'',
-        emoji:'🚗', badge:'',     color:kBlue),
-  _Tile(id:'puncture',    title:'Mobile Puncture',         subtitle:'Fast puncture repair',
-        emoji:'🛵', badge:'',     color:kPink),
-  _Tile(id:'construction',title:'Constructions',           subtitle:'Usha Constructions',
-        emoji:'🏗️', badge:'',    color:kGold),
-  _Tile(id:'custom',      title:'Custom Order',            subtitle:'Call us for any order',
-        emoji:'📦', badge:'Soon', color:kPurple),
-];
-
 // ── NJ Tech Quick-Service Icons ──────────────────────────────────
 const _njServices = [
-  {'icon': '📱', 'label': 'Mobile\nService',  'id': 'mobile'},
-  {'icon': '🔧', 'label': 'Spare\nParts',     'id': 'spares'},
-  // ✅ Updated to use local asset GIF
+  {'icon': FluentEmojiFlat.mobile_phone, 'label': 'Mobile\nService',  'id': 'mobile'},
+  {'icon': FluentEmojiFlat.wrench, 'label': 'Spare\nParts',     'id': 'spares'},
   {'icon': 'assets/images/assistant.gif', 'label': 'AI Bots', 'id': 'aibots'},
-  {'icon': '📶', 'label': 'Broadband',         'id': 'broadband'},
-  {'icon': '🛠️', 'label': 'Repairs',          'id': 'repairs'},
-  {'icon': '🚚', 'label': 'Delivery',          'id': 'delivery'},
+  {'icon': FluentEmojiFlat.antenna_bars, 'label': 'Broadband',         'id': 'broadband'},
+  {'icon': FluentEmojiFlat.hammer_and_wrench, 'label': 'Repairs',          'id': 'repairs'},
+  {'icon': FluentEmojiFlat.delivery_truck, 'label': 'Delivery',          'id': 'delivery'},
+];
+
+// ── Banner Items ──────────────────────────────────────────────────
+const _bannerItems = [
+  {'title': 'BIKE TAXI', 'emoji': '🏍️', 'color': kTeal},
+  {'title': 'CAB', 'emoji': '🚗', 'color': kBlue},
+  {'title': 'AUTO', 'emoji': '🛺', 'color': kPurple},
+  {'title': 'GROCERIES', 'emoji': '🛒', 'color': kGreen},
+  {'title': 'FOOD', 'emoji': '🍔', 'color': kGold},
+  {'title': 'SERVICES', 'emoji': '🔧', 'color': kPink},
 ];
 
 // ================================================================
@@ -140,7 +119,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ),
   ];
 
-  bool _updateAvailable = true; // Set to true to test the glow.
+  bool _updateAvailable = true;
 
   Future<void> _claimPromo(String offerId) async {
     setState(() {
@@ -183,7 +162,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _silentBackupIfNeeded() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-
     try {
       final lastBackupStr = HiveCache.get('lastCoinsBackupDate') as String?;
       final now = DateTime.now();
@@ -199,9 +177,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
 
       if (!shouldBackup) return;
-
       final currentCoins = (HiveCache.get(HiveCache.kWalletBalance) as num?)?.toDouble() ?? 0.0;
-
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -211,14 +187,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           }, SetOptions(merge: true));
 
       HiveCache.put('lastCoinsBackupDate', now.toIso8601String());
-
       debugPrint('[Dashboard] Silent backup completed: ${currentCoins.toStringAsFixed(0)} coins');
     } catch (e) {
       debugPrint('[Dashboard] Silent backup failed: $e');
     }
   }
 
-  // ── Tab switch — saves last tab to PrefsCache ────────────────
   void _goTab(int i) {
     setState(() => _navIndex = i);
     PrefsCache.saveLastTab(i);
@@ -245,20 +219,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _tap(String id) {
     switch (id) {
-      case 'taxi':        _navigate(const BikeBookingScreen());
-      case 'broadband':   _launchBroadband();
-      case 'food':        _navigate(const StoreLayoutScreen(storeType: 'food'));
-      case 'grocery':     _navigate(const StoreLayoutScreen(storeType: 'grocery'));
-      case 'njtech':      _navigate(const NJTechStoreScreen());
-      case 'carwash':     _navigate(const CarWashScreen());
-      case 'puncture':    _navigate(const ComingSoonScreen(role: 'Mobile Puncture'));
-      case 'construction':_navigate(const ConstructionScreen());
-      case 'custom':      _navigate(const CustomOrderScreen());
-      case 'mobile':      _navigate(const NjTechServiceScreen());
-      case 'spares':      _navigate(const NjTechServiceScreen());
-      case 'aibots':      _navigate(const GuruChatScreen());
-      case 'repairs':     _navigate(const NjTechServiceScreen());
-      case 'delivery':    _navigate(const ComingSoonScreen(role: 'Delivery'));
+      case 'taxi':        _navigate(const BikeBookingScreen()); break;
+      case 'broadband':   _launchBroadband(); break;
+      case 'food':        _navigate(const CustomFoodOrderScreen()); break;
+      case 'grocery':     _navigate(const StoreLayoutScreen(storeType: 'grocery')); break;
+      case 'njtech':      _navigate(const NJTechStoreScreen()); break;
+      case 'carwash':     _navigate(const CarWashScreen()); break;
+      case 'puncture':    _navigate(const ComingSoonScreen(role: 'Mobile Puncture')); break;
+      case 'construction':_navigate(const ConstructionScreen()); break;
+      case 'custom':      _navigate(const CustomOrderScreen()); break;
+      case 'mobile':      _navigate(const NjTechServiceScreen()); break;
+      case 'spares':      _navigate(const NjTechServiceScreen()); break;
+      case 'aibots':      _navigate(const GuruChatScreen()); break;
+      case 'repairs':     _navigate(const NjTechServiceScreen()); break;
+      case 'delivery':    _navigate(const ComingSoonScreen(role: 'Delivery')); break;
     }
   }
 
@@ -274,15 +248,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           builder: (_) => AlertDialog(
             backgroundColor: kBg,
             title: Text('வெளியேறுவீர்களா?',
-                style: GoogleFonts.notoSansTamil(
+                style: GoogleFonts.outfit(
                     color: kText, fontWeight: FontWeight.w700)),
             content: Text('App-ஐ மூடவா?',
-                style: GoogleFonts.notoSansTamil(color: kMuted)),
+                style: GoogleFonts.outfit(color: kMuted)),
             actions: [
               TextButton(onPressed: () => Navigator.pop(context, false),
-                  child: Text('இல்லை', style: TextStyle(color: kPink))),
+                  child: const Text('இல்லை', style: TextStyle(color: kPink))),
               TextButton(onPressed: () => Navigator.pop(context, true),
-                  child: Text('ஆம்', style: TextStyle(color: kRed))),
+                  child: const Text('ஆம்', style: TextStyle(color: kRed))),
             ],
           ),
         );
@@ -316,9 +290,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const KeepAliveTab(child: GuruChatScreen()),
                 const KeepAliveTab(child: SosScreen()),
               ],
-            ),
-          ],
-        ),
+          ),
+        ],
+      ),
         bottomNavigationBar: _buildBottomNav(),
       ),
     );
@@ -334,7 +308,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       surfaceTintColor: Colors.transparent,
       titleSpacing: 0,
       leading: IconButton(
-        icon: Icon(Icons.menu_rounded, color: kPink, size: 26),
+        icon: const Icon(Icons.menu_rounded, color: kPink, size: 26),
         onPressed: () => _scaffoldKey.currentState?.openDrawer(),
       ),
       title: Row(
@@ -383,11 +357,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: kPink.withValues(alpha: 0.3)),
           ),
-          child: Row(
+          child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.wallet_rounded, size: 16, color: kPink),
-              const SizedBox(width: 4),
+              SizedBox(width: 4),
               Text(
                 '₹0',
                 style: TextStyle(color: kPink, fontWeight: FontWeight.w700, fontSize: 13),
@@ -416,7 +390,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       decoration: BoxDecoration(
         color: kBg,
-        border: Border(top: BorderSide(color: kBorder, width: 1)),
+        border: const Border(top: BorderSide(color: kBorder, width: 1)),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 16, offset: const Offset(0, -4))],
       ),
@@ -450,7 +424,130 @@ class _DashboardScreenState extends State<DashboardScreen> {
 }
 
 // ================================================================
-// HOME TAB
+// FLOATING GURU BOT — Draggable
+// ================================================================
+class _FloatingGuruBot extends StatefulWidget {
+  final VoidCallback onTap;
+  const _FloatingGuruBot({required this.onTap});
+  @override
+  State<_FloatingGuruBot> createState() => _FloatingGuruBotState();
+}
+
+class _FloatingGuruBotState extends State<_FloatingGuruBot> {
+  double _x = 0, _y = 0;
+  bool _placed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    if (!_placed) { _x = size.width - 90; _y = size.height * 0.5; _placed = true; }
+
+    return Positioned(
+      left: _x, top: _y,
+      child: GestureDetector(
+        onPanUpdate: (d) => setState(() {
+          _x = (_x + d.delta.dx).clamp(0, size.width - 80);
+          _y = (_y + d.delta.dy).clamp(0, size.height - 80);
+        }),
+        onTap: widget.onTap,
+        child: Stack(clipBehavior: Clip.none, children: [
+          Container(
+            width: 60, height: 60,
+            decoration: BoxDecoration(
+              color: kBg, shape: BoxShape.circle,
+              border: Border.all(color: kPink.withValues(alpha: 0.35), width: 2),
+              boxShadow: [BoxShadow(
+                  color: kPink.withValues(alpha: 0.25),
+                  blurRadius: 16, spreadRadius: 2)],
+            ),
+            child: Center(
+              child: Image.asset(
+                'assets/images/assistant.gif',
+                width: 46, height: 46,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Text('💬', style: TextStyle(fontSize: 28)),
+              ),
+            ),
+          ),
+          Positioned(top: -6, right: -4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: kGreen, borderRadius: BorderRadius.circular(8)),
+              child: Text('FREE', style: GoogleFonts.outfit(
+                  color: Colors.white, fontSize: 7,
+                  fontWeight: FontWeight.w800)),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ================================================================
+// FLOATING GIFT BOX
+// ================================================================
+class _FloatingGiftBox extends StatefulWidget {
+  final VoidCallback onTap;
+  const _FloatingGiftBox({required this.onTap});
+  @override
+  State<_FloatingGiftBox> createState() => _FloatingGiftBoxState();
+}
+
+class _FloatingGiftBoxState extends State<_FloatingGiftBox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _glow;
+  late final Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _glow = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1200))
+      ..repeat(reverse: true);
+    _pulse = Tween<double>(begin: 0.85, end: 1.08).animate(
+        CurvedAnimation(parent: _glow, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() { _glow.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (_, __) => Transform.scale(
+        scale: _pulse.value,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: Container(
+            width: 60, height: 60,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const RadialGradient(colors: [
+                Color(0xFFFFDD00), Color(0xFFFF9800),
+              ]),
+              boxShadow: [
+                BoxShadow(
+                    color: const Color(0xFFFFBB00)
+                        .withValues(alpha: 0.5 + 0.35 * _pulse.value),
+                    blurRadius: 22,
+                    spreadRadius: 4),
+              ],
+            ),
+            child: const Center(
+              child: Text('🎁', style: TextStyle(fontSize: 28)),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ================================================================
+// HOME TAB (Redesigned with Mega Cards)
 // ================================================================
 class _HomeTab extends StatelessWidget {
   final void Function(String) onTileTap;
@@ -471,16 +568,8 @@ class _HomeTab extends StatelessWidget {
       physics: const BouncingScrollPhysics(),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const SizedBox(height: 12),
-        // Top Half-Screen Banner Ads
-        const BannerAdsSlider(
-          height: 240,
-          imageUrls: [
-            'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=800&q=80',
-            'https://images.unsplash.com/photo-1546054454-aa26e2b734c7?w=800&q=80',
-            'https://images.unsplash.com/photo-1555664424-778a1e5e1b48?w=800&q=80',
-          ],
-        ),
-        const SizedBox(height: 20),
+        const _CategorySlidingBanner(),
+        const SizedBox(height: 12),
         _buildNJTechBanner(context),
         const SizedBox(height: 20),
         Padding(
@@ -490,7 +579,25 @@ class _HomeTab extends StatelessWidget {
                   fontSize: 17, fontWeight: FontWeight.w800, color: kText)),
         ),
         const SizedBox(height: 12),
-        _buildServiceGrid(context),
+        
+        // ── MEGA CARDS REVAMP ──────────────────────────────
+        _buildHeroBookingMegaCard(context),
+        const SizedBox(height: 12),
+        _buildTaxiMegaCard(context),
+        const SizedBox(height: 12),
+        _buildFoodMegaCard(context),
+        const SizedBox(height: 12),
+        _buildElectronicsMegaCard(context),
+        const SizedBox(height: 12),
+        _buildCarServiceMegaCard(context),
+        const SizedBox(height: 12),
+        _buildConstructionMegaCard(context),
+        const SizedBox(height: 12),
+        _buildPrintingMegaCard(context),
+        const SizedBox(height: 12),
+        _buildOtherServicesMegaCard(context),
+        // ───────────────────────────────────────────────────
+
         const SizedBox(height: 12),
         _buildFeaturedShop(context),
         const SizedBox(height: 10),
@@ -505,6 +612,574 @@ class _HomeTab extends StatelessWidget {
         ),
         const SizedBox(height: 100),
       ]),
+    );
+  }
+
+  // ── TAXI MEGA CARD ────────────────────────────────────────────────
+  Widget _buildTaxiMegaCard(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      SvgPicture.string(FluentEmojiFlat.taxi, width: 20, height: 20),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Taxi & Transportation',
+                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                  const Text(
+                    '  Bike, Auto, Cab, Parcel & Rent',
+                    style: TextStyle(color: kMuted, fontSize: 11),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: kPink.withValues(alpha: 0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.arrow_forward_ios_rounded, color: kPink, size: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const BikeBookingScreen()),
+            ),
+            child: Container(
+              width: double.infinity,
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: kPink.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  SvgPicture.string(FluentEmojiFlat.motor_scooter, width: 32, height: 32),
+                  SvgPicture.string(FluentEmojiFlat.package, width: 32, height: 32),
+                  SvgPicture.string(FluentEmojiFlat.auto_rickshaw, width: 32, height: 32),
+                  SvgPicture.string(FluentEmojiFlat.oncoming_taxi, width: 32, height: 32),
+                  SvgPicture.string(FluentEmojiFlat.delivery_truck, width: 32, height: 32),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── FOOD MEGA CARD ────────────────────────────────────────────────
+  Widget _buildFoodMegaCard(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      SvgPicture.string(FluentEmojiFlat.hamburger, width: 20, height: 20),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Food Delivery',
+                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                  const Text(
+                    '  Order from ANY shop in Erode!',
+                    style: TextStyle(color: kMuted, fontSize: 11),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: kGold.withValues(alpha: 0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.arrow_forward_ios_rounded, color: kGold, size: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const CustomFoodOrderScreen()),
+            ),
+            child: Container(
+              width: double.infinity,
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: kGold.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kGold.withValues(alpha: 0.3), width: 1.5),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  SvgPicture.string(FluentEmojiFlat.hamburger, width: 32, height: 32),
+                  SvgPicture.string(FluentEmojiFlat.pizza, width: 32, height: 32),
+                  SvgPicture.string(FluentEmojiFlat.chicken, width: 32, height: 32),
+                  SvgPicture.string(FluentEmojiFlat.french_fries, width: 32, height: 32),
+                  SvgPicture.string(FluentEmojiFlat.shortcake, width: 32, height: 32),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── ELECTRONICS MEGA CARD (Slim Static Layout) ───────────────────────
+  Widget _buildElectronicsMegaCard(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      SvgPicture.string(FluentEmojiFlat.mobile_phone, width: 20, height: 20),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Electronic Services',
+                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                  const Text(
+                    '  Mobile, Laptop, PC, CCTV, TV & AC',
+                    style: TextStyle(color: kMuted, fontSize: 11),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: kBlue.withValues(alpha: 0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.arrow_forward_ios_rounded, color: kBlue, size: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const NJTechStoreScreen()),
+            ),
+            child: Container(
+              width: double.infinity,
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: kBlue.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kBlue.withValues(alpha: 0.2), width: 1.5),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  SvgPicture.string(FluentEmojiFlat.mobile_phone, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.laptop, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.desktop_computer, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.video_camera, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.television, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.snowflake, width: 30, height: 30),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── CAR SERVICE MEGA CARD (Slim Static Layout) ────────────────────
+  Widget _buildCarServiceMegaCard(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      SvgPicture.string(FluentEmojiFlat.oncoming_taxi, width: 20, height: 20),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Car Service & Wash',
+                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                  const Text(
+                    '  Water Wash, Repairs & Old Spares',
+                    style: TextStyle(color: kMuted, fontSize: 11),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: kTeal.withValues(alpha: 0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.arrow_forward_ios_rounded, color: kTeal, size: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const CarWashScreen()),
+            ),
+            child: Container(
+              width: double.infinity,
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: kTeal.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kTeal.withValues(alpha: 0.2), width: 1.5),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  SvgPicture.string(FluentEmojiFlat.oncoming_taxi, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.sweat_droplets, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.gear, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.hammer_and_wrench, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.sport_utility_vehicle, width: 30, height: 30),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── CONSTRUCTION MEGA CARD (Slim Static Layout) ───────────────────
+  Widget _buildConstructionMegaCard(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      SvgPicture.string(FluentEmojiFlat.building_construction, width: 20, height: 20),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Constructions & Building',
+                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                  const Text(
+                    '  Usha Constructions, Contracts & Plans',
+                    style: TextStyle(color: kMuted, fontSize: 11),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: kPurple.withValues(alpha: 0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.arrow_forward_ios_rounded, color: kPurple, size: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const ConstructionScreen()),
+            ),
+            child: Container(
+              width: double.infinity,
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: kPurple.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kPurple.withValues(alpha: 0.2), width: 1.5),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  SvgPicture.string(FluentEmojiFlat.building_construction, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.brick, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.construction_worker, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.triangular_ruler, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.office_building, width: 30, height: 30),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── HERO BOOKING MEGA CARD ───────────────────────────────────────
+  Widget _buildHeroBookingMegaCard(BuildContext context) {
+    const Color heroColor = Color(0xFFFF5252); // Red
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      SvgPicture.string(FluentEmojiFlat.man_superhero, width: 20, height: 20),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Hero Booking',
+                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                  const Text(
+                    '  Hire a Hero for any tasks & deliveries',
+                    style: TextStyle(color: kMuted, fontSize: 11),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: heroColor.withValues(alpha: 0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.arrow_forward_ios_rounded, color: heroColor, size: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const CustomOrderScreen()),
+            ),
+            child: Container(
+              width: double.infinity,
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: heroColor.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: heroColor.withValues(alpha: 0.2), width: 1.5),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  SvgPicture.string(FluentEmojiFlat.man_superhero, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.high_voltage, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.package, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.shopping_bags, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.man_running, width: 30, height: 30),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── PRINTING MEGA CARD ─────────────────────────────────────────
+  Widget _buildPrintingMegaCard(BuildContext context) {
+    const Color printColor = Color(0xFF673AB7); // Deep Purple
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      SvgPicture.string(FluentEmojiFlat.printer, width: 20, height: 20),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Designing & Printing',
+                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                  const Text(
+                    '  Visiting Cards, Flex, Bill Books & Notices',
+                    style: TextStyle(color: kMuted, fontSize: 11),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: printColor.withValues(alpha: 0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.arrow_forward_ios_rounded, color: printColor, size: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const PrintingServiceScreen()),
+            ),
+            child: Container(
+              width: double.infinity,
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: printColor.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: printColor.withValues(alpha: 0.2), width: 1.5),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  SvgPicture.string(FluentEmojiFlat.card_index, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.scroll, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.framed_picture, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.label, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.printer, width: 30, height: 30),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── OTHER SERVICES MEGA CARD ────────────────────────────────────
+  Widget _buildOtherServicesMegaCard(BuildContext context) {
+    const Color serviceColor = Color(0xFF607D8B); // Blue Grey
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      SvgPicture.string(FluentEmojiFlat.hammer_and_wrench, width: 20, height: 20),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Other Services',
+                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                  const Text(
+                    '  Broadband, Mobile Puncture & More',
+                    style: TextStyle(color: kMuted, fontSize: 11),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: serviceColor.withValues(alpha: 0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.arrow_forward_ios_rounded, color: serviceColor, size: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+            decoration: BoxDecoration(
+              color: serviceColor.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: serviceColor.withValues(alpha: 0.2), width: 1.5),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildSmallActionTile(context, FluentEmojiFlat.antenna_bars, 'Internet', () => onTileTap('broadband')),
+                _buildSmallActionTile(context, FluentEmojiFlat.motorcycle, 'Puncture', () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ComingSoonScreen(role: 'Mobile Puncture')))),
+                _buildSmallActionTile(context, FluentEmojiFlat.broom, 'Cleaning', () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ComingSoonScreen(role: 'Home Cleaning')))),
+                _buildSmallActionTile(context, FluentEmojiFlat.high_voltage, 'Electrician', () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ComingSoonScreen(role: 'Electrician')))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSmallActionTile(BuildContext context, String iconSvg, String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 3)),
+              ],
+            ),
+            child: Center(child: SvgPicture.string(iconSvg, width: 28, height: 28)),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: GoogleFonts.outfit(color: kText, fontSize: 10, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
     );
   }
 
@@ -547,7 +1222,6 @@ class _HomeTab extends StatelessWidget {
                   color: kPink.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                // ✅ Replaced basic box emoji with a premium 3D parcel image
                 child: Center(
                   child: Image.network(
                     'https://img.icons8.com/fluency/96/magic-parcel.png',
@@ -564,8 +1238,8 @@ class _HomeTab extends StatelessWidget {
                         color: Colors.white, fontSize: 14,
                         fontWeight: FontWeight.w800)),
                 const SizedBox(height: 2),
-                Text('Place custom orders & get support — tap to start',
-                    style: const TextStyle(
+                const Text('Place custom orders & get support — tap to start',
+                    style: TextStyle(
                         color: Colors.white60, fontSize: 10)),
               ])),
               Container(
@@ -579,27 +1253,6 @@ class _HomeTab extends StatelessWidget {
           ),
         ),
       ]),
-    );
-  }
-
-  // ── Service Grid ───────────────────────────────────────────────
-  Widget _buildServiceGrid(BuildContext context) {
-    final cols = MediaQuery.of(context).size.width > 600 ? 5 : 3;
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: cols,
-        childAspectRatio: cols == 5 ? 1.0 : 0.85,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-      ),
-      itemCount: _tiles.length,
-      itemBuilder: (_, i) => _ServiceGridTile(
-        tile: _tiles[i],
-        onTap: () => onTileTap(_tiles[i].id),
-      ),
     );
   }
 
@@ -634,7 +1287,7 @@ class _HomeTab extends StatelessWidget {
           Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Text('★ Featured Shop',
+              const Text('★ Featured Shop',
                   style: TextStyle(color: kGold, fontSize: 10,
                       fontWeight: FontWeight.w700)),
               const Spacer(),
@@ -650,8 +1303,8 @@ class _HomeTab extends StatelessWidget {
             const SizedBox(height: 2),
             Text('Erode Fresh', style: GoogleFonts.outfit(
                 color: kText, fontSize: 15, fontWeight: FontWeight.w800)),
-            Text('★★  · Fresh Groceries',
-                style: const TextStyle(color: kMuted, fontSize: 11)),
+            const Text('★★  · Fresh Groceries',
+                style: TextStyle(color: kMuted, fontSize: 11)),
           ])),
           const Icon(Icons.chevron_right_rounded, color: kMuted),
         ]),
@@ -740,26 +1393,20 @@ class _HomeTab extends StatelessWidget {
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: kPurple.withValues(alpha: 0.4)),
                   ),
-                  child: Text('GURU', style: TextStyle(
+                  child: const Text('GURU', style: TextStyle(
                       color: kPurple, fontSize: 8,
                       fontWeight: FontWeight.w800)),
                 ),
               ]),
               const SizedBox(height: 2),
-              Text('Visit NJ TECH to unlock the 1-year free Guru AI offer.',
-                  style: const TextStyle(color: kMuted, fontSize: 10)),
+              const Text('Visit NJ TECH to unlock the 1-year free Guru AI offer.',
+                  style: TextStyle(color: kMuted, fontSize: 10)),
             ])),
             const Icon(Icons.chevron_right_rounded, color: kMuted),
           ]),
         ),
       ),
     ]);
-  }
-
-  @override
-  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
-    super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<User?>('user', user));
   }
 }
 
@@ -826,7 +1473,9 @@ class _NJServiceMarqueeState extends State<_NJServiceMarquee> {
             child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
               s['icon']!.startsWith('assets/')
                   ? Image.asset(s['icon']!, width: 26, height: 26, fit: BoxFit.contain)
-                  : Text(s['icon']!, style: const TextStyle(fontSize: 22)),
+                  : s['icon']!.startsWith('<svg')
+                      ? SvgPicture.string(s['icon']!, width: 26, height: 26)
+                      : Text(s['icon']!, style: const TextStyle(fontSize: 22)),
               const SizedBox(height: 3),
               Text(s['label']!, textAlign: TextAlign.center,
                   style: const TextStyle(
@@ -842,245 +1491,7 @@ class _NJServiceMarqueeState extends State<_NJServiceMarquee> {
 }
 
 // ================================================================
-// SERVICE GRID TILE
-// ================================================================
-class _ServiceGridTile extends StatefulWidget {
-  final _Tile tile;
-  final VoidCallback onTap;
-  const _ServiceGridTile({required this.tile, required this.onTap});
-
-  @override
-  State<_ServiceGridTile> createState() => _ServiceGridTileState();
-}
-
-class _ServiceGridTileState extends State<_ServiceGridTile>
-    with TickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final Animation<double> _slide;
-  int _vehicleIndex = 0;
-  static const _vehicles = ['🏍️', '🛺', '🚗'];
-  static const _vehicleAssets = [
-    'assets/images/top_bike.png',
-    null,
-    null,
-  ];
-
-  // ✅ New High-Tech Asset Map (Placeholders)
-  static const Map<String, String> _tileAssetMap = {
-    'food': 'assets/icons/food.png',
-    'grocery': 'assets/icons/grocery.png',
-    'njtech': 'assets/icons/njtech.png',
-    'broadband': 'assets/icons/broadband.png',
-    'construction': 'assets/icons/construction.png',
-    'carwash': 'assets/icons/carwash.png',
-    'puncture': 'assets/icons/puncture.png',
-    'custom': 'assets/icons/custom.png',
-  };
-
-  int _emojiIndex = 0;
-  Timer? _emojiTimer;
-
-  late final AnimationController _steamCtrl;
-  late final Animation<double> _steamRise;
-  late final Animation<double> _steamFade;
-
-  late final AnimationController _bagCtrl;
-  late final Animation<double> _bagBounce;
-  late final Animation<double> _bagSpin;
-
-  @override
-  void initState() {
-    super.initState();
-    final id = widget.tile.id;
-    // ✅ Slowed down the cycle from 2s to 4s for a premium feel
-    _emojiTimer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (mounted) setState(() => _emojiIndex++);
-    });
-
-    if (id == 'taxi') {
-      _ctrl = AnimationController(
-          vsync: this, duration: const Duration(milliseconds: 1400))
-        ..addStatusListener((status) {
-          if (status == AnimationStatus.completed) {
-            _ctrl.reverse();
-          } else if (status == AnimationStatus.dismissed) {
-            setState(() => _vehicleIndex = (_vehicleIndex + 1) % _vehicles.length);
-            Future.delayed(const Duration(milliseconds: 180), () {
-              if (mounted) _ctrl.forward();
-            });
-          }
-        })
-        ..forward();
-      _slide = Tween<double>(begin: -18, end: 18).animate(
-          CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
-    } else {
-      _ctrl  = AnimationController(vsync: this, duration: Duration.zero);
-      _slide = const AlwaysStoppedAnimation(0);
-    }
-
-    if (id == 'food') {
-      _steamCtrl = AnimationController(
-          vsync: this, duration: const Duration(milliseconds: 1600))
-        ..repeat();
-      _steamRise = Tween<double>(begin: 4, end: -26).animate(
-          CurvedAnimation(parent: _steamCtrl, curve: Curves.easeInOut));
-      _steamFade = TweenSequence<double>([
-        TweenSequenceItem(tween: Tween(begin: 0.0, end: 0.9), weight: 25),
-        TweenSequenceItem(tween: Tween(begin: 0.9, end: 0.9), weight: 20),
-        TweenSequenceItem(tween: Tween(begin: 0.9, end: 0.0), weight: 55),
-      ]).animate(_steamCtrl);
-    } else {
-      _steamCtrl = AnimationController(vsync: this, duration: Duration.zero);
-      _steamRise = const AlwaysStoppedAnimation(0);
-      _steamFade = const AlwaysStoppedAnimation(0);
-    }
-
-    if (id == 'grocery') {
-      _bagCtrl = AnimationController(
-          vsync: this, duration: const Duration(milliseconds: 900))
-        ..repeat(reverse: true);
-      _bagBounce = Tween<double>(begin: 2, end: -10).animate(
-          CurvedAnimation(parent: _bagCtrl, curve: Curves.easeInOut));
-      _bagSpin = Tween<double>(begin: -0.12, end: 0.12).animate(
-          CurvedAnimation(parent: _bagCtrl, curve: Curves.easeInOut));
-    } else {
-      _bagCtrl   = AnimationController(vsync: this, duration: Duration.zero);
-      _bagBounce = const AlwaysStoppedAnimation(0);
-      _bagSpin   = const AlwaysStoppedAnimation(0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _emojiTimer?.cancel();
-    _ctrl.dispose();
-    _steamCtrl.dispose();
-    _bagCtrl.dispose();
-    super.dispose();
-  }
-
-  Widget _buildIconArea(_Tile tile) {
-    if (tile.id == 'taxi') {
-      return AnimatedBuilder(
-        animation: _slide,
-        builder: (_, __) => Transform.translate(
-          offset: Offset(_slide.value, 0),
-          child: _vehicleAssets[_vehicleIndex] != null
-              ? Image.asset(_vehicleAssets[_vehicleIndex]!,
-                  width: 50, height: 50, fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => Text(_vehicles[_vehicleIndex], style: const TextStyle(fontSize: 40)))
-              : Text(_vehicles[_vehicleIndex], style: const TextStyle(fontSize: 40)),
-        ),
-      );
-    }
-
-    const Map<String, List<IconData>> premiumIcons = {
-      'broadband':    [Icons.wifi_rounded, Icons.router_rounded, Icons.settings_ethernet_rounded, Icons.signal_wifi_4_bar_rounded],
-      'food':         [Icons.fastfood_rounded, Icons.local_pizza_rounded, Icons.ramen_dining_rounded, Icons.cake_rounded],
-      'grocery':      [Icons.shopping_basket_rounded, Icons.shopping_cart_rounded, Icons.local_grocery_store_rounded, Icons.kitchen_rounded],
-      'njtech':       [Icons.smartphone_rounded, Icons.laptop_mac_rounded, Icons.headphones_rounded, Icons.electrical_services_rounded],
-      'carwash':      [Icons.directions_car_rounded, Icons.local_car_wash_rounded, Icons.water_drop_rounded, Icons.cleaning_services_rounded],
-      'puncture':     [Icons.two_wheeler_rounded, Icons.tire_repair_rounded, Icons.build_rounded, Icons.handyman_rounded],
-      'construction': [Icons.engineering_rounded, Icons.handyman_rounded, Icons.foundation_rounded, Icons.architecture_rounded],
-      'custom':       [Icons.inventory_2_rounded, Icons.card_giftcard_rounded, Icons.support_agent_rounded, Icons.local_shipping_rounded],
-    };
-
-    final iconSet = premiumIcons[tile.id] ?? [Icons.category_rounded];
-    final currentIcon = iconSet[_emojiIndex % iconSet.length];
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-        boxShadow: [BoxShadow(
-          color: tile.color.withValues(alpha: 0.28),
-          blurRadius: 14, spreadRadius: 2, offset: const Offset(0, 3),
-        )],
-      ),
-      padding: const EdgeInsets.all(12),
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 600),
-        transitionBuilder: (child, animation) => ScaleTransition(
-          scale: CurvedAnimation(
-            parent: animation,
-            curve: Curves.elasticOut,
-          ),
-          child: FadeTransition(opacity: animation, child: child),
-        ),
-        child: Icon(
-          currentIcon,
-          key: ValueKey<IconData>(currentIcon),
-          size: 34,
-          color: tile.color,
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final tile = widget.tile;
-    return GestureDetector(
-      onTap: widget.onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          // Clean, subtle pastel background matching the brand theme
-          color: tile.color.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: tile.color.withValues(alpha: 0.12)),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 4, offset: const Offset(0, 2))
-          ],
-        ),
-        padding: const EdgeInsets.only(top: 10, left: 6, right: 6, bottom: 6),
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                // Layer 1: Text at the Top
-                Text(
-                  tile.title,
-                  maxLines: 2,
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: kText,
-                    height: 1.1,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // Layer 2: Animated Icon at the Bottom
-                Expanded(
-                  child: Center(child: _buildIconArea(tile)),
-                ),
-              ],
-            ),
-            // Layer 3: Live Badge
-            if (tile.badge.isNotEmpty)
-              Positioned(
-                top: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: tile.isLive ? kGreen : kGold,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(tile.badge, style: const TextStyle(fontSize: 7, fontWeight: FontWeight.w900, color: Colors.white)),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ================================================================
-// PROFILE DRAWER
+// PROFILE DRAWER (Restored MVP Version)
 // ================================================================
 class _ProfileDrawer extends StatelessWidget {
   final User? user;
@@ -1096,6 +1507,7 @@ class _ProfileDrawer extends StatelessWidget {
       backgroundColor: kBg,
       child: SafeArea(
         child: Column(children: [
+          // Drawer Header
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -1129,45 +1541,79 @@ class _ProfileDrawer extends StatelessWidget {
               ])),
             ]),
           ),
+
+          // Drawer Menu Items
           Expanded(
             child: ListView(padding: EdgeInsets.zero, children: [
+              const SizedBox(height: 10),
+
               _drawerItem(context, Icons.person_outline_rounded,
                   'My Profile', () => onNavigate(const ProfileScreen())),
-              _drawerItem(context, Icons.history_rounded,
-                  'My Rides', () => onNavigate(const RideHistoryScreen())),
-              _drawerItem(context, Icons.account_balance_wallet_outlined,
-                  'Wallet', () => Navigator.pop(context)),
-              _drawerItem(context, Icons.payment_rounded,
-                  'Payment Methods', () => Navigator.pop(context)),
-              _drawerItem(context, Icons.notifications_outlined,
-                  'Notifications', () => onNavigate(const NotificationsScreen())),
-              _drawerItem(context, Icons.translate_rounded,
-                  'Change Language', () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Language settings coming soon')));
-              }),
-              _drawerItem(context, Icons.download_rounded,
-                  'Download Mobile App', () {
-                Navigator.pop(context);
-                _showApkSheet(context);
-              }),
-              _drawerItem(context, Icons.location_on_outlined,
-                  'Saved Addresses', () => onNavigate(
-                      const ComingSoonScreen(role: 'Saved Addresses'))),
-              _drawerItem(context, Icons.help_outline_rounded,
-                  'Help & Support', () async {
-                final uri = Uri.parse('https://njtech.in/support');
-                if (await canLaunchUrl(uri)) launchUrl(uri);
-              }),
+
+              // Activity (Replaces standard history)
+              _drawerItem(context, Icons.local_activity_outlined,
+                  'Activity', () => onNavigate(const RideHistoryScreen())),
+
               _drawerItem(context, Icons.settings_outlined,
                   'Settings', () => onNavigate(const SettingsScreen())),
-              _drawerItem(context, Icons.system_update_alt_rounded,
-                  '🔄  Check for Updates', () {
-                Navigator.pop(context);
-                _checkForUpdates(context);
+
+              _drawerItem(context, Icons.support_agent_rounded,
+                  'Help & WhatsApp Support', () async {
+                final url = Uri.parse("https://wa.me/918681869091?text=${Uri.encodeComponent('Hi NJ Tech! I need some help from the app.')}");
+                if (await canLaunchUrl(url)) {
+                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                }
               }),
+
+              const SizedBox(height: 20),
+
+              // Growth Hack: Download App CTA
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showApkSheet(context);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [kPurple, Color(0xFF5A50C8)],
+                        begin: Alignment.topLeft, end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [BoxShadow(color: kPurple.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))],
+                    ),
+                    child: Row(
+                      children: [
+                        const Text('🚀', style: TextStyle(fontSize: 32)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Download the App!', style: GoogleFonts.outfit(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 2),
+                              const Text('Get the app & run 10x faster!', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
+                          child: const Icon(Icons.download_rounded, color: Colors.white, size: 16),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
               const Divider(color: kBorder, height: 1),
+              const SizedBox(height: 10),
+
               _drawerItem(context, Icons.logout_rounded,
                   'Sign Out / Logout', () async {
                 await LocalSyncService.instance.clearAll();
@@ -1176,6 +1622,14 @@ class _ProfileDrawer extends StatelessWidget {
                 await FirebaseAuth.instance.signOut();
               }, color: kRed),
             ]),
+          ),
+
+          // Version Info at bottom
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Text('Allin1 Super App v1.0.0',
+              style: TextStyle(color: kMuted.withValues(alpha: 0.5), fontSize: 10, fontWeight: FontWeight.bold)
+            ),
           ),
         ]),
       ),
@@ -1214,7 +1668,7 @@ Future<void> _checkForUpdates(BuildContext context) async {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
         const SizedBox(height: 8),
-        SizedBox(
+        const SizedBox(
           width: 48, height: 48,
           child: CircularProgressIndicator(
               strokeWidth: 3,
@@ -1263,7 +1717,7 @@ Future<void> _checkForUpdates(BuildContext context) async {
         actions: [
           TextButton(
             onPressed: () => navigator.pop(),
-            child: Text('Got it', style: TextStyle(color: kPink)),
+            child: const Text('Got it', style: TextStyle(color: kPink)),
           ),
         ],
       ),
@@ -1349,189 +1803,6 @@ Widget _apkBtn({required String label,
 }
 
 // ================================================================
-// WALLET SHEET — Add Money / Transfer
-// ================================================================
-class _WalletSheet extends StatefulWidget {
-  final User? user;
-  const _WalletSheet({required this.user});
-  @override
-  State<_WalletSheet> createState() => _WalletSheetState();
-}
-
-class _WalletSheetState extends State<_WalletSheet>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tab = TabController(length: 2, vsync: this);
-  final _ctrl   = TextEditingController();
-  final _toCtrl = TextEditingController();
-  bool _loading = false;
-
-  @override
-  void dispose() {
-    _tab.dispose();
-    _ctrl.dispose();
-    _toCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: kBg,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const SizedBox(height: 12),
-          Container(width: 40, height: 4,
-              decoration: BoxDecoration(color: kBorder,
-                  borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 16),
-          TabBar(controller: _tab,
-              labelColor: kPink, unselectedLabelColor: kMuted,
-              indicatorColor: kPink, dividerColor: kBorder,
-              tabs: const [Tab(text: 'Add Money'), Tab(text: 'Transfer')]),
-          SizedBox(height: 220, child: TabBarView(controller: _tab, children: [
-            _addMoneyTab(), _transferTab(),
-          ])),
-        ]),
-      ),
-    );
-  }
-
-  Widget _addMoneyTab() {
-    return Padding(padding: const EdgeInsets.all(20), child: Column(children: [
-      TextField(controller: _ctrl, keyboardType: TextInputType.number,
-          decoration: InputDecoration(
-            hintText: 'Enter amount (₹)', prefixText: '₹ ',
-            prefixStyle: const TextStyle(color: kPink, fontWeight: FontWeight.w700),
-            filled: true, fillColor: kSurface,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none))),
-      const SizedBox(height: 10),
-      Row(children: [100, 200, 500, 1000].map((v) =>
-        Padding(padding: const EdgeInsets.only(right: 8),
-          child: GestureDetector(onTap: () => _ctrl.text = '$v',
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(color: kPinkBg,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: kPink.withValues(alpha: 0.3))),
-              child: Text('₹$v', style: TextStyle(color: kPink, fontSize: 12,
-                  fontWeight: FontWeight.w600)))))).toList()),
-      const SizedBox(height: 14),
-      SizedBox(width: double.infinity, height: 48,
-        child: ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: kPink,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14))),
-          onPressed: _loading ? null : _addMoney,
-          child: _loading
-              ? const SizedBox(width: 20, height: 20,
-                  child: CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 2))
-              : const Text('Add Money', style: TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.w800)))),
-    ]));
-  }
-
-  Widget _transferTab() {
-    return Padding(padding: const EdgeInsets.all(20), child: Column(children: [
-      TextField(controller: _toCtrl, keyboardType: TextInputType.phone,
-          decoration: InputDecoration(hintText: 'Recipient phone number',
-            prefixIcon: const Icon(Icons.phone_outlined, color: kMuted, size: 18),
-            filled: true, fillColor: kSurface,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none))),
-      const SizedBox(height: 10),
-      TextField(controller: _ctrl, keyboardType: TextInputType.number,
-          decoration: InputDecoration(hintText: 'Amount (₹)', prefixText: '₹ ',
-            prefixStyle: const TextStyle(
-                color: kPink, fontWeight: FontWeight.w700),
-            filled: true, fillColor: kSurface,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none))),
-      const SizedBox(height: 14),
-      SizedBox(width: double.infinity, height: 48,
-        child: ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: kPink,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14))),
-          onPressed: _loading ? null : _transfer,
-          child: const Text('Transfer Now', style: TextStyle(
-              color: Colors.white, fontWeight: FontWeight.w800)))),
-    ]));
-  }
-
-  Future<void> _addMoney() async {
-    final amt = double.tryParse(_ctrl.text.trim());
-    if (amt == null || amt <= 0 || widget.user == null) return;
-    setState(() => _loading = true);
-    try {
-      final db = FirebaseFirestore.instance;
-      await db.runTransaction((txn) async {
-        final ref  = db.collection('users').doc(widget.user!.uid);
-        final snap = await txn.get(ref);
-        final cur  = (snap.data()?['walletBalance'] as num?)?.toDouble() ?? 0.0;
-        txn
-          ..update(ref, {'walletBalance': cur + amt})
-          ..set(db.collection('wallet_transactions').doc(), {
-            'userId': widget.user!.uid, 'type': 'credit',
-            'amount': amt, 'createdAt': FieldValue.serverTimestamp()});
-      });
-      if (mounted) Navigator.pop(context);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
-          backgroundColor: kRed,
-          behavior: SnackBarBehavior.floating,
-        ));
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _transfer() async {
-    final amt   = double.tryParse(_ctrl.text.trim());
-    final phone = _toCtrl.text.trim();
-    if (amt == null || amt <= 0 || phone.isEmpty || widget.user == null) return;
-    setState(() => _loading = true);
-    try {
-      final db      = FirebaseFirestore.instance;
-      final recSnap = await db.collection('users')
-          .where('phone', isEqualTo: phone).limit(1).get();
-      if (recSnap.docs.isEmpty) throw Exception('User not found');
-      final toUid = recSnap.docs.first.id;
-      await db.runTransaction((txn) async {
-        final fromRef = db.collection('users').doc(widget.user!.uid);
-        final toRef   = db.collection('users').doc(toUid);
-        final fSnap   = await txn.get(fromRef);
-        final tSnap   = await txn.get(toRef);
-        final fBal = (fSnap.data()?['walletBalance'] as num?)?.toDouble() ?? 0.0;
-        final tBal = (tSnap.data()?['walletBalance'] as num?)?.toDouble() ?? 0.0;
-        if (fBal < amt) throw Exception('Insufficient balance');
-        txn
-          ..update(fromRef, {'walletBalance': fBal - amt})
-          ..update(toRef,   {'walletBalance': tBal + amt});
-      });
-      if (mounted) Navigator.pop(context);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
-          backgroundColor: kRed,
-          behavior: SnackBarBehavior.floating,
-        ));
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-}
-
-// ================================================================
 // NJ TECH BROADBAND WEBVIEW
 // ================================================================
 class NjTechBroadbandWebView extends StatefulWidget {
@@ -1606,7 +1877,7 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
       body: Center(
         child: _loading
             ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                CircularProgressIndicator(color: kPink),
+                const CircularProgressIndicator(color: kPink),
                 const SizedBox(height: 20),
                 Text('Opening Erode Fiber...',
                     style: GoogleFonts.outfit(
@@ -1905,3 +2176,164 @@ class _KeepAliveTabState extends State<KeepAliveTab> with AutomaticKeepAliveClie
     return widget.child;
   }
 }
+
+// ================================================================
+// CATEGORY SLIDING BANNER — Animated marquee per slide
+// ================================================================
+class _CategorySlidingBanner extends StatefulWidget {
+  const _CategorySlidingBanner();
+  @override
+  State<_CategorySlidingBanner> createState() => _CategorySlidingBannerState();
+}
+
+class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
+  final PageController _pageController = PageController();
+  int _currentIndex = 0;
+  Timer? _autoScrollTimer;
+
+  final List<_CategorySlideData> _slides = const [
+    _CategorySlideData(title: '🚕 Taxi & Transport', icons: [
+      FluentEmojiFlat.motor_scooter, FluentEmojiFlat.package, FluentEmojiFlat.auto_rickshaw,
+      FluentEmojiFlat.oncoming_taxi, FluentEmojiFlat.delivery_truck, FluentEmojiFlat.bicycle,
+    ]),
+    _CategorySlideData(title: '🍔 Food Delivery', icons: [
+      FluentEmojiFlat.hamburger, FluentEmojiFlat.pizza, FluentEmojiFlat.chicken,
+      FluentEmojiFlat.french_fries, FluentEmojiFlat.cup_with_straw, FluentEmojiFlat.shortcake,
+    ]),
+    _CategorySlideData(title: '🛒 Groceries', icons: [
+      FluentEmojiFlat.leafy_green, FluentEmojiFlat.red_apple, FluentEmojiFlat.carrot,
+      FluentEmojiFlat.onion, FluentEmojiFlat.garlic, FluentEmojiFlat.shopping_cart,
+    ]),
+    _CategorySlideData(title: '🔧 Services', icons: [
+      FluentEmojiFlat.mobile_phone, FluentEmojiFlat.laptop, FluentEmojiFlat.battery,
+      FluentEmojiFlat.antenna_bars, FluentEmojiFlat.hammer_and_wrench, FluentEmojiFlat.delivery_truck,
+    ]),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _autoScrollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (_pageController.hasClients) {
+        final nextPage = (_currentIndex + 1) % _slides.length;
+        _pageController.animateToPage(nextPage, duration: const Duration(milliseconds: 600), curve: Curves.easeInOut);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoScrollTimer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          height: 140,
+          margin: const EdgeInsets.all(16),
+          child: PageView.builder(
+            controller: _pageController,
+            onPageChanged: (index) => setState(() => _currentIndex = index),
+            itemCount: _slides.length,
+            itemBuilder: (_, i) {
+              final slide = _slides[i];
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [kPink.withValues(alpha: 0.15), kPink.withValues(alpha: 0.05)],
+                    begin: Alignment.topLeft, end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: kPink.withValues(alpha: 0.2)),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(slide.title, style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    Expanded(child: _IconMarquee(icons: slide.icons)),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(
+            _slides.length,
+            (index) => Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              width: 6, height: 6,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _currentIndex == index ? kPink : kMuted.withValues(alpha: 0.3),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CategorySlideData {
+  final String title;
+  final List<String> icons;
+  const _CategorySlideData({required this.title, required this.icons});
+}
+
+class _IconMarquee extends StatefulWidget {
+  final List<String> icons;
+  const _IconMarquee({required this.icons});
+  @override
+  State<_IconMarquee> createState() => _IconMarqueeState();
+}
+
+class _IconMarqueeState extends State<_IconMarquee> with SingleTickerProviderStateMixin {
+  late ScrollController _controller;
+  Timer? _timer;
+  @override
+  void initState() {
+    super.initState();
+    _controller = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startMarquee());
+  }
+  void _startMarquee() {
+    _timer = Timer.periodic(const Duration(milliseconds: 30), (_) {
+      if (!mounted || !_controller.hasClients) return;
+      final max = _controller.position.maxScrollExtent;
+      if (max <= 0) return;
+      final next = _controller.offset + 1.0;
+      if (next >= max) {
+        _controller.jumpTo(0);
+      } else {
+        _controller.jumpTo(next);
+      }
+    });
+  }
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) {
+    final doubled = [...widget.icons, ...widget.icons, ...widget.icons];
+    return ListView.builder(
+      controller: _controller,
+      scrollDirection: Axis.horizontal,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: doubled.length,
+      itemBuilder: (_, i) => Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: SvgPicture.string(doubled[i], width: 36, height: 36)),
+    );
+  }
+}
+
