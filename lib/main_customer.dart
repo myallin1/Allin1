@@ -1,4 +1,4 @@
-// lib/main_customer.dart
+﻿// lib/main_customer.dart
 // Erode Super App - CUSTOMER PWA Entry Point
 // Fixed: back button logout + routing + geolocator web crash
 

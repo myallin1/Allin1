@@ -1,7 +1,7 @@
-// lib/widgets/allin1_map_widget.dart
+﻿// lib/widgets/allin1_map_widget.dart
 // Dual Map Provider Architecture | Ola + OSM
 // Architecture: ListenableBuilder only (NO Streams, NO ValueKey)
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -16,7 +16,7 @@ import 'package:latlong2/latlong.dart';
 import '../config/api_config.dart';
 import '../services/map_service.dart';
 
-// â”€â”€ Erode Default Coordinates â”€â”€
+// ── Erode Default Coordinates ──
 const LatLng kErodeCenter = LatLng(11.3410, 77.7171);
 final Uint8List _transparentPixel = Uint8List.fromList(<int>[
   0x89,
@@ -91,7 +91,7 @@ final Uint8List _transparentPixel = Uint8List.fromList(<int>[
 /// Allin1MapWidget - Dual Map Provider enabled map widget
 ///
 /// Features:
-/// - Automatic provider switching (Ola â†” OSM)
+/// - Automatic provider switching (Ola ↔ OSM)
 /// - Real-time tile URL generation via custom TileProvider
 /// - Provider badge showing active provider
 /// - Clean lifecycle management
@@ -447,7 +447,7 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
   }
 }
 
-// â”€â”€ FIX #1: Custom TileProvider with AUTO-FALLBACK â”€â”€â”€â”€â”€â”€â”€
+// ── FIX #1: Custom TileProvider with AUTO-FALLBACK ───────
 /// Generates tile URLs dynamically from the current provider.
 /// If Ola tiles fail (timeout/broken URL), automatically falls back to OSM tiles.
 class _DynamicTileProvider extends TileProvider {
@@ -474,10 +474,10 @@ class _DynamicTileProvider extends TileProvider {
     }
   }
 
-  // getImageFromCache removed in flutter_map v8 â€” uses default caching
+  // getImageFromCache removed in flutter_map v8 — uses default caching
 }
 
-// â”€â”€ Provider Badge (shows active provider) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Provider Badge (shows active provider) ────────────────────────
 class _ProviderBadge extends StatelessWidget {
   final MapProviderType provider;
 
@@ -495,7 +495,7 @@ class _ProviderBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'â­ Premium Map',
+            '⭐ Premium Map',
             style: TextStyle(
               color: Colors.white,
               fontSize: 9,
@@ -514,7 +514,7 @@ class _ProviderBadge extends StatelessWidget {
   }
 }
 
-// â”€â”€ Default Marker (unchanged from original) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Default Marker (unchanged from original) ─────────────────────
 class _DefaultMarker extends StatelessWidget {
   final Color color;
   final IconData icon;
@@ -603,7 +603,7 @@ class _DefaultMarker extends StatelessWidget {
   }
 }
 
-// â”€â”€ Data Models (unchanged from original) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Data Models (unchanged from original) ────────────────────────
 class MapMarker {
   final LatLng point;
   final Color color;
