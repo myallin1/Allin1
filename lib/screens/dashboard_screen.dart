@@ -23,11 +23,12 @@ import '../services/pwa_cache_platform_stub.dart'
 import '../widgets/banner_slider.dart';
 import 'bike_taxi/bike_booking_screen.dart';
 import 'custom_food_order_screen.dart';
-import 'store_layout_screen.dart';
+import 'hero_booking_screen.dart';
 import 'car_wash_screen.dart';
 import 'coming_soon_screen.dart';
 import 'construction_screen.dart';
 import 'custom_order_screen.dart';
+import 'grocery_order_screen.dart';
 import 'printing_service_screen.dart';
 import 'guru_chat_screen.dart';
 import 'nj_tech_service_screen.dart';
@@ -222,7 +223,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 'taxi':        _navigate(const BikeBookingScreen()); break;
       case 'broadband':   _launchBroadband(); break;
       case 'food':        _navigate(const CustomFoodOrderScreen()); break;
-      case 'grocery':     _navigate(const StoreLayoutScreen(storeType: 'grocery')); break;
+      case 'grocery':     _navigate(const GroceryOrderScreen()); break;
       case 'njtech':      _navigate(const NJTechStoreScreen()); break;
       case 'carwash':     _navigate(const CarWashScreen()); break;
       case 'puncture':    _navigate(const ComingSoonScreen(role: 'Mobile Puncture')); break;
@@ -997,7 +998,7 @@ class _HomeTab extends StatelessWidget {
           GestureDetector(
             onTap: () => Navigator.push<void>(
               context,
-              MaterialPageRoute<void>(builder: (_) => const CustomOrderScreen()),
+              MaterialPageRoute<void>(builder: (_) => const HeroBookingScreen()),
             ),
             child: Container(
               width: double.infinity,
