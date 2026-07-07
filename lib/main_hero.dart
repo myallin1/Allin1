@@ -63,12 +63,14 @@ Future<void> _ensureFirebaseInitialized() async {
 // ── Global RTDB Hero Ping Listener (Auth-Aware) ──────────────────
 // Survives UI dispose & handles Login/Logout dynamically
 StreamSubscription<DatabaseEvent>? _globalHeroPingSub;
+StreamSubscription<DatabaseEvent>? _globalServicePingSub;
 StreamSubscription<User?>? _authSub;
 
 void _initGlobalHeroPingListener() {
   _authSub?.cancel();
   _authSub = FirebaseAuth.instance.authStateChanges().listen((User? user) {
     _globalHeroPingSub?.cancel(); // Clear existing listener
+    _globalServicePingSub?.cancel();
 
     if (user == null) {
       debugPrint('[GlobalPing] User logged out — stopping listener');
@@ -120,6 +122,57 @@ void _initGlobalHeroPingListener() {
       }
     }, onError: (Object e) {
       debugPrint('[GlobalPing] RTDB listener error: $e');
+    });
+
+    // ── Broadcast Order System — parallel ping channel ────────────
+    // Same wake/notification mechanism as hero_pings, generic text.
+    // The in-app accept dialog is handled by hero_home_screen.dart's
+    // own hero_service_pings listener; this only fires the
+    // lock-screen notification so the hero is woken up.
+    debugPrint('[GlobalServicePing] Attaching global hero_service_pings/$uid listener');
+    _globalServicePingSub = FirebaseDatabase.instance
+        .ref('hero_service_pings/$uid')
+        .onChildAdded
+        .listen((event) async {
+      final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
+      final requestId = event.snapshot.key as String? ?? '';
+      if (pingData == null || requestId.isEmpty) return;
+
+      final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
+      if (pingExpiresAt == null) return;
+      if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
+        debugPrint('[GlobalServicePing] Expired ping — removing: $requestId');
+        await FirebaseDatabase.instance.ref('hero_service_pings/$uid/$requestId').remove();
+        return;
+      }
+
+      debugPrint('[GlobalServicePing] ✅ New service ping received: $requestId');
+
+      if (!HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
+        debugPrint('[GlobalServicePing] ⏭️ Duplicate ping skipped: $requestId');
+        return;
+      }
+
+      if (!kIsWeb) {
+        try {
+          await HeroRideNotificationService.showRideAssigned(
+            rideId: requestId,
+            data: Map<String, dynamic>.from(pingData),
+            playAlertTone: false,
+            title: 'New Service Request',
+            channelName: 'Hero Ride Alerts',
+            channelDescription:
+                'Lock-screen ride and service-request alerts with ACCEPT action and ringtone.',
+            ticker: 'New service request assigned',
+            emptyBodyFallback: 'Tap ACCEPT to open the request.',
+          );
+          debugPrint('[GlobalServicePing] 🔔 Notification fired for: $requestId');
+        } catch (e) {
+          debugPrint('[GlobalServicePing] Notification error: $e');
+        }
+      }
+    }, onError: (Object e) {
+      debugPrint('[GlobalServicePing] RTDB listener error: $e');
     });
   });
 }

@@ -121,6 +121,17 @@ class HeroRideNotificationService {
     required String rideId,
     required Map<String, dynamic> data,
     bool playAlertTone = true,
+    // ── Generic-text overrides ──────────────────────────────────
+    // Defaults preserve the exact ride-alert text/behavior for every
+    // existing call site. Passing overrides (e.g. from the broadcast
+    // order system) reuses the identical full-screen-intent + alarm-
+    // stream ringtone mechanism with different wording.
+    String title = 'New Ride Assigned',
+    String channelName = 'Hero Ride Alerts',
+    String channelDescription =
+        'Lock-screen ride request alerts with ACCEPT action and ringtone.',
+    String ticker = 'New ride assigned',
+    String emptyBodyFallback = 'Tap ACCEPT to open the ride request.',
   }) async {
     if (kIsWeb || rideId.trim().isEmpty) {
       return;
@@ -147,9 +158,8 @@ class HeroRideNotificationService {
     final details = NotificationDetails(
       android: AndroidNotificationDetails(
         rideAlertChannelId,
-        'Hero Ride Alerts',
-        channelDescription:
-            'Lock-screen ride request alerts with ACCEPT action and ringtone.',
+        channelName,
+        channelDescription: channelDescription,
         importance: Importance.max,
         priority: Priority.max,
         category: AndroidNotificationCategory.call,
@@ -161,7 +171,7 @@ class HeroRideNotificationService {
         enableVibration: true,
         // 0ms delay, vibrate 1sec, pause 0.5sec, vibrate 1sec, pause 0.5sec, vibrate 1sec
         vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
-        ticker: 'New ride assigned',
+        ticker: ticker,
         timeoutAfter: 15000,
         sound: const RawResourceAndroidNotificationSound('ride_alert'),
         audioAttributesUsage: AudioAttributesUsage.alarm,
@@ -185,8 +195,8 @@ class HeroRideNotificationService {
 
     await _plugin.show(
       id: _notificationIdForRide(rideId),
-      title: 'New Ride Assigned',
-      body: body.isEmpty ? 'Tap ACCEPT to open the ride request.' : body,
+      title: title,
+      body: body.isEmpty ? emptyBodyFallback : body,
       notificationDetails: details,
       payload: jsonEncode(<String, String>{'rideId': rideId}),
     );

@@ -25,6 +25,7 @@ import '../../models/ride_model.dart';
 import '../../services/hero_ride_notification_service.dart';
 import '../../services/hero_web_audio_service.dart';
 import '../../services/location_service.dart';
+import '../../services/service_request_service.dart';
 import '../../services/update_service.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../../widgets/hero_premium_loader.dart';
@@ -87,6 +88,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   int _mapRefreshGen = 0;
   bool _isShowingRideDialog = false;
   bool _showServiceZone = false;
+  bool _isShowingServiceDialog = false;
 
   // Commission + Hero Coins state
   double _commissionRate = 0;
@@ -140,6 +142,11 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
   StreamSubscription<DatabaseEvent>? _heroPingSub;
   // Shown ride IDs (deprecated with old Firestore stream) a dialog for to prevent duplicates
+
+  // Broadcast Order System — parallel ping subscription (mirrors _heroPingSub
+  // lifecycle exactly: same init/pause/resume/dispose points).
+  StreamSubscription<DatabaseEvent>? _servicePingSub;
+  final Set<String> _shownServicePingIds = {};
 
   bool _isOnRide = false;
   DateTime? _lastFirestoreLocationWriteAt;
@@ -368,6 +375,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
   void _startTargetedRideFallback() {
     _listenForHeroPings();
+    _listenForServicePings();
   }
 
   // FIX-RIDE: Firestore live stream for broadcast 'searching' rides.
@@ -387,6 +395,12 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   void _stopTargetedRideFallback() {
     _heroPingSub?.cancel();
     _heroPingSub = null;
+    _stopServicePingListening();
+  }
+
+  void _stopServicePingListening() {
+    _servicePingSub?.cancel();
+    _servicePingSub = null;
   }
 
   Future<void> _showUpdateDialog() async {
@@ -629,6 +643,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         // _initPendingRidesStream removed
         _startGlobalLocationTracking();
         _listenForHeroPings();
+        _listenForServicePings();
 
         unawaited(_consumePendingRidePush());
         debugPrint('🔄 Hero online state restored — live tracking restarted');
@@ -771,14 +786,17 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       // Manage ping subscription based on online state
       if (online) {
         _listenForHeroPings();
+        _listenForServicePings();
       } else {
         _heroPingSub?.cancel();
         _heroPingSub = null;
+        _stopServicePingListening();
       }
     } catch (e) {
       debugPrint('[HeroHomeScreen] syncOnlineStatus error: ');
       _heroPingSub?.cancel();
       _heroPingSub = null;
+      _stopServicePingListening();
       if (mounted) {
         setState(() => _isOnline = false);
       }
@@ -1264,6 +1282,226 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     });
   }
 
+  // ================================================================
+  // BROADCAST ORDER SYSTEM — parallel ping listener + accept flow.
+  // Extends (does not duplicate) the ride-ping pattern above: same
+  // expiry check, same "ignore pre-existing pings on resume" guard,
+  // same atomic-accept-wins-the-race semantics, same notification
+  // mechanism. Only the RTDB path and dialog UI differ.
+  // ================================================================
+  void _listenForServicePings() {
+    final uid = _user?.uid;
+    if (uid == null) return;
+    _servicePingSub?.cancel();
+    debugPrint('🔥 [DEBUG] Hero is LISTENING to EXACT PATH: hero_service_pings/$uid');
+
+    final listenerAttachedAt = DateTime.now().toUtc().millisecondsSinceEpoch;
+
+    _servicePingSub = FirebaseDatabase.instance
+        .ref('hero_service_pings/$uid')
+        .onChildAdded
+        .listen((event) {
+      if (!mounted || !_isOnline || _activeRideId.isNotEmpty) return;
+      if (_isShowingServiceDialog) return;
+
+      final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
+      final requestId = event.snapshot.key as String? ?? '';
+      if (pingData == null || requestId.isEmpty) return;
+
+      final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
+      if (pingExpiresAt == null) return;
+      if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
+        FirebaseDatabase.instance.ref('hero_service_pings/$uid/$requestId').remove();
+        return;
+      }
+
+      // Ignore pings that existed before this listener attached (same
+      // guard as ride pings — prevents stale-ping re-trigger on resume).
+      // 90s broadcast window, same reasoning as the 10s ride window.
+      final pingCreatedAt = pingExpiresAt - kServiceRequestPingExpirySeconds * 1000;
+      if (pingCreatedAt < listenerAttachedAt - 2000) {
+        debugPrint('[HeroHomeScreen] Ignoring pre-existing service ping: $requestId');
+        return;
+      }
+
+      if (_shownServicePingIds.contains(requestId)) return;
+      _shownServicePingIds.add(requestId);
+
+      debugPrint('[HeroHomeScreen] RTDB service ping received: $requestId');
+
+      if (!kIsWeb && !HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
+        debugPrint('[HeroHomeScreen] Notification already fired by global listener. Showing dialog only.');
+      } else if (!kIsWeb) {
+        try {
+          HeroRideNotificationService.showRideAssigned(
+            rideId: requestId,
+            data: Map<String, dynamic>.from(pingData),
+            playAlertTone: true,
+            title: 'New Service Request',
+            channelDescription:
+                'Lock-screen ride and service-request alerts with ACCEPT action and ringtone.',
+            ticker: 'New service request assigned',
+            emptyBodyFallback: 'Tap ACCEPT to open the request.',
+          );
+        } catch (e) {
+          debugPrint('[HeroHomeScreen] Ringtone error: $e');
+        }
+      }
+
+      _showServiceRequestDialog(requestId, Map<String, dynamic>.from(pingData));
+    }, onError: (Object e) {
+      debugPrint('[HeroHomeScreen] RTDB service ping listener error: $e');
+    });
+  }
+
+  void _showServiceRequestDialog(String requestId, Map<String, dynamic> data) {
+    if (!mounted) return;
+    if (_isShowingServiceDialog) {
+      debugPrint('[HeroHomeScreen] Service dialog already open — skipping $requestId');
+      return;
+    }
+    setState(() => _isShowingServiceDialog = true);
+
+    if (kIsWeb) {
+      try {
+        HeroWebAudioService().playAlert();
+      } catch (e) {
+        debugPrint('[HeroHomeScreen] Web audio error: $e');
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isShowingServiceDialog) return;
+      _doShowServiceDialog(requestId, data);
+    });
+  }
+
+  void _doShowServiceDialog(String requestId, Map<String, dynamic> data, [int attempt = 0]) {
+    final dialogContext = navigatorKey.currentContext;
+    if (dialogContext == null) {
+      if (attempt >= 2) {
+        debugPrint('[HeroHomeScreen] dialogContext null after 2 retries — giving up');
+        if (mounted) setState(() => _isShowingServiceDialog = false);
+        return;
+      }
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (!mounted || !_isShowingServiceDialog) return;
+        _doShowServiceDialog(requestId, data, attempt + 1);
+      });
+      return;
+    }
+
+    final requestType = data['requestType'] as String? ?? 'hero_booking';
+    final customerName = data['customerName'] as String? ?? 'Customer';
+    final details = data['details'] as Map? ?? {};
+    final summary = _serviceRequestSummary(requestType, details);
+
+    showDialog<void>(
+      context: dialogContext,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(_serviceRequestTitle(requestType), style: GoogleFonts.outfit(fontWeight: FontWeight.w800)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('From: $customerName', style: const TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Text(summary, style: const TextStyle(color: Colors.black54)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _rejectServiceRequest(requestId);
+            },
+            child: const Text('Decline', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4FA3)),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _acceptServiceRequest(requestId);
+            },
+            child: const Text('ACCEPT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    ).then((_) {
+      if (mounted) setState(() => _isShowingServiceDialog = false);
+    });
+  }
+
+  String _serviceRequestTitle(String requestType) {
+    switch (requestType) {
+      case 'hero_booking':
+        return 'New Hero Booking';
+      case 'custom_order':
+        return 'New Custom Order';
+      case 'custom_food_order':
+        return 'New Food Order';
+      case 'grocery_order':
+        return 'New Grocery Order';
+      default:
+        return 'New Service Request';
+    }
+  }
+
+  String _serviceRequestSummary(String requestType, Map details) {
+    switch (requestType) {
+      case 'hero_booking':
+        return (details['taskDescription'] as String?) ?? '';
+      case 'custom_order':
+        return (details['orderDescription'] as String?) ?? '';
+      case 'custom_food_order':
+        final items = (details['items'] as String?) ?? '';
+        final pref = (details['restaurantOrPreference'] as String?) ?? '';
+        return [if (pref.isNotEmpty) 'From: $pref', if (items.isNotEmpty) items].join('\n');
+      case 'grocery_order':
+        final text = (details['listText'] as String?) ?? '';
+        final hasImage = (details['listImageUrl'] as String?)?.isNotEmpty ?? false;
+        return [if (text.isNotEmpty) text, if (hasImage) '📷 Photo list attached'].join('\n');
+      default:
+        return '';
+    }
+  }
+
+  Future<void> _acceptServiceRequest(String requestId) async {
+    if (_user == null) return;
+    try {
+      final won = await ServiceRequestService().acceptServiceRequest(
+        requestId: requestId,
+        heroId: _user!.uid,
+        heroName: _captainName,
+        heroPhone: _user!.phoneNumber ?? '',
+      );
+      if (!won) {
+        debugPrint('[HeroHomeScreen] Service request already accepted by another hero — aborting');
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Request accepted! Check "My Requests" to update status.'), backgroundColor: Color(0xFF00C853)),
+        );
+      }
+    } catch (e) {
+      debugPrint('[HeroHomeScreen] acceptServiceRequest error: $e');
+    }
+  }
+
+  Future<void> _rejectServiceRequest(String requestId) async {
+    final uid = _user?.uid;
+    if (uid == null) return;
+    try {
+      await FirebaseDatabase.instance.ref('hero_service_pings/$uid/$requestId').remove();
+    } catch (e) {
+      debugPrint('[HeroHomeScreen] rejectServiceRequest error: $e');
+    }
+  }
+
   Widget _buildPingDialog(String requestId, Map<String, dynamic> pingData) {
     return _PingCountdownDialog(
       requestId: requestId.toString(),
@@ -1565,6 +1803,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     if (_isOnline) {
       _startGlobalLocationTracking();
       _listenForHeroPings();
+      _listenForServicePings();
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1600,6 +1839,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     _stopGlobalLocationTracking();
     _heroPingSub?.cancel();
     _heroPingSub = null;
+    _stopServicePingListening();
     _locationSubscription = LocationService().getLocationStream(
       highAccuracy: true, // active ride — full navigation accuracy
     ).listen(
@@ -1715,6 +1955,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             child: Column(
               children: [
                 _buildHeader(),
+                _buildActiveServiceRequestsBanner(),
                 if (_isOnline) ...[
                   if (_activeRideId.isNotEmpty) ...[
                     _buildActiveRideCard(),
@@ -1737,6 +1978,40 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     return Scaffold(
       backgroundColor: _bg,
       body: content,
+    );
+  }
+
+  // ── BROADCAST ORDER SYSTEM: minimal status-advance UI ──────────
+  // Shows any service_requests currently assigned to this hero
+  // (whether the assignment came from broadcast-accept or an admin
+  // manual assignment — both write the exact same fields) with a
+  // simple 3-button status-advance control.
+  Widget _buildActiveServiceRequestsBanner() {
+    final uid = _user?.uid;
+    if (uid == null) return const SizedBox.shrink();
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('service_requests')
+          .where('assignedHeroId', isEqualTo: uid)
+          .where('status', whereIn: ['hero_assigned', 'in_progress', 'nearing_completion'])
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        return Column(
+          children: snapshot.data!.docs.map((doc) {
+            final data = doc.data();
+            return _ServiceRequestStatusCard(
+              requestId: doc.id,
+              requestType: data['requestType'] as String? ?? 'hero_booking',
+              status: data['status'] as String? ?? 'hero_assigned',
+              customerName: data['customerName'] as String? ?? 'Customer',
+            );
+          }).toList(),
+        );
+      },
     );
   }
 
@@ -3542,6 +3817,132 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         ),
       ),
     );
+  }
+}
+
+// ================================================================
+// SERVICE REQUEST STATUS CARD — minimal 3-button status-advance UI
+// for the Broadcast Order System. Deliberately simple per spec.
+// ================================================================
+const List<String> _kServiceAdvanceOrder = [
+  'hero_assigned',
+  'in_progress',
+  'nearing_completion',
+  'completed',
+];
+
+class _ServiceRequestStatusCard extends StatefulWidget {
+  final String requestId;
+  final String requestType;
+  final String status;
+  final String customerName;
+  const _ServiceRequestStatusCard({
+    required this.requestId,
+    required this.requestType,
+    required this.status,
+    required this.customerName,
+  });
+
+  @override
+  State<_ServiceRequestStatusCard> createState() => _ServiceRequestStatusCardState();
+}
+
+class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
+  bool _updating = false;
+
+  Future<void> _advanceTo(String newStatus) async {
+    setState(() => _updating = true);
+    try {
+      await ServiceRequestService().advanceStatus(widget.requestId, newStatus);
+    } catch (e) {
+      debugPrint('[ServiceRequestStatusCard] advanceStatus error: $e');
+    } finally {
+      if (mounted) setState(() => _updating = false);
+    }
+  }
+
+  String _typeLabel() {
+    switch (widget.requestType) {
+      case 'hero_booking':
+        return 'Hero Booking';
+      case 'custom_order':
+        return 'Custom Order';
+      case 'custom_food_order':
+        return 'Food Order';
+      case 'grocery_order':
+        return 'Grocery Order';
+      default:
+        return 'Service Request';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentIndex = _kServiceAdvanceOrder.indexOf(widget.status);
+    final nextStatus = currentIndex >= 0 && currentIndex < _kServiceAdvanceOrder.length - 1
+        ? _kServiceAdvanceOrder[currentIndex + 1]
+        : null;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFFF4FA3).withValues(alpha: 0.2)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 3))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_typeLabel(), style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 13)),
+                    Text('For ${widget.customerName}', style: const TextStyle(color: Colors.black54, fontSize: 11)),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: const Color(0xFFFF4FA3).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                child: Text(widget.status.replaceAll('_', ' '), style: const TextStyle(color: Color(0xFFFF4FA3), fontSize: 10, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          if (nextStatus != null) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 38,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4FA3)),
+                onPressed: _updating ? null : () => _advanceTo(nextStatus),
+                child: _updating
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : Text(_buttonLabelFor(nextStatus), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _buttonLabelFor(String nextStatus) {
+    switch (nextStatus) {
+      case 'in_progress':
+        return 'Start';
+      case 'nearing_completion':
+        return 'Nearing Completion';
+      case 'completed':
+        return 'Mark Complete';
+      default:
+        return 'Advance';
+    }
   }
 }
 
