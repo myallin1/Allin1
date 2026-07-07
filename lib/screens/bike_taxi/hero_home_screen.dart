@@ -1424,7 +1424,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4FA3)),
             onPressed: () {
               Navigator.pop(ctx);
-              _acceptServiceRequest(requestId);
+              _acceptServiceRequest(requestId, data);
             },
             child: const Text('ACCEPT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
@@ -1469,8 +1469,20 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     }
   }
 
-  Future<void> _acceptServiceRequest(String requestId) async {
+  Future<void> _acceptServiceRequest(String requestId, Map<String, dynamic> data) async {
     if (_user == null) return;
+
+    // Same clock-skew-tolerant expiry buffer as _acceptRide — reject
+    // client-side before even attempting the transaction if this ping
+    // has visibly expired (e.g. dialog was left open across a
+    // background/foreground cycle).
+    final pingExpiresAt = (data['pingExpiresAt'] as num?)?.toInt() ?? 0;
+    final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
+    if (pingExpiresAt > 0 && nowMs > pingExpiresAt + 5000) {
+      debugPrint('[HeroHomeScreen] Service ping expired, cannot accept');
+      return;
+    }
+
     try {
       final won = await ServiceRequestService().acceptServiceRequest(
         requestId: requestId,
@@ -3823,13 +3835,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 // ================================================================
 // SERVICE REQUEST STATUS CARD — minimal 3-button status-advance UI
 // for the Broadcast Order System. Deliberately simple per spec.
+// (Status-advance order lives in kServiceRequestAdvanceOrder,
+// service_request_service.dart — single source of truth.)
 // ================================================================
-const List<String> _kServiceAdvanceOrder = [
-  'hero_assigned',
-  'in_progress',
-  'nearing_completion',
-  'completed',
-];
 
 class _ServiceRequestStatusCard extends StatefulWidget {
   final String requestId;
@@ -3878,9 +3886,9 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
 
   @override
   Widget build(BuildContext context) {
-    final currentIndex = _kServiceAdvanceOrder.indexOf(widget.status);
-    final nextStatus = currentIndex >= 0 && currentIndex < _kServiceAdvanceOrder.length - 1
-        ? _kServiceAdvanceOrder[currentIndex + 1]
+    final currentIndex = kServiceRequestAdvanceOrder.indexOf(widget.status);
+    final nextStatus = currentIndex >= 0 && currentIndex < kServiceRequestAdvanceOrder.length - 1
+        ? kServiceRequestAdvanceOrder[currentIndex + 1]
         : null;
 
     return Container(

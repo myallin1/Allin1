@@ -6,6 +6,8 @@
 // to all online + available heroes, then hands off to the shared
 // tracking screen.
 // ================================================================
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -55,6 +57,11 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
         customerPhone: user.phoneNumber ?? '',
         details: {'orderDescription': _orderCtrl.text.trim()},
       );
+
+      unawaited(Future.delayed(
+        const Duration(seconds: kServiceRequestPingExpirySeconds),
+        () => ServiceRequestService().markTimeoutIfStillPending(requestId),
+      ));
 
       if (!mounted) return;
       await Navigator.pushReplacement(

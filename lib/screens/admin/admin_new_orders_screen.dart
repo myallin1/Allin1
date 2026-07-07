@@ -26,13 +26,6 @@ const Color _red = Color(0xFFFF5252);
 const Color _pink = Color(0xFFFF4FA3);
 const Color _border = Color(0x1AFFFFFF);
 
-const List<String> _kServiceAdvanceOrder = [
-  'hero_assigned',
-  'in_progress',
-  'nearing_completion',
-  'completed',
-];
-
 String _requestTypeLabel(String requestType) {
   switch (requestType) {
     case 'hero_booking':
@@ -480,9 +473,9 @@ class _ServiceRequestManualStatusControlState extends State<ServiceRequestManual
 
   @override
   Widget build(BuildContext context) {
-    final currentIndex = _kServiceAdvanceOrder.indexOf(widget.currentStatus);
-    final nextStatus = currentIndex >= 0 && currentIndex < _kServiceAdvanceOrder.length - 1
-        ? _kServiceAdvanceOrder[currentIndex + 1]
+    final currentIndex = kServiceRequestAdvanceOrder.indexOf(widget.currentStatus);
+    final nextStatus = currentIndex >= 0 && currentIndex < kServiceRequestAdvanceOrder.length - 1
+        ? kServiceRequestAdvanceOrder[currentIndex + 1]
         : null;
     if (nextStatus == null) return const SizedBox.shrink();
 

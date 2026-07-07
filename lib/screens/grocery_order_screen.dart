@@ -5,6 +5,7 @@
 // handwritten list; at least one is required. Image upload reuses
 // the exact Firebase Storage pattern from hero_document_screen.dart.
 // ================================================================
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -91,6 +92,11 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
           'listImageUrl': listImageUrl,
         },
       );
+
+      unawaited(Future.delayed(
+        const Duration(seconds: kServiceRequestPingExpirySeconds),
+        () => ServiceRequestService().markTimeoutIfStillPending(requestId),
+      ));
 
       if (!mounted) return;
       await Navigator.pushReplacement(

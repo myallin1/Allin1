@@ -8,6 +8,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'dart:async';
+
 import '../services/service_request_service.dart';
 import 'service_request_tracking_screen.dart';
 
@@ -53,6 +55,15 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         customerPhone: user.phoneNumber ?? '',
         details: {'taskDescription': _taskCtrl.text.trim()},
       );
+
+      // Fire-and-forget: if no hero accepts within the broadcast
+      // window, route this request to the admin "New Orders" tab.
+      // Detached from this screen's lifecycle since the customer
+      // navigates away immediately after this call.
+      unawaited(Future.delayed(
+        const Duration(seconds: kServiceRequestPingExpirySeconds),
+        () => ServiceRequestService().markTimeoutIfStillPending(requestId),
+      ));
 
       if (!mounted) return;
       await Navigator.pushReplacement(

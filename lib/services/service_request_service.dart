@@ -25,6 +25,18 @@ const List<String> kServiceRequestStatuses = [
 
 const int kServiceRequestPingExpirySeconds = 90;
 
+/// Status-advance order for the hero/admin 3-button control — a
+/// deliberate subset of kServiceRequestStatuses (excludes 'pending'
+/// and 'admin_review', which aren't reachable once a hero is
+/// assigned). Single source of truth shared by hero_home_screen.dart
+/// and admin_new_orders_screen.dart — do not redefine locally.
+const List<String> kServiceRequestAdvanceOrder = [
+  'hero_assigned',
+  'in_progress',
+  'nearing_completion',
+  'completed',
+];
+
 class ServiceRequestService {
   /// Reserves a document ID without writing anything — used when a
   /// caller needs the future request's ID before creating the doc
@@ -237,6 +249,19 @@ class ServiceRequestService {
       'assignedHeroPhone': heroPhone,
       'assignmentMethod': 'admin_manual',
       'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // Also close out the RTDB broadcast state so a hero whose ping
+    // hasn't expired yet can't win a concurrent atomic-accept race
+    // against this manual assignment — acceptServiceRequest's
+    // transaction aborts on status == 'accepted'.
+    await rtdb.FirebaseDatabase.instance
+        .ref('active_service_requests/$requestId')
+        .update({
+      'status': 'accepted',
+      'acceptedHeroId': heroId,
+      'acceptedHeroName': heroName,
+      'acceptedHeroPhone': heroPhone,
     });
   }
 

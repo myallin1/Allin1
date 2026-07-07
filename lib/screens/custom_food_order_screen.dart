@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -58,6 +60,11 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
           'deliveryAddress': _addressCtrl.text.trim(),
         },
       );
+
+      unawaited(Future.delayed(
+        const Duration(seconds: kServiceRequestPingExpirySeconds),
+        () => ServiceRequestService().markTimeoutIfStillPending(requestId),
+      ));
 
       if (!mounted) return;
       await Navigator.pushReplacement(
