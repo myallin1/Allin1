@@ -588,6 +588,8 @@ class _HomeTab extends StatelessWidget {
         const SizedBox(height: 12),
         _buildFoodMegaCard(context),
         const SizedBox(height: 12),
+        _buildGroceryMegaCard(context),
+        const SizedBox(height: 12),
         _buildElectronicsMegaCard(context),
         const SizedBox(height: 12),
         _buildCarServiceMegaCard(context),
@@ -743,6 +745,74 @@ class _HomeTab extends StatelessWidget {
                   SvgPicture.string(FluentEmojiFlat.chicken, width: 32, height: 32),
                   SvgPicture.string(FluentEmojiFlat.french_fries, width: 32, height: 32),
                   SvgPicture.string(FluentEmojiFlat.shortcake, width: 32, height: 32),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── GROCERY MEGA CARD ────────────────────────────────────────────
+  Widget _buildGroceryMegaCard(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      SvgPicture.string(FluentEmojiFlat.shopping_cart, width: 20, height: 20),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Grocery Order',
+                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                  const Text(
+                    '  Type your list or snap a photo',
+                    style: TextStyle(color: kMuted, fontSize: 11),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: kGreen.withValues(alpha: 0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.arrow_forward_ios_rounded, color: kGreen, size: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const GroceryOrderScreen()),
+            ),
+            child: Container(
+              width: double.infinity,
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: kGreen.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kGreen.withValues(alpha: 0.3), width: 1.5),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  SvgPicture.string(FluentEmojiFlat.leafy_green, width: 32, height: 32),
+                  SvgPicture.string(FluentEmojiFlat.red_apple, width: 32, height: 32),
+                  SvgPicture.string(FluentEmojiFlat.carrot, width: 32, height: 32),
+                  SvgPicture.string(FluentEmojiFlat.onion, width: 32, height: 32),
+                  SvgPicture.string(FluentEmojiFlat.shopping_cart, width: 32, height: 32),
                 ],
               ),
             ),
