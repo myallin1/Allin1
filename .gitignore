@@ -65,3 +65,6 @@ firebase.json
 .env
 .env.local
 .env.*.local
+
+# Claude Code local preview/launch tooling — machine-specific, not for commit
+.claude/
