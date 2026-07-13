@@ -545,7 +545,9 @@ class _HeroHistoryItem {
       paymentStatus == 'paid' ||
       paymentStatus == 'completed' ||
       paymentStatus == 'paid_by_wallet' ||
-      paymentStatus == 'paid_offline_p2p';
+      paymentStatus == 'paid_offline_p2p' ||
+      paymentStatus == 'settled' ||
+      paymentStatus == 'confirmed';
 
   bool get canReportIssue => !paymentSettled && !paymentDispute;
 

@@ -3156,7 +3156,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         if ((paymentStatus == 'completed' ||
                 paymentStatus == 'paid' ||
                 paymentStatus == 'paid_by_wallet' ||
-                paymentStatus == 'paid_offline_p2p') &&
+                paymentStatus == 'paid_offline_p2p' ||
+                paymentStatus == 'settled' ||
+                paymentStatus == 'confirmed') &&
             !_paymentAlertShown) {
           _paymentAlertShown = true;
 
