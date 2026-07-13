@@ -105,7 +105,7 @@ class _PaymentScreenState extends State<PaymentScreen>
     final data = snap.data();
     if (data == null) return;
     final paymentStatus = (data['paymentStatus'] as String? ?? '').trim();
-    if (['paid', 'paid_by_wallet', 'paid_offline_p2p', 'completed'].contains(paymentStatus)) {
+    if (['paid', 'paid_by_wallet', 'paid_offline_p2p', 'completed', 'settled', 'confirmed'].contains(paymentStatus)) {
       if (!_paid) {
         setState(() {
           _paid = true;
@@ -158,6 +158,8 @@ class _PaymentScreenState extends State<PaymentScreen>
             'paid_by_wallet',
             'paid_offline_p2p',
             'completed',
+            'settled',
+            'confirmed',
           }.contains(paymentStatus);
 
           if (liveFare != null && liveFare > 0 && liveFare != _fare) {
@@ -176,6 +178,8 @@ class _PaymentScreenState extends State<PaymentScreen>
               ..reset()
               ..forward();
           }
+        }, onError: (Object e) {
+          debugPrint('[PaymentScreen] Ride status listener error: $e');
         });
   }
 
