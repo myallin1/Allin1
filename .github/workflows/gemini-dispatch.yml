@@ -10,6 +10,8 @@ jobs:
   gemini-agent:
     if: contains(github.event.comment.body, '@gemini-cli')
     runs-on: ubuntu-latest
+    env:
+      GEMINI_CLI_TRUST_WORKSPACE: 'true'
     permissions:
       contents: write
       pull-requests: write
@@ -25,6 +27,8 @@ jobs:
         uses: google-github-actions/run-gemini-cli@v0.1.18
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          settings: |
+            {"tools": {"sandbox": false}, "trustedFolders": ["*"]}
           prompt: |
             You are a coding agent working on the Allin1 Flutter repo.
             Read GEMINI.md and AGENTS.md first and follow all rules there.
