@@ -38,7 +38,7 @@ class RideHistoryScreen extends StatelessWidget {
               child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('rides')
-                    .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                    .where('customerId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
                     .orderBy('createdAt', descending: true)
                     .limit(20)
                     .snapshots(),
@@ -144,11 +144,11 @@ class _RideHistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fare = data['fare'] as num? ?? 0;
-    final pickup = data['pickup'] as String? ?? '';
-    final drop = data['drop'] as String? ?? '';
+    final pickup = data['pickupAddress'] as String? ?? '';
+    final drop = data['dropAddress'] as String? ?? '';
     final status = data['status'] as String? ?? 'pending';
     final rating = data['customerRating'] as int? ?? 0;
-    final rideType = data['rideType'] as String? ?? 'Bike';
+    final category = data['category'] as String? ?? 'bike';
     final ts = data['createdAt'] as Timestamp?;
     final date = ts != null
         ? '${ts.toDate().day}/${ts.toDate().month}/${ts.toDate().year}'
@@ -168,11 +168,14 @@ class _RideHistoryCard extends StatelessWidget {
           Row(
             children: [
               Icon(
-                rideType == 'Auto'
-                    ? Icons.local_taxi
-                    : rideType == 'Parcel'
-                        ? Icons.local_shipping
-                        : Icons.directions_bike,
+                switch (category) {
+                  'auto' => Icons.local_taxi,
+                  'car' => Icons.directions_car,
+                  'parcel' => Icons.local_shipping,
+                  'mini_truck' || 'lorry' => Icons.local_shipping_outlined,
+                  'emergency_manpower' => Icons.support_agent_rounded,
+                  _ => Icons.directions_bike,
+                },
                 size: 20,
                 color: kGold,
               ),
