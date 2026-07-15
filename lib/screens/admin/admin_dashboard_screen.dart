@@ -79,6 +79,92 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _computeWalletTotal();
   }
 
+  Future<void> _showUtrDialog(String rideDocId, String customerName, double amount) async {
+    final TextEditingController _utrController = TextEditingController();
+    bool _isLoading = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A2A),
+          title: const Text(
+            '✅ Verify Payment',
+            style: TextStyle(color: Color(0xFFFFBB00), fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Customer: $customerName\nAmount: ₹${amount.toStringAsFixed(2)}',
+                style: const TextStyle(color: Color(0xFFEEEEF5)),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _utrController,
+                keyboardType: TextInputType.text,
+                style: const TextStyle(color: Color(0xFFEEEEF5)),
+                decoration: InputDecoration(
+                  labelText: '📋 UTR Number (Transaction ID)',
+                  hintText: 'e.g., 123456789012',
+                  labelStyle: const TextStyle(color: Color(0xFF7777A0)),
+                  filled: true,
+                  fillColor: const Color(0xFF0A0A12),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(color: Color(0xFF7777A0))),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00C853)),
+              onPressed: _isLoading ? null : () async {
+                final utr = _utrController.text.trim();
+                if (utr.isEmpty || utr.length < 6) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('⚠️ Enter a valid UTR number (min 6 chars)'), backgroundColor: Color(0xFFFF5252)),
+                  );
+                  return;
+                }
+                setDialogState(() => _isLoading = true);
+                try {
+                  await FirebaseFirestore.instance.collection('rides').doc(rideDocId).update({
+                    'paymentStatus': 'confirmed',
+                    'utrNumber': utr,
+                    'confirmedAt': FieldValue.serverTimestamp(),
+                    'confirmedBy': FirebaseAuth.instance.currentUser?.uid ?? 'admin',
+                  });
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('✅ Payment confirmed!'), backgroundColor: Color(0xFF00C853)),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('❌ Error: ${e.toString()}'), backgroundColor: Color(0xFFFF5252)),
+                    );
+                  }
+                } finally {
+                  setDialogState(() => _isLoading = false);
+                }
+              },
+              child: _isLoading
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Text('Confirm Payment ✅', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _phoneController.dispose();
@@ -88,22 +174,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   /// Aggregates walletBalance from all users — run once per session.
   Future<void> _computeWalletTotal() async {
-    try {
-      final snap = await FirebaseFirestore.instance.collection('users').get();
-      double total = 0;
-      for (final doc in snap.docs) {
-        total += (doc.data()['walletBalance'] as num?)?.toDouble() ?? 0;
-      }
-      if (mounted) {
-        setState(() {
-          _walletTotal = total;
-          _walletLoading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _walletLoading = false);
-      }
+    // V1 Launch: Wallet feature backend is on hold to save DB costs.
+    // UI remains intact, but backend returns 0.0
+    if (mounted) {
+      setState(() {
+        _walletTotal = 0.0;
+      });
     }
   }
 
@@ -1237,6 +1313,47 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           ),
                         ),
                       ),
+                      const SizedBox(width: 8),
+                      // ── Payment status badge ─────────────────────────
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: (d['paymentStatus'] as String? ?? 'pending') == 'confirmed'
+                              ? _green.withValues(alpha: 0.12)
+                              : _red.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(
+                            color: (d['paymentStatus'] as String? ?? 'pending') == 'confirmed'
+                                ? _green.withValues(alpha: 0.3)
+                                : _red.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Text(
+                          '💳 ${(d['paymentStatus'] as String? ?? 'pending').toUpperCase()}',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: (d['paymentStatus'] as String? ?? 'pending') == 'confirmed' ? _green : _red,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      if ((d['paymentStatus'] as String? ?? 'pending') == 'pending')
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: TextButton(
+                            onPressed: () => _showUtrDialog(doc.id, cust, (d['finalFare'] as num?)?.toDouble() ?? 0),
+                            style: TextButton.styleFrom(
+                              backgroundColor: _purple.withValues(alpha: 0.12),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text(
+                              'Verify UTR',
+                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: _purple),
+                            ),
+                          ),
+                        ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(

@@ -10,7 +10,6 @@ import 'package:lottie/lottie.dart';
 import 'package:scratcher/scratcher.dart';
 
 import '../widgets/promo_overlay.dart';
-import '../widgets/soundbox_easter_egg_overlay.dart';
 import '../widgets/banner_slider.dart';
 import 'guru_chat_screen.dart';
 
@@ -196,7 +195,6 @@ class _RewardsScreenState extends State<RewardsScreen>
             ),
           ),
         ),
-        const RewardsSoundboxOverlay(),
         // Floating Guru Bot — bottom-left
         Positioned(
           left: 16,

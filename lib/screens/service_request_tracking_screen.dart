@@ -12,6 +12,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../utils/service_request_labels.dart';
+
 const Color _kPink = Color(0xFFFF4FA3);
 const Color _kBg = Color(0xFFFFFFFF);
 const Color _kSurface = Color(0xFFF8F8FF);
@@ -20,44 +22,9 @@ const Color _kMuted = Color(0xFF9999BB);
 const Color _kGreen = Color(0xFF00C853);
 const Color _kBorder = Color(0xFFEEEEF5);
 
-// ── Task-type vs Goods-type label sets ───────────────────────────
-// Both map onto the exact same 5-value status progression below.
-// Index: 0=pending 1=hero_assigned 2=in_progress 3=nearing_completion 4=completed
-const List<String> _kTaskLabels = [
-  'Waiting for hero confirmation',
-  'Your hero confirmed',
-  'Your process ongoing',
-  'Hero reaching you soon',
-  'Task completed',
-];
-
-const List<String> _kGoodsLabels = [
-  'Waiting for order confirmation',
-  'Order confirmed',
-  'Order on process',
-  'Order on the way',
-  'Order delivered',
-];
-
-const Set<String> _kTaskTypeRequests = {'hero_booking'};
-
-int _statusIndex(String status) {
-  switch (status) {
-    case 'pending':
-    case 'admin_review':
-      return 0;
-    case 'hero_assigned':
-      return 1;
-    case 'in_progress':
-      return 2;
-    case 'nearing_completion':
-      return 3;
-    case 'completed':
-      return 4;
-    default:
-      return 0;
-  }
-}
+// Status→label and status→index mappings now live in
+// utils/service_request_labels.dart (single source of truth shared with
+// the "My Orders" list on the food page).
 
 class ServiceRequestTrackingScreen extends StatelessWidget {
   final String requestId;
@@ -70,7 +37,7 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final labels = _kTaskTypeRequests.contains(requestType) ? _kTaskLabels : _kGoodsLabels;
+    final labels = serviceRequestLabelsFor(requestType);
 
     return Scaffold(
       backgroundColor: _kBg,
@@ -96,7 +63,7 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
 
           final data = snapshot.data!.data()!;
           final status = data['status'] as String? ?? 'pending';
-          final currentIndex = _statusIndex(status);
+          final currentIndex = serviceRequestStatusIndex(status);
           final isAdminReview = status == 'admin_review';
           final heroName = data['assignedHeroName'] as String?;
           final heroPhone = data['assignedHeroPhone'] as String?;

@@ -1700,6 +1700,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
          'category': _normalizeCategoryKey(vehicleType),
          'vehicle_category': _normalizeCategoryKey(vehicleType),
          'status': 'searching',
+         'paymentStatus': 'pending',
          'createdAt': FieldValue.serverTimestamp(),
          'heroId': null,
          'captainId': null,

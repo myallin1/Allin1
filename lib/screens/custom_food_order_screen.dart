@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/service_request_service.dart';
+import '../utils/service_request_labels.dart';
 import 'service_request_tracking_screen.dart';
 
 const Color kPink = Color(0xFFFF4FA3);
@@ -67,7 +69,14 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
       ));
 
       if (!mounted) return;
-      await Navigator.pushReplacement(
+      // Clear the form so the just-placed order shows cleanly in the
+      // "My Orders" list when the user taps back from tracking.
+      _shopCtrl.clear();
+      _itemsCtrl.clear();
+      _addressCtrl.clear();
+      // `push` (not `pushReplacement`) so pressing back returns to this
+      // Food Genie page and the live "My Orders" list below.
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => ServiceRequestTrackingScreen(
@@ -180,7 +189,136 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
                     : Text('Place Order', style: GoogleFonts.outfit(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ),
+            const SizedBox(height: 32),
+            _buildMyOrders(),
             const SizedBox(height: 30),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── My Orders — live status list for this customer ───────────────
+  Widget _buildMyOrders() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const SizedBox.shrink();
+
+    final stream = FirebaseFirestore.instance
+        .collection('service_requests')
+        .where('customerId', isEqualTo: user.uid)
+        .where('requestType', isEqualTo: 'custom_food_order')
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('My Orders', style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 12),
+        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: stream,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Center(child: CircularProgressIndicator(color: kPink, strokeWidth: 2)),
+              );
+            }
+            if (snapshot.hasError) {
+              return const Text('Could not load your orders.', style: TextStyle(color: kMuted, fontSize: 12));
+            }
+            final docs = snapshot.data?.docs ?? [];
+            if (docs.isEmpty) {
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: kSurface,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Text(
+                  'No orders yet. Place your first order above! 🍔',
+                  style: TextStyle(color: kMuted, fontSize: 13),
+                ),
+              );
+            }
+            return ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: docs.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, i) => _orderCard(docs[i]),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _orderCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
+    final details = (data['details'] as Map<String, dynamic>?) ?? const {};
+    final shop = (details['restaurantOrPreference'] as String?)?.trim();
+    final items = (details['items'] as String?)?.trim();
+    final status = (data['status'] as String?) ?? 'pending';
+    final statusColor = serviceRequestStatusColor(status);
+    final statusLabel = serviceRequestStatusLabel('custom_food_order', status);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ServiceRequestTrackingScreen(
+            requestId: doc.id,
+            requestType: 'custom_food_order',
+          ),
+        ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: kSurface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFEEEEF5)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    (shop != null && shop.isNotEmpty) ? shop : 'Custom food order',
+                    style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w700),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (items != null && items.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      items,
+                      style: const TextStyle(color: kMuted, fontSize: 12),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                statusLabel,
+                style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w700),
+              ),
+            ),
           ],
         ),
       ),

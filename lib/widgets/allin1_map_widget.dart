@@ -102,6 +102,7 @@ class Allin1MapWidget extends StatefulWidget {
   final List<MapRoute> routes;
   final List<MapCircle> circles;
   final bool interactive;
+  final void Function(int index)? onMarkerTap;
   final MapController? mapController;
   final VoidCallback? onMapReady;
 
@@ -115,6 +116,7 @@ class Allin1MapWidget extends StatefulWidget {
     this.interactive = true,
     this.mapController,
     this.onMapReady,
+    this.onMarkerTap,
   });
 
   @override
@@ -323,19 +325,29 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
                   ),
                 MarkerLayer(
                   markers: widget.markers
+                      .asMap()
+                      .entries
                       .map(
-                        (m) => Marker(
-                          point: m.point,
-                          width: m.size,
-                          height: m.size,
-                          alignment: Alignment.center,
-                          child: _DefaultMarker(
-                            color: m.color,
-                            icon: m.icon,
-                            assetPath: m.assetPath,
-                            bearingDegrees: m.bearingDegrees,
-                          ),
-                        ),
+                        (entry) {
+                          final index = entry.key;
+                          final m = entry.value;
+                          return Marker(
+                            point: m.point,
+                            width: m.size,
+                            height: m.size,
+                            alignment: Alignment.center,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => widget.onMarkerTap?.call(index),
+                              child: _DefaultMarker(
+                                color: m.color,
+                                icon: m.icon,
+                                assetPath: m.assetPath,
+                                bearingDegrees: m.bearingDegrees,
+                              ),
+                            ),
+                          );
+                        },
                       )
                       .toList(),
                 ),
@@ -651,3 +663,4 @@ class MapCircle {
     this.borderStrokeWidth = 2.5,
   });
 }
+
