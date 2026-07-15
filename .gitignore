@@ -68,3 +68,4 @@ firebase.json
 
 # Claude Code local preview/launch tooling — machine-specific, not for commit
 .claude/
+.aider*
