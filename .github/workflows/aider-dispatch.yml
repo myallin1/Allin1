@@ -39,7 +39,7 @@ jobs:
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: |
-          aider --yes --model deepseek/deepseek-chat --no-check-update --message "Read GEMINI.md and AGENTS.md first and follow all rules there. ${{ github.event.comment.body }}" AGENTS.md
+          aider --yes --model deepseek/deepseek-chat --no-check-update --message "Read GEMINI.md and AGENTS.md first and follow all rules there. Search the codebase to find the right file(s) for this task. ${{ github.event.comment.body }}"
 
       - name: Commit any remaining changes
         run: |
