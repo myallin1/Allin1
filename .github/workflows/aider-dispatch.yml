@@ -33,7 +33,7 @@ jobs:
           git config user.email "aider-bot@users.noreply.github.com"
 
       - name: Create branch
-        run: git checkout -b agent/issue-${{ github.event.issue.number }}-fix
+        run: git checkout -b agent/issue-${{ github.event.issue.number }}-fix-${{ github.run_number }}
 
       - name: Run Aider with DeepSeek
         env:
@@ -41,11 +41,16 @@ jobs:
         run: |
           aider --yes --model deepseek/deepseek-chat --no-check-update --message "Read GEMINI.md and AGENTS.md first and follow all rules there. ${{ github.event.comment.body }}" AGENTS.md
 
+      - name: Commit any remaining changes
+        run: |
+          git add -A
+          git diff --staged --quiet || git commit -m "fix: automated change via Aider + DeepSeek for issue #${{ github.event.issue.number }}"
+
       - name: Push branch
-        run: git push origin agent/issue-${{ github.event.issue.number }}-fix
+        run: git push origin agent/issue-${{ github.event.issue.number }}-fix-${{ github.run_number }}
 
       - name: Create PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr create --base dev-nijam --title "Fix issue #${{ github.event.issue.number }}" --body "Automated fix via Aider + DeepSeek"
+          gh pr create --base dev-nijam --head agent/issue-${{ github.event.issue.number }}-fix-${{ github.run_number }} --title "Fix issue #${{ github.event.issue.number }}" --body "Automated fix via Aider + DeepSeek"
