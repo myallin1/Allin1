@@ -114,6 +114,7 @@ void _initGlobalHeroPingListener() {
             rideId: requestId,
             data: Map<String, dynamic>.from(pingData),
             playAlertTone: false,
+            showDetails: false,
           );
           debugPrint('[GlobalPing] 🔔 Notification fired for: $requestId');
         } catch (e) {
@@ -159,6 +160,7 @@ void _initGlobalHeroPingListener() {
             rideId: requestId,
             data: Map<String, dynamic>.from(pingData),
             playAlertTone: false,
+            showDetails: false,
             title: 'New Service Request',
             channelName: 'Hero Ride Alerts',
             channelDescription:
@@ -193,6 +195,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       rideId: rideId,
       data: message.data,
       playAlertTone: false,
+      showDetails: false,
     );
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(kPendingHeroRideIdKey, rideId);

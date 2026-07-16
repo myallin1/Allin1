@@ -1,0 +1,172 @@
+diff --git a/lib/main_hero.dart b/lib/main_hero.dart
+index 250994cb..d80dcf3b 100644
+--- a/lib/main_hero.dart
++++ b/lib/main_hero.dart
+@@ -114,6 +114,7 @@ void _initGlobalHeroPingListener() {
+             rideId: requestId,
+             data: Map<String, dynamic>.from(pingData),
+             playAlertTone: false,
++            showDetails: false,
+           );
+           debugPrint('[GlobalPing] 🔔 Notification fired for: $requestId');
+         } catch (e) {
+@@ -159,6 +160,7 @@ void _initGlobalHeroPingListener() {
+             rideId: requestId,
+             data: Map<String, dynamic>.from(pingData),
+             playAlertTone: false,
++            showDetails: false,
+             title: 'New Service Request',
+             channelName: 'Hero Ride Alerts',
+             channelDescription:
+@@ -193,6 +195,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+       rideId: rideId,
+       data: message.data,
+       playAlertTone: false,
++      showDetails: false,
+     );
+     final prefs = await SharedPreferences.getInstance();
+     await prefs.setString(kPendingHeroRideIdKey, rideId);
+diff --git a/lib/screens/bike_taxi/hero_home_screen.dart b/lib/screens/bike_taxi/hero_home_screen.dart
+index fe4b9095..7e422c1a 100644
+--- a/lib/screens/bike_taxi/hero_home_screen.dart
++++ b/lib/screens/bike_taxi/hero_home_screen.dart
+@@ -1396,6 +1396,15 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
+     final details = data['details'] as Map? ?? {};
+     final summary = _serviceRequestSummary(requestType, details);
+ 
++    // Hygiene: clear any earlier quiet background notification for this
++    // request now that the in-app dialog is taking over. This dialog
++    // does not play a looping ringtone (unlike the ride-taxi dialog), so
++    // there is no fresh-sound-overlap concern here — just tidying up
++    // the now-redundant lock-screen notification.
++    if (!kIsWeb) {
++      unawaited(HeroRideNotificationService.cancelRideNotification(requestId));
++    }
++
+     showDialog<void>(
+       context: dialogContext,
+       barrierDismissible: false,
+@@ -1576,6 +1585,17 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
+   }
+ 
+   void _showDialogNow(BuildContext dialogContext, String rideId, Map<String, dynamic> rideData) {
++    // Force-stop any sound left over from the earlier quiet background
++    // notification, and cancel that notification, right as the in-app
++    // dialog is about to take over — regardless of whether this dialog
++    // was triggered by a notification tap or a listener re-fire. This
++    // guarantees the fresh looping ringtone below never overlaps with a
++    // residual background sound.
++    if (!kIsWeb) {
++      unawaited(HeroRideNotificationService.stopWakeAlertRingtone());
++      unawaited(HeroRideNotificationService.cancelRideNotification(rideId));
++    }
++
+     showDialog<void>(
+       context: dialogContext,
+       barrierDismissible: false,
+diff --git a/lib/services/hero_ride_notification_service.dart b/lib/services/hero_ride_notification_service.dart
+index 3800a7fc..1ae1e0e6 100644
+--- a/lib/services/hero_ride_notification_service.dart
++++ b/lib/services/hero_ride_notification_service.dart
+@@ -129,6 +129,17 @@ class HeroRideNotificationService {
+     required String rideId,
+     required Map<String, dynamic> data,
+     bool playAlertTone = true,
++    // ── Simplified/background mode ──────────────────────────────
++    // When false (used only by the quiet background/killed-app paths
++    // in main_hero.dart), the notification shows a generic,
++    // non-alarming message with no fare/pickup/drop details and no
++    // action buttons — full details + Accept/Reject are shown by the
++    // existing in-app dialog once the hero taps the notification and
++    // opens the app. Also made dismissible (not "ongoing"), since a
++    // swipe-dismiss here is not a reject — the existing ping-expiry /
++    // broadcast system already routes an unanswered request to the
++    // next hero on its own.
++    bool showDetails = true,
+     // ── Generic-text overrides ──────────────────────────────────
+     // Defaults preserve the exact ride-alert text/behavior for every
+     // existing call site. Passing overrides (e.g. from the broadcast
+@@ -146,22 +157,29 @@ class HeroRideNotificationService {
+     }
+ 
+     await initialize();
+-    final pickup = _stringValue(data, const [
+-      'pickupAddress',
+-      'pickup',
+-      'fromAddress',
+-    ]);
+-    final drop = _stringValue(data, const [
+-      'dropAddress',
+-      'drop',
+-      'toAddress',
+-    ]);
+-    final fare = _fareText(data);
+-    final body = [
+-      if (pickup.isNotEmpty) 'Pickup: $pickup',
+-      if (drop.isNotEmpty) 'Drop: $drop',
+-      if (fare.isNotEmpty) 'Fare: $fare',
+-    ].join('\n');
++
++    String body;
++    if (showDetails) {
++      final pickup = _stringValue(data, const [
++        'pickupAddress',
++        'pickup',
++        'fromAddress',
++      ]);
++      final drop = _stringValue(data, const [
++        'dropAddress',
++        'drop',
++        'toAddress',
++      ]);
++      final fare = _fareText(data);
++      body = [
++        if (pickup.isNotEmpty) 'Pickup: $pickup',
++        if (drop.isNotEmpty) 'Drop: $drop',
++        if (fare.isNotEmpty) 'Fare: $fare',
++      ].join('\n');
++    } else {
++      // Generic, non-alarming — no ride specifics on the lock screen.
++      body = 'Someone needs your help! Tap to view request details.';
++    }
+ 
+     final details = NotificationDetails(
+       android: AndroidNotificationDetails(
+@@ -173,8 +191,8 @@ class HeroRideNotificationService {
+         category: AndroidNotificationCategory.call,
+         visibility: NotificationVisibility.public,
+         fullScreenIntent: true,
+-        ongoing: true,
+-        autoCancel: false,
++        ongoing: showDetails,
++        autoCancel: !showDetails,
+         playSound: true,
+         enableVibration: true,
+         // 0ms delay, vibrate 1sec, pause 0.5sec, vibrate 1sec, pause 0.5sec, vibrate 1sec
+@@ -183,15 +201,17 @@ class HeroRideNotificationService {
+         timeoutAfter: 15000,
+         sound: const RawResourceAndroidNotificationSound('ride_alert'),
+         audioAttributesUsage: AudioAttributesUsage.alarm,
+-        actions: const [
+-          AndroidNotificationAction(
+-            acceptRideActionId,
+-            'ACCEPT',
+-            icon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+-            showsUserInterface: true,
+-            contextual: true,
+-          ),
+-        ],
++        actions: showDetails
++            ? const [
++                AndroidNotificationAction(
++                  acceptRideActionId,
++                  'ACCEPT',
++                  icon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
++                  showsUserInterface: true,
++                  contextual: true,
++                ),
++              ]
++            : const [],
+         styleInformation: BigTextStyleInformation(body),
+       ),
+       iOS: const DarwinNotificationDetails(

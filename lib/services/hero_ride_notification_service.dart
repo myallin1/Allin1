@@ -129,6 +129,17 @@ class HeroRideNotificationService {
     required String rideId,
     required Map<String, dynamic> data,
     bool playAlertTone = true,
+    // ── Simplified/background mode ──────────────────────────────
+    // When false (used only by the quiet background/killed-app paths
+    // in main_hero.dart), the notification shows a generic,
+    // non-alarming message with no fare/pickup/drop details and no
+    // action buttons — full details + Accept/Reject are shown by the
+    // existing in-app dialog once the hero taps the notification and
+    // opens the app. Also made dismissible (not "ongoing"), since a
+    // swipe-dismiss here is not a reject — the existing ping-expiry /
+    // broadcast system already routes an unanswered request to the
+    // next hero on its own.
+    bool showDetails = true,
     // ── Generic-text overrides ──────────────────────────────────
     // Defaults preserve the exact ride-alert text/behavior for every
     // existing call site. Passing overrides (e.g. from the broadcast
@@ -146,22 +157,29 @@ class HeroRideNotificationService {
     }
 
     await initialize();
-    final pickup = _stringValue(data, const [
-      'pickupAddress',
-      'pickup',
-      'fromAddress',
-    ]);
-    final drop = _stringValue(data, const [
-      'dropAddress',
-      'drop',
-      'toAddress',
-    ]);
-    final fare = _fareText(data);
-    final body = [
-      if (pickup.isNotEmpty) 'Pickup: $pickup',
-      if (drop.isNotEmpty) 'Drop: $drop',
-      if (fare.isNotEmpty) 'Fare: $fare',
-    ].join('\n');
+
+    String body;
+    if (showDetails) {
+      final pickup = _stringValue(data, const [
+        'pickupAddress',
+        'pickup',
+        'fromAddress',
+      ]);
+      final drop = _stringValue(data, const [
+        'dropAddress',
+        'drop',
+        'toAddress',
+      ]);
+      final fare = _fareText(data);
+      body = [
+        if (pickup.isNotEmpty) 'Pickup: $pickup',
+        if (drop.isNotEmpty) 'Drop: $drop',
+        if (fare.isNotEmpty) 'Fare: $fare',
+      ].join('\n');
+    } else {
+      // Generic, non-alarming — no ride specifics on the lock screen.
+      body = 'Someone needs your help! Tap to view request details.';
+    }
 
     final details = NotificationDetails(
       android: AndroidNotificationDetails(
@@ -173,8 +191,8 @@ class HeroRideNotificationService {
         category: AndroidNotificationCategory.call,
         visibility: NotificationVisibility.public,
         fullScreenIntent: true,
-        ongoing: true,
-        autoCancel: false,
+        ongoing: showDetails,
+        autoCancel: !showDetails,
         playSound: true,
         enableVibration: true,
         // 0ms delay, vibrate 1sec, pause 0.5sec, vibrate 1sec, pause 0.5sec, vibrate 1sec
@@ -183,15 +201,17 @@ class HeroRideNotificationService {
         timeoutAfter: 15000,
         sound: const RawResourceAndroidNotificationSound('ride_alert'),
         audioAttributesUsage: AudioAttributesUsage.alarm,
-        actions: const [
-          AndroidNotificationAction(
-            acceptRideActionId,
-            'ACCEPT',
-            icon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
-            showsUserInterface: true,
-            contextual: true,
-          ),
-        ],
+        actions: showDetails
+            ? const [
+                AndroidNotificationAction(
+                  acceptRideActionId,
+                  'ACCEPT',
+                  icon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+                  showsUserInterface: true,
+                  contextual: true,
+                ),
+              ]
+            : const [],
         styleInformation: BigTextStyleInformation(body),
       ),
       iOS: const DarwinNotificationDetails(

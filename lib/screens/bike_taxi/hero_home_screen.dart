@@ -1396,6 +1396,15 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     final details = data['details'] as Map? ?? {};
     final summary = _serviceRequestSummary(requestType, details);
 
+    // Hygiene: clear any earlier quiet background notification for this
+    // request now that the in-app dialog is taking over. This dialog
+    // does not play a looping ringtone (unlike the ride-taxi dialog), so
+    // there is no fresh-sound-overlap concern here — just tidying up
+    // the now-redundant lock-screen notification.
+    if (!kIsWeb) {
+      unawaited(HeroRideNotificationService.cancelRideNotification(requestId));
+    }
+
     showDialog<void>(
       context: dialogContext,
       barrierDismissible: false,
@@ -1576,6 +1585,17 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   }
 
   void _showDialogNow(BuildContext dialogContext, String rideId, Map<String, dynamic> rideData) {
+    // Force-stop any sound left over from the earlier quiet background
+    // notification, and cancel that notification, right as the in-app
+    // dialog is about to take over — regardless of whether this dialog
+    // was triggered by a notification tap or a listener re-fire. This
+    // guarantees the fresh looping ringtone below never overlaps with a
+    // residual background sound.
+    if (!kIsWeb) {
+      unawaited(HeroRideNotificationService.stopWakeAlertRingtone());
+      unawaited(HeroRideNotificationService.cancelRideNotification(rideId));
+    }
+
     showDialog<void>(
       context: dialogContext,
       barrierDismissible: false,
