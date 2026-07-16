@@ -52,7 +52,34 @@ Treat feature requests and bug reports as issue work.
 - **Child Docs:** When a folder becomes a durable boundary with its own specific rules, create a nested child `AGENTS.md` inside that folder. Child docs control local work details but cannot weaken root DOCS-INDEX rules.
 - **Design Contracts:** Any major visual/UI project should route layout and brand work to a `Design.md` file before scaffolding the actual code.
 
-## 8. Closeout & Verification Protocol
+## 8. Notification & Ping Timing Contracts (Hero App)
+
+These are the CURRENT, verified values in code — keep this section in
+sync whenever any of these constants change, so future agents don't
+have to re-derive them from source:
+
+- **Service-request broadcast ping expiry:** 90 seconds
+  (`kServiceRequestPingExpirySeconds` in
+  `lib/services/service_request_service.dart`). Applies to Hero
+  Booking, Custom Order, Custom Food Order, and Grocery Order pings.
+- **Ride-taxi ping staleness window:** 10 seconds (hardcoded as
+  `pingExpiresAt - 10000` in `hero_home_screen.dart`'s
+  `_listenForHeroPings`). Used only to derive when a ride ping was
+  created from its expiry timestamp.
+- **Ride-alert local-notification auto-dismiss:** 15000ms
+  (`timeoutAfter: 15000` in
+  `lib/services/hero_ride_notification_service.dart`). This is an
+  Android notification auto-dismiss timer, NOT a ping or ringtone
+  timeout — do not confuse it with the two values above.
+- **Hero-side notification de-duplication window:** 18 seconds
+  (`_deduplicationWindow` in `hero_ride_notification_service.dart`),
+  backed by `HiveCache` (persists across the FCM background-isolate /
+  main-isolate boundary, unlike a plain static field). Prevents the
+  same ride/service ping from firing a duplicate ringtone+notification
+  when the hero backgrounds and then reopens the app shortly after a
+  push already arrived.
+
+## 9. Closeout & Verification Protocol
 
 1. Run `flutter analyze` and ensure ZERO errors.
 2. Run `graphify update .` to keep the AST graph current (as per Section 4).

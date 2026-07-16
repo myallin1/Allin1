@@ -7,6 +7,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'hive_cache.dart';
+
 const String kPendingHeroRideIdKey = 'pending_hero_ride_id';
 const String kPendingHeroAcceptRideIdKey = 'pending_hero_accept_ride_id';
 
@@ -28,9 +30,15 @@ class HeroRideNotificationService {
       rideId.hashCode & 0x7fffffff;
 
   // ── De-duplication guards ──────────────────────────────────
-  static String? lastProcessedRideId;
-  static DateTime? lastProcessedAt;
-  static const Duration _deduplicationWindow = Duration(seconds: 3);
+  // Persisted via HiveCache (not a static in-memory field) so the
+  // dedup check survives the FCM background-isolate / main-isolate
+  // boundary — a plain static var only dedups within one isolate's
+  // lifetime, which is why background + foreground paths could both
+  // fire for the same ride. Window widened from 3s to 18s to cover
+  // realistic "hero unlocks phone and opens app" delay after a
+  // background push already showed a (quiet) system notification.
+  static const Duration _deduplicationWindow = Duration(seconds: 18);
+  static String _dedupKey(String rideId) => 'hero_ride_notified_$rideId';
 
   static Future<void> initialize() async {
     if (kIsWeb || _initialized) {
@@ -216,33 +224,29 @@ class HeroRideNotificationService {
         '[NotificationService] ✅ Cancelled notification for ride: $rideId (ID: $notificationId)',
       );
 
-      // Clear de-duplication flag
-      if (lastProcessedRideId == rideId) {
-        lastProcessedRideId = null;
-        lastProcessedAt = null;
-      }
+      // Clear de-duplication flag (Hive-backed — see shouldProcessRideNotification)
+      await HiveCache.evict(_dedupKey(rideId));
     } catch (e) {
       debugPrint('[NotificationService] ❌ Cancel failed for $rideId: $e');
     }
   }
 
   // ── Check if notification already processing (De-duplication) ──
-  static bool shouldProcessRideNotification(String rideId) {
-    final now = DateTime.now();
-
-    // If same ride pinged within 3 seconds — skip
-    if (lastProcessedRideId == rideId &&
-        lastProcessedAt != null &&
-        now.difference(lastProcessedAt!).inSeconds < 3) {
+  // Async + Hive-backed: this must be checked (and awaited) from BOTH
+  // the FCM background isolate (main_hero.dart) and the main-isolate
+  // in-app RTDB listeners (hero_home_screen.dart) for the SAME ride,
+  // so the dedup record has to live somewhere both can see — a static
+  // Dart field does not cross that isolate boundary, Hive does.
+  static Future<bool> shouldProcessRideNotification(String rideId) async {
+    final alreadyProcessed = await HiveCache.isFresh(_dedupKey(rideId));
+    if (alreadyProcessed) {
       debugPrint(
         '[NotificationService] ⏭️ Skipping duplicate notification for $rideId',
       );
       return false;
     }
 
-    // New ride or 3s+ passed — process it
-    lastProcessedRideId = rideId;
-    lastProcessedAt = now;
+    await HiveCache.put(_dedupKey(rideId), true, ttl: _deduplicationWindow);
     return true;
   }
 

@@ -100,7 +100,7 @@ void _initGlobalHeroPingListener() {
       debugPrint('[GlobalPing] ✅ New ping received: $requestId');
 
       // De-duplication check
-      if (!HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
+      if (!await HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
         debugPrint('[GlobalPing] ⏭️ Duplicate ping skipped: $requestId');
         return;
       }
@@ -148,7 +148,7 @@ void _initGlobalHeroPingListener() {
 
       debugPrint('[GlobalServicePing] ✅ New service ping received: $requestId');
 
-      if (!HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
+      if (!await HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
         debugPrint('[GlobalServicePing] ⏭️ Duplicate ping skipped: $requestId');
         return;
       }

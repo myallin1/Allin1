@@ -18,6 +18,13 @@ class HiveCache {
 
   static Future<Box> _box() async {
     if (Hive.isBoxOpen(_boxName)) return Hive.box(_boxName);
+    // HiveCache is shared across every app entrypoint (customer, hero,
+    // seller). Only main_customer.dart calls Hive.initFlutter() at
+    // startup — callers like the hero app's notification dedup
+    // (hero_ride_notification_service.dart) would otherwise crash on
+    // openBox() with no storage path configured. initFlutter() is
+    // idempotent/safe to call again if another entrypoint already did.
+    await Hive.initFlutter();
     return await Hive.openBox(_boxName);
   }
 

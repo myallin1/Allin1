@@ -1211,7 +1211,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     _heroPingSub = FirebaseDatabase.instance
         .ref('hero_pings/$uid')
         .onChildAdded
-        .listen((event) {
+        .listen((event) async {
       if (!mounted || !_isOnline || _activeRideId.isNotEmpty) return;
       if (_isShowingRideDialog) return;
 
@@ -1229,7 +1229,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       // ✅ FIX: Ignore pings that existed before this listener attached
       // Prevents stale pings from re-triggering on app resume
       final pingCreatedAt = pingExpiresAt - 10000; // expiresAt - 10s window
-      if (pingCreatedAt < listenerAttachedAt - 2000) {
+      if (pingCreatedAt < listenerAttachedAt - 18000) {
         debugPrint('[HeroHomeScreen] Ignoring pre-existing ping: $requestId');
         return;
       }
@@ -1261,7 +1261,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       }
 
       // Notification: only if global listener hasn't fired yet
-      if (!kIsWeb && !HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
+      if (!kIsWeb && !await HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
         debugPrint('[HeroHomeScreen] Notification already fired by global listener. Showing dialog only.');
       } else if (!kIsWeb) {
         try {
@@ -1300,7 +1300,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     _servicePingSub = FirebaseDatabase.instance
         .ref('hero_service_pings/$uid')
         .onChildAdded
-        .listen((event) {
+        .listen((event) async {
       if (!mounted || !_isOnline || _activeRideId.isNotEmpty) return;
       if (_isShowingServiceDialog) return;
 
@@ -1319,7 +1319,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       // guard as ride pings — prevents stale-ping re-trigger on resume).
       // 90s broadcast window, same reasoning as the 10s ride window.
       final pingCreatedAt = pingExpiresAt - kServiceRequestPingExpirySeconds * 1000;
-      if (pingCreatedAt < listenerAttachedAt - 2000) {
+      if (pingCreatedAt < listenerAttachedAt - 18000) {
         debugPrint('[HeroHomeScreen] Ignoring pre-existing service ping: $requestId');
         return;
       }
@@ -1329,7 +1329,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
       debugPrint('[HeroHomeScreen] RTDB service ping received: $requestId');
 
-      if (!kIsWeb && !HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
+      if (!kIsWeb && !await HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
         debugPrint('[HeroHomeScreen] Notification already fired by global listener. Showing dialog only.');
       } else if (!kIsWeb) {
         try {
