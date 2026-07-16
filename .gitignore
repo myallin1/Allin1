@@ -68,3 +68,8 @@ firebase.json
 
 # Claude Code local preview/launch tooling — machine-specific, not for commit
 .claude/
+
+# Working-note/review diffs generated during Claude-assisted sessions —
+# scratch artifacts for human review, not project source
+plans/*.diff
+plans/*.new
