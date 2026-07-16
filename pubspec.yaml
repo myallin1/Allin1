@@ -12,6 +12,8 @@ dependencies:
   cloud_functions: ^6.0.7
   crypto: ^3.0.3
   cupertino_icons: ^1.0.8
+  colorful_iconify_flutter: ^0.0.5
+  flutter_svg: ^2.3.0
   dio: ^5.4.0
   encrypt: ^5.0.3
   file_picker: ^8.1.2
