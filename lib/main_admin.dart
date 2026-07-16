@@ -2,6 +2,8 @@
 // Allin1 — ADMIN Panel Entry Point
 // HIDDEN — Not for public!
 
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -16,13 +18,67 @@ import 'screens/admin/task_approvals_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/session_service.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
-  runApp(const AdminApp());
+void main() {
+  FlutterError.onError = (details) {
+    debugPrint('[main_admin] Flutter error: ${details.exceptionAsString()}');
+  };
+
+  runZonedGuarded(() async {
+    // WidgetsFlutterBinding must be created inside the same zone that
+    // runApp() executes in — creating it before runZonedGuarded() puts
+    // the binding in the root zone while runApp() runs in a child zone,
+    // which triggers a "Zone mismatch" framework assertion on cold start.
+    WidgetsFlutterBinding.ensureInitialized();
+
+    try {
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      }
+      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+    } on FirebaseException catch (e, stack) {
+      if (e.code == 'duplicate-app') {
+        debugPrint('[main_admin] Firebase already initialized, continuing.');
+      } else {
+        debugPrint('[main_admin] Firebase init failed: $e\n$stack');
+        runApp(_InitErrorApp('Firebase initialization failed:\n$e'));
+        return;
+      }
+    } catch (e, stack) {
+      debugPrint('[main_admin] Firebase init failed: $e\n$stack');
+      runApp(_InitErrorApp('Firebase initialization failed:\n$e'));
+      return;
+    }
+    runApp(const AdminApp());
+  }, (error, stack) {
+    debugPrint('[main_admin] Unhandled zone error: $error\n$stack');
+  });
+}
+
+class _InitErrorApp extends StatelessWidget {
+  final String message;
+  const _InitErrorApp(this.message);
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: const Color(0xFF0A0A1A),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              message,
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class AdminApp extends StatelessWidget {
