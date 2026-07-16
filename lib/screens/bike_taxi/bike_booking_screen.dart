@@ -733,13 +733,56 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     }
 
     if (_shouldResumePaymentFlow(status, paymentStatus)) {
+      // Resolve the fare with full visibility into which source actually
+      // provided it — the old chain silently fell through to 0.0 when
+      // amount/estimatedFare/fare were all null, which UPI apps reject
+      // as an invalid amount (matches the "UPI opens but payment can't
+      // complete" report). Scoped to this resume-after-restart path only
+      // — the normal post-ride-completion path in ride_tracking_screen.dart
+      // is untouched.
+      double resolvedAmount;
+      String amountSource;
+      if (amount != null) {
+        resolvedAmount = amount;
+        amountSource = 'amount (pending-ride cache)';
+      } else if (ride.estimatedFare != null) {
+        resolvedAmount = ride.estimatedFare!.toDouble();
+        amountSource = 'ride.estimatedFare';
+      } else if (ride.fare != null) {
+        resolvedAmount = ride.fare!.toDouble();
+        amountSource = 'ride.fare';
+      } else {
+        resolvedAmount = 0.0;
+        amountSource = '0.0 fallback (amount/estimatedFare/fare all null)';
+      }
+      debugPrint(
+        '[BikeBookingScreen] Resume-payment fare resolved via $amountSource '
+        '= $resolvedAmount (rideDocId=$rideDocId)',
+      );
+
+      if (resolvedAmount <= 0) {
+        debugPrint(
+          '[BikeBookingScreen] ⚠️ Resume-payment amount is <= 0 — blocking '
+          'navigation to PaymentScreen to avoid sending an invalid UPI '
+          'request (rideDocId=$rideDocId).',
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Unable to determine ride fare — please contact support',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => PaymentScreen(
-            amount: amount ??
-                ride.estimatedFare?.toDouble() ??
-                ride.fare?.toDouble() ??
-                0.0,
+            amount: resolvedAmount,
             note: 'Bike Taxi Ride',
             rideDocId: rideDocId,
           ),
