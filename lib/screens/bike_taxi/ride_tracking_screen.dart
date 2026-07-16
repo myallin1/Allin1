@@ -105,11 +105,20 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   DateTime? _lastRouteDrawAt;
 
   // ─── LOCAL DETERMINISTIC OTP GENERATOR (NO DB REQUIRED) ───
+  // Must stay byte-identical to ride_search_screen.dart's and
+  // hero_ride_screen.dart's _generateLocalOtp(). This copy previously
+  // used String.hashCode, which is not guaranteed identical between
+  // native VM/AOT and web (dart2js/dart2wasm) builds — that divergence
+  // caused customer- and hero-side OTPs to mismatch for the same ride
+  // doc ID. Replaced with the same platform-stable rolling checksum.
   String _generateLocalOtp(String docId) {
     final cleanId = docId.trim().replaceAll(RegExp(r'\s+'), '');
     if (cleanId.isEmpty) return '1234';
-    final hash = cleanId.hashCode.abs();
-    return (1000 + (hash % 9000)).toString(); // Generates 1000-9999
+    int checksum = 0;
+    for (int i = 0; i < cleanId.length; i++) {
+      checksum = (checksum * 31 + cleanId.codeUnitAt(i)) & 0x7FFFFFFF;
+    }
+    return (1000 + (checksum % 9000)).toString();
   }
   // ──────────────────────────────────────────────────────────
 
