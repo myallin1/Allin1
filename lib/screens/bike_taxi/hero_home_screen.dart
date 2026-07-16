@@ -110,6 +110,16 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   final List<DateTime> _sosTapTimes = <DateTime>[];
   bool _sendingSos = false;
 
+  // ── Nearby-SOS overlay: per-session dismiss + 15-min auto-expiry ──
+  // "OK, I've seen it" adds the alert's doc id here so it stops
+  // showing this session, even though the underlying sos_alerts doc
+  // is still status:'active' (only an admin resolve changes that).
+  // Independently, alerts older than 15 minutes are filtered out on
+  // the read side below, regardless of dismiss state — a safety net
+  // in case no admin ever resolves the alert.
+  final Set<String> _dismissedSosIds = <String>{};
+  static const Duration _sosAlertMaxAge = Duration(minutes: 15);
+
   // GPS throttling for RTDB
   DateTime? _lastGpsUpdate;
   Position? _lastUploadedPosition;
@@ -2066,8 +2076,25 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
         double? nearestMeters;
         GeoPoint? nearestLocation;
+        String? nearestDocId;
+        final cutoff = DateTime.now().subtract(_sosAlertMaxAge);
 
         for (final doc in snapshot.data!.docs) {
+          if (_dismissedSosIds.contains(doc.id)) {
+            continue;
+          }
+
+          // 15-minute auto-expiry safety net (creation writes use either
+          // 'timestamp' or 'createdAt' depending on which screen sent the
+          // alert — read side handles both without touching the writers).
+          // A still-pending serverTimestamp() resolves to null locally
+          // until the server acks it — treat null as "just created" so a
+          // brand-new alert never briefly vanishes from this check.
+          final rawTs = doc.data()['timestamp'] ?? doc.data()['createdAt'];
+          if (rawTs is Timestamp && rawTs.toDate().isBefore(cutoff)) {
+            continue;
+          }
+
           final location = doc.data()['location'];
           if (location is! GeoPoint) {
             continue;
@@ -2082,14 +2109,16 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               (nearestMeters == null || distanceMeters < nearestMeters)) {
             nearestMeters = distanceMeters;
             nearestLocation = location;
+            nearestDocId = doc.id;
           }
         }
 
-        if (nearestMeters == null || nearestLocation == null) {
+        if (nearestMeters == null || nearestLocation == null || nearestDocId == null) {
           return const SizedBox.shrink();
         }
 
         final distanceKm = nearestMeters / 1000;
+        final dismissId = nearestDocId;
         return Positioned.fill(
           child: ColoredBox(
             color: const Color(0xE6B00020),
@@ -2164,6 +2193,29 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                       ),
                     ),
                     const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: () {
+                        if (mounted) {
+                          setState(() => _dismissedSosIds.add(dismissId));
+                        }
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 10,
+                        ),
+                      ),
+                      child: Text(
+                        "OK, I've seen it",
+                        style: GoogleFonts.outfit(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
                     Text(
                       'Stay safe. Call police/100 if required.',
                       textAlign: TextAlign.center,
