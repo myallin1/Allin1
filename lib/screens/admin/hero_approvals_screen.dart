@@ -4,6 +4,7 @@
 // ================================================================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -341,6 +342,19 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
 
       await batch.commit();
 
+      // Best-effort RTDB mirror — mirrors the hero_pings notification
+      // pattern (RTDB + flutter_local_notifications) rather than FCM,
+      // since Cloud Functions/Blaze billing aren't available. Failure
+      // here must not block the Firestore approval itself.
+      try {
+        await FirebaseDatabase.instance.ref('hero_status_updates/$uid').set({
+          'type': 'approval',
+          'timestamp': ServerValue.timestamp,
+        });
+      } catch (e) {
+        debugPrint('[HeroApprovals] hero_status_updates write failed: $e');
+      }
+
       // Allow stream to settle before showing success message
       await Future<void>.delayed(const Duration(milliseconds: 300));
       if (!mounted) return;
@@ -378,38 +392,65 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
   Future<void> _rejectHero(String uid, Map<String, dynamic> data) async {
     if (!mounted) return;
 
-    final confirmed = await showDialog<bool>(
+    final reasonController = TextEditingController();
+    final reason = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: _surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Reject Hero',
-          style: TextStyle(color: _red, fontWeight: FontWeight.w700),
-        ),
-        content: Text(
-          'Reject "${data['name'] ?? uid}"? They will be notified.',
-          style: const TextStyle(color: _muted),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel', style: TextStyle(color: _muted)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: _surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Reject Hero',
+            style: TextStyle(color: _red, fontWeight: FontWeight.w700),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: _red),
-            child: const Text(
-              'Reject',
-              style:
-                  TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Reject "${data['name'] ?? uid}"? They will be notified.',
+                style: const TextStyle(color: _muted),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonController,
+                autofocus: true,
+                maxLines: 2,
+                style: const TextStyle(color: _text),
+                decoration: const InputDecoration(
+                  hintText: 'Reason for rejection (required)',
+                  hintStyle: TextStyle(color: _muted),
+                  filled: true,
+                  fillColor: _card,
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (_) => setDialogState(() {}),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel', style: TextStyle(color: _muted)),
             ),
-          ),
-        ],
+            ElevatedButton(
+              onPressed: reasonController.text.trim().isEmpty
+                  ? null
+                  : () => Navigator.pop(ctx, reasonController.text.trim()),
+              style: ElevatedButton.styleFrom(backgroundColor: _red),
+              child: const Text(
+                'Reject',
+                style:
+                    TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
       ),
     );
+    reasonController.dispose();
 
-    if (confirmed != true || !mounted) return;
+    if (reason == null || reason.isEmpty || !mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
@@ -429,6 +470,7 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
       final pendingRef = firestore.collection('heroes_pending').doc(uid);
       final updateData = {
         'approvalStatus': 'rejected',
+        'rejectionReason': reason,
         'rejectedAt': FieldValue.serverTimestamp(),
         'lastUpdated': FieldValue.serverTimestamp(),
       };
@@ -440,6 +482,17 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
       }
 
       await batch.commit();
+
+      // Best-effort RTDB mirror — see matching comment in _approveHero().
+      try {
+        await FirebaseDatabase.instance.ref('hero_status_updates/$uid').set({
+          'type': 'rejection',
+          'reason': reason,
+          'timestamp': ServerValue.timestamp,
+        });
+      } catch (e) {
+        debugPrint('[HeroApprovals] hero_status_updates write failed: $e');
+      }
 
       await Future<void>.delayed(const Duration(milliseconds: 300));
       if (!mounted) return;

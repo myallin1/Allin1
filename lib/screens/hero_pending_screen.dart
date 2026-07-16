@@ -7,7 +7,10 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart' as rtdb;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -35,13 +38,107 @@ class HeroPendingScreen extends StatefulWidget {
 
 class _HeroPendingScreenState extends State<HeroPendingScreen> {
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _statusSubscription;
+  StreamSubscription<rtdb.DatabaseEvent>? _statusUpdateSub;
   bool _isNavigating = false;
+
+  // ── In-app approval/rejection notification ──────────────────────
+  // Mirrors the hero_pings notification architecture (RTDB + local
+  // notifications, not FCM/Cloud Functions — Blaze billing is off the
+  // table). Own minimal channel, separate from
+  // hero_ride_notification_service.dart's ride-specific channel, kept
+  // self-contained here per scope discipline.
+  static const String _approvalChannelId = 'hero_approval_status_v1';
+  final FlutterLocalNotificationsPlugin _notifications =
+      FlutterLocalNotificationsPlugin();
+  bool _notificationsReady = false;
+  int _statusListenerAttachedAtMs = 0;
 
   @override
   void initState() {
     super.initState();
+    _statusListenerAttachedAtMs = DateTime.now().toUtc().millisecondsSinceEpoch;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeStatusListener();
+      unawaited(_initApprovalNotifications());
+    });
+  }
+
+  Future<void> _initApprovalNotifications() async {
+    if (kIsWeb || _notificationsReady) return;
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initSettings = InitializationSettings(
+      android: androidInit,
+      iOS: DarwinInitializationSettings(),
+    );
+    await _notifications.initialize(settings: initSettings);
+
+    const channel = AndroidNotificationChannel(
+      _approvalChannelId,
+      'Hero Approval Status',
+      description: 'Notifies when your hero registration is approved or rejected.',
+      importance: Importance.high,
+    );
+    await _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+    _notificationsReady = true;
+  }
+
+  Future<void> _showApprovalStatusNotification({
+    required bool approved,
+    String? reason,
+  }) async {
+    if (kIsWeb) return;
+    await _initApprovalNotifications();
+    final title = approved ? 'Registration Approved' : 'Registration Rejected';
+    final body = approved
+        ? 'Your registration was approved!'
+        : 'Registration rejected: ${(reason?.trim().isNotEmpty ?? false) ? reason!.trim() : 'No reason provided'}';
+    await _notifications.show(
+      id: 'hero_approval_status'.hashCode & 0x7fffffff,
+      title: title,
+      body: body,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _approvalChannelId,
+          'Hero Approval Status',
+          channelDescription: 'Notifies when your hero registration is approved or rejected.',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(presentAlert: true, presentSound: true),
+      ),
+    );
+  }
+
+  void _listenForStatusUpdates(String uid) {
+    _statusUpdateSub?.cancel();
+    _statusUpdateSub = rtdb.FirebaseDatabase.instance
+        .ref('hero_status_updates/$uid')
+        .onValue
+        .listen((event) {
+      final raw = event.snapshot.value;
+      if (raw is! Map) return;
+      final data = Map<String, dynamic>.from(raw);
+
+      // Stale-event guard: ignore anything written before this
+      // listener attached (e.g. a leftover node from a prior
+      // approval/rejection cycle), same pattern used for ride pings.
+      final eventMs = (data['timestamp'] as num?)?.toInt() ?? 0;
+      if (eventMs > 0 && eventMs < _statusListenerAttachedAtMs) {
+        return;
+      }
+
+      final type = data['type'] as String?;
+      if (type == 'approval') {
+        unawaited(_showApprovalStatusNotification(approved: true));
+      } else if (type == 'rejection') {
+        unawaited(_showApprovalStatusNotification(
+          approved: false,
+          reason: data['reason'] as String?,
+        ));
+      }
     });
   }
 
@@ -57,6 +154,8 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
       );
       return;
     }
+
+    _listenForStatusUpdates(currentUser.uid);
 
     _statusSubscription = FirebaseFirestore.instance
         .collection('heroes')
@@ -122,6 +221,7 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
     if (_isNavigating) return;
     _isNavigating = true;
     _statusSubscription?.cancel();
+    _statusUpdateSub?.cancel();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       await navigateAction();
@@ -131,6 +231,7 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
   @override
   void dispose() {
     _statusSubscription?.cancel();
+    _statusUpdateSub?.cancel();
     super.dispose();
   }
 
