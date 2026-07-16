@@ -29,7 +29,7 @@ import 'coming_soon_screen.dart';
 import 'construction_screen.dart';
 import 'custom_order_screen.dart';
 import 'grocery_order_screen.dart';
-import 'printing_service_screen.dart';
+// import 'printing_service_screen.dart'; // TODO(printing): file missing, feature temporarily disabled
 import 'guru_chat_screen.dart';
 import 'nj_tech_service_screen.dart';
 import 'nj_tech_store_screen.dart';
@@ -1135,10 +1135,14 @@ class _HomeTab extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           GestureDetector(
-            onTap: () => Navigator.push<void>(
-              context,
-              MaterialPageRoute<void>(builder: (_) => const PrintingServiceScreen()),
-            ),
+            onTap: () {
+              // TODO(printing): PrintingServiceScreen is missing
+              // (printing_service_screen.dart not found). Navigation disabled
+              // until the screen is restored.
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Printing service is temporarily unavailable')),
+              );
+            },
             child: Container(
               width: double.infinity,
               height: 56,
