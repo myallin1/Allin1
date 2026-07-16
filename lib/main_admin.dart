@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 import 'firebase_options.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
@@ -29,6 +30,13 @@ void main() {
     // the binding in the root zone while runApp() runs in a child zone,
     // which triggers a "Zone mismatch" framework assertion on cold start.
     WidgetsFlutterBinding.ensureInitialized();
+
+    // SessionService.saveSession() opens a Hive box directly (not via
+    // HiveCache's guarded wrapper), which throws "You need to
+    // initialize Hive..." if nothing primed it first. main_customer.dart
+    // calls this eagerly at startup; admin never did, so Google
+    // Sign-In's post-auth saveSession() call was crashing here.
+    await Hive.initFlutter();
 
     try {
       if (Firebase.apps.isEmpty) {
