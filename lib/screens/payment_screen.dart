@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/localization_service.dart';
+import '../widgets/rating_feedback_sheet.dart';
 import 'bike_taxi/bike_booking_screen.dart';
 
 const Color _card = Colors.white;
@@ -26,6 +27,7 @@ class PaymentScreen extends StatefulWidget {
   final String? note;
   final String? rideId;
   final String? rideDocId;
+  final String? heroId;
 
   const PaymentScreen({
     super.key,
@@ -33,6 +35,7 @@ class PaymentScreen extends StatefulWidget {
     this.note,
     this.rideId,
     this.rideDocId,
+    this.heroId,
   });
 
   @override
@@ -45,7 +48,8 @@ class PaymentScreen extends StatefulWidget {
       ..add(DoubleProperty('amount', amount))
       ..add(StringProperty('note', note))
       ..add(StringProperty('rideId', rideId))
-      ..add(StringProperty('rideDocId', rideDocId));
+      ..add(StringProperty('rideDocId', rideDocId))
+      ..add(StringProperty('heroId', heroId));
   }
 }
 
@@ -56,7 +60,6 @@ class _PaymentScreenState extends State<PaymentScreen>
   bool _payingWallet = false;
   bool _paid = false;
   bool _awaitingHeroConfirmation = false;
-  int _selectedRating = 0;
   String _summaryPaymentMethod = 'Payment';
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _rideSubscription;
 
@@ -102,7 +105,7 @@ class _PaymentScreenState extends State<PaymentScreen>
     final data = snap.data();
     if (data == null) return;
     final paymentStatus = (data['paymentStatus'] as String? ?? '').trim();
-    if (['paid', 'paid_by_wallet', 'paid_offline_p2p', 'completed', 'settled'].contains(paymentStatus)) {
+    if (['paid', 'paid_by_wallet', 'paid_offline_p2p', 'completed'].contains(paymentStatus)) {
       if (!_paid) {
         setState(() {
           _paid = true;
@@ -155,7 +158,6 @@ class _PaymentScreenState extends State<PaymentScreen>
             'paid_by_wallet',
             'paid_offline_p2p',
             'completed',
-            'settled',
           }.contains(paymentStatus);
 
           if (liveFare != null && liveFare > 0 && liveFare != _fare) {
@@ -334,7 +336,7 @@ class _PaymentScreenState extends State<PaymentScreen>
       if (launched) {
         setState(() => _awaitingHeroConfirmation = true);
         _snack(
-          'UPI app opened. Scan the Paytm Soundbox and wait for hero confirmation.',
+          'UPI app opened. Pay the amount and return to the app.',
           _gold,
         );
       } else {
@@ -352,27 +354,7 @@ class _PaymentScreenState extends State<PaymentScreen>
     }
   }
 
-  Future<void> _submitRatingAndReturn(int rating) async {
-    if (!mounted) {
-      return;
-    }
-    setState(() => _selectedRating = rating);
-
-    final rideDocId = _rideDocId;
-    if (rideDocId != null) {
-      try {
-        await FirebaseFirestore.instance.collection('rides').doc(rideDocId).set(
-          {
-            'customerRating': rating,
-            'customerRatedAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
-      } catch (e) {
-        debugPrint('Rating update failed: $e');
-      }
-    }
-
+  Future<void> _onRatingSubmitted(int rating) async {
     await Future<void>.delayed(const Duration(milliseconds: 350));
     if (!mounted) {
       return;
@@ -547,16 +529,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(color: _border),
                 ),
-                child: Image.asset(
-                  'assets/images/paytm_soundbox.png',
-                  fit: BoxFit.contain,
-                  errorBuilder:
-                      (context, error, stackTrace) => const Icon(
-                        Icons.speaker_group_rounded,
-                        color: _orange,
-                        size: 34,
-                      ),
-                ),
+                child: const Text('📱', style: TextStyle(fontSize: 40)),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -935,32 +908,14 @@ class _PaymentScreenState extends State<PaymentScreen>
             ),
           ),
           const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List<Widget>.generate(5, (index) {
-              final star = index + 1;
-              final selected = _selectedRating >= star;
-              return IconButton(
-                onPressed: () => _submitRatingAndReturn(star),
-                icon: Icon(
-                  selected ? Icons.star_rounded : Icons.star_border_rounded,
-                  color: _gold,
-                  size: 34,
-                ),
-              );
-            }),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _selectedRating == 0
-                ? 'Tap a star and we will take you back to booking.'
-                : 'Redirecting you back to booking...',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.outfit(
-              fontSize: 12,
-              color: _muted,
+          if (_rideDocId != null)
+            RatingFeedbackSheet(
+              completionCollection: 'rides',
+              docId: _rideDocId!,
+              rateeCollection: widget.heroId != null ? 'heroes' : null,
+              rateeId: widget.heroId,
+              onSubmitted: _onRatingSubmitted,
             ),
-          ),
         ],
       ),
     ),
