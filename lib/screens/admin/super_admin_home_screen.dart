@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -41,7 +43,7 @@ class SuperAdminHomeScreen extends StatelessWidget {
   Future<void> _logout(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
     if (context.mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      unawaited(Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false));
     }
   }
 
@@ -254,10 +256,13 @@ class SuperAdminHomeScreen extends StatelessWidget {
               final actualFare = (data['actualFare'] as num?)?.toDouble();
               final tipAmount = (data['tipAmount'] as num?)?.toDouble();
               final estFare = (data['fare'] as num?)?.toDouble();
-              revenue += finalFare ??
-                  ((actualFare ?? 0) + (tipAmount ?? 0)) ??
-                  estFare ??
-                  0.0;
+              if (finalFare != null) {
+                revenue += finalFare;
+              } else if (actualFare != null) {
+                revenue += actualFare + (tipAmount ?? 0);
+              } else {
+                revenue += estFare ?? 0;
+              }
             }
           }
           return Container(
