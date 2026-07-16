@@ -6,7 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../services/ride_search_service.dart';
+import '../../services/admin_ride_dispatch_service.dart';
 import '../../widgets/allin1_map_widget.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
@@ -294,31 +294,32 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
                           }
                           setSheetState(() => _isLoading = true);
                           try {
-                            final service = RideSearchService();
-                            final normalizedPhone = RideSearchService.normalizePhone(_phoneCtrl.text);
-                            final rideData = {
-                              'customerName': _nameCtrl.text.trim(),
-                              'customerPhone': normalizedPhone,
-                              'pickupAddress': _pickupCtrl.text.trim(),
-                              'dropAddress': _dropCtrl.text.trim(),
-                              'category': _selectedCategory,
-                              'pickupLatitude': _erodeCenter.latitude,
-                              'pickupLongitude': _erodeCenter.longitude,
-                            };
-                            final rideId = await service.createCallCenterRide(rideData);
-                            if (rideId != null && _selectedHeroId != null) {
-                              await service.pingHero(_selectedHeroId!, rideId, rideData);
-                              if (context.mounted) {
-                                Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Ride sent to hero!'), backgroundColor: Colors.green),
-                                );
-                              }
-                            }
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                            await AdminRideDispatchService.dispatchRideToHero(
+                              customerName: _nameCtrl.text.trim(),
+                              customerPhone: _phoneCtrl.text.trim(),
+                              pickupAddress: _pickupCtrl.text.trim(),
+                              dropAddress: _dropCtrl.text.trim(),
+                              category: _selectedCategory,
+                              heroId: _selectedHeroId!,
+                              heroName: _selectedHeroName ?? 'Hero',
+                              heroPhone: _selectedHeroPhone ?? '',
                             );
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Ride sent to hero'), backgroundColor: _green),
+                              );
+                            }
+                            _nameCtrl.clear();
+                            _phoneCtrl.clear();
+                            _pickupCtrl.clear();
+                            _dropCtrl.clear();
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                              );
+                            }
                           } finally {
                             setSheetState(() => _isLoading = false);
                           }

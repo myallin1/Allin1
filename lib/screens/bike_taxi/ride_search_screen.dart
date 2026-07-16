@@ -309,6 +309,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         await firestoreRef.set({
           'status': 'searching',
           'customerId': user.uid,
+          'category': _normalizeCategoryKey(widget.ride.vehicleType ?? 'bike'),
           'createdAt': FieldValue.serverTimestamp(),
         });
       }
