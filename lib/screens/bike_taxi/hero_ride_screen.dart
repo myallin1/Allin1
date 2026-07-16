@@ -94,6 +94,11 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   String _rideOtpCode = '';
   bool _verifyingOtp = false;
   bool _liveLocationCleanedUp = false;
+  // Set in initState() if widget.rideDocId arrives empty (hero_home_screen.dart
+  // no longer silently substitutes the RTDB push key here — see its
+  // _acceptRide() comment). build() shows a dedicated error state instead
+  // of proceeding with a Firestore/OTP setup that would silently be wrong.
+  bool _missingRideDocId = false;
 
   // Actual tracked distance during trip
   double _actualDistanceKm = 0;
@@ -118,7 +123,17 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    
+
+    if (widget.rideDocId.trim().isEmpty) {
+      debugPrint(
+        '[HeroRideScreen] ❌ rideDocId is empty — the accepted-ride ping '
+        'was missing its Firestore doc link. Skipping ride setup; '
+        'build() will show an error state instead of a wrong OTP.',
+      );
+      _missingRideDocId = true;
+      return;
+    }
+
     // ✅ Generate Local OTP on Init
     _rideOtpCode = _generateLocalOtp(widget.rideDocId);
 
@@ -1428,6 +1443,46 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (_missingRideDocId) {
+      return Scaffold(
+        backgroundColor: _bg,
+        appBar: AppBar(
+          backgroundColor: _surface,
+          title: const Text('Ride Error', style: TextStyle(color: _text)),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline_rounded, color: _red, size: 56),
+                const SizedBox(height: 16),
+                const Text(
+                  'Ride reference missing — contact support',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: _text, fontWeight: FontWeight.w700, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "This ride couldn't be linked to its booking record, "
+                  'so a trip OTP cannot be generated safely.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: _muted, fontSize: 13),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: ElevatedButton.styleFrom(backgroundColor: _purple),
+                  child: const Text('Go Back', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     // Map center based on status
     final mapCenter = _currentPosition != null
         ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)

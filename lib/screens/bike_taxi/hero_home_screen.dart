@@ -1728,8 +1728,23 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           .update({'isAvailable': false});
 
       if (mounted) {
-        // Use the Firestore doc ID from the ping (not the RTDB push key)
-        final firestoreDocId = pingData['firestoreDocId'] as String? ?? requestId;
+        // Use the Firestore doc ID from the ping (not the RTDB push key).
+        // Deliberately NOT falling back to requestId (the RTDB push key)
+        // when firestoreDocId is missing — that silent substitution used
+        // to feed the wrong ID into CaptainRideScreen's local OTP
+        // checksum, producing an OTP that could never match what the
+        // customer sees, with no visible error. Fall back to '' instead
+        // so CaptainRideScreen can detect and surface this loudly.
+        final rawFirestoreDocId = pingData['firestoreDocId'] as String?;
+        final firestoreDocId = (rawFirestoreDocId ?? '').trim();
+        if (firestoreDocId.isEmpty) {
+          debugPrint(
+            '⚠️ [RIDE ACCEPTED] Ping for request $requestId is missing '
+            'firestoreDocId — cannot safely link this ride to its '
+            'Firestore doc (OTP/status updates would break). '
+            'rawFirestoreDocId=$rawFirestoreDocId requestId=$requestId',
+          );
+        }
         final rideModel = RideModel(
           rideId: firestoreDocId,
           customerId: pingData['customerId'] as String? ?? '',
