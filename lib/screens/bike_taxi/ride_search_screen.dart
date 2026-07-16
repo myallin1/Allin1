@@ -12,6 +12,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/ride_model.dart';
+import '../../utils/otp_utils.dart';
 import '../../widgets/allin1_map_widget.dart';
 import 'ride_tracking_screen.dart';
 
@@ -100,23 +101,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     if (existingRideDocId != null && existingRideDocId.trim().isNotEmpty) {
       _rideDocId = existingRideDocId.trim();
       _requestId = existingRideDocId.trim();
-      _rideOtp = _generateLocalOtp(_rideDocId);
+      _rideOtp = generateLocalOtp(_rideDocId);
     }
     _startRideCreation();
-  }
-
-  // ─── LOCAL DETERMINISTIC OTP GENERATOR (NO DB REQUIRED) ───
-  String _generateLocalOtp(String docId) {
-    final cleanId = docId.trim().replaceAll(RegExp(r'\s+'), '');
-    if (cleanId.isEmpty) return '1234';
-    // Platform-independent checksum — avoids String.hashCode, which
-    // differs between native (VM) and web (dart2js/dart2wasm) builds,
-    // causing OTP mismatches between mobile app and PWA.
-    int checksum = 0;
-    for (int i = 0; i < cleanId.length; i++) {
-      checksum = (checksum * 31 + cleanId.codeUnitAt(i)) & 0x7FFFFFFF;
-    }
-    return (1000 + (checksum % 9000)).toString();
   }
 
   @override

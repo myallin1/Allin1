@@ -19,6 +19,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/ride_model.dart';
+import '../../utils/otp_utils.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../payment_screen.dart';
 import 'bike_booking_screen.dart';
@@ -103,24 +104,6 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   bool _isRideLoading = true;
   String? _rideErrorMessage;
   DateTime? _lastRouteDrawAt;
-
-  // ─── LOCAL DETERMINISTIC OTP GENERATOR (NO DB REQUIRED) ───
-  // Must stay byte-identical to ride_search_screen.dart's and
-  // hero_ride_screen.dart's _generateLocalOtp(). This copy previously
-  // used String.hashCode, which is not guaranteed identical between
-  // native VM/AOT and web (dart2js/dart2wasm) builds — that divergence
-  // caused customer- and hero-side OTPs to mismatch for the same ride
-  // doc ID. Replaced with the same platform-stable rolling checksum.
-  String _generateLocalOtp(String docId) {
-    final cleanId = docId.trim().replaceAll(RegExp(r'\s+'), '');
-    if (cleanId.isEmpty) return '1234';
-    int checksum = 0;
-    for (int i = 0; i < cleanId.length; i++) {
-      checksum = (checksum * 31 + cleanId.codeUnitAt(i)) & 0x7FFFFFFF;
-    }
-    return (1000 + (checksum % 9000)).toString();
-  }
-  // ──────────────────────────────────────────────────────────
 
   void _returnToRootSafely() {
     if (!mounted) {
@@ -568,7 +551,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     WidgetsBinding.instance.addObserver(this);
     
     // ✅ Set local OTP immediately upon screen load
-    _rideOtp = _generateLocalOtp(widget.rideDocId); 
+    _rideOtp = generateLocalOtp(widget.rideDocId); 
     
     _rideStatus = widget.ride.status ?? _rideStatus;
     _captainName = widget.ride.heroName;
@@ -798,7 +781,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     );
     
     // ✅ Always use local deterministic OTP based on rideDocId
-    final nextRideOtp = _generateLocalOtp(widget.rideDocId); 
+    final nextRideOtp = generateLocalOtp(widget.rideDocId); 
     
     final nextCaptainLat = ((data['captainLat'] ??
             data['heroLat'] ??

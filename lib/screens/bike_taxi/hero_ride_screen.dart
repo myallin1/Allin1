@@ -19,6 +19,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../models/ride_model.dart';
 import '../../services/map_service.dart';
 import '../../services/hero_ride_notification_service.dart';
+import '../../utils/otp_utils.dart';
 import '../../widgets/allin1_map_widget.dart';
 
 class CaptainRideScreen extends StatefulWidget {
@@ -104,21 +105,6 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   double _actualDistanceKm = 0;
   Position? _prevTrackingPosition;
 
-  // ─── LOCAL DETERMINISTIC OTP GENERATOR (NO DB REQUIRED) ───
-  String _generateLocalOtp(String docId) {
-    final cleanId = docId.trim().replaceAll(RegExp(r'\s+'), '');
-    if (cleanId.isEmpty) return '1234';
-    // Platform-independent checksum — avoids String.hashCode, which
-    // differs between native (VM) and web (dart2js/dart2wasm) builds,
-    // causing OTP mismatches between mobile app and PWA.
-    int checksum = 0;
-    for (int i = 0; i < cleanId.length; i++) {
-      checksum = (checksum * 31 + cleanId.codeUnitAt(i)) & 0x7FFFFFFF;
-    }
-    return (1000 + (checksum % 9000)).toString();
-  }
-  // ──────────────────────────────────────────────────────────
-
   @override
   void initState() {
     super.initState();
@@ -135,7 +121,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
     }
 
     // ✅ Generate Local OTP on Init
-    _rideOtpCode = _generateLocalOtp(widget.rideDocId);
+    _rideOtpCode = generateLocalOtp(widget.rideDocId);
 
     _rideStatus = widget.ride.status ?? 'accepted';
     _pickupAddress = widget.ride.pickupAddress ?? '---';
@@ -526,7 +512,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
           _tipAmount = (data['tipAmount'] as num?)?.toDouble() ?? _tipAmount;
           
           // ✅ Always use local deterministic OTP 
-          _rideOtpCode = _generateLocalOtp(widget.rideDocId);
+          _rideOtpCode = generateLocalOtp(widget.rideDocId);
 
           _finalFare = (data['finalFare'] as num?)?.toDouble() ??
               (data['estimatedFare'] as num?)?.toDouble() ??
