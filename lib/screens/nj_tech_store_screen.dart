@@ -511,8 +511,9 @@ class _CategoryTile extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<_ServiceCategory>('category', category));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+    properties
+      ..add(DiagnosticsProperty<_ServiceCategory>('category', category))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }
 
@@ -1192,24 +1193,24 @@ class _FormField extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(
-      DiagnosticsProperty<TextEditingController>('controller', controller),
-    );
-    properties.add(StringProperty('hint', hint));
-    properties.add(DiagnosticsProperty<IconData>('icon', icon));
     properties
-        .add(DiagnosticsProperty<TextInputType?>('keyboardType', keyboardType));
-    properties.add(
-      IterableProperty<TextInputFormatter>(
-        'inputFormatters',
-        inputFormatters,
-      ),
-    );
-    properties.add(
-      ObjectFlagProperty<String? Function(String?)?>.has(
-        'validator',
-        validator,
-      ),
-    );
+      ..add(
+        DiagnosticsProperty<TextEditingController>('controller', controller),
+      )
+      ..add(StringProperty('hint', hint))
+      ..add(DiagnosticsProperty<IconData>('icon', icon))
+      ..add(DiagnosticsProperty<TextInputType?>('keyboardType', keyboardType))
+      ..add(
+        IterableProperty<TextInputFormatter>(
+          'inputFormatters',
+          inputFormatters,
+        ),
+      )
+      ..add(
+        ObjectFlagProperty<String? Function(String?)?>.has(
+          'validator',
+          validator,
+        ),
+      );
   }
 }

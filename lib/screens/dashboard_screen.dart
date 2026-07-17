@@ -2149,22 +2149,23 @@ class _HomeTab extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(
-      ObjectFlagProperty<void Function(String)>.has('onTileTap', onTileTap),
-    );
-    properties.add(
-      ObjectFlagProperty<void Function(String)>.has(
-        'onNJServiceTap',
-        onNJServiceTap,
-      ),
-    );
-    properties.add(DiagnosticsProperty<User?>('user', user));
-    properties.add(
-      DiagnosticsProperty<Stream<DocumentSnapshot<Object?>>>(
-        'userStream',
-        userStream,
-      ),
-    );
+    properties
+      ..add(
+        ObjectFlagProperty<void Function(String)>.has('onTileTap', onTileTap),
+      )
+      ..add(
+        ObjectFlagProperty<void Function(String)>.has(
+          'onNJServiceTap',
+          onNJServiceTap,
+        ),
+      )
+      ..add(DiagnosticsProperty<User?>('user', user))
+      ..add(
+        DiagnosticsProperty<Stream<DocumentSnapshot<Object?>>>(
+          'userStream',
+          userStream,
+        ),
+      );
   }
 }
 
@@ -2182,9 +2183,9 @@ class _NJServiceMarquee extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(IterableProperty<Map<String, String>>('services', services));
     properties
-        .add(ObjectFlagProperty<void Function(String)>.has('onTap', onTap));
+      ..add(IterableProperty<Map<String, String>>('services', services))
+      ..add(ObjectFlagProperty<void Function(String)>.has('onTap', onTap));
   }
 }
 
@@ -2529,13 +2530,14 @@ class _ProfileDrawer extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<User?>('user', user));
-    properties.add(
-      ObjectFlagProperty<void Function(Widget)>.has(
-        'onNavigate',
-        onNavigate,
-      ),
-    );
+    properties
+      ..add(DiagnosticsProperty<User?>('user', user))
+      ..add(
+        ObjectFlagProperty<void Function(Widget)>.has(
+          'onNavigate',
+          onNavigate,
+        ),
+      );
   }
 }
 

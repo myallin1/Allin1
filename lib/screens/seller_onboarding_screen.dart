@@ -563,11 +563,12 @@ class _TypeTile extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('label', label));
-    properties.add(StringProperty('title', title));
-    properties.add(StringProperty('subtitle', subtitle));
-    properties.add(DiagnosticsProperty<IconData>('icon', icon));
-    properties.add(DiagnosticsProperty<bool>('isSelected', isSelected));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+    properties
+      ..add(StringProperty('label', label))
+      ..add(StringProperty('title', title))
+      ..add(StringProperty('subtitle', subtitle))
+      ..add(DiagnosticsProperty<IconData>('icon', icon))
+      ..add(DiagnosticsProperty<bool>('isSelected', isSelected))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }

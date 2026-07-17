@@ -38,13 +38,13 @@ class RewardsScreen extends StatefulWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties
-        .add(IterableProperty<PromoOfferItem>('promoOffers', promoOffers));
-    properties.add(
-      ObjectFlagProperty<Future<dynamic> Function(String offerId)>.has(
-        'onClaimPromo',
-        onClaimPromo,
-      ),
-    );
+      ..add(IterableProperty<PromoOfferItem>('promoOffers', promoOffers))
+      ..add(
+        ObjectFlagProperty<Future<dynamic> Function(String offerId)>.has(
+          'onClaimPromo',
+          onClaimPromo,
+        ),
+      );
   }
 }
 
@@ -484,11 +484,11 @@ class _GlowingPaytmQuizCard extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties
-        .add(DiagnosticsProperty<Animation<double>>('animation', animation));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
-    properties.add(DiagnosticsProperty<bool>('disabled', disabled));
-    properties.add(StringProperty('lockedMessage', lockedMessage));
-    properties.add(StringProperty('couponCode', couponCode));
+      ..add(DiagnosticsProperty<Animation<double>>('animation', animation))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap))
+      ..add(DiagnosticsProperty<bool>('disabled', disabled))
+      ..add(StringProperty('lockedMessage', lockedMessage))
+      ..add(StringProperty('couponCode', couponCode));
   }
 }
 
@@ -1076,8 +1076,9 @@ class _RewardOfferTile extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<PromoOfferItem>('offer', offer));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onClaim', onClaim));
+    properties
+      ..add(DiagnosticsProperty<PromoOfferItem>('offer', offer))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onClaim', onClaim));
   }
 }
 

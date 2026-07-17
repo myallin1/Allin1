@@ -1440,16 +1440,15 @@ class _ActiveRideSheet extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('heroName', heroName));
-    properties.add(StringProperty('bikeModel', bikeModel));
-    properties.add(StringProperty('vehicleNumber', vehicleNumber));
-    properties.add(IntProperty('etaMinutes', etaMinutes));
-    properties.add(DoubleProperty('rating', rating));
-    properties.add(StringProperty('rideOtp', rideOtp));
     properties
-        .add(ObjectFlagProperty<VoidCallback>.has('onCallHero', onCallHero));
-    properties
-        .add(ObjectFlagProperty<VoidCallback>.has('onTrackRide', onTrackRide));
+      ..add(StringProperty('heroName', heroName))
+      ..add(StringProperty('bikeModel', bikeModel))
+      ..add(StringProperty('vehicleNumber', vehicleNumber))
+      ..add(IntProperty('etaMinutes', etaMinutes))
+      ..add(DoubleProperty('rating', rating))
+      ..add(StringProperty('rideOtp', rideOtp))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onCallHero', onCallHero))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onTrackRide', onTrackRide));
   }
 }
 

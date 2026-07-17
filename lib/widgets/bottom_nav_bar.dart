@@ -37,8 +37,9 @@ class MobileShell extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(IntProperty('initialIndex', initialIndex));
-    properties.add(StringProperty('userType', userType));
+    properties
+      ..add(IntProperty('initialIndex', initialIndex))
+      ..add(StringProperty('userType', userType));
   }
 }
 
@@ -227,10 +228,11 @@ class _NavBarItem extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<IconData>('icon', icon));
-    properties.add(StringProperty('label', label));
-    properties.add(DiagnosticsProperty<bool>('isSelected', isSelected));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+    properties
+      ..add(DiagnosticsProperty<IconData>('icon', icon))
+      ..add(StringProperty('label', label))
+      ..add(DiagnosticsProperty<bool>('isSelected', isSelected))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }
 
@@ -336,8 +338,9 @@ class BottomNavBar extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(IntProperty('currentIndex', currentIndex));
-    properties.add(ObjectFlagProperty<void Function(int)>.has('onTap', onTap));
-    properties.add(StringProperty('userType', userType));
+    properties
+      ..add(IntProperty('currentIndex', currentIndex))
+      ..add(ObjectFlagProperty<void Function(int)>.has('onTap', onTap))
+      ..add(StringProperty('userType', userType));
   }
 }
