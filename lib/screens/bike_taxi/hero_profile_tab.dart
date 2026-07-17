@@ -447,7 +447,9 @@ class _HeroProfileTabState extends State<HeroProfileTab>
     return GestureDetector(
       onTap: () async {
         final launched = await launchUrl(Uri.parse('tel:+919597879191'));
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(

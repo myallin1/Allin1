@@ -64,10 +64,14 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
   }
 
   Future<void> _submit() async {
-    if (!_canSubmit) return;
+    if (!_canSubmit) {
+      return;
+    }
 
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
@@ -103,7 +107,9 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
         ),
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       await Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -123,7 +129,9 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
     }
   }
 

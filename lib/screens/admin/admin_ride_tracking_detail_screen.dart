@@ -95,7 +95,9 @@ class _AdminRideTrackingDetailScreenState
   }
 
   Future<void> _call(String? phone) async {
-    if (phone == null || phone.isEmpty) return;
+    if (phone == null || phone.isEmpty) {
+      return;
+    }
     final url = Uri.parse('tel:$phone');
     if (await canLaunchUrl(url)) {
       await launchUrl(url);

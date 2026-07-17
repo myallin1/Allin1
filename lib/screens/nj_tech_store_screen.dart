@@ -726,7 +726,9 @@ _Please contact me regarding this service._''';
         );
       }
     } finally {
-      if (mounted) setState(() => _sending = false);
+      if (mounted) {
+        setState(() => _sending = false);
+      }
     }
   }
 

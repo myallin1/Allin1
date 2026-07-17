@@ -274,7 +274,9 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
 
   // ── Approve ────────────────────────────────────────────────────
   Future<void> _approveHero(String uid, Map<String, dynamic> data) async {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -307,10 +309,14 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
       ),
     );
 
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !mounted) {
+      return;
+    }
 
     // Show loading state
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
       SnackBar(
@@ -343,7 +349,9 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
 
       // Allow stream to settle before showing success message
       await Future<void>.delayed(const Duration(milliseconds: 300));
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(
@@ -359,7 +367,9 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
         ),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(
@@ -376,7 +386,9 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
 
   // ── Reject ─────────────────────────────────────────────────────
   Future<void> _rejectHero(String uid, Map<String, dynamic> data) async {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -409,7 +421,9 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
       ),
     );
 
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !mounted) {
+      return;
+    }
 
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
@@ -442,7 +456,9 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
       await batch.commit();
 
       await Future<void>.delayed(const Duration(milliseconds: 300));
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(
@@ -455,7 +471,9 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
         ),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(

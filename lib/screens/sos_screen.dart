@@ -74,7 +74,9 @@ class _SosScreenState extends State<SosScreen> {
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Please enable GPS to send an SOS alert.'),
@@ -90,7 +92,9 @@ class _SosScreenState extends State<SosScreen> {
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Location permission is required for SOS.'),
@@ -116,7 +120,9 @@ class _SosScreenState extends State<SosScreen> {
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('SOS sent to nearby Heroes and NJ Tech Call Center.'),
@@ -126,7 +132,9 @@ class _SosScreenState extends State<SosScreen> {
       );
     } catch (error) {
       debugPrint('[SosScreen] SOS failed: $error');
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('SOS could not be sent. Please try again.'),
@@ -143,7 +151,9 @@ class _SosScreenState extends State<SosScreen> {
   Future<void> _callPolice() async {
     final uri = Uri.parse('tel:100');
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Unable to open dialer for Police 100.'),

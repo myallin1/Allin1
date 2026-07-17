@@ -67,7 +67,9 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
 
     try {
       final uid = _auth.currentUser?.uid;
-      if (uid == null) throw Exception('Not authenticated');
+      if (uid == null) {
+        throw Exception('Not authenticated');
+      }
 
       final now = DateTime.now();
       final seller = SellerModel(
@@ -86,7 +88,9 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
 
       await _service.createSellerProfile(seller);
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       Navigator.pushReplacement(
         context,
@@ -95,7 +99,9 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
         ),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to save: $e'),
@@ -103,7 +109,9 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
         ),
       );
     } finally {
-      if (mounted) setState(() => _isSaving = false);
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
   }
 

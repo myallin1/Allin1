@@ -1213,7 +1213,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
   void _listenForHeroPings() {
     final uid = _user?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      return;
+    }
     _heroPingSub?.cancel();
     debugPrint('🔥 [DEBUG] Hero is LISTENING to EXACT PATH: hero_pings/$uid');
 
@@ -1223,15 +1225,23 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     _heroPingSub =
         FirebaseDatabase.instance.ref('hero_pings/$uid').onChildAdded.listen(
       (event) {
-        if (!mounted || !_isOnline || _activeRideId.isNotEmpty) return;
-        if (_isShowingRideDialog) return;
+        if (!mounted || !_isOnline || _activeRideId.isNotEmpty) {
+          return;
+        }
+        if (_isShowingRideDialog) {
+          return;
+        }
 
         final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
         final requestId = event.snapshot.key ?? '';
-        if (pingData == null || requestId.isEmpty) return;
+        if (pingData == null || requestId.isEmpty) {
+          return;
+        }
 
         final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
-        if (pingExpiresAt == null) return;
+        if (pingExpiresAt == null) {
+          return;
+        }
         if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
           FirebaseDatabase.instance.ref('hero_pings/$uid/$requestId').remove();
           return;
@@ -1316,7 +1326,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   // ================================================================
   void _listenForServicePings() {
     final uid = _user?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      return;
+    }
     _servicePingSub?.cancel();
     debugPrint(
       '🔥 [DEBUG] Hero is LISTENING to EXACT PATH: hero_service_pings/$uid',
@@ -1329,15 +1341,23 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         .onChildAdded
         .listen(
       (event) {
-        if (!mounted || !_isOnline || _activeRideId.isNotEmpty) return;
-        if (_isShowingServiceDialog) return;
+        if (!mounted || !_isOnline || _activeRideId.isNotEmpty) {
+          return;
+        }
+        if (_isShowingServiceDialog) {
+          return;
+        }
 
         final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
         final requestId = event.snapshot.key ?? '';
-        if (pingData == null || requestId.isEmpty) return;
+        if (pingData == null || requestId.isEmpty) {
+          return;
+        }
 
         final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
-        if (pingExpiresAt == null) return;
+        if (pingExpiresAt == null) {
+          return;
+        }
         if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
           FirebaseDatabase.instance
               .ref('hero_service_pings/$uid/$requestId')
@@ -1397,7 +1417,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   }
 
   void _showServiceRequestDialog(String requestId, Map<String, dynamic> data) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     if (_isShowingServiceDialog) {
       debugPrint(
         '[HeroHomeScreen] Service dialog already open — skipping $requestId',
@@ -1415,7 +1437,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_isShowingServiceDialog) return;
+      if (!mounted || !_isShowingServiceDialog) {
+        return;
+      }
       _doShowServiceDialog(requestId, data);
     });
   }
@@ -1431,11 +1455,15 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         debugPrint(
           '[HeroHomeScreen] dialogContext null after 2 retries — giving up',
         );
-        if (mounted) setState(() => _isShowingServiceDialog = false);
+        if (mounted) {
+          setState(() => _isShowingServiceDialog = false);
+        }
         return;
       }
       Future.delayed(const Duration(milliseconds: 500), () {
-        if (!mounted || !_isShowingServiceDialog) return;
+        if (!mounted || !_isShowingServiceDialog) {
+          return;
+        }
         _doShowServiceDialog(requestId, data, attempt + 1);
       });
       return;
@@ -1495,7 +1523,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         ],
       ),
     ).then((_) {
-      if (mounted) setState(() => _isShowingServiceDialog = false);
+      if (mounted) {
+        setState(() => _isShowingServiceDialog = false);
+      }
     });
   }
 
@@ -1542,7 +1572,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     String requestId,
     Map<String, dynamic> data,
   ) async {
-    if (_user == null) return;
+    if (_user == null) {
+      return;
+    }
 
     // Same clock-skew-tolerant expiry buffer as _acceptRide — reject
     // client-side before even attempting the transaction if this ping
@@ -1585,7 +1617,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
   Future<void> _rejectServiceRequest(String requestId) async {
     final uid = _user?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      return;
+    }
     try {
       await FirebaseDatabase.instance
           .ref('hero_service_pings/$uid/$requestId')
@@ -1605,7 +1639,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   }
 
   void _showRideRequestDialog(String rideId, Map<String, dynamic> rideData) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     if (_isShowingRideDialog) {
       debugPrint('[HeroHomeScreen] Dialog already open — skipping $rideId');
       return;
@@ -1622,7 +1658,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_isShowingRideDialog) return;
+      if (!mounted || !_isShowingRideDialog) {
+        return;
+      }
       _doShowDialog(rideId, rideData);
     });
   }
@@ -1633,13 +1671,17 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     if (dialogContext == null) {
       debugPrint('[HeroHomeScreen] dialogContext null — retrying in 500ms');
       Future.delayed(const Duration(milliseconds: 500), () {
-        if (!mounted || !_isShowingRideDialog) return;
+        if (!mounted || !_isShowingRideDialog) {
+          return;
+        }
         dialogContext = navigatorKey.currentContext;
         if (dialogContext != null) {
           _showDialogNow(dialogContext!, rideId, rideData);
         } else {
           Future.delayed(const Duration(milliseconds: 500), () {
-            if (!mounted || !_isShowingRideDialog) return;
+            if (!mounted || !_isShowingRideDialog) {
+              return;
+            }
             final thirdCtx = navigatorKey.currentContext;
             if (thirdCtx != null) {
               _showDialogNow(thirdCtx, rideId, rideData);
@@ -1674,20 +1716,26 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       if (!kIsWeb) {
         unawaited(HeroRideNotificationService.stopWakeAlertRingtone());
       }
-      if (mounted) setState(() => _isShowingRideDialog = false);
+      if (mounted) {
+        setState(() => _isShowingRideDialog = false);
+      }
     });
     // Start looping ringtone AFTER dialog is visible (not before).
     // This ensures the alert plays continuously while the hero sees the dialog,
     // and stops only when they accept/reject/timeout.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_isShowingRideDialog) return;
+      if (!mounted || !_isShowingRideDialog) {
+        return;
+      }
       _playIncomingRideAlertSafe(looping: true);
     });
   }
 
   Future<void> _rejectRide(String requestId) async {
     final uid = _user?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      return;
+    }
     debugPrint('[HeroHomeScreen] Rejecting ride: $requestId');
     try {
       await FirebaseDatabase.instance
@@ -1707,7 +1755,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     String requestId,
     Map<String, dynamic> pingData,
   ) async {
-    if (_user == null) return;
+    if (_user == null) {
+      return;
+    }
     setState(() => _accepting = true);
     debugPrint('[HeroHomeScreen] Accepting ride via RTDB: $requestId');
     try {
@@ -1721,7 +1771,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       if (pingExpiresAt > 0 && nowMs > pingExpiresAt + 5000) {
         // 5-second tolerance for device clock skew
         debugPrint('[HeroHomeScreen] Ping expired, cannot accept');
-        if (mounted) setState(() => _accepting = false);
+        if (mounted) {
+          setState(() => _accepting = false);
+        }
         return;
       }
 
@@ -1774,7 +1826,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         await FirebaseDatabase.instance
             .ref('hero_pings/$uid/$requestId')
             .remove();
-        if (mounted) setState(() => _accepting = false);
+        if (mounted) {
+          setState(() => _accepting = false);
+        }
         return;
       }
 
@@ -1824,7 +1878,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     } catch (e) {
       debugPrint('[HeroHomeScreen] Accept ride error: $e');
     }
-    if (mounted) setState(() => _accepting = false);
+    if (mounted) {
+      setState(() => _accepting = false);
+    }
   }
 
   // Complete a ride — 0% Commission Promotion: Hero keeps 100% of fare
@@ -1992,7 +2048,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         lat,
         lng,
       );
-      if (dist < 50) return;
+      if (dist < 50) {
+        return;
+      }
     }
     _lastGpsUpdate = now;
     _lastUploadedPosition = _latestPosition;
@@ -2407,7 +2465,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Please enable GPS to send an SOS alert.'),
@@ -2423,7 +2483,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Location permission is required for SOS.'),
@@ -2450,7 +2512,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -2462,7 +2526,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       );
     } catch (error) {
       debugPrint('[HeroHome] SOS failed: $error');
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('SOS could not be sent. Please try again.'),
@@ -3087,7 +3153,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                     if (snap.hasError) {
                       // Auto-retry: reinitialise stream after 4s
                       Future.delayed(const Duration(seconds: 4), () {
-                        if (!mounted || !_isOnline) return;
+                        if (!mounted || !_isOnline) {
+                          return;
+                        }
                         debugPrint(
                           '[HeroHomeScreen] Stream error — auto-retrying: ${snap.error}',
                         );
@@ -3996,7 +4064,9 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
     } catch (e) {
       debugPrint('[ServiceRequestStatusCard] advanceStatus error: $e');
     } finally {
-      if (mounted) setState(() => _updating = false);
+      if (mounted) {
+        setState(() => _updating = false);
+      }
     }
   }
 

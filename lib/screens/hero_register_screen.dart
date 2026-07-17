@@ -142,7 +142,9 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     } else {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Unable to open WhatsApp')),
       );
@@ -155,7 +157,9 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
     } else {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Unable to open phone dialer'),
@@ -192,7 +196,9 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
 
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('User not logged in');
+      if (user == null) {
+        throw Exception('User not logged in');
+      }
       final vehicleType = _normalizeVehicleType(selectedVehicleType);
       final vehicleCategoryLabel = _vehicleCategoryLabel(vehicleType);
 

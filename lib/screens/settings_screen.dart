@@ -97,7 +97,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final location = box.get('location', defaultValue: true) as bool;
       final biometric = box.get('biometric', defaultValue: false) as bool;
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _selectedLanguage = _getLanguageNameFromCode(langCode);
         _selectedCurrency = currency;
@@ -226,7 +228,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: 'Receive push notifications',
             value: _notificationsEnabled,
             onChanged: (v) {
-              if (!mounted) return;
+              if (!mounted) {
+                return;
+              }
               setState(() => _notificationsEnabled = v);
               _saveSetting('notifications', v);
             },
@@ -238,7 +242,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: 'Get updates about your rides',
             value: _rideAlertsEnabled,
             onChanged: (v) {
-              if (!mounted) return;
+              if (!mounted) {
+                return;
+              }
               setState(() => _rideAlertsEnabled = v);
               _saveSetting('rideAlerts', v);
             },
@@ -250,7 +256,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: 'Offers and deals',
             value: _promotionalAlerts,
             onChanged: (v) {
-              if (!mounted) return;
+              if (!mounted) {
+                return;
+              }
               setState(() => _promotionalAlerts = v);
               _saveSetting('promotions', v);
             },
@@ -275,7 +283,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: 'Allow app to access location',
             value: _locationEnabled,
             onChanged: (v) {
-              if (!mounted) return;
+              if (!mounted) {
+                return;
+              }
               setState(() => _locationEnabled = v);
               _saveSetting('location', v);
             },
@@ -287,7 +297,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: 'Use fingerprint for quick login',
             value: _biometricEnabled,
             onChanged: (v) {
-              if (!mounted) return;
+              if (!mounted) {
+                return;
+              }
               setState(() => _biometricEnabled = v);
               _saveSetting('biometric', v);
             },
@@ -867,11 +879,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               final isSel = _selectedLanguage == lang['name'];
               return GestureDetector(
                 onTap: () {
-                  if (!mounted) return;
+                  if (!mounted) {
+                    return;
+                  }
                   setState(() => _selectedLanguage = lang['name']!);
                   _saveSetting('language_code', lang['code'] ?? 'english');
                   Future.delayed(const Duration(milliseconds: 250), () {
-                    if (mounted) Navigator.of(ctx).pop();
+                    if (mounted) {
+                      Navigator.of(ctx).pop();
+                    }
                   });
                 },
                 child: AnimatedContainer(
@@ -1017,7 +1033,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final isSelected = _selectedCurrency == currency;
     return ListTile(
       onTap: () {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         setState(() => _selectedCurrency = currency);
         _saveSetting('currency', currency);
         Navigator.of(ctx).pop();

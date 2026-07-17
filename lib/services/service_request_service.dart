@@ -125,16 +125,22 @@ class ServiceRequestService {
   }) async {
     final snap =
         await rtdb.FirebaseDatabase.instance.ref('online_heroes').get();
-    if (!snap.exists || snap.value is! Map) return;
+    if (!snap.exists || snap.value is! Map) {
+      return;
+    }
 
     final heroes = Map<dynamic, dynamic>.from(snap.value! as Map);
     final futures = <Future<void>>[];
 
     heroes.forEach((heroId, heroDataRaw) {
-      if (heroDataRaw is! Map) return;
+      if (heroDataRaw is! Map) {
+        return;
+      }
       final heroData = Map<String, dynamic>.from(heroDataRaw);
       final isAvailable = (heroData['isAvailable'] as bool?) ?? false;
-      if (!isAvailable) return;
+      if (!isAvailable) {
+        return;
+      }
 
       futures.add(
         rtdb.FirebaseDatabase.instance
@@ -277,7 +283,9 @@ class ServiceRequestService {
         .collection('service_requests')
         .doc(requestId);
     final doc = await docRef.get();
-    if (!doc.exists) return;
+    if (!doc.exists) {
+      return;
+    }
 
     final status = doc.data()?['status'] as String? ?? '';
     if (status != 'pending') return; // Already progressed — nothing to do.

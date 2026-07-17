@@ -140,7 +140,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   Future<void> _startRideCreation() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        Navigator.pop(context);
+      }
       return;
     }
     debugPrint('🔥 [RIDE CREATION] About to fetch nearby heroes...');
@@ -395,7 +397,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     debugPrint(
       '🔥 [SEQUENTIAL] _startSequentialPinging started. Queue: ${_heroesQueue.length}',
     );
-    if (_heroesQueue.isEmpty || _requestId.isEmpty) return;
+    if (_heroesQueue.isEmpty || _requestId.isEmpty) {
+      return;
+    }
 
     _isPinging = true;
     _currentHeroIndex = 0;
@@ -542,9 +546,13 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         .ref('active_ride_requests/$_requestId')
         .onValue
         .listen((event) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       final data = event.snapshot.value as Map<dynamic, dynamic>?;
-      if (data == null) return;
+      if (data == null) {
+        return;
+      }
 
       final status = data['status'] as String? ?? '';
       final acceptedHeroId = data['acceptedHeroId'] as String? ?? '';
@@ -568,7 +576,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   ) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
+      if (user == null) {
+        return;
+      }
 
       final heroName =
           requestData['acceptedHeroName'] as String? ?? 'Hero Rider';
@@ -647,7 +657,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   }
 
   Future<void> _handleSearchTimeout() async {
-    if (_captainFound || _cancelled || _searchTimedOut) return;
+    if (_captainFound || _cancelled || _searchTimedOut) {
+      return;
+    }
     _countTimer?.cancel();
     _radarCtrl.stop();
     if (_requestId.isNotEmpty) {
@@ -683,7 +695,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
           .ref('hero_pings/$_assignedHeroId/$_requestId')
           .remove();
     }
-    if (mounted) Navigator.pop(context);
+    if (mounted) {
+      Navigator.pop(context);
+    }
   }
 
   Future<void> _selectEncourageTip(int amount) async {
@@ -723,10 +737,14 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   void _listenToNearbyCaptains() {
     _nearbyHeroesSub =
         FirebaseDatabase.instance.ref('online_heroes').onValue.listen((event) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       final data = event.snapshot.value as Map<dynamic, dynamic>?;
       if (data == null) {
-        if (_nearbyMarkers.isNotEmpty) setState(() => _nearbyMarkers = []);
+        if (_nearbyMarkers.isNotEmpty) {
+          setState(() => _nearbyMarkers = []);
+        }
         return;
       }
       final List<MapMarker> newMarkers = [];
@@ -745,7 +763,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
           }
         }
       });
-      if (mounted) setState(() => _nearbyMarkers = newMarkers);
+      if (mounted) {
+        setState(() => _nearbyMarkers = newMarkers);
+      }
     });
   }
 
@@ -783,7 +803,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   }
 
   void _showCancelledSnack(String msg) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
@@ -929,7 +951,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   }
 
   void _showHeroAcceptedOverlay() {
-    if (!mounted || _heroAcceptedOverlayShown) return;
+    if (!mounted || _heroAcceptedOverlayShown) {
+      return;
+    }
     _heroAcceptedOverlayShown = true;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -958,17 +982,25 @@ class _RideSearchScreenState extends State<RideSearchScreen>
 
   void _startHeroLocationTracking(String heroId) {
     _heroLocationSubscription?.cancel();
-    if (_rideDocId.isEmpty) return;
+    if (_rideDocId.isEmpty) {
+      return;
+    }
     _heroLocationSubscription = FirebaseDatabase.instance
         .ref('live_locations/$_rideDocId')
         .onValue
         .listen((event) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       final data = event.snapshot.value as Map<dynamic, dynamic>?;
-      if (data == null) return;
+      if (data == null) {
+        return;
+      }
       final lat = (data['lat'] as num?)?.toDouble();
       final lng = (data['lng'] as num?)?.toDouble();
-      if (lat == null || lng == null) return;
+      if (lat == null || lng == null) {
+        return;
+      }
       setState(() => _acceptedHeroLocation = LatLng(lat, lng));
       _fitAcceptedRideBounds();
     });
@@ -976,7 +1008,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
 
   void _fitAcceptedRideBounds() {
     final hero = _acceptedHeroLocation;
-    if (hero == null || !mounted) return;
+    if (hero == null || !mounted) {
+      return;
+    }
     if (!_acceptedMapReady) {
       _pendingAcceptedFit = true;
       return;
@@ -986,7 +1020,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       widget.ride.pickupLongitude ?? 77.7172,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       try {
         _acceptedMapController.fitCamera(
           CameraFit.bounds(
@@ -1003,7 +1039,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
 
   void _handleAcceptedMapReady() {
     _acceptedMapReady = true;
-    if (_pendingAcceptedFit) _fitAcceptedRideBounds();
+    if (_pendingAcceptedFit) {
+      _fitAcceptedRideBounds();
+    }
   }
 
   Future<void> _callCaptain() async {

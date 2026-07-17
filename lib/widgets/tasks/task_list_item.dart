@@ -47,7 +47,9 @@ class _TaskListItemState extends State<TaskListItem> {
       final response =
           await _taskService.startTask(widget.task.taskId, deviceId);
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       if (response.success && response.trackingUrl != null) {
         final uri = Uri.parse(response.trackingUrl!);
@@ -66,7 +68,9 @@ class _TaskListItemState extends State<TaskListItem> {
           throw Exception('Could not launch partner URL');
         }
       } else {
-        if (!context.mounted) return;
+        if (!context.mounted) {
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(response.message),
@@ -75,7 +79,9 @@ class _TaskListItemState extends State<TaskListItem> {
         );
       }
     } catch (e) {
-      if (!context.mounted) return;
+      if (!context.mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error: ${e.toString()}'),

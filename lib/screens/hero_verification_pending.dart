@@ -38,7 +38,9 @@ class _HeroVerificationPendingScreenState
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     } else {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Unable to open WhatsApp'),
@@ -54,7 +56,9 @@ class _HeroVerificationPendingScreenState
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
     } else {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Unable to open phone dialer'),

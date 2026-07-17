@@ -61,18 +61,24 @@ class _HeroSosScreenState extends State<HeroSosScreen> {
       barrierDismissible: false,
       builder: (_) => const _SosCountdownDialog(),
     );
-    if (shouldSend != true || !mounted) return;
+    if (shouldSend != true || !mounted) {
+      return;
+    }
     await _sendSosAlert(user);
   }
 
   Future<void> _sendSosAlert(User user) async {
-    if (_sendingSos) return;
+    if (_sendingSos) {
+      return;
+    }
     setState(() => _sendingSos = true);
 
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Please enable GPS to send an SOS alert.'),
@@ -89,7 +95,9 @@ class _HeroSosScreenState extends State<HeroSosScreen> {
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Location permission is required for SOS.'),
@@ -102,7 +110,9 @@ class _HeroSosScreenState extends State<HeroSosScreen> {
 
       final pos = await LocationService().getCurrentLocation();
       if (pos == null) {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Could not get current location for SOS.'),
@@ -154,7 +164,9 @@ class _HeroSosScreenState extends State<HeroSosScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _sendingSos = false);
+      if (mounted) {
+        setState(() => _sendingSos = false);
+      }
     }
   }
 

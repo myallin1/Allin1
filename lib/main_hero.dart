@@ -85,11 +85,15 @@ void _initGlobalHeroPingListener() {
       (event) async {
         final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
         final requestId = event.snapshot.key ?? '';
-        if (pingData == null || requestId.isEmpty) return;
+        if (pingData == null || requestId.isEmpty) {
+          return;
+        }
 
         // Expiry check
         final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
-        if (pingExpiresAt == null) return;
+        if (pingExpiresAt == null) {
+          return;
+        }
         if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
           debugPrint('[GlobalPing] Expired ping — removing: $requestId');
           await FirebaseDatabase.instance
@@ -144,10 +148,14 @@ void _initGlobalHeroPingListener() {
       (event) async {
         final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
         final requestId = event.snapshot.key ?? '';
-        if (pingData == null || requestId.isEmpty) return;
+        if (pingData == null || requestId.isEmpty) {
+          return;
+        }
 
         final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
-        if (pingExpiresAt == null) return;
+        if (pingExpiresAt == null) {
+          return;
+        }
         if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
           debugPrint('[GlobalServicePing] Expired ping — removing: $requestId');
           await FirebaseDatabase.instance
@@ -256,7 +264,9 @@ class HeroApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        if (kIsWeb) HeroWebAudioService().unlock();
+        if (kIsWeb) {
+          HeroWebAudioService().unlock();
+        }
       },
       child: MaterialApp(
         navigatorKey: navigatorKey,

@@ -168,7 +168,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Auto-show the daily Paytm Soundbox scratch card once per calendar day.
     // Runs after first frame so a bottom sheet can be shown safely.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       if (!_alreadyScratchedToday()) {
         _showScratchCardModal();
       }
@@ -187,7 +189,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _silentBackupIfNeeded() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      return;
+    }
     try {
       final lastBackupStr = HiveCache.get('lastCoinsBackupDate') as String?;
       final now = DateTime.now();
@@ -202,7 +206,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
 
-      if (!shouldBackup) return;
+      if (!shouldBackup) {
+        return;
+      }
       final currentCoins =
           (HiveCache.get(HiveCache.kWalletBalance) as num?)?.toDouble() ?? 0.0;
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set(
@@ -300,7 +306,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
+        if (didPop) {
+          return;
+        }
         if (_navIndex != 0) {
           _goTab(0);
           return;
@@ -2203,9 +2211,13 @@ class _NJServiceMarqueeState extends State<_NJServiceMarquee> {
 
   void _startMarquee() {
     _timer = Timer.periodic(const Duration(milliseconds: 16), (_) {
-      if (!mounted || !_sc.hasClients) return;
+      if (!mounted || !_sc.hasClients) {
+        return;
+      }
       final max = _sc.position.maxScrollExtent;
-      if (max <= 0) return;
+      if (max <= 0) {
+        return;
+      }
       final next = _sc.offset + 0.8;
       if (next >= max) {
         _sc.jumpTo(0);
@@ -3445,9 +3457,13 @@ class _IconMarqueeState extends State<_IconMarquee>
 
   void _startMarquee() {
     _timer = Timer.periodic(const Duration(milliseconds: 30), (_) {
-      if (!mounted || !_controller.hasClients) return;
+      if (!mounted || !_controller.hasClients) {
+        return;
+      }
       final max = _controller.position.maxScrollExtent;
-      if (max <= 0) return;
+      if (max <= 0) {
+        return;
+      }
       final next = _controller.offset + 1.0;
       if (next >= max) {
         _controller.jumpTo(0);

@@ -43,7 +43,9 @@ class _HeroBuddyFormScreenState extends State<HeroBuddyFormScreen> {
     }
     setState(() => _isSearching = true);
     await Future.delayed(const Duration(seconds: 15));
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     setState(() => _isSearching = false);
     _showTimeoutDialog();
   }

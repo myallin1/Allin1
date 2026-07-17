@@ -21,7 +21,9 @@ class SoundboxEasterEggService extends ChangeNotifier {
 
   // ── Call once at app startup (e.g., in main.dart or ChangeNotifierProvider) ─
   Future<void> init() async {
-    if (_initialized) return;
+    if (_initialized) {
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     _isHiddenGlobally = prefs.getBool(_kHiddenKey) ?? false;
     _tapCount = prefs.getInt(_kTapKey) ?? 0;
@@ -47,7 +49,9 @@ class SoundboxEasterEggService extends ChangeNotifier {
 
   // ── Permanently hide — writes to SharedPreferences ───────────────
   Future<void> hideGlobally() async {
-    if (_isHiddenGlobally) return;
+    if (_isHiddenGlobally) {
+      return;
+    }
     _isHiddenGlobally = true;
     notifyListeners();
 

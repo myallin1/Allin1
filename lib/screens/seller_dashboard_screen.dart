@@ -54,11 +54,15 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
 
   Future<void> _loadProfile() async {
     final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      return;
+    }
 
     try {
       final seller = await _service.getSeller(uid);
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       if (seller == null) {
         Navigator.pushReplacement(
@@ -110,7 +114,9 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   }
 
   Future<void> _toggleOnlineStatus() async {
-    if (_seller == null) return;
+    if (_seller == null) {
+      return;
+    }
     final newStatus = !_seller!.isOpen;
     try {
       await _service.updateSellerProfile(_seller!.id, {
@@ -152,7 +158,9 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   }
 
   Future<void> _navigateToMenuSetup() async {
-    if (_seller == null) return;
+    if (_seller == null) {
+      return;
+    }
     final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute<bool>(

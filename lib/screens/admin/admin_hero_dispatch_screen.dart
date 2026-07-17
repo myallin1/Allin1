@@ -97,7 +97,9 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
       (event) {
         final raw = event.snapshot.value;
         if (raw is! Map) {
-          if (mounted) setState(() => _onlineHeroes = []);
+          if (mounted) {
+            setState(() => _onlineHeroes = []);
+          }
           return;
         }
 
@@ -135,7 +137,9 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
           debugPrint('online_heroes parse error: $e');
         }
 
-        if (mounted) setState(() => _onlineHeroes = heroes);
+        if (mounted) {
+          setState(() => _onlineHeroes = heroes);
+        }
       },
       onError: (e) {
         if (mounted) {

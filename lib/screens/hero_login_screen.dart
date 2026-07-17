@@ -341,7 +341,9 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
   }
 
   Future<void> _loginWithGoogle() async {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     setState(() => _isLoading = true);
 
     const googleWebClientId =
@@ -355,7 +357,9 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
     try {
       final googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
-        if (mounted) setState(() => _isLoading = false);
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
         return;
       }
 
@@ -368,14 +372,18 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
       final userCredential =
           await FirebaseAuth.instance.signInWithCredential(credential);
       final user = userCredential.user;
-      if (user == null) throw Exception('User not found after Google sign-in');
+      if (user == null) {
+        throw Exception('User not found after Google sign-in');
+      }
 
       final heroDoc = await FirebaseFirestore.instance
           .collection('heroes')
           .doc(user.uid)
           .get();
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       if (!heroDoc.exists) {
         Navigator.pushReplacement(
@@ -408,7 +416,9 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
       await FirebaseAuth.instance.signOut();
       await googleSignIn.signOut();
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Your account is pending Admin approval'),
@@ -416,7 +426,9 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
         ),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Google sign-in failed: $e'),
@@ -424,7 +436,9 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
         ),
       );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

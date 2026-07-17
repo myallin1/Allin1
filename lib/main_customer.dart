@@ -61,7 +61,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 Future<void> _ensureFirebaseInitialized() async {
-  if (Firebase.apps.isNotEmpty) return;
+  if (Firebase.apps.isNotEmpty) {
+    return;
+  }
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -156,9 +158,13 @@ void main() async {
 Future<void> _restoreActiveRideIfNeeded() async {
   try {
     final cached = await HiveCache.get<Map>(HiveCache.kActiveRide);
-    if (cached == null) return;
+    if (cached == null) {
+      return;
+    }
     final rideDocId = cached['rideDocId'] as String?;
-    if (rideDocId == null || rideDocId.isEmpty) return;
+    if (rideDocId == null || rideDocId.isEmpty) {
+      return;
+    }
     final snap = await FirebaseFirestore.instance
         .collection('rides')
         .doc(rideDocId)

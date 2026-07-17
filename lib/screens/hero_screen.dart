@@ -128,7 +128,9 @@ class _CaptainScreenState extends State<CaptainScreen>
 
   Future<void> _acceptRide(String rideId, Map<String, dynamic> data) async {
     final captain = FirebaseAuth.instance.currentUser;
-    if (captain == null) return;
+    if (captain == null) {
+      return;
+    }
     try {
       await FirebaseFirestore.instance.collection('rides').doc(rideId).update({
         'status': 'accepted',
@@ -144,7 +146,9 @@ class _CaptainScreenState extends State<CaptainScreen>
       }
       _showAcceptedSheet(rideId, data);
     } on FirebaseException catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(e.message ?? 'Unknown Firebase error'),
@@ -153,7 +157,9 @@ class _CaptainScreenState extends State<CaptainScreen>
         ),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error: $e'),
@@ -177,7 +183,9 @@ class _CaptainScreenState extends State<CaptainScreen>
         (rideData['estimatedFare'] as num?)?.toDouble() ??
         0.0;
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     // Show offline payment confirmation before completing
     final confirmed = await showModalBottomSheet<bool>(
@@ -191,7 +199,9 @@ class _CaptainScreenState extends State<CaptainScreen>
       builder: (_) => _EndRidePaymentSheet(fare: fare),
     );
 
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !mounted) {
+      return;
+    }
 
     // ── 1. Stop GPS location updates ──
     _stopLocationUpdates();
@@ -226,7 +236,9 @@ class _CaptainScreenState extends State<CaptainScreen>
     // ── 5. Reload today's stats ──
     await _loadTodayStats();
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(

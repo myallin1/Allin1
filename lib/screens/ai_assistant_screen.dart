@@ -93,7 +93,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   }
 
   void _trimMessages() {
-    if (_messages.length <= _maxMessages) return;
+    if (_messages.length <= _maxMessages) {
+      return;
+    }
     final excess = _messages.length - _maxMessages;
     _messages.removeRange(1, 1 + excess);
   }

@@ -47,7 +47,9 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
     }
 
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
@@ -70,7 +72,9 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         ),
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       await Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -90,7 +94,9 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
     }
   }
 

@@ -435,7 +435,9 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       return;
     }
     _handledPaidFlow = true;
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     final rating = await showDialog<int>(
       context: context,
       barrierDismissible: false,
@@ -471,7 +473,9 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
         debugPrint('[Rating] Save failed: $e');
       }
     }
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const BikeBookingScreen()),
       (route) => false,
@@ -888,7 +892,9 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
 
   // RTDB listener for live captain GPS with smooth animation (Zero-Read Rule)
   void _startCaptainLocationTracking(String? heroId) {
-    if (heroId == null || heroId.isEmpty) return;
+    if (heroId == null || heroId.isEmpty) {
+      return;
+    }
     if (_trackedHeroId == heroId && _captainLocationSub != null) {
       return;
     }
@@ -898,7 +904,9 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
         .ref('live_locations/${widget.rideDocId}')
         .onValue
         .listen((event) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       final data = event.snapshot.value as Map<dynamic, dynamic>?;
       if (data == null) {
         return;
@@ -909,7 +917,9 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       final heading = (data['heading'] as num?)?.toDouble();
       final vehicleType =
           (data['vehicleType'] ?? data['heroVehicleType'])?.toString();
-      if (lat == null || lng == null) return;
+      if (lat == null || lng == null) {
+        return;
+      }
 
       if (mounted) {
         _applyHeroLocationUpdate(
@@ -931,7 +941,9 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
+        if (didPop) {
+          return;
+        }
         _returnToRootSafely();
       },
       child: Scaffold(

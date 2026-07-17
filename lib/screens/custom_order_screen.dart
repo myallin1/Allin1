@@ -49,7 +49,9 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
     }
 
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
@@ -68,7 +70,9 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
         ),
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       await Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -88,7 +92,9 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
     }
   }
 

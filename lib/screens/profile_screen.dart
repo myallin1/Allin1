@@ -96,7 +96,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

@@ -125,7 +125,9 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
         .snapshots()
         .listen(
       (snapshot) {
-        if (mounted) setState(() => _pendingReview = snapshot.docs);
+        if (mounted) {
+          setState(() => _pendingReview = snapshot.docs);
+        }
       },
       onError: (Object e) {
         debugPrint('[AdminNewOrders] Pending-review listener error: $e');
@@ -146,7 +148,9 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
         .snapshots()
         .listen(
           (snapshot) {
-            if (mounted) setState(() => _adminManagedActive = snapshot.docs);
+            if (mounted) {
+              setState(() => _adminManagedActive = snapshot.docs);
+            }
           },
           onError: (Object e) {
             debugPrint('[AdminNewOrders] Admin-managed listener error: $e');
@@ -155,7 +159,9 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
   }
 
   Future<void> _call(String phone) async {
-    if (phone.isEmpty) return;
+    if (phone.isEmpty) {
+      return;
+    }
     final uri = Uri.parse('tel:$phone');
     if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
@@ -458,7 +464,9 @@ class _AssignHeroSheetState extends State<_AssignHeroSheet> {
         FirebaseDatabase.instance.ref('online_heroes').onValue.listen((event) {
       final raw = event.snapshot.value;
       if (raw is! Map) {
-        if (mounted) setState(() => _onlineHeroes = []);
+        if (mounted) {
+          setState(() => _onlineHeroes = []);
+        }
         return;
       }
       final heroes = <Map<String, dynamic>>[];
@@ -473,7 +481,9 @@ class _AssignHeroSheetState extends State<_AssignHeroSheet> {
           });
         }
       });
-      if (mounted) setState(() => _onlineHeroes = heroes);
+      if (mounted) {
+        setState(() => _onlineHeroes = heroes);
+      }
     });
   }
 
@@ -492,7 +502,9 @@ class _AssignHeroSheetState extends State<_AssignHeroSheet> {
         heroName: hero['name'] as String,
         heroPhone: hero['phone'] as String,
       );
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        Navigator.pop(context);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -500,7 +512,9 @@ class _AssignHeroSheetState extends State<_AssignHeroSheet> {
         );
       }
     } finally {
-      if (mounted) setState(() => _assigning = false);
+      if (mounted) {
+        setState(() => _assigning = false);
+      }
     }
   }
 
@@ -635,7 +649,9 @@ class _ServiceRequestManualStatusControlState
     } catch (e) {
       debugPrint('[ServiceRequestManualStatusControl] advanceStatus error: $e');
     } finally {
-      if (mounted) setState(() => _updating = false);
+      if (mounted) {
+        setState(() => _updating = false);
+      }
     }
   }
 

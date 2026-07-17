@@ -37,7 +37,9 @@ class _BannerAdsSliderState extends State<BannerAdsSlider> {
     super.initState();
     _pageController = PageController(viewportFraction: widget.viewportFraction);
     _timer = Timer.periodic(const Duration(seconds: 3), (timer) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _currentPage =
             (_currentPage < widget.imageUrls.length - 1) ? _currentPage + 1 : 0;

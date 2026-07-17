@@ -393,7 +393,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     _initLocationTracking();
     unawaited(_restoreActiveRideIfNeeded());
     Timer(const Duration(seconds: 1), () {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       _ensureDummyTrafficInitialized();
       unawaited(_hydrateDummyTrafficRoutes());
       _refreshHeroMarkers();
@@ -810,7 +812,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         'cancelledBy': 'customer',
         'cancelledAt': FieldValue.serverTimestamp(),
       });
-      if (mounted) _showError('Ride cancelled successfully');
+      if (mounted) {
+        _showError('Ride cancelled successfully');
+      }
     } catch (e) {
       debugPrint('[BikeBookingScreen] Failed to cancel active ride: $e');
       if (mounted) {
@@ -930,7 +934,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   Future<void> _loadFareConfig() async {
     try {
       final fares = await CategoryGatewayService().loadRideFares();
-      if (mounted) setState(() => _fares = fares);
+      if (mounted) {
+        setState(() => _fares = fares);
+      }
     } catch (e) {
       debugPrint('Fare load error: $e');
     }
@@ -1033,7 +1039,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   void _updateUserLocation(LatLng position, {bool animateMap = false}) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     _myPositionLatLng = position;
     if (_pickupController.text.trim().isEmpty ||
         _pickupController.text == 'Current Location') {
@@ -1051,7 +1059,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     if (_pickupLocation != null && _dropLocation != null) {
       unawaited(_loadRoadRoute());
     }
-    if (animateMap) _moveMainMap(position, 15.5);
+    if (animateMap) {
+      _moveMainMap(position, 15.5);
+    }
   }
 
   String get _selectedVehicleTypeKey {
@@ -1347,7 +1357,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   void _showError(String message) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -1639,7 +1651,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       _showError('Authentication required');
       // Redirect to login after a brief delay so the user sees the error
       Future.delayed(const Duration(seconds: 1), () {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         Navigator.of(context).pushReplacement(
           MaterialPageRoute<void>(
             builder: (_) => const LoginScreen(
@@ -1735,7 +1749,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         debugPrint('[BikeBookingScreen] Background ride creation failed: $e');
       });
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       // ── Instant Navigation: User sees the search screen immediately ──
       unawaited(

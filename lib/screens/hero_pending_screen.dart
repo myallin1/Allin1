@@ -50,7 +50,9 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
     final currentUser = FirebaseAuth.instance.currentUser;
 
     if (currentUser == null) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute<void>(builder: (_) => const HeroLoginScreen()),
@@ -64,7 +66,9 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
         .doc(currentUser.uid)
         .snapshots()
         .listen((snapshot) async {
-      if (_isNavigating) return;
+      if (_isNavigating) {
+        return;
+      }
 
       if (!snapshot.exists) {
         _triggerNavigation(() async {
@@ -123,11 +127,15 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
   }
 
   void _triggerNavigation(FutureOr<void> Function() navigateAction) {
-    if (_isNavigating) return;
+    if (_isNavigating) {
+      return;
+    }
     _isNavigating = true;
     _statusSubscription?.cancel();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       await navigateAction();
     });
   }

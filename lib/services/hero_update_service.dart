@@ -60,7 +60,9 @@ class HeroUpdateService {
 
   /// Mobile update handler - Downloads and installs APK.
   Future<void> _handleMobileUpdate(BuildContext context) async {
-    if (_isDownloading) return;
+    if (_isDownloading) {
+      return;
+    }
 
     try {
       _isDownloading = true;

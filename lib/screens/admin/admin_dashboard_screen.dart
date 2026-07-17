@@ -754,7 +754,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     if (rtdbSnap.hasData &&
                         rtdbSnap.data!.snapshot.value != null) {
                       final val = rtdbSnap.data!.snapshot.value;
-                      if (val is Map) activeNow = val.length;
+                      if (val is Map) {
+                        activeNow = val.length;
+                      }
                     }
                     return _statCard(
                       '⚡',

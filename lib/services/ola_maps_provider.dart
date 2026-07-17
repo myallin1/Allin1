@@ -74,7 +74,9 @@ class OlaMapsProvider extends MapProvider {
                 ? label
                 : '$label, Erode, Tamil Nadu',
           );
-          if (geocoded != null) results.add(geocoded);
+          if (geocoded != null) {
+            results.add(geocoded);
+          }
         }
 
         if (results.isNotEmpty) return _dedupeResults(results);

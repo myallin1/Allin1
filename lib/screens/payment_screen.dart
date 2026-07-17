@@ -97,13 +97,17 @@ class _PaymentScreenState extends State<PaymentScreen>
 
   Future<void> _checkPaymentStatus() async {
     final rideDocId = _rideDocId;
-    if (rideDocId == null) return;
+    if (rideDocId == null) {
+      return;
+    }
     final snap = await FirebaseFirestore.instance
         .collection('rides')
         .doc(rideDocId)
         .get();
     final data = snap.data();
-    if (data == null) return;
+    if (data == null) {
+      return;
+    }
     final paymentStatus = (data['paymentStatus'] as String? ?? '').trim();
     if ([
       'paid',

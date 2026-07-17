@@ -825,7 +825,9 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   }
 
   Future<void> _markAllRead(BuildContext context, String? userId) async {
-    if (userId == null) return;
+    if (userId == null) {
+      return;
+    }
 
     final snapshot = await FirebaseFirestore.instance
         .collection('notifications')

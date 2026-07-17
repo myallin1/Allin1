@@ -67,13 +67,17 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
         final filteredItems =
             DefaultMenuData.filterByHotelType(seller.hotelType);
         _buildItemList(filteredItems);
-        if (mounted) setState(() => _isLoadingSeller = false);
+        if (mounted) {
+          setState(() => _isLoadingSeller = false);
+        }
       }
       _loadExistingMenuItems();
     } catch (_) {
       final items = DefaultMenuData.filterByHotelType('both');
       _buildItemList(items);
-      if (mounted) setState(() => _isLoadingSeller = false);
+      if (mounted) {
+        setState(() => _isLoadingSeller = false);
+      }
     }
   }
 
@@ -156,7 +160,9 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
       final batchItems = <MenuItemModel>[];
       for (final entries in _categoryItems.values) {
         for (final entry in entries) {
-          if (!entry.enabled) continue;
+          if (!entry.enabled) {
+            continue;
+          }
           final price = double.parse(entry.priceController.text.trim());
           batchItems.add(
             MenuItemModel(
@@ -177,7 +183,9 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
 
       await _service.batchUpsertMenuItems(widget.sellerId, batchItems);
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -188,7 +196,9 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
 
       Navigator.pop(context, true);
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to save menu: $e'),
@@ -196,7 +206,9 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
         ),
       );
     } finally {
-      if (mounted) setState(() => _isSaving = false);
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
   }
 

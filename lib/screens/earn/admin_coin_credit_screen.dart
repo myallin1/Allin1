@@ -123,7 +123,9 @@ class _AdminCoinCreditScreenState extends State<AdminCoinCreditScreen> {
         );
       }
     }
-    if (mounted) setState(() => _processing = false);
+    if (mounted) {
+      setState(() => _processing = false);
+    }
   }
 
   Future<void> _moveToPending(String txnId, String userId, int coins) async {

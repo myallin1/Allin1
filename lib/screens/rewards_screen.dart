@@ -92,7 +92,9 @@ class _RewardsScreenState extends State<RewardsScreen>
           DateTime.now().difference(lastQuizWonAt.toDate()) <
               const Duration(hours: 24);
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _quizLockedForToday = locked;
         _activeCouponCode = activeCoupon is Map<String, dynamic>
@@ -109,7 +111,9 @@ class _RewardsScreenState extends State<RewardsScreen>
   }
 
   Future<void> _openPaytmQuizScratchDialog() async {
-    if (_checkingQuizLock) return;
+    if (_checkingQuizLock) {
+      return;
+    }
 
     if (_quizLockedForToday) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -520,7 +524,9 @@ class _PaytmQuizScratchDialogState extends State<_PaytmQuizScratchDialog> {
   }
 
   void _startQuiz() {
-    if (_stage != _QuizDialogStage.scratch) return;
+    if (_stage != _QuizDialogStage.scratch) {
+      return;
+    }
     setState(() {
       _stage = _QuizDialogStage.quiz;
       _secondsLeft = 15;
@@ -586,7 +592,9 @@ class _PaytmQuizScratchDialogState extends State<_PaytmQuizScratchDialog> {
         },
         SetOptions(merge: true),
       );
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _couponCode = code;
         _savingWin = false;

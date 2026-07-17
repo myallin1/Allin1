@@ -46,13 +46,17 @@ class _HeroHistoryScreenState extends State<HeroHistoryScreen>
 
   Future<void> _loadAggregates() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      return;
+    }
     try {
       final heroDoc = await FirebaseFirestore.instance
           .collection('heroes')
           .doc(uid)
           .get(const GetOptions(source: Source.cache));
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       final data = heroDoc.data() ?? {};
       setState(() {
         _aggregateEarnings = (data['totalEarnings'] as num?)?.toDouble() ?? 0;
@@ -64,7 +68,9 @@ class _HeroHistoryScreenState extends State<HeroHistoryScreen>
           .collection('heroes')
           .doc(uid)
           .get(const GetOptions(source: Source.server));
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       final serverData = serverDoc.data() ?? {};
       setState(() {
         _aggregateEarnings =

@@ -8,12 +8,16 @@ class AudioPlatform {
   bool _unlocked = false;
 
   void unlock() {
-    if (_unlocked) return;
+    if (_unlocked) {
+      return;
+    }
     try {
       final jsWindow = js.context;
       final audioCtxConstructor =
           jsWindow['AudioContext'] ?? jsWindow['webkitAudioContext'];
-      if (audioCtxConstructor == null) return;
+      if (audioCtxConstructor == null) {
+        return;
+      }
 
       final ctx = js.JsObject(audioCtxConstructor as js.JsFunction, []);
       ctx.callMethod('resume');
@@ -28,12 +32,16 @@ class AudioPlatform {
   }
 
   void playAlert() {
-    if (!_unlocked) return;
+    if (!_unlocked) {
+      return;
+    }
     try {
       final jsWindow = js.context;
       final audioCtxConstructor =
           jsWindow['AudioContext'] ?? jsWindow['webkitAudioContext'];
-      if (audioCtxConstructor == null) return;
+      if (audioCtxConstructor == null) {
+        return;
+      }
 
       final ctx = js.JsObject(audioCtxConstructor as js.JsFunction, []);
       final now = ctx['currentTime'] as num;

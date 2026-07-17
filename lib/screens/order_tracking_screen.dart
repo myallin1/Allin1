@@ -76,14 +76,18 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
         'placedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _orderId = ref.id;
         _uploading = false;
         _orderStream = ref.snapshots();
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _uploading = false;
         _error = e.toString();
