@@ -386,7 +386,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
           .update({'currentPingHeroId': heroId});
 
       // ── Step 2: Write ping to hero's inbox ────────────────────
-      final pingExpiresAt = DateTime.now().toUtc().millisecondsSinceEpoch + 10000;
+      final pingExpiresAt = DateTime.now().toUtc().millisecondsSinceEpoch + 15000;
       await FirebaseDatabase.instance
           .ref('hero_pings/$heroId/$_requestId')
           .set({
@@ -413,7 +413,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       // ── Step 3: Wait 10 seconds — check every 1s for acceptance ─
       // FIX: This loop now ACTUALLY BLOCKS because _startSequentialPinging
       // is awaited by _startRideCreation. Each 1-second delay is real.
-      for (int w = 0; w < 10; w++) {
+      for (int w = 0; w < 15; w++) {
         await Future.delayed(const Duration(seconds: 1));
 
         // Early exit if ride was accepted/cancelled while waiting
@@ -901,16 +901,28 @@ class _RideSearchScreenState extends State<RideSearchScreen>
                     animation: _radarAnim,
                     builder: (_, __) => SizedBox(
                       width: 140, height: 140,
-                      child: CustomPaint(
-                        painter: _RadarPainter(_radarAnim.value),
-                        child: Center(
-                          child: Container(
-                            width: 60, height: 60,
-                            decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: _accent, width: 2),
-                              boxShadow: [BoxShadow(color: _accent.withValues(alpha: 0.4), blurRadius: 16)]),
-                            child: const Center(child: Text('🏍️', style: TextStyle(fontSize: 28))),
+                      child: Stack(
+                        children: [
+                          CustomPaint(
+                            size: const Size(140, 140),
+                            painter: _RadarPainter(_radarAnim.value),
                           ),
-                        ),
+                          // Decorative-only vehicle icons — purely cosmetic,
+                          // zero Firestore/RTDB reads. Does NOT touch
+                          // _fetchNearbyHeroes()/_nearbyMarkers/live_locations
+                          // or any real hero-matching/ping logic.
+                          const Positioned.fill(
+                            child: _DecorativeRadarVehicles(),
+                          ),
+                          Center(
+                            child: Container(
+                              width: 60, height: 60,
+                              decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: _accent, width: 2),
+                                boxShadow: [BoxShadow(color: _accent.withValues(alpha: 0.4), blurRadius: 16)]),
+                              child: const Center(child: Text('🏍️', style: TextStyle(fontSize: 28))),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -1120,4 +1132,154 @@ class _RadarPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RadarPainter oldDelegate) => oldDelegate.progress != progress;
+}
+
+// ── Decorative Radar Vehicles ───────────────────────────────────
+// Purely cosmetic layer for the "Finding a Hero" radar — zero
+// Firestore/RTDB reads, entirely client-side hardcoded/randomized
+// icons. Does NOT represent real hero positions or availability;
+// the actual hero-matching pipeline (_fetchNearbyHeroes(),
+// _nearbyMarkers, live_locations, ping/accept flow) is completely
+// separate and untouched by this widget. Icons are biased toward 4
+// fixed angular "zones" loosely standing in for well-known Erode
+// landmarks (Erode Bus Stand, P.S. Park, Erode Junction, Nadarmedu)
+// — this is purely visual clustering, not real geographic/LatLng
+// mapping.
+enum _DecorativeVehicleKind { bike, auto, car, miniTruck, lorry }
+
+class _DecorativeVehicleSpec {
+  const _DecorativeVehicleSpec({
+    required this.kind,
+    required this.baseAngle,
+    required this.radiusFraction,
+    required this.phase,
+  });
+
+  final _DecorativeVehicleKind kind;
+  final double baseAngle;
+  final double radiusFraction;
+  final double phase;
+}
+
+class _DecorativeRadarVehicles extends StatefulWidget {
+  const _DecorativeRadarVehicles();
+
+  @override
+  State<_DecorativeRadarVehicles> createState() =>
+      _DecorativeRadarVehiclesState();
+}
+
+class _DecorativeRadarVehiclesState extends State<_DecorativeRadarVehicles>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _driftCtrl;
+  late final List<_DecorativeVehicleSpec> _specs;
+
+  // Roughly evenly spaced zone angles, one per landmark — visual
+  // clustering only, no real coordinates involved.
+  static const List<double> _zoneAngles = <double>[-pi / 2, 0, pi / 2, pi];
+  static const int _vehicleCount = 12;
+
+  @override
+  void initState() {
+    super.initState();
+    _driftCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 6),
+    )..repeat();
+    _specs = _generateSpecs();
+  }
+
+  @override
+  void dispose() {
+    _driftCtrl.dispose();
+    super.dispose();
+  }
+
+  List<_DecorativeVehicleSpec> _generateSpecs() {
+    final rnd = Random();
+    final specs = <_DecorativeVehicleSpec>[];
+    for (var i = 0; i < _vehicleCount; i++) {
+      final nearZone = rnd.nextDouble() < 0.7;
+      final double angle;
+      if (nearZone) {
+        final zone = _zoneAngles[rnd.nextInt(_zoneAngles.length)];
+        angle = zone + (rnd.nextDouble() - 0.5) * (pi / 3);
+      } else {
+        angle = rnd.nextDouble() * 2 * pi;
+      }
+      specs.add(_DecorativeVehicleSpec(
+        kind: _pickKind(rnd),
+        baseAngle: angle,
+        radiusFraction: 0.35 + rnd.nextDouble() * 0.55,
+        phase: rnd.nextDouble() * 2 * pi,
+      ));
+    }
+    return specs;
+  }
+
+  // Weighted toward bike, per spec — more bike icons should cluster
+  // near the landmark zones than other vehicle types.
+  _DecorativeVehicleKind _pickKind(Random rnd) {
+    final r = rnd.nextDouble();
+    if (r < 0.50) return _DecorativeVehicleKind.bike;
+    if (r < 0.70) return _DecorativeVehicleKind.auto;
+    if (r < 0.85) return _DecorativeVehicleKind.car;
+    if (r < 0.95) return _DecorativeVehicleKind.miniTruck;
+    return _DecorativeVehicleKind.lorry;
+  }
+
+  String _emoji(_DecorativeVehicleKind kind) {
+    switch (kind) {
+      case _DecorativeVehicleKind.bike:
+        return '🏍️';
+      case _DecorativeVehicleKind.auto:
+        return '🛺';
+      case _DecorativeVehicleKind.car:
+        return '🚗';
+      case _DecorativeVehicleKind.miniTruck:
+        return '🚚';
+      case _DecorativeVehicleKind.lorry:
+        return '🚛';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final diameter = constraints.maxWidth < constraints.maxHeight
+            ? constraints.maxWidth
+            : constraints.maxHeight;
+        final center = diameter / 2;
+        final maxRadius = diameter / 2;
+        return AnimatedBuilder(
+          animation: _driftCtrl,
+          builder: (_, __) {
+            return Stack(
+              children: _specs.map((spec) {
+                // Gentle sinusoidal drift so icons feel alive — purely
+                // cosmetic, not tied to any real motion/location data.
+                final drift = sin(_driftCtrl.value * 2 * pi + spec.phase);
+                final radius = maxRadius * spec.radiusFraction + drift * 4;
+                final angle = spec.baseAngle + drift * 0.05;
+                final dx = center + radius * cos(angle);
+                final dy = center + radius * sin(angle);
+                return Positioned(
+                  left: dx - 10,
+                  top: dy - 10,
+                  child: Opacity(
+                    opacity: 0.55,
+                    child: Text(
+                      _emoji(spec.kind),
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        );
+      },
+    );
+  }
 }
