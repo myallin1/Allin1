@@ -267,8 +267,9 @@ class ApiService {
       (_dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
         final client = HttpClient();
         // Connection pooling settings
-        client.maxConnectionsPerHost = 10;
-        client.idleTimeout = const Duration(seconds: 30);
+        client
+          ..maxConnectionsPerHost = 10
+          ..idleTimeout = const Duration(seconds: 30);
         return client;
       };
     }

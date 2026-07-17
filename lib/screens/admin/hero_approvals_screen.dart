@@ -32,16 +32,16 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
     Iterable<QueryDocumentSnapshot> docs,
     String field,
   ) {
-    final sorted = docs.toList();
-    sorted.sort((a, b) {
-      final aData = a.data()! as Map<String, dynamic>;
-      final bData = b.data()! as Map<String, dynamic>;
-      final aTs = aData[field] as Timestamp?;
-      final bTs = bData[field] as Timestamp?;
-      final aMs = aTs?.millisecondsSinceEpoch ?? 0;
-      final bMs = bTs?.millisecondsSinceEpoch ?? 0;
-      return bMs.compareTo(aMs);
-    });
+    final sorted = docs.toList()
+      ..sort((a, b) {
+        final aData = a.data()! as Map<String, dynamic>;
+        final bData = b.data()! as Map<String, dynamic>;
+        final aTs = aData[field] as Timestamp?;
+        final bTs = bData[field] as Timestamp?;
+        final aMs = aTs?.millisecondsSinceEpoch ?? 0;
+        final bMs = bTs?.millisecondsSinceEpoch ?? 0;
+        return bMs.compareTo(aMs);
+      });
     return sorted;
   }
 
@@ -654,11 +654,11 @@ class _HeroApprovalCard extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('uid', uid));
-    properties.add(DiagnosticsProperty<Map<String, dynamic>>('data', data));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onView', onView));
     properties
-        .add(ObjectFlagProperty<VoidCallback>.has('onApprove', onApprove));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onReject', onReject));
+      ..add(StringProperty('uid', uid))
+      ..add(DiagnosticsProperty<Map<String, dynamic>>('data', data))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onView', onView))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onApprove', onApprove))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onReject', onReject));
   }
 }

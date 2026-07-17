@@ -478,8 +478,9 @@ class CredentialCacheService {
       final operation = OfflineOperation.fromJson(
         jsonDecode(data as String) as Map<String, dynamic>,
       );
-      operation.retryCount = retryCount;
-      operation.lastError = error;
+      operation
+        ..retryCount = retryCount
+        ..lastError = error;
 
       await _offlineQueueBoxInstance.put(
         operationId,
