@@ -117,12 +117,15 @@ class _HeroProfileTabState extends State<HeroProfileTab>
     }
     setState(() => _loggingOut = true);
     try {
-      await FirebaseFirestore.instance.collection('heroes').doc(user.uid).set({
-        'isOnline': false,
-        'status': 'offline',
-        'activeRideId': null,
-        'lastUpdated': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true),);
+      await FirebaseFirestore.instance.collection('heroes').doc(user.uid).set(
+        {
+          'isOnline': false,
+          'status': 'offline',
+          'activeRideId': null,
+          'lastUpdated': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
       await FirebaseDatabase.instance.ref('online_heroes/${user.uid}').remove();
       await FirebaseAuth.instance.signOut();
     } catch (e) {
@@ -253,52 +256,52 @@ class _HeroProfileTabState extends State<HeroProfileTab>
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                         const SizedBox(height: 12),
-                         SizedBox(
-                           width: double.infinity,
-                           child: ElevatedButton.icon(
-                             style: ElevatedButton.styleFrom(
-                               backgroundColor: Color(0xFF6C63FF),
-                               foregroundColor: Colors.white,
-                               padding: const EdgeInsets.symmetric(vertical: 12),
-                               shape: RoundedRectangleBorder(
-                                 borderRadius: BorderRadius.circular(16),
-                               ),
-                             ),
-                             onPressed: _openSettings,
-                             icon: const Icon(Icons.settings_rounded),
-                             label: Text(
-                               'Hero Settings',
-                               style: GoogleFonts.outfit(
-                                 fontSize: 12,
-                                 fontWeight: FontWeight.w800,
-                               ),
-                             ),
-                           ),
-                         ),
-                         const SizedBox(height: 8),
-                         SizedBox(
-                           width: double.infinity,
-                           child: ElevatedButton.icon(
-                             style: ElevatedButton.styleFrom(
-                               backgroundColor: _pink,
-                               foregroundColor: Colors.white,
-                               padding: const EdgeInsets.symmetric(vertical: 12),
-                               shape: RoundedRectangleBorder(
-                                 borderRadius: BorderRadius.circular(16),
-                               ),
-                             ),
-                             onPressed: _openHelpSupport,
-                             icon: const Icon(Icons.support_agent_rounded),
-                             label: Text(
-                               'Help & Support',
-                               style: GoogleFonts.outfit(
-                                 fontSize: 12,
-                                 fontWeight: FontWeight.w800,
-                               ),
-                             ),
-                           ),
-                         ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF6C63FF),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            onPressed: _openSettings,
+                            icon: const Icon(Icons.settings_rounded),
+                            label: Text(
+                              'Hero Settings',
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _pink,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            onPressed: _openHelpSupport,
+                            icon: const Icon(Icons.support_agent_rounded),
+                            label: Text(
+                              'Help & Support',
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         SizedBox(
                           width: double.infinity,
@@ -306,7 +309,7 @@ class _HeroProfileTabState extends State<HeroProfileTab>
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF6C63FF),
                               foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
                               ),
@@ -330,18 +333,16 @@ class _HeroProfileTabState extends State<HeroProfileTab>
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFFFF4FA3),
                               foregroundColor: Colors.white,
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 12),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               elevation: 4,
-                              shadowColor:
-                                  const Color(0xFFFF4FA3).withValues(alpha: 0.4),
+                              shadowColor: const Color(0xFFFF4FA3)
+                                  .withValues(alpha: 0.4),
                             ),
                             onPressed: _downloadHeroApp,
-                            icon:
-                                const Icon(Icons.download_rounded, size: 18),
+                            icon: const Icon(Icons.download_rounded, size: 18),
                             label: Text(
                               'Download Latest App',
                               style: GoogleFonts.outfit(
@@ -490,8 +491,11 @@ class _HeroProfileTabState extends State<HeroProfileTab>
                 ),
               ),
             ),
-            const Icon(Icons.phone_in_talk_rounded,
-                color: Colors.white, size: 18,),
+            const Icon(
+              Icons.phone_in_talk_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
           ],
         ),
       ),
@@ -551,7 +555,6 @@ class _HeroProfileTabState extends State<HeroProfileTab>
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-
                 ],
               ),
             ),

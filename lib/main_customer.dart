@@ -1,4 +1,4 @@
-﻿// lib/main_customer.dart
+// lib/main_customer.dart
 // Erode Super App - CUSTOMER PWA Entry Point
 // Fixed: back button logout + routing + geolocator web crash
 
@@ -33,7 +33,6 @@ import 'services/hive_cache.dart';
 import 'services/local_sync_service.dart';
 import 'services/localization_service.dart';
 import 'services/map_service.dart';
-import 'services/session_service.dart';
 import 'services/soundbox_easter_egg_service.dart';
 import 'services/theme_service.dart';
 import 'widgets/soundbox_easter_egg_overlay.dart';
@@ -41,13 +40,13 @@ import 'widgets/soundbox_easter_egg_overlay.dart';
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   if (Firebase.apps.isEmpty) {
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true,
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-  );
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
 
     // Enable Firestore offline persistence
     FirebaseFirestore.instance.settings = const Settings(
@@ -171,7 +170,9 @@ Future<void> _restoreActiveRideIfNeeded() async {
       debugPrint('[main_customer] Stale active ride cleared: $status');
       return;
     }
-    debugPrint('[main_customer] Active ride restored: $rideDocId status=$status');
+    debugPrint(
+      '[main_customer] Active ride restored: $rideDocId status=$status',
+    );
   } catch (e) {
     debugPrint('[main_customer] Ride restore error: $e');
   }
@@ -345,10 +346,12 @@ class _CustomerHomeGateState extends State<_CustomerHomeGate> {
               .collection('users')
               .doc(user.uid)
               .get(const GetOptions(source: Source.cache))
-              .catchError((_) => FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(user.uid)
-                  .get()),
+              .catchError(
+                (_) => FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user.uid)
+                    .get(),
+              ),
           builder: (context, userSnapshot) {
             // Only show spinner on genuine first-ever cold start (no cache)
             if (userSnapshot.connectionState == ConnectionState.waiting &&
@@ -365,9 +368,7 @@ class _CustomerHomeGateState extends State<_CustomerHomeGate> {
             final needsSetup = phone.isEmpty || !isSetupComplete;
 
             final child = needsSetup
-                ? const ProfileSetupScreen(
-                    preferredRole: UserType.customer,
-                  )
+                ? const ProfileSetupScreen()
                 : const DashboardScreen();
 
             return child;

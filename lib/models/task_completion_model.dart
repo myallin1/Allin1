@@ -63,7 +63,9 @@ class TaskCompletionModel {
 
   // Factory from Firestore
   factory TaskCompletionModel.fromFirestore(
-      Map<String, dynamic> data, String id,) {
+    Map<String, dynamic> data,
+    String id,
+  ) {
     return TaskCompletionModel(
       completionId: id,
       taskId: data['taskId'] as String? ?? '',

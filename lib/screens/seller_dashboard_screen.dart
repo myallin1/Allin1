@@ -64,7 +64,8 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute<void>(
-              builder: (_) => const SellerOnboardingScreen()),
+            builder: (_) => const SellerOnboardingScreen(),
+          ),
         );
         return;
       }
@@ -85,7 +86,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
 
   void _listenToOrders(String sellerId) {
     _ordersSub = _service.listenToIncomingOrders(sellerId).listen(
-      (List<FoodOrderModel> orders) {
+      (orders) {
         if (mounted) {
           setState(() => _activeOrders = orders);
         }
@@ -158,7 +159,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         builder: (_) => SellerMenuSetupScreen(sellerId: _seller!.id),
       ),
     );
-    if (result == true) {
+    if (result ?? false) {
       await _loadMenuItemCount(_seller!.id);
     }
   }
@@ -426,8 +427,11 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
             ),
             child: Column(
               children: [
-                Icon(Icons.inbox_outlined,
-                    size: 48, color: _muted.withValues(alpha: 0.5)),
+                Icon(
+                  Icons.inbox_outlined,
+                  size: 48,
+                  color: _muted.withValues(alpha: 0.5),
+                ),
                 const SizedBox(height: 12),
                 Text(
                   'No incoming orders',
@@ -519,7 +523,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          '${(item.quantity ?? 1)}x ${(item.name ?? 'Unknown')}',
+                          '${item.quantity ?? 1}x ${item.name ?? 'Unknown'}',
                           style:
                               GoogleFonts.outfit(color: _muted, fontSize: 13),
                         ),

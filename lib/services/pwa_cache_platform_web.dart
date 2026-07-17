@@ -15,16 +15,14 @@ class PwaCachePlatform {
   Future<void> clearAndReload() async {
     try {
       // Step 1: Unregister all service worker registrations
-      final registrations = await web.window.navigator.serviceWorker
-          .getRegistrations()
-          .toDart;
+      final registrations =
+          await web.window.navigator.serviceWorker.getRegistrations().toDart;
       for (final reg in registrations.toDart) {
         await reg.unregister().toDart;
       }
 
       // Step 2: Clear all Cache Storage caches
-      final cacheKeys =
-          await web.window.caches.keys().toDart;
+      final cacheKeys = await web.window.caches.keys().toDart;
       for (final key in cacheKeys.toDart) {
         await web.window.caches.delete(key.toDart).toDart;
       }

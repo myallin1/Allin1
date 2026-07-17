@@ -51,7 +51,7 @@ class SellerApp extends StatelessWidget {
       },
       onGenerateRoute: (settings) {
         if (settings.name == '/seller-menu-setup') {
-          final sellerId = settings.arguments as String;
+          final sellerId = settings.arguments! as String;
           return MaterialPageRoute(
             builder: (_) => SellerMenuSetupScreen(sellerId: sellerId),
           );

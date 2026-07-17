@@ -64,8 +64,7 @@ class _HeroPremiumLoaderState extends State<HeroPremiumLoader>
     final Widget loaderCard = AnimatedBuilder(
       animation: _animationController,
       builder: (context, child) {
-        final double streakX =
-            -1.25 + (_animationController.value * 2.5);
+        final double streakX = -1.25 + (_animationController.value * 2.5);
         return ClipRRect(
           borderRadius: BorderRadius.circular(compact ? 28 : 36),
           child: Container(
@@ -136,8 +135,7 @@ class _HeroPremiumLoaderState extends State<HeroPremiumLoader>
                     vertical: compact ? 22 : 34,
                   ),
                   child: Column(
-                    mainAxisSize:
-                        compact ? MainAxisSize.min : MainAxisSize.max,
+                    mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
                       Transform.scale(

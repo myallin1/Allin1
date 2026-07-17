@@ -83,10 +83,13 @@ class LocalizationService extends ChangeNotifier {
       'use_as_destination_label': 'Use as Destination',
       'use_as_pickup_label': 'Use as Pickup',
       'pay_via_soundbox': 'Pay your bill via Paytm box',
-      'scan_soundbox_qr': 'Scan the physical soundbox QR and confirm once the amount is paid.',
+      'scan_soundbox_qr':
+          'Scan the physical soundbox QR and confirm once the amount is paid.',
       'awaiting_hero_payment': 'Waiting for Hero Confirmation...',
-      'scan_and_wait_hero': 'Please scan the Paytm Soundbox and wait while the Hero confirms your bill.',
-      'open_upi_scan_soundbox': 'Open Paytm through the UPI chooser, scan the Hero Paytm Soundbox, and complete the exact bill amount.',
+      'scan_and_wait_hero':
+          'Please scan the Paytm Soundbox and wait while the Hero confirms your bill.',
+      'open_upi_scan_soundbox':
+          'Open Paytm through the UPI chooser, scan the Hero Paytm Soundbox, and complete the exact bill amount.',
     },
     'ta': {
       'app_title': 'my allin1',
@@ -159,10 +162,13 @@ class LocalizationService extends ChangeNotifier {
       'use_as_destination_label': 'இறங்கும் இடமாக பயன்படுத்து',
       'use_as_pickup_label': 'பிக்கப் இடமாக பயன்படுத்து',
       'pay_via_soundbox': 'Paytm சவுண்ட்பாக்ஸ் மூலம் பில் செலுத்தவும்',
-      'scan_soundbox_qr': 'சவுண்ட்பாக்ஸ் QR ஐ ஸ்கேன் செய்து, பணம் செலுத்தியதும் உறுதிசெய்யவும்.',
+      'scan_soundbox_qr':
+          'சவுண்ட்பாக்ஸ் QR ஐ ஸ்கேன் செய்து, பணம் செலுத்தியதும் உறுதிசெய்யவும்.',
       'awaiting_hero_payment': 'ஹீரோ உறுதிப்படுத்தலுக்காக காத்திருக்கிறது...',
-      'scan_and_wait_hero': 'Paytm சவுண்ட்பாக்ஸை ஸ்கேன் செய்து, ஹீரோ உங்கள் பில்லை உறுதிப்படுத்தும் வரை காத்திருக்கவும்.',
-      'open_upi_scan_soundbox': 'UPI தேர்வு மூலம் Paytm ஐ திறந்து, ஹீரோவின் Paytm சவுண்ட்பாக்ஸை ஸ்கேன் செய்து, சரியான பில் தொகையை செலுத்தவும்.',
+      'scan_and_wait_hero':
+          'Paytm சவுண்ட்பாக்ஸை ஸ்கேன் செய்து, ஹீரோ உங்கள் பில்லை உறுதிப்படுத்தும் வரை காத்திருக்கவும்.',
+      'open_upi_scan_soundbox':
+          'UPI தேர்வு மூலம் Paytm ஐ திறந்து, ஹீரோவின் Paytm சவுண்ட்பாக்ஸை ஸ்கேன் செய்து, சரியான பில் தொகையை செலுத்தவும்.',
     },
     'tg': {
       'app_title': 'my allin1',
@@ -235,10 +241,13 @@ class LocalizationService extends ChangeNotifier {
       'use_as_destination_label': 'Destination ah use pannu',
       'use_as_pickup_label': 'Pickup ah use pannu',
       'pay_via_soundbox': 'Paytm soundbox la bill kattru',
-      'scan_soundbox_qr': 'Soundbox QR scan pannitu, amount pay pannitu confirm pannu.',
+      'scan_soundbox_qr':
+          'Soundbox QR scan pannitu, amount pay pannitu confirm pannu.',
       'awaiting_hero_payment': 'Hero confirmation ku waiting...',
-      'scan_and_wait_hero': 'Paytm Soundbox scan pannitu, Hero unga bill confirm panna vara wait pannu.',
-      'open_upi_scan_soundbox': 'UPI la Paytm open pannu, Hero Soundbox scan pannu, exact bill amount pay pannu.',
+      'scan_and_wait_hero':
+          'Paytm Soundbox scan pannitu, Hero unga bill confirm panna vara wait pannu.',
+      'open_upi_scan_soundbox':
+          'UPI la Paytm open pannu, Hero Soundbox scan pannu, exact bill amount pay pannu.',
     },
   };
 

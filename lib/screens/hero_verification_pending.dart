@@ -3,6 +3,7 @@
 // Allin1 Super App - Hero Verification Status
 // ================================================================
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -10,11 +11,17 @@ import 'package:url_launcher/url_launcher.dart';
 class HeroVerificationPendingScreen extends StatefulWidget {
   final String heroId;
 
-  const HeroVerificationPendingScreen({super.key, required this.heroId});
+  const HeroVerificationPendingScreen({required this.heroId, super.key});
 
   @override
   State<HeroVerificationPendingScreen> createState() =>
       _HeroVerificationPendingScreenState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('heroId', heroId));
+  }
 }
 
 class _HeroVerificationPendingScreenState
@@ -24,9 +31,9 @@ class _HeroVerificationPendingScreenState
 
   Future<void> _launchWhatsApp() async {
     final message = Uri.encodeComponent(
-        'Hi Admin, this is ${widget.heroId}. I have submitted my documents and am ready for verification. Please approve my Hero account when possible.');
-    final url =
-        Uri.parse('https://wa.me/$_adminWhatsApp?text=$message');
+      'Hi Admin, this is ${widget.heroId}. I have submitted my documents and am ready for verification. Please approve my Hero account when possible.',
+    );
+    final url = Uri.parse('https://wa.me/$_adminWhatsApp?text=$message');
 
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -85,15 +92,15 @@ class _HeroVerificationPendingScreenState
               width: 120,
               height: 120,
               margin: const EdgeInsets.only(bottom: 24),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: const LinearGradient(
+                gradient: LinearGradient(
                   // T1: was [Color(0xFFFFBB00), Color(0xFFFF6B35)] — orange eradicated
                   colors: [Color(0xFFFF4FA3), Color(0xFFBE2A7A)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                boxShadow: const [
+                boxShadow: [
                   BoxShadow(
                     // T1: shadow now matches NJ Pink
                     color: Color(0x4AFF4FA3),
@@ -145,10 +152,10 @@ class _HeroVerificationPendingScreenState
                   color: const Color(0xFFFFBB00).withValues(alpha: 0.3),
                 ),
               ),
-              child: Column(
+              child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'To Speed Up Approval:',
                     style: TextStyle(
                       color: Color(0xFFFFBB00),
@@ -156,8 +163,8 @@ class _HeroVerificationPendingScreenState
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  const Text(
+                  SizedBox(height: 12),
+                  Text(
                     '• Send your documents (Aadhar, PAN, License) to Admin via WhatsApp\n• Call for immediate verification\n• Keep your phone available for confirmation',
                     style: TextStyle(
                       color: Color(0xFFEEEEF5),
@@ -255,13 +262,13 @@ class _HeroVerificationPendingScreenState
                   ),
                   SizedBox(width: 12),
                   Expanded(
-                     child: Text(
-                       "Tip: You can check back in 2-4 hours for approval status, or we'll notify you via SMS once approved.",
-                       style: TextStyle(
-                         color: Color(0xFFBBBBBB),
-                         fontSize: 14,
-                       ),
-                     ),
+                    child: Text(
+                      "Tip: You can check back in 2-4 hours for approval status, or we'll notify you via SMS once approved.",
+                      style: TextStyle(
+                        color: Color(0xFFBBBBBB),
+                        fontSize: 14,
+                      ),
+                    ),
                   ),
                 ],
               ),

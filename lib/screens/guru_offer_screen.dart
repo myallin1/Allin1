@@ -117,7 +117,8 @@ class GuruOfferScreen extends StatelessWidget {
                         width: 42,
                         height: 42,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFF4FA3).withValues(alpha: 0.12),
+                          color:
+                              const Color(0xFFFF4FA3).withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: const Icon(
@@ -143,7 +144,8 @@ class GuruOfferScreen extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
-                    onPressed: () => Navigator.pushNamed(context, '/ai-settings'),
+                    onPressed: () =>
+                        Navigator.pushNamed(context, '/ai-settings'),
                     icon: const Icon(Icons.settings_suggest_rounded),
                     label: Text(
                       'Advanced User? Configure Groq Key',

@@ -345,7 +345,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           color: softFill,
                           borderRadius: BorderRadius.circular(18),
                           border: Border.all(
-                              color: primary.withValues(alpha: 0.22),),
+                            color: primary.withValues(alpha: 0.22),
+                          ),
                         ),
                         child: Row(
                           children: [

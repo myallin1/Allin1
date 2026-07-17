@@ -13,9 +13,9 @@ import 'package:flutter/foundation.dart';
 import '../models/food_models.dart';
 
 class FoodSellerService {
+  factory FoodSellerService() => _instance;
   FoodSellerService._internal();
   static final FoodSellerService _instance = FoodSellerService._internal();
-  factory FoodSellerService() => _instance;
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -24,8 +24,7 @@ class FoodSellerService {
   CollectionReference get _sellersRef => _firestore.collection('sellers');
   CollectionReference get _ordersRef => _firestore.collection('food_orders');
 
-  DocumentReference _sellerDocRef(String sellerId) =>
-      _sellersRef.doc(sellerId);
+  DocumentReference _sellerDocRef(String sellerId) => _sellersRef.doc(sellerId);
 
   CollectionReference _menuItemsRef(String sellerId) =>
       _sellerDocRef(sellerId).collection('menu_items');
@@ -48,7 +47,9 @@ class FoodSellerService {
 
   /// Update an existing seller's profile fields.
   Future<void> updateSellerProfile(
-      String sellerId, Map<String, dynamic> updates) async {
+    String sellerId,
+    Map<String, dynamic> updates,
+  ) async {
     try {
       updates['updatedAt'] = FieldValue.serverTimestamp();
       await _sellerDocRef(sellerId).update(updates);
@@ -64,7 +65,7 @@ class FoodSellerService {
     try {
       final doc = await _sellerDocRef(sellerId).get();
       if (!doc.exists) return null;
-      final data = doc.data() as Map<String, dynamic>;
+      final data = doc.data()! as Map<String, dynamic>;
       return SellerModel.fromJson(data);
     } catch (e) {
       debugPrint('[FoodSellerService] Failed to get seller: $e');
@@ -80,7 +81,7 @@ class FoodSellerService {
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data()! as Map<String, dynamic>;
         data['id'] = doc.id;
         return SellerModel.fromJson(data);
       }).toList();
@@ -95,7 +96,7 @@ class FoodSellerService {
           .where('status', isEqualTo: 'active')
           .get();
       return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data()! as Map<String, dynamic>;
         data['id'] = doc.id;
         return SellerModel.fromJson(data);
       }).toList();
@@ -114,7 +115,8 @@ class FoodSellerService {
     try {
       await _menuItemsRef(sellerId).doc(item.id).set(item.toJson());
       debugPrint(
-          '[FoodSellerService] Menu item added: ${item.id} for seller: $sellerId');
+        '[FoodSellerService] Menu item added: ${item.id} for seller: $sellerId',
+      );
     } catch (e) {
       debugPrint('[FoodSellerService] Failed to add menu item: $e');
       rethrow;
@@ -123,7 +125,10 @@ class FoodSellerService {
 
   /// Update an existing menu item.
   Future<void> updateMenuItem(
-      String sellerId, String itemId, Map<String, dynamic> updates) async {
+    String sellerId,
+    String itemId,
+    Map<String, dynamic> updates,
+  ) async {
     try {
       updates['updatedAt'] = FieldValue.serverTimestamp();
       await _menuItemsRef(sellerId).doc(itemId).update(updates);
@@ -147,16 +152,22 @@ class FoodSellerService {
 
   /// Batch upsert menu items (useful for seller bulk menu uploads).
   Future<void> batchUpsertMenuItems(
-      String sellerId, List<MenuItemModel> items) async {
+    String sellerId,
+    List<MenuItemModel> items,
+  ) async {
     try {
       final batch = _firestore.batch();
       for (final item in items) {
-        batch.set(_menuItemsRef(sellerId).doc(item.id), item.toJson(),
-            SetOptions(merge: true));
+        batch.set(
+          _menuItemsRef(sellerId).doc(item.id),
+          item.toJson(),
+          SetOptions(merge: true),
+        );
       }
       await batch.commit();
       debugPrint(
-          '[FoodSellerService] Batch upserted ${items.length} menu items');
+        '[FoodSellerService] Batch upserted ${items.length} menu items',
+      );
     } catch (e) {
       debugPrint('[FoodSellerService] Batch upsert failed: $e');
       rethrow;
@@ -167,7 +178,7 @@ class FoodSellerService {
   Stream<List<MenuItemModel>> listenToMenuItems(String sellerId) {
     return _menuItemsRef(sellerId).snapshots().map((snapshot) {
       return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data()! as Map<String, dynamic>;
         data['id'] = doc.id;
         return MenuItemModel.fromJson(data);
       }).toList();
@@ -181,7 +192,7 @@ class FoodSellerService {
           .where('isAvailable', isEqualTo: true)
           .get();
       return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data()! as Map<String, dynamic>;
         data['id'] = doc.id;
         return MenuItemModel.fromJson(data);
       }).toList();
@@ -210,7 +221,9 @@ class FoodSellerService {
 
   /// Update the status of an order and record the timestamp in the timeline.
   Future<void> updateOrderStatus(
-      String orderId, String newStatus) async {
+    String orderId,
+    String newStatus,
+  ) async {
     try {
       final timelineField = 'statusTimeline.$newStatus';
       await _ordersRef.doc(orderId).update({
@@ -219,7 +232,8 @@ class FoodSellerService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
       debugPrint(
-          '[FoodSellerService] Order $orderId status updated to: $newStatus');
+        '[FoodSellerService] Order $orderId status updated to: $newStatus',
+      );
     } catch (e) {
       debugPrint('[FoodSellerService] Failed to update order status: $e');
       rethrow;
@@ -234,11 +248,11 @@ class FoodSellerService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        return FoodOrderModel.fromJson(data);
-      }).toList();
-    });
+          return snapshot.docs.map((doc) {
+            final data = doc.data()! as Map<String, dynamic>;
+            return FoodOrderModel.fromJson(data);
+          }).toList();
+        });
   }
 
   /// Reactive stream of all orders for a specific seller (including completed/cancelled).
@@ -249,7 +263,7 @@ class FoodSellerService {
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data()! as Map<String, dynamic>;
         return FoodOrderModel.fromJson(data);
       }).toList();
     });
@@ -263,7 +277,7 @@ class FoodSellerService {
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data()! as Map<String, dynamic>;
         return FoodOrderModel.fromJson(data);
       }).toList();
     });
@@ -274,7 +288,7 @@ class FoodSellerService {
     try {
       final doc = await _ordersRef.doc(orderId).get();
       if (!doc.exists) return null;
-      final data = doc.data() as Map<String, dynamic>;
+      final data = doc.data()! as Map<String, dynamic>;
       return FoodOrderModel.fromJson(data);
     } catch (e) {
       debugPrint('[FoodSellerService] Failed to get order: $e');
@@ -287,12 +301,14 @@ class FoodSellerService {
     try {
       final snapshot = await _ordersRef
           .where('sellerId', isEqualTo: sellerId)
-          .where('status',
-              whereIn: ['placed', 'accepted', 'preparing', 'ready', 'pickedUp'])
+          .where(
+            'status',
+            whereIn: ['placed', 'accepted', 'preparing', 'ready', 'pickedUp'],
+          )
           .orderBy('createdAt', descending: true)
           .get();
       return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data()! as Map<String, dynamic>;
         return FoodOrderModel.fromJson(data);
       }).toList();
     } catch (e) {
@@ -307,7 +323,7 @@ class FoodSellerService {
       final orderDoc = await _ordersRef.doc(orderId).get();
       if (!orderDoc.exists) return false;
 
-      final data = orderDoc.data() as Map<String, dynamic>;
+      final data = orderDoc.data()! as Map<String, dynamic>;
       if (data['status'] != 'placed') return false;
 
       await _ordersRef.doc(orderId).update({
@@ -330,12 +346,11 @@ class FoodSellerService {
   /// Get all unique subCategories from active sellers.
   Future<List<String>> getAvailableSubCategories() async {
     try {
-      final snapshot = await _sellersRef
-          .where('status', isEqualTo: 'active')
-          .get();
+      final snapshot =
+          await _sellersRef.where('status', isEqualTo: 'active').get();
       final categories = <String>{};
       for (final doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data()! as Map<String, dynamic>;
         final subCat = data['subCategory'] as String?;
         if (subCat != null && subCat.isNotEmpty) {
           categories.add(subCat);
@@ -344,7 +359,8 @@ class FoodSellerService {
       return categories.toList()..sort();
     } catch (e) {
       debugPrint(
-          '[FoodSellerService] Failed to get available categories: $e');
+        '[FoodSellerService] Failed to get available categories: $e',
+      );
       return [];
     }
   }

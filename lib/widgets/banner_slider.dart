@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class BannerAdsSlider extends StatefulWidget {
@@ -7,14 +8,22 @@ class BannerAdsSlider extends StatefulWidget {
   final double viewportFraction;
 
   const BannerAdsSlider({
-    super.key,
     required this.imageUrls,
+    super.key,
     this.height = 140,
     this.viewportFraction = 0.95,
   });
 
   @override
   State<BannerAdsSlider> createState() => _BannerAdsSliderState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(IterableProperty<String>('imageUrls', imageUrls));
+    properties.add(DoubleProperty('height', height));
+    properties.add(DoubleProperty('viewportFraction', viewportFraction));
+  }
 }
 
 class _BannerAdsSliderState extends State<BannerAdsSlider> {
@@ -26,10 +35,11 @@ class _BannerAdsSliderState extends State<BannerAdsSlider> {
   void initState() {
     super.initState();
     _pageController = PageController(viewportFraction: widget.viewportFraction);
-    _timer = Timer.periodic(const Duration(seconds: 3), (Timer timer) {
+    _timer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (!mounted) return;
       setState(() {
-        _currentPage = (_currentPage < widget.imageUrls.length - 1) ? _currentPage + 1 : 0;
+        _currentPage =
+            (_currentPage < widget.imageUrls.length - 1) ? _currentPage + 1 : 0;
         if (_pageController.hasClients) {
           _pageController.animateToPage(
             _currentPage,
@@ -54,15 +64,19 @@ class _BannerAdsSliderState extends State<BannerAdsSlider> {
       height: widget.height,
       child: PageView.builder(
         controller: _pageController,
-        onPageChanged: (int page) => setState(() => _currentPage = page),
+        onPageChanged: (page) => setState(() => _currentPage = page),
         itemCount: widget.imageUrls.length,
         itemBuilder: (context, index) {
           return Container(
-            margin: const EdgeInsets.symmetric(horizontal: 6.0),
+            margin: const EdgeInsets.symmetric(horizontal: 6),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 10, offset: const Offset(0, 5))
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 10,
+                  offset: const Offset(0, 5),
+                ),
               ],
             ),
             child: ClipRRect(
@@ -70,9 +84,11 @@ class _BannerAdsSliderState extends State<BannerAdsSlider> {
               child: Image.network(
                 widget.imageUrls[index],
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  color: const Color(0xFFFFECF6),
-                  child: const Center(child: Icon(Icons.broken_image, color: Color(0xFFFF4FA3))),
+                errorBuilder: (_, __, ___) => const ColoredBox(
+                  color: Color(0xFFFFECF6),
+                  child: Center(
+                    child: Icon(Icons.broken_image, color: Color(0xFFFF4FA3)),
+                  ),
                 ),
               ),
             ),

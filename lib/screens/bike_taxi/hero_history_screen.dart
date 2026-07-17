@@ -44,7 +44,7 @@ class _HeroHistoryScreenState extends State<HeroHistoryScreen>
     unawaited(_loadAggregates());
   }
 
-    Future<void> _loadAggregates() async {
+  Future<void> _loadAggregates() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     try {
@@ -67,9 +67,11 @@ class _HeroHistoryScreenState extends State<HeroHistoryScreen>
       if (!mounted) return;
       final serverData = serverDoc.data() ?? {};
       setState(() {
-        _aggregateEarnings = (serverData['totalEarnings'] as num?)?.toDouble() ?? 0;
+        _aggregateEarnings =
+            (serverData['totalEarnings'] as num?)?.toDouble() ?? 0;
         _aggregateRides = (serverData['totalRides'] as int?) ?? 0;
-        _aggregateRating = (serverData['averageRating'] as num?)?.toDouble() ?? 0;
+        _aggregateRating =
+            (serverData['averageRating'] as num?)?.toDouble() ?? 0;
       });
     } catch (_) {}
   }
@@ -100,9 +102,13 @@ class _HeroHistoryScreenState extends State<HeroHistoryScreen>
     return null;
   }
 
-  List<_HeroHistoryItem> _mapSnapshot(QuerySnapshot<Map<String, dynamic>> snap) {
+  List<_HeroHistoryItem> _mapSnapshot(
+    QuerySnapshot<Map<String, dynamic>> snap,
+  ) {
     final items = snap.docs
-        .map((doc) => _HeroHistoryItem.fromMap(doc.id, doc.data(), _extractWhen))
+        .map(
+          (doc) => _HeroHistoryItem.fromMap(doc.id, doc.data(), _extractWhen),
+        )
         .where((item) => item.isCompleted)
         .toList()
       ..sort((a, b) => b.when.compareTo(a.when));
@@ -165,7 +171,8 @@ class _HeroHistoryScreenState extends State<HeroHistoryScreen>
       });
     }
     try {
-      final serverSnap = await query.get(const GetOptions(source: Source.server));
+      final serverSnap =
+          await query.get(const GetOptions(source: Source.server));
       if (!mounted) {
         return;
       }
@@ -301,7 +308,9 @@ class _HeroHistoryScreenState extends State<HeroHistoryScreen>
             Expanded(
               child: _summaryCard(
                 label: 'Avg Rating',
-                value: _aggregateRating > 0 ? _aggregateRating.toStringAsFixed(1) : '0.0',
+                value: _aggregateRating > 0
+                    ? _aggregateRating.toStringAsFixed(1)
+                    : '0.0',
                 icon: Icons.star_rounded,
               ),
             ),
@@ -586,12 +595,18 @@ class _HeroHistoryItem {
       status: (data['status'] as String? ?? '').trim(),
       paymentStatus: (data['paymentStatus'] as String? ?? '').trim(),
       paymentDispute: data['paymentDispute'] == true,
-      amount: ((data['finalFare'] ?? data['amountPaid'] ?? data['lockedFare'] ?? data['fare']) as num?)
+      amount: ((data['finalFare'] ??
+                  data['amountPaid'] ??
+                  data['lockedFare'] ??
+                  data['fare']) as num?)
               ?.toDouble() ??
           0.0,
       tip: (data['tip'] as num?)?.toDouble() ?? 0.0,
       netEarnings: (data['netEarnings'] as num?)?.toDouble() ??
-          ((data['finalFare'] ?? data['amountPaid'] ?? data['lockedFare'] ?? data['fare']) as num?)
+          ((data['finalFare'] ??
+                  data['amountPaid'] ??
+                  data['lockedFare'] ??
+                  data['fare']) as num?)
               ?.toDouble() ??
           0.0,
       when: whenReader(data) ?? DateTime.fromMillisecondsSinceEpoch(0),
@@ -677,11 +692,13 @@ class _HistoryCard extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: statusColor.withValues(alpha: 0.28)),
+                  border:
+                      Border.all(color: statusColor.withValues(alpha: 0.28)),
                 ),
                 child: Text(
                   item.status.toUpperCase(),
@@ -761,7 +778,11 @@ class _HistoryCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Icon(Icons.calendar_today_rounded, size: 12, color: _muted),
+                    const Icon(
+                      Icons.calendar_today_rounded,
+                      size: 12,
+                      color: _muted,
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       '${item.when.day}/${item.when.month}',
@@ -810,6 +831,8 @@ class _HistoryCard extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<_HeroHistoryItem>('item', item));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onReportIssue', onReportIssue));
+    properties.add(
+      ObjectFlagProperty<VoidCallback>.has('onReportIssue', onReportIssue),
+    );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -60,7 +61,8 @@ class AdminHeroMirrorScreen extends StatelessWidget {
       ['approvalStatus', 'status'],
       fallback: 'approved',
     );
-    final createdAt = _timestampLabel(['createdAt', 'approvedAt', 'lastUpdated']);
+    final createdAt =
+        _timestampLabel(['createdAt', 'approvedAt', 'lastUpdated']);
 
     return Scaffold(
       backgroundColor: _bg,
@@ -166,6 +168,14 @@ class AdminHeroMirrorScreen extends StatelessWidget {
       ),
     );
   }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('heroUid', heroUid));
+    properties
+        .add(DiagnosticsProperty<Map<String, dynamic>>('heroData', heroData));
+  }
 }
 
 class _MirrorSection extends StatelessWidget {
@@ -202,6 +212,12 @@ class _MirrorSection extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('title', title));
   }
 }
 
@@ -248,5 +264,13 @@ class _MirrorRow extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('label', label));
+    properties.add(StringProperty('value', value));
+    properties.add(DiagnosticsProperty<bool>('mono', mono));
   }
 }

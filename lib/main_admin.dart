@@ -52,16 +52,16 @@ class AdminApp extends StatelessWidget {
             return const SuperAdminHomeScreen();
           }
           return const LoginScreen(
-             presetUserType: UserType.admin,
-             lockUserType: true,
-             title: '🔐 Admin Access',
-             subtitle: 'Authorized personnel only',
-             lockedUserLabel: 'Admin',
-           );
+            presetUserType: UserType.admin,
+            lockUserType: true,
+            title: '🔐 Admin Access',
+            subtitle: 'Authorized personnel only',
+            lockedUserLabel: 'Admin',
+          );
         },
       ),
       routes: {
-        '/admin-home':       (_) => const AdminDashboardScreen(),
+        '/admin-home': (_) => const AdminDashboardScreen(),
         '/admin/ads': (_) => const AdsManagementScreen(),
         '/admin/credentials': (_) => const CredentialsAdminScreen(),
         '/admin/tasks': (_) => const TaskApprovalsScreen(),

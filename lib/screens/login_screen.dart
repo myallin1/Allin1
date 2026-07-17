@@ -140,7 +140,9 @@ class _LoginScreenState extends State<LoginScreen>
           _error = result.error ?? 'Google sign-in failed';
         });
         if (_selectedUserType == UserType.admin && mounted) {
-          debugPrint('Admin login warning: ${result.error ?? 'Unknown admin Google sign-in error'}');
+          debugPrint(
+            'Admin login warning: ${result.error ?? 'Unknown admin Google sign-in error'}',
+          );
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(result.error ?? 'Admin login failed'),

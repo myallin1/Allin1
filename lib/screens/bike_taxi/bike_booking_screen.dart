@@ -168,7 +168,11 @@ LatLng _lerpLatLng(LatLng a, LatLng b, double t) {
 }
 
 LatLng _offsetAlongSegment(
-    LatLng start, LatLng end, LatLng point, double laneOffset,) {
+  LatLng start,
+  LatLng end,
+  LatLng point,
+  double laneOffset,
+) {
   final dx = end.longitude - start.longitude;
   final dy = end.latitude - start.latitude;
   final length = sqrt((dx * dx) + (dy * dy));
@@ -198,7 +202,11 @@ LatLng _pointOnPath(List<LatLng> path, double progress, double laneOffset) {
   final localT = scaled - scaled.floorToDouble();
   final point = _lerpLatLng(path[segmentIndex], path[nextIndex], localT);
   return _offsetAlongSegment(
-      path[segmentIndex], path[nextIndex], point, laneOffset,);
+    path[segmentIndex],
+    path[nextIndex],
+    point,
+    laneOffset,
+  );
 }
 
 double _bearingBetween(LatLng start, LatLng end) {
@@ -463,7 +471,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   bool _isRestorableCustomerRide(
-      Map<String, dynamic> data, String customerUid,) {
+    Map<String, dynamic> data,
+    String customerUid,
+  ) {
     final customerId = (data['customerId'] as String?)?.trim();
     if (customerId != customerUid) {
       return false;
@@ -571,11 +581,13 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       }).toList();
 
       for (final doc in expiredSearchDocs) {
-        unawaited(doc.reference.update({
-          'status': 'cancelled',
-          'cancelledBy': 'system',
-          'cancelledAt': FieldValue.serverTimestamp(),
-        }));
+        unawaited(
+          doc.reference.update({
+            'status': 'cancelled',
+            'cancelledBy': 'system',
+            'cancelledAt': FieldValue.serverTimestamp(),
+          }),
+        );
       }
       if (!mounted) {
         return;
@@ -995,8 +1007,10 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
           });
         }
       } else {
-        _updateUserLocation(LatLng(pos.latitude, pos.longitude),
-            animateMap: true,);
+        _updateUserLocation(
+          LatLng(pos.latitude, pos.longitude),
+          animateMap: true,
+        );
       }
 
       if (mounted && _isInitializingLocation) {
@@ -1204,9 +1218,11 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       if (!mounted) {
         return;
       }
-      vehicle.advance(Random(
-        vehicle.id.hashCode ^ DateTime.now().millisecondsSinceEpoch,
-      ),);
+      vehicle.advance(
+        Random(
+          vehicle.id.hashCode ^ DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
       _refreshHeroMarkers();
       _scheduleVehicleTick(vehicle);
     });
@@ -1332,11 +1348,13 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
 
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(message),
-      backgroundColor: Colors.redAccent,
-      behavior: SnackBarBehavior.floating,
-    ),);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   // ── Search ────────────────────────────────────────────────────
@@ -1422,7 +1440,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       _pinDropLocation = location;
     });
     _moveMainMap(selectedPoint, 15.5);
-    
+
     if (_isFocusingDrop) {
       _closeSearch();
       if (_pickupLocation != null && _dropLocation != null) {
@@ -1678,59 +1696,65 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         _isSearching = true;
       });
 
-       // ── Background Write: Start Firebase task without awaiting blocking ──
+      // ── Background Write: Start Firebase task without awaiting blocking ──
       debugPrint('🔥 [RIDE CREATION] About to create Firestore document...');
-       rideRef.set({
-         'rideId': rideRef.id,
-         'userId': user.uid,
-         'customerId': user.uid,
-         'customerPhone': customerPhone,
-         'pickupAddress': pickupAddress,
-         'dropAddress': dropAddress,
-         'pickupLatitude': _pickupLocation!['lat'],
-         'pickupLongitude': _pickupLocation!['lng'],
-         'dropLatitude': _dropLocation!['lat'],
-         'dropLongitude': _dropLocation!['lng'],
-         'fare': fare,
-         'estimatedFare': fare,
-         'distanceKm': normalizedDist,
-         'distance_km': normalizedDist,
-         'etaMinutes': _eta,
-         'vehicleType': vehicleType,
-         'category': _normalizeCategoryKey(vehicleType),
-         'vehicle_category': _normalizeCategoryKey(vehicleType),
-         'status': 'searching',
-         'createdAt': FieldValue.serverTimestamp(),
-         'heroId': null,
-         'captainId': null,
-         'heroName': null,
-         'heroPhone': null,
-         'heroVehicleNumber': null,
-         'heroModel': null,
-         'heroRating': null,
-         'heroEta': null,
-       }).then((_) {
-         debugPrint('🔥 [RIDE CREATION] Firestore document created successfully! Doc ID: ${rideRef.id}');
-       }).catchError((dynamic e) {
-         debugPrint('[BikeBookingScreen] Background ride creation failed: $e');
-       });
+      rideRef.set({
+        'rideId': rideRef.id,
+        'userId': user.uid,
+        'customerId': user.uid,
+        'customerPhone': customerPhone,
+        'pickupAddress': pickupAddress,
+        'dropAddress': dropAddress,
+        'pickupLatitude': _pickupLocation!['lat'],
+        'pickupLongitude': _pickupLocation!['lng'],
+        'dropLatitude': _dropLocation!['lat'],
+        'dropLongitude': _dropLocation!['lng'],
+        'fare': fare,
+        'estimatedFare': fare,
+        'distanceKm': normalizedDist,
+        'distance_km': normalizedDist,
+        'etaMinutes': _eta,
+        'vehicleType': vehicleType,
+        'category': _normalizeCategoryKey(vehicleType),
+        'vehicle_category': _normalizeCategoryKey(vehicleType),
+        'status': 'searching',
+        'createdAt': FieldValue.serverTimestamp(),
+        'heroId': null,
+        'captainId': null,
+        'heroName': null,
+        'heroPhone': null,
+        'heroVehicleNumber': null,
+        'heroModel': null,
+        'heroRating': null,
+        'heroEta': null,
+      }).then((_) {
+        debugPrint(
+          '🔥 [RIDE CREATION] Firestore document created successfully! Doc ID: ${rideRef.id}',
+        );
+      }).catchError((e) {
+        debugPrint('[BikeBookingScreen] Background ride creation failed: $e');
+      });
 
       if (!mounted) return;
 
       // ── Instant Navigation: User sees the search screen immediately ──
-      unawaited(Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => RideSearchScreen(
-            ride: rideModel,
-            existingRideDocId: rideRef.id,
+      unawaited(
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => RideSearchScreen(
+              ride: rideModel,
+              existingRideDocId: rideRef.id,
+            ),
           ),
         ),
-      ));
+      );
     } catch (e) {
       debugPrint('🔥 [RIDE CREATION ERROR] Crashed with: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to book ride. Please try again.')),
+          const SnackBar(
+            content: Text('Failed to book ride. Please try again.'),
+          ),
         );
       }
     }
@@ -1739,36 +1763,42 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   List<MapMarker> get _mapMarkers {
     final markers = <MapMarker>[];
     if (_myPositionLatLng != null) {
-      markers.add(MapMarker(
-        point: _myPositionLatLng!,
-        icon: Icons.navigation_rounded,
-        color: Colors.lightBlueAccent,
-        label: 'You',
-        size: 42,
-      ),);
+      markers.add(
+        MapMarker(
+          point: _myPositionLatLng!,
+          icon: Icons.navigation_rounded,
+          color: Colors.lightBlueAccent,
+          label: 'You',
+          size: 42,
+        ),
+      );
     }
     if (_pickupLocation != null) {
-      markers.add(MapMarker(
-        point: LatLng(
-          (_pickupLocation!['lat'] as num).toDouble(),
-          (_pickupLocation!['lng'] as num).toDouble(),
+      markers.add(
+        MapMarker(
+          point: LatLng(
+            (_pickupLocation!['lat'] as num).toDouble(),
+            (_pickupLocation!['lng'] as num).toDouble(),
+          ),
+          icon: Icons.my_location_rounded,
+          color: _accentOrange,
+          label: 'Pickup',
+          size: 40,
         ),
-        icon: Icons.my_location_rounded,
-        color: _accentOrange,
-        label: 'Pickup',
-        size: 40,
-      ),);
+      );
     }
     if (_dropLocation != null) {
-      markers.add(MapMarker(
-        point: LatLng(
-          (_dropLocation!['lat'] as num).toDouble(),
-          (_dropLocation!['lng'] as num).toDouble(),
+      markers.add(
+        MapMarker(
+          point: LatLng(
+            (_dropLocation!['lat'] as num).toDouble(),
+            (_dropLocation!['lng'] as num).toDouble(),
+          ),
+          color: _successGreen,
+          label: 'Drop',
+          size: 44,
         ),
-        color: _successGreen,
-        label: 'Drop',
-        size: 44,
-      ),);
+      );
     }
     markers.addAll(_nearbyCaptainMarkersNotifier.value);
     markers.addAll(_dummyHeroMarkersNotifier.value);
@@ -1813,8 +1843,11 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.location_off_rounded,
-              color: Colors.redAccent, size: 48,),
+          const Icon(
+            Icons.location_off_rounded,
+            color: Colors.redAccent,
+            size: 48,
+          ),
           const SizedBox(height: 12),
           Text(
             'Enable location services to detect your live pickup.',
@@ -1903,24 +1936,28 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                         Expanded(
                           child: _glassPanel(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 14,),
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
                             child: Row(
                               children: [
                                 Container(
                                   width: 10,
                                   height: 10,
                                   decoration: const BoxDecoration(
-                                      color: _successGreen,
-                                      shape: BoxShape.circle,),
+                                    color: _successGreen,
+                                    shape: BoxShape.circle,
+                                  ),
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
                                     'Erode Taxi',
                                     style: GoogleFonts.outfit(
-                                        color: _textPrimary,
-                                        fontSize: 17,
-                                        fontWeight: FontWeight.w700,),
+                                      color: _textPrimary,
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                 ),
                                 Text(
@@ -1928,9 +1965,10 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                                       ? 'Locating…'
                                       : 'Live',
                                   style: GoogleFonts.outfit(
-                                      color: _textSecondary,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,),
+                                    color: _textSecondary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ],
                             ),
@@ -2089,8 +2127,10 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   // ── Reusable glass widgets ────────────────────────────────────
-  Widget _glassCircleButton(
-      {required IconData icon, required VoidCallback onTap,}) {
+  Widget _glassCircleButton({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),
       child: BackdropFilter(
@@ -2177,28 +2217,36 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                 const SizedBox(height: 2),
               if (_pickupLocation != null && _dropLocation != null) ...[
                 const SizedBox(height: 8),
-                Row(children: [
-                  Expanded(
+                Row(
+                  children: [
+                    Expanded(
                       child: _metricTile(
-                          title: '${_distance.toStringAsFixed(1)} km',
-                          subtitle: localization.t('distance_label'),
-                          icon: Icons.route_rounded,),),
-                  const SizedBox(width: 8),
-                  Expanded(
+                        title: '${_distance.toStringAsFixed(1)} km',
+                        subtitle: localization.t('distance_label'),
+                        icon: Icons.route_rounded,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
                       child: _metricTile(
-                          title: '$_eta mins',
-                          subtitle: localization.t('eta_label'),
-                          icon: Icons.access_time_rounded,),),
-                  const SizedBox(width: 8),
-                  Expanded(
+                        title: '$_eta mins',
+                        subtitle: localization.t('eta_label'),
+                        icon: Icons.access_time_rounded,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
                       child: _metricTile(
-                          title: _estimatedFare != null
-                              ? '₹${_estimatedFare!.toStringAsFixed(0)}'
-                              : '—',
-                          subtitle: 'Est. Fare',
-                          icon: Icons.currency_rupee_rounded,
-                          highlight: true,),),
-                ],),
+                        title: _estimatedFare != null
+                            ? '₹${_estimatedFare!.toStringAsFixed(0)}'
+                            : '—',
+                        subtitle: 'Est. Fare',
+                        icon: Icons.currency_rupee_rounded,
+                        highlight: true,
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
@@ -2209,12 +2257,17 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       elevation: 0,
                     ),
-                    child: Text(localization.t('choose_vehicle_label'),
-                        style: GoogleFonts.outfit(
-                            fontSize: 17, fontWeight: FontWeight.w700,),),
+                    child: Text(
+                      localization.t('choose_vehicle_label'),
+                      style: GoogleFonts.outfit(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -2521,7 +2574,6 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
             : null,
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(

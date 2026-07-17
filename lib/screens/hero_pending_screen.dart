@@ -34,7 +34,8 @@ class HeroPendingScreen extends StatefulWidget {
 }
 
 class _HeroPendingScreenState extends State<HeroPendingScreen> {
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _statusSubscription;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+      _statusSubscription;
   bool _isNavigating = false;
 
   @override
@@ -47,7 +48,7 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
 
   Future<void> _initializeStatusListener() async {
     final currentUser = FirebaseAuth.instance.currentUser;
-    
+
     if (currentUser == null) {
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
@@ -81,14 +82,17 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
       }
 
       final data = snapshot.data();
-      final approvalStatus = data?['approvalStatus']?.toString().trim().toLowerCase();
+      final approvalStatus =
+          data?['approvalStatus']?.toString().trim().toLowerCase();
 
       if (approvalStatus == 'approved') {
         _triggerNavigation(() {
           if (mounted) {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute<void>(builder: (_) => const HeroDashboardShell()),
+              MaterialPageRoute<void>(
+                builder: (_) => const HeroDashboardShell(),
+              ),
             );
           }
         });
@@ -191,7 +195,11 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.info_outline, size: 20, color: kPurple2),
+                          const Icon(
+                            Icons.info_outline,
+                            size: 20,
+                            color: kPurple2,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(

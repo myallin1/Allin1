@@ -166,7 +166,8 @@ class CategoryGatewayService {
         return cachedFares;
       }
 
-      final doc = await _firestore.collection('settings').doc('ride_fares').get();
+      final doc =
+          await _firestore.collection('settings').doc('ride_fares').get();
 
       if (!doc.exists) {
         return _getDefaultRideFares();
@@ -215,7 +216,8 @@ class CategoryGatewayService {
 
   // ── Force Refresh (Clear Cache + Fetch Fresh) ───────────────
   Future<List<Map<String, dynamic>>> forceRefreshCategory(
-      Category category,) async {
+    Category category,
+  ) async {
     final categoryKey = _getCategoryFilter(category);
     await _cache.clearSellersCache(categoryKey);
     return loadCategoryData(category);

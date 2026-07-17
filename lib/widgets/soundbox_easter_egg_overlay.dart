@@ -10,7 +10,8 @@ import '../services/soundbox_easter_egg_service.dart';
 
 class SoundboxEasterEggOverlayScope extends StatelessWidget {
   const SoundboxEasterEggOverlayScope({
-    required this.child, super.key,
+    required this.child,
+    super.key,
   });
 
   final Widget child;
@@ -50,7 +51,8 @@ class _BouncingSoundboxOverlay extends StatefulWidget {
   final bool forceVisible;
 
   @override
-  State<_BouncingSoundboxOverlay> createState() => _BouncingSoundboxOverlayState();
+  State<_BouncingSoundboxOverlay> createState() =>
+      _BouncingSoundboxOverlayState();
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
@@ -102,7 +104,13 @@ class _BouncingSoundboxOverlayState extends State<_BouncingSoundboxOverlay>
     if (!_started) {
       _position = Offset(
         math.min(_position.dx, availableWidth).toDouble(),
-        topInset + math.min((_position.dy - topInset).clamp(0, availableHeight), availableHeight).toDouble(),
+        topInset +
+            math
+                .min(
+                  (_position.dy - topInset).clamp(0, availableHeight),
+                  availableHeight,
+                )
+                .toDouble(),
       );
       _started = true;
     }
@@ -112,7 +120,8 @@ class _BouncingSoundboxOverlayState extends State<_BouncingSoundboxOverlay>
       return;
     }
 
-    final dt = (elapsed - _lastTick!).inMicroseconds / Duration.microsecondsPerSecond;
+    final dt =
+        (elapsed - _lastTick!).inMicroseconds / Duration.microsecondsPerSecond;
     _lastTick = elapsed;
 
     if (_isExiting) {
@@ -121,7 +130,8 @@ class _BouncingSoundboxOverlayState extends State<_BouncingSoundboxOverlay>
         setState(() {
           _exitProgress = nextProgress;
           _position = Offset(
-            (_position.dx + (_velocity.dx * dt * 1.6)).clamp(0.0, availableWidth + 120),
+            (_position.dx + (_velocity.dx * dt * 1.6))
+                .clamp(0.0, availableWidth + 120),
             (_position.dy - (44 * dt)).clamp(-140.0, size.height),
           );
         });
@@ -158,7 +168,8 @@ class _BouncingSoundboxOverlayState extends State<_BouncingSoundboxOverlay>
   void _handleTap() {
     HapticFeedback.lightImpact();
     final service = context.read<SoundboxEasterEggService>();
-    service.registerTap(); // async — fire and forget, UI updates via notifyListeners
+    service
+        .registerTap(); // async — fire and forget, UI updates via notifyListeners
     setState(() {
       _pulseScale = 1.14;
     });
@@ -187,8 +198,11 @@ class _BouncingSoundboxOverlayState extends State<_BouncingSoundboxOverlay>
       return const SizedBox.shrink();
     }
 
-    final exitScale = widget.forceVisible ? 1.0 : (1 - (_exitProgress * 0.82)).clamp(0.18, 1.0);
-    final opacity = widget.forceVisible ? 0.94 : (1 - _exitProgress).clamp(0.0, 1.0);
+    final exitScale = widget.forceVisible
+        ? 1.0
+        : (1 - (_exitProgress * 0.82)).clamp(0.18, 1.0);
+    final opacity =
+        widget.forceVisible ? 0.94 : (1 - _exitProgress).clamp(0.0, 1.0);
 
     return Positioned(
       left: _position.dx,

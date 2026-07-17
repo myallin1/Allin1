@@ -1,5 +1,5 @@
 // ================================================================
-// car_wash_screen.dart — Car Service & Water Wash
+// printing_service_screen.dart — Printing & Xerox Services
 // Premium NJ Tech Pink Dark Theme — May 2026
 // ================================================================
 
@@ -23,54 +23,44 @@ const String _waUri = 'https://wa.me/918681869091';
 
 // ── Service data ─────────────────────────────────────────────────
 const _services = [
-  _CarService(
-    title: 'Exterior Wash',
-    subtitle: 'Full body foam wash, tyre shine & streak-free glass polish',
-    price: '₹299',
-    badge: 'POPULAR',
+  _PrintingService(
+    title: 'Xerox & Photocopy',
+    subtitle: 'Black & white / color photocopy, spiral binding & lamination',
+    price: '₹2/page',
+    badge: 'MOST BOOKED',
     badgeColor: _kGold,
     imageUrl:
-        'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?w=800&q=80',
-    features: ['Foam Pre-Wash', 'Hand Rinse', 'Tyre Dressing', 'Glass Polish'],
+        'https://images.unsplash.com/photo-1586953208448-b95a79798f07?w=800&q=80',
+    features: ['B&W / Color', 'Spiral Binding', 'Lamination', 'Same Day'],
   ),
-  _CarService(
-    title: 'Interior Cleaning',
-    subtitle: 'Deep vacuum, dashboard wipe, seat shampoo & air freshener',
-    price: '₹499',
+  _PrintingService(
+    title: 'Document Printing',
+    subtitle: 'Resumes, certificates, forms & bulk document printing',
+    price: '₹5/page',
     badge: 'BEST VALUE',
     badgeColor: _kGreen,
     imageUrl:
-        'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&q=80',
-    features: [
-      'Deep Vacuum',
-      'Dashboard Wipe',
-      'Seat Shampoo',
-      'Air Freshener',
-    ],
+        'https://images.unsplash.com/photo-1568205612837-017257d2310a?w=800&q=80',
+    features: ['Resume Print', 'Certificates', 'Bulk Orders', 'Fast Turnaround'],
   ),
-  _CarService(
-    title: 'Full Detailing',
-    subtitle: 'Complete exterior + interior + engine bay + ceramic coat finish',
-    price: '₹1,299',
+  _PrintingService(
+    title: 'Banners & Flex Printing',
+    subtitle: 'Custom banners, flex boards, posters & shop signage',
+    price: 'Call for Quotation',
     badge: 'PREMIUM',
     badgeColor: _kPink,
     imageUrl:
-        'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=800&q=80',
-    features: [
-      'Engine Bay Clean',
-      'Ceramic Coat',
-      'Paint Correction',
-      'Interior Detail',
-    ],
+        'https://images.unsplash.com/photo-1611162458324-aae1eb4129a4?w=800&q=80',
+    features: ['Custom Size', 'Flex & Vinyl', 'Posters', 'Shop Signage'],
   ),
 ];
 
 // ── Data model ───────────────────────────────────────────────────
-class _CarService {
+class _PrintingService {
   final String title, subtitle, price, badge, imageUrl;
   final Color badgeColor;
   final List<String> features;
-  const _CarService({
+  const _PrintingService({
     required this.title,
     required this.subtitle,
     required this.price,
@@ -84,8 +74,8 @@ class _CarService {
 // ================================================================
 // SCREEN
 // ================================================================
-class CarWashScreen extends StatelessWidget {
-  const CarWashScreen({super.key});
+class PrintingServiceScreen extends StatelessWidget {
+  const PrintingServiceScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -130,7 +120,7 @@ class CarWashScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Car Service &',
+              'Printing &',
               style: GoogleFonts.outfit(
                 fontSize: 18,
                 fontWeight: FontWeight.w900,
@@ -138,7 +128,7 @@ class CarWashScreen extends StatelessWidget {
               ),
             ),
             Text(
-              'Water Wash 🚗',
+              'Xerox Services 🖨️',
               style: GoogleFonts.outfit(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -151,7 +141,7 @@ class CarWashScreen extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             Image.network(
-              'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?w=800&q=80',
+              'https://images.unsplash.com/photo-1586953208448-b95a79798f07?w=800&q=80',
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => Container(color: _kDark2),
             ),
@@ -198,7 +188,7 @@ class CarWashScreen extends StatelessWidget {
 // SERVICE CARD
 // ================================================================
 class _ServiceCard extends StatelessWidget {
-  final _CarService service;
+  final _PrintingService service;
   const _ServiceCard({required this.service});
 
   @override
@@ -248,7 +238,7 @@ class _ServiceCard extends StatelessWidget {
                     color: _kDark2,
                     child: const Center(
                       child: Icon(
-                        Icons.local_car_wash_rounded,
+                        Icons.print_rounded,
                         color: _kPink,
                         size: 48,
                       ),
@@ -306,7 +296,7 @@ class _ServiceCard extends StatelessWidget {
                     service.price,
                     style: GoogleFonts.outfit(
                       color: _kPink,
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -418,7 +408,7 @@ class _ServiceCard extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<_CarService>('service', service));
+    properties.add(DiagnosticsProperty<_PrintingService>('service', service));
   }
 }
 
@@ -498,7 +488,7 @@ class _BottomContactBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.phone_in_talk_rounded, color: _kPink, size: 18),
+          const Icon(Icons.print_rounded, color: _kPink, size: 18),
           const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,

@@ -59,7 +59,9 @@ class ServiceRequestService {
     // orders that upload an image to a Storage path keyed by requestId)
     // to reserve the ID up front via `reserveRequestId()`.
     final docRef = preGeneratedRequestId != null
-        ? FirebaseFirestore.instance.collection('service_requests').doc(preGeneratedRequestId)
+        ? FirebaseFirestore.instance
+            .collection('service_requests')
+            .doc(preGeneratedRequestId)
         : FirebaseFirestore.instance.collection('service_requests').doc();
     final requestId = docRef.id;
 
@@ -125,7 +127,7 @@ class ServiceRequestService {
         await rtdb.FirebaseDatabase.instance.ref('online_heroes').get();
     if (!snap.exists || snap.value is! Map) return;
 
-    final heroes = Map<dynamic, dynamic>.from(snap.value as Map);
+    final heroes = Map<dynamic, dynamic>.from(snap.value! as Map);
     final futures = <Future<void>>[];
 
     heroes.forEach((heroId, heroDataRaw) {
@@ -164,7 +166,7 @@ class ServiceRequestService {
     final requestRef = rtdb.FirebaseDatabase.instance
         .ref('active_service_requests/$requestId');
 
-    final transResult = await requestRef.runTransaction((Object? currentData) {
+    final transResult = await requestRef.runTransaction((currentData) {
       if (currentData == null) {
         // Optimistic local cache run. NEVER abort here — the server
         // will re-run this against the real data.
@@ -179,7 +181,9 @@ class ServiceRequestService {
       final data = Map<String, dynamic>.from(currentData as Map);
       final status = data['status'] as String? ?? '';
 
-      if (status == 'accepted' || status == 'cancelled' || status == 'timeout') {
+      if (status == 'accepted' ||
+          status == 'cancelled' ||
+          status == 'timeout') {
         return rtdb.Transaction.abort();
       }
 
@@ -269,8 +273,9 @@ class ServiceRequestService {
   /// request is still 'pending' (no hero accepted), routes it to the
   /// admin "New Orders" tab for manual follow-up.
   Future<void> markTimeoutIfStillPending(String requestId) async {
-    final docRef =
-        FirebaseFirestore.instance.collection('service_requests').doc(requestId);
+    final docRef = FirebaseFirestore.instance
+        .collection('service_requests')
+        .doc(requestId);
     final doc = await docRef.get();
     if (!doc.exists) return;
 

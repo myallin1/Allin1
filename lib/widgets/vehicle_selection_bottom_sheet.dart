@@ -24,19 +24,27 @@ class VehicleSelectionBottomSheet extends StatefulWidget {
   });
 
   @override
-  State<VehicleSelectionBottomSheet> createState() => _VehicleSelectionBottomSheetState();
+  State<VehicleSelectionBottomSheet> createState() =>
+      _VehicleSelectionBottomSheetState();
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(DoubleProperty('distanceKm', distanceKm));
     properties.add(DiagnosticsProperty<Map<String, dynamic>?>('fares', fares));
-    properties.add(ObjectFlagProperty<void Function(String vehicleType, double estimatedFare)>.has('onConfirm', onConfirm));
+    properties.add(
+      ObjectFlagProperty<
+          void Function(String vehicleType, double estimatedFare)>.has(
+        'onConfirm',
+        onConfirm,
+      ),
+    );
     properties.add(StringProperty('initialVehicleType', initialVehicleType));
   }
 }
 
-class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomSheet>
+class _VehicleSelectionBottomSheetState
+    extends State<VehicleSelectionBottomSheet>
     with SingleTickerProviderStateMixin {
   late String _selectedVehicle;
   late AnimationController _animationController;
@@ -117,8 +125,8 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
       'icon': '🚨',
       'eta': '5-8 mins',
       'capacity': 1,
-      'color': Color(0xFFFF5252),
-      'bgColor': Color(0x1AFF5252),
+      'color': const Color(0xFFFF5252),
+      'bgColor': const Color(0x1AFF5252),
     },
   ];
 
@@ -150,7 +158,8 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
         ),
         child: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.only(top: 8, bottom: 24, left: 24, right: 24),
+            padding:
+                const EdgeInsets.only(top: 8, bottom: 24, left: 24, right: 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -180,7 +189,7 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                           style: GoogleFonts.outfit(
                             fontSize: 24,
                             fontWeight: FontWeight.w800,
-                          color: _brandText,
+                            color: _brandText,
                             letterSpacing: -0.8,
                           ),
                         ),
@@ -216,7 +225,8 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: _vehicles.length,
-                  itemBuilder: (context, index) => _buildVehicleCard(_vehicles[index]),
+                  itemBuilder: (context, index) =>
+                      _buildVehicleCard(_vehicles[index]),
                 ),
 
                 const SizedBox(height: 32),
@@ -241,7 +251,9 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                   ),
                   child: ElevatedButton(
                     onPressed: () {
-                      debugPrint('🔥 [BUTTON CLICKED] Confirm Booking button was tapped!');
+                      debugPrint(
+                        '🔥 [BUTTON CLICKED] Confirm Booking button was tapped!',
+                      );
                       final fare = RideModel.calculateFare(
                         widget.distanceKm,
                         _selectedVehicle,
@@ -328,10 +340,13 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                       colors: [bgColor, bgColor.withValues(alpha: 0.05)],
                     )
                   : null,
-              color: isSelected ? bgColor.withValues(alpha: 0.16) : Colors.white,
+              color:
+                  isSelected ? bgColor.withValues(alpha: 0.16) : Colors.white,
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: isSelected ? accentColor.withValues(alpha: 0.6) : _brandBorder,
+                color: isSelected
+                    ? accentColor.withValues(alpha: 0.6)
+                    : _brandBorder,
                 width: isSelected ? 2.5 : 1.5,
               ),
               boxShadow: isSelected
@@ -358,8 +373,15 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                   height: 56,
                   decoration: BoxDecoration(
                     gradient: isSelected
-                        ? LinearGradient(colors: [accentColor, accentColor.withValues(alpha: 0.8)])
-                        : const LinearGradient(colors: [Color(0xFFFFEEF7), Colors.white]),
+                        ? LinearGradient(
+                            colors: [
+                              accentColor,
+                              accentColor.withValues(alpha: 0.8),
+                            ],
+                          )
+                        : const LinearGradient(
+                            colors: [Color(0xFFFFEEF7), Colors.white],
+                          ),
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
@@ -399,11 +421,24 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                           ),
                           // Enhanced Price Display
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               gradient: isSelected
-                                  ? LinearGradient(colors: [accentColor, accentColor.withValues(alpha: 0.8)])
-                                  : const LinearGradient(colors: [Color(0xFFFFEEF7), Colors.white]),
+                                  ? LinearGradient(
+                                      colors: [
+                                        accentColor,
+                                        accentColor.withValues(alpha: 0.8),
+                                      ],
+                                    )
+                                  : const LinearGradient(
+                                      colors: [
+                                        Color(0xFFFFEEF7),
+                                        Colors.white,
+                                      ],
+                                    ),
                               borderRadius: BorderRadius.circular(16),
                               boxShadow: [
                                 BoxShadow(

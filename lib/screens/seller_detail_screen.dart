@@ -746,7 +746,8 @@ class _CartItemTile extends StatelessWidget {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<CartItem>('item', item));
     properties.add(
-        ObjectFlagProperty<void Function(int)>.has('onUpdateQty', onUpdateQty),);
+      ObjectFlagProperty<void Function(int)>.has('onUpdateQty', onUpdateQty),
+    );
     properties.add(ObjectFlagProperty<VoidCallback>.has('onRemove', onRemove));
   }
 }

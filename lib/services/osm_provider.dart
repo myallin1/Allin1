@@ -231,7 +231,8 @@ class OSMProvider extends MapProvider {
       // FIX #4: Ping real search query instead of root URL
       final response = await http.get(
         Uri.parse(
-            'https://nominatim.openstreetmap.org/search?q=Erode&format=json&limit=1',),
+          'https://nominatim.openstreetmap.org/search?q=Erode&format=json&limit=1',
+        ),
         headers: {'User-Agent': 'Allin1SuperApp/1.0'},
       ).timeout(const Duration(seconds: 5));
       return response.statusCode == 200;

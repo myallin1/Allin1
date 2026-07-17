@@ -8,6 +8,7 @@
 // hero's app or an admin manual override.
 // ================================================================
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -63,14 +64,15 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
   final String requestId;
   final String requestType;
   const ServiceRequestTrackingScreen({
-    super.key,
     required this.requestId,
     required this.requestType,
+    super.key,
   });
 
   @override
   Widget build(BuildContext context) {
-    final labels = _kTaskTypeRequests.contains(requestType) ? _kTaskLabels : _kGoodsLabels;
+    final labels =
+        _kTaskTypeRequests.contains(requestType) ? _kTaskLabels : _kGoodsLabels;
 
     return Scaffold(
       backgroundColor: _kBg,
@@ -78,20 +80,41 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
         backgroundColor: _kBg,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _kText, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: _kText,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Track Request', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 18)),
+        title: Text(
+          'Track Request',
+          style: GoogleFonts.outfit(
+            color: _kText,
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+          ),
+        ),
         centerTitle: true,
       ),
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance.collection('service_requests').doc(requestId).snapshots(),
+        stream: FirebaseFirestore.instance
+            .collection('service_requests')
+            .doc(requestId)
+            .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: _kPink));
+            return const Center(
+              child: CircularProgressIndicator(color: _kPink),
+            );
           }
           if (!snapshot.hasData || !snapshot.data!.exists) {
-            return const Center(child: Text('Request not found.', style: TextStyle(color: _kMuted)));
+            return const Center(
+              child: Text(
+                'Request not found.',
+                style: TextStyle(color: _kMuted),
+              ),
+            );
           }
 
           final data = snapshot.data!.data()!;
@@ -114,11 +137,17 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.orange.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: Colors.orange.withValues(alpha: 0.3),
+                      ),
                     ),
                     child: const Text(
                       'Our team is personally arranging a Hero for you — this may take a little longer than usual.',
-                      style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 if (heroName != null && heroName.isNotEmpty)
@@ -136,15 +165,33 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
                         CircleAvatar(
                           radius: 22,
                           backgroundColor: _kPink.withValues(alpha: 0.15),
-                          child: Text(heroName.isNotEmpty ? heroName[0].toUpperCase() : 'H', style: const TextStyle(color: _kPink, fontWeight: FontWeight.w800)),
+                          child: Text(
+                            heroName.isNotEmpty
+                                ? heroName[0].toUpperCase()
+                                : 'H',
+                            style: const TextStyle(
+                              color: _kPink,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(heroName, style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 14)),
-                              const Text('Your assigned Hero', style: TextStyle(color: _kMuted, fontSize: 11)),
+                              Text(
+                                heroName,
+                                style: GoogleFonts.outfit(
+                                  color: _kText,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const Text(
+                                'Your assigned Hero',
+                                style: TextStyle(color: _kMuted, fontSize: 11),
+                              ),
                             ],
                           ),
                         ),
@@ -154,7 +201,8 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
                               final uri = Uri.parse('tel:$heroPhone');
                               if (await canLaunchUrl(uri)) await launchUrl(uri);
                             },
-                            icon: const Icon(Icons.call_rounded, color: _kGreen),
+                            icon:
+                                const Icon(Icons.call_rounded, color: _kGreen),
                           ),
                       ],
                     ),
@@ -166,6 +214,13 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
         },
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestId', requestId));
+    properties.add(StringProperty('requestType', requestType));
   }
 }
 
@@ -205,7 +260,8 @@ class _StatusStepper extends StatelessWidget {
                   child: Text(
                     labels[i],
                     style: GoogleFonts.outfit(
-                      color: isCurrent ? _kText : (isCompleted ? _kText : _kMuted),
+                      color:
+                          isCurrent ? _kText : (isCompleted ? _kText : _kMuted),
                       fontSize: 14,
                       fontWeight: isCurrent ? FontWeight.w800 : FontWeight.w600,
                     ),
@@ -217,6 +273,13 @@ class _StatusStepper extends StatelessWidget {
         );
       }),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(IterableProperty<String>('labels', labels));
+    properties.add(IntProperty('currentIndex', currentIndex));
   }
 }
 
@@ -252,5 +315,12 @@ class _StepCircle extends StatelessWidget {
         border: Border.all(color: _kBorder, width: 2),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<bool>('isCompleted', isCompleted));
+    properties.add(DiagnosticsProperty<bool>('isCurrent', isCurrent));
   }
 }

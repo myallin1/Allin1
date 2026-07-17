@@ -17,8 +17,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/ride_model.dart';
-import '../../services/map_service.dart';
 import '../../services/hero_ride_notification_service.dart';
+import '../../services/map_service.dart';
 import '../../widgets/allin1_map_widget.dart';
 
 class CaptainRideScreen extends StatefulWidget {
@@ -118,7 +118,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    
+
     // ✅ Generate Local OTP on Init
     _rideOtpCode = _generateLocalOtp(widget.rideDocId);
 
@@ -182,7 +182,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
     // ✅ FIX: Cancel notification if screen closes abruptly
     if (widget.rideDocId.isNotEmpty && _rideStatus != 'paid') {
       unawaited(
-        HeroRideNotificationService.cancelRideNotification(widget.rideDocId)
+        HeroRideNotificationService.cancelRideNotification(widget.rideDocId),
       );
     }
 
@@ -509,8 +509,8 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
               (data['fare'] as num?)?.toDouble() ??
               _rideFareAmount;
           _tipAmount = (data['tipAmount'] as num?)?.toDouble() ?? _tipAmount;
-          
-          // ✅ Always use local deterministic OTP 
+
+          // ✅ Always use local deterministic OTP
           _rideOtpCode = _generateLocalOtp(widget.rideDocId);
 
           _finalFare = (data['finalFare'] as num?)?.toDouble() ??
@@ -568,11 +568,14 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
     final enteredOtp = _otpController.text.trim();
     if (_rideOtpCode.isNotEmpty && enteredOtp != _rideOtpCode) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('❌ Incorrect OTP, please ask the customer to confirm'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('❌ Incorrect OTP, please ask the customer to confirm'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
       return;
     }
@@ -665,8 +668,12 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       // ✅ FIX: Kill the ride notification when ride completes
       if (widget.rideDocId.isNotEmpty) {
         try {
-          await HeroRideNotificationService.cancelRideNotification(widget.rideDocId);
-          debugPrint('[HeroRideScreen] Ride notification cancelled on trip complete');
+          await HeroRideNotificationService.cancelRideNotification(
+            widget.rideDocId,
+          );
+          debugPrint(
+            '[HeroRideScreen] Ride notification cancelled on trip complete',
+          );
         } catch (e) {
           debugPrint('[HeroRideScreen] Notification cancel error: $e');
         }
@@ -745,8 +752,12 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       // ✅ FIX: Kill the ride notification when payment is marked received
       if (widget.rideDocId.isNotEmpty) {
         try {
-          await HeroRideNotificationService.cancelRideNotification(widget.rideDocId);
-          debugPrint('[HeroRideScreen] Ride notification cancelled on payment received');
+          await HeroRideNotificationService.cancelRideNotification(
+            widget.rideDocId,
+          );
+          debugPrint(
+            '[HeroRideScreen] Ride notification cancelled on payment received',
+          );
         } catch (e) {
           debugPrint('[HeroRideScreen] Notification cancel error: $e');
         }
@@ -795,7 +806,9 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       if (rideData['paymentStatus'] == 'settled' ||
           rideData['paymentStatus'] == 'paid' ||
           rideData['paymentStatus'] == 'paid_by_wallet') {
-        debugPrint('[HeroRideScreen] Payment already processed — skipping markPaymentReceived');
+        debugPrint(
+          '[HeroRideScreen] Payment already processed — skipping markPaymentReceived',
+        );
         return;
       }
 
@@ -817,8 +830,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
           FirebaseFirestore.instance.collection('heroes').doc(user.uid);
       final heroSnap = await heroRef.get();
       final currentBalance =
-          (heroSnap.data()?['walletBalance'] as num?)?.toDouble() ??
-          0.0;
+          (heroSnap.data()?['walletBalance'] as num?)?.toDouble() ?? 0.0;
       final totalEarnings =
           (heroSnap.data()?['totalEarnings'] as num?)?.toDouble() ?? 0.0;
       final totalRides = (heroSnap.data()?['totalRides'] as num?)?.toInt() ?? 0;
@@ -857,7 +869,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         'rideId': widget.rideDocId,
         'description': 'Payment collected for completed ride',
         'timestamp': FieldValue.serverTimestamp(),
-       });
+      });
 
       await FirebaseDatabase.instance
           .ref('live_locations/${widget.rideDocId}')
@@ -953,7 +965,8 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       case 'started':
       case 'in_progress':
         badgeColor = _green;
-        statusText = _isCargoRide ? 'Navigate to Drop' : 'Navigate to Destination';
+        statusText =
+            _isCargoRide ? 'Navigate to Drop' : 'Navigate to Destination';
         break;
       case 'completed':
         badgeColor = _muted;

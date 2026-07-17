@@ -290,34 +290,36 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                 ),
                                 const SizedBox(height: 8),
                                 ...featureList.take(5).map(
-                                  (feature) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 6),
-                                    child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Padding(
-                                          padding: EdgeInsets.only(top: 4),
-                                          child: Icon(
-                                            Icons.check_circle_rounded,
-                                            color: kGold,
-                                            size: 14,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            feature,
-                                            style: GoogleFonts.outfit(
-                                              color: kText,
-                                              fontSize: 11,
-                                              height: 1.4,
+                                      (feature) => Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 6),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            const Padding(
+                                              padding: EdgeInsets.only(top: 4),
+                                              child: Icon(
+                                                Icons.check_circle_rounded,
+                                                color: kGold,
+                                                size: 14,
+                                              ),
                                             ),
-                                          ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                feature,
+                                                style: GoogleFonts.outfit(
+                                                  color: kText,
+                                                  fontSize: 11,
+                                                  height: 1.4,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                ),
                               ],
                               if (distribution.isNotEmpty ||
                                   shorebirdStatus.isNotEmpty ||
@@ -329,12 +331,19 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                   runSpacing: 8,
                                   children: [
                                     if (distribution.isNotEmpty)
-                                      _buildMetaChip(distribution.replaceAll('_', ' ').toUpperCase()),
+                                      _buildMetaChip(
+                                        distribution
+                                            .replaceAll('_', ' ')
+                                            .toUpperCase(),
+                                      ),
                                     if (shorebirdStatus.isNotEmpty)
-                                      _buildMetaChip('PATCH ${shorebirdStatus.toUpperCase()}'),
+                                      _buildMetaChip(
+                                        'PATCH ${shorebirdStatus.toUpperCase()}',
+                                      ),
                                     if (currentPatch != null)
                                       _buildMetaChip('LIVE P$currentPatch'),
-                                    if (nextPatch != null && nextPatch != currentPatch)
+                                    if (nextPatch != null &&
+                                        nextPatch != currentPatch)
                                       _buildMetaChip('NEXT P$nextPatch'),
                                   ],
                                 ),
@@ -342,10 +351,13 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                               if (isDownloading) ...[
                                 const SizedBox(height: 12),
                                 LinearProgressIndicator(
-                                  value: downloadProgress <= 0 ? null : downloadProgress,
+                                  value: downloadProgress <= 0
+                                      ? null
+                                      : downloadProgress,
                                   minHeight: 8,
                                   color: kGold,
-                                  backgroundColor: Colors.white.withValues(alpha: 0.08),
+                                  backgroundColor:
+                                      Colors.white.withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                                 const SizedBox(height: 8),
@@ -393,7 +405,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                         borderRadius: BorderRadius.circular(14),
                                         boxShadow: [
                                           BoxShadow(
-                                            color: kGold.withValues(alpha: glow),
+                                            color:
+                                                kGold.withValues(alpha: glow),
                                             blurRadius: 20,
                                             spreadRadius: 1.5,
                                             offset: const Offset(0, 6),
@@ -417,7 +430,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                             vertical: 14,
                                           ),
                                           shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(14),
+                                            borderRadius:
+                                                BorderRadius.circular(14),
                                           ),
                                         ),
                                         icon: Icon(
@@ -775,9 +789,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
   String _buildApkFileName(String docId, String apkUrl) {
     final uri = Uri.tryParse(apkUrl);
-    final lastSegment = uri != null && uri.pathSegments.isNotEmpty
-        ? uri.pathSegments.last
-        : '';
+    final lastSegment =
+        uri != null && uri.pathSegments.isNotEmpty ? uri.pathSegments.last : '';
     final rawName = lastSegment.toLowerCase().endsWith('.apk')
         ? lastSegment
         : 'allin1_update_$docId.apk';

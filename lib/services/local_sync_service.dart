@@ -120,7 +120,9 @@ class LocalSyncService {
     _assertInitialized();
 
     if (_kTrailBaseUrl.isEmpty) {
-      debugPrint('[LocalSync] TrailBase URL not configured — skipping store sync.');
+      debugPrint(
+        '[LocalSync] TrailBase URL not configured — skipping store sync.',
+      );
       return const _BoxSyncResult(recordsSynced: 0);
     }
 
@@ -169,7 +171,9 @@ class LocalSyncService {
     _assertInitialized();
 
     if (_kTrailBaseUrl.isEmpty) {
-      debugPrint('[LocalSync] TrailBase URL not configured — skipping reward sync.');
+      debugPrint(
+        '[LocalSync] TrailBase URL not configured — skipping reward sync.',
+      );
       return const _BoxSyncResult(recordsSynced: 0);
     }
 
@@ -216,7 +220,9 @@ class LocalSyncService {
     _assertInitialized();
 
     if (_kTrailBaseUrl.isEmpty) {
-      debugPrint('[LocalSync] TrailBase URL not configured — skipping balance sync.');
+      debugPrint(
+        '[LocalSync] TrailBase URL not configured — skipping balance sync.',
+      );
       return const _BoxSyncResult(recordsSynced: 0);
     }
 
@@ -329,7 +335,8 @@ class LocalSyncService {
     _assertInitialized();
     await _metaBox.clear();
     debugPrint(
-        '[LocalSync] Sync timestamps invalidated — full sync on next call.',);
+      '[LocalSync] Sync timestamps invalidated — full sync on next call.',
+    );
   }
 
   // ── Internal Helpers ──────────────────────────────────────────────────────

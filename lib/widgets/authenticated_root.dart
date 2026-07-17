@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../screens/dashboard_screen.dart';
 
-/// A wrapper for the Dashboard that intercepts the back button 
+/// A wrapper for the Dashboard that intercepts the back button
 /// to prevent logging out unintentionally.
 class AuthenticatedRoot extends StatelessWidget {
   const AuthenticatedRoot({super.key});

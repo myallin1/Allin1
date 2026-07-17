@@ -12,14 +12,14 @@ import 'package:url_launcher/url_launcher.dart';
 // ROUTING FIX: import added — was missing, causing "undefined class" compile error
 import 'hero_verification_pending.dart';
 
-const Color _bg    = Color(0xFF0A0A12);
-const Color _card  = Color(0xFF1A1A2A);
+const Color _bg = Color(0xFF0A0A12);
+const Color _card = Color(0xFF1A1A2A);
 const Color _green = Color(0xFF00C853);
-const Color _gold  = Color(0xFFFFBB00);
+const Color _gold = Color(0xFFFFBB00);
 const Color _njPink = Color(0xFFFF4FA3); // NJ TECH brand pink
-const Color _text  = Color(0xFFEEEEF5);
+const Color _text = Color(0xFFEEEEF5);
 const Color _muted = Color(0xFF7777A0);
-const Color _red   = Color(0xFFFF5252);
+const Color _red = Color(0xFFFF5252);
 
 class _HeroCategory {
   const _HeroCategory({
@@ -84,19 +84,19 @@ class HeroRegisterScreen extends StatefulWidget {
 
 class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController        = TextEditingController();
-  final _phoneController       = TextEditingController();
-  final _dobController         = TextEditingController(); // T1: D.O.B
-  final _addressController     = TextEditingController(); // T1: Address
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _dobController = TextEditingController(); // T1: D.O.B
+  final _addressController = TextEditingController(); // T1: Address
   final _licenseNumberController = TextEditingController();
-  final _aadhaarController     = TextEditingController(); // T1: Aadhaar No
-  final _panController         = TextEditingController(); // T1: PAN No
+  final _aadhaarController = TextEditingController(); // T1: Aadhaar No
+  final _panController = TextEditingController(); // T1: PAN No
   String? _selectedVehicleType;
   bool _agreedEmergencyResponder = false;
 
   // T2: CEO WhatsApp placeholder — replace 91XXXXXXXXXX with real number
   static const String _adminWhatsApp = '91XXXXXXXXXX';
-  static const String _adminPhone    = '+91XXXXXXXXXX';
+  static const String _adminPhone = '+91XXXXXXXXXX';
 
   @override
   void dispose() {
@@ -196,30 +196,30 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       final vehicleType = _normalizeVehicleType(selectedVehicleType);
       final vehicleCategoryLabel = _vehicleCategoryLabel(vehicleType);
 
-       // Save to heroes collection
-       await FirebaseFirestore.instance.collection('heroes').doc(user.uid).set({
-         'heroId': user.uid,
-         'uid': user.uid,
-         'name': _nameController.text.trim(),
-         'phone': user.phoneNumber ?? _phoneController.text.trim(),
-         'email': user.email ?? '',
-         // T1: New fields per CEO directive
-         'dob': _dobController.text.trim(),
-         'address': _addressController.text.trim(),
-         'aadhaarNumber': _aadhaarController.text.trim(),
-         'panNumber': _panController.text.trim(),
-         'vehicleType': vehicleType,
-         'heroCategory': vehicleType,
-         'vehicleCategoryLabel': vehicleCategoryLabel,
-         'isEmergencyHelper': true,
-         'sosNetworkAcceptedAt': FieldValue.serverTimestamp(),
-         'licenseNumber': _licenseNumberController.text.trim(),
-         // T1: No document URLs — hero sends physical docs via WhatsApp
-         'approvalStatus': 'pending',
-         'status': 'offline',
-         'onboardingMethod': 'manual_whatsapp',
-         'createdAt': FieldValue.serverTimestamp(),
-       });
+      // Save to heroes collection
+      await FirebaseFirestore.instance.collection('heroes').doc(user.uid).set({
+        'heroId': user.uid,
+        'uid': user.uid,
+        'name': _nameController.text.trim(),
+        'phone': user.phoneNumber ?? _phoneController.text.trim(),
+        'email': user.email ?? '',
+        // T1: New fields per CEO directive
+        'dob': _dobController.text.trim(),
+        'address': _addressController.text.trim(),
+        'aadhaarNumber': _aadhaarController.text.trim(),
+        'panNumber': _panController.text.trim(),
+        'vehicleType': vehicleType,
+        'heroCategory': vehicleType,
+        'vehicleCategoryLabel': vehicleCategoryLabel,
+        'isEmergencyHelper': true,
+        'sosNetworkAcceptedAt': FieldValue.serverTimestamp(),
+        'licenseNumber': _licenseNumberController.text.trim(),
+        // T1: No document URLs — hero sends physical docs via WhatsApp
+        'approvalStatus': 'pending',
+        'status': 'offline',
+        'onboardingMethod': 'manual_whatsapp',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -243,7 +243,9 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       }
     } on FirebaseAuthException catch (e) {
       // Task 4: Typed Firebase Auth error — prints exact code to console
-      debugPrint('[HeroRegister] FirebaseAuthException: ${e.code} — ${e.message}');
+      debugPrint(
+        '[HeroRegister] FirebaseAuthException: ${e.code} — ${e.message}',
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -372,8 +374,9 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                 label: 'Contact Number',
                 icon: Icons.phone_rounded,
                 keyboardType: TextInputType.phone,
-                validator: (v) =>
-                    v!.trim().length < 10 ? 'Enter a valid 10-digit number' : null,
+                validator: (v) => v!.trim().length < 10
+                    ? 'Enter a valid 10-digit number'
+                    : null,
               ),
               const SizedBox(height: 12),
               // T1: Date of Birth — text entry (dd/mm/yyyy)
@@ -413,8 +416,9 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                 label: 'Aadhaar Number',
                 icon: Icons.fingerprint_rounded,
                 keyboardType: TextInputType.number,
-                validator: (v) =>
-                    v!.trim().length != 12 ? 'Enter valid 12-digit Aadhaar' : null,
+                validator: (v) => v!.trim().length != 12
+                    ? 'Enter valid 12-digit Aadhaar'
+                    : null,
               ),
               const SizedBox(height: 12),
               _field(
@@ -465,8 +469,8 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF25D366)
-                                .withValues(alpha: 0.18),
+                            color:
+                                const Color(0xFF25D366).withValues(alpha: 0.18),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: const Text(
@@ -527,7 +531,8 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                         icon: const Icon(Icons.call_rounded, size: 16),
                         label: Text(
                           'Call Admin for Quick Verification',
-                          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+                          style:
+                              GoogleFonts.outfit(fontWeight: FontWeight.w700),
                         ),
                         style: OutlinedButton.styleFrom(
                           // T3: was Colors.blue — now NJ Pink
@@ -640,7 +645,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     );
   }
 
-   Widget _buildEmergencyResponderAgreement() {
+  Widget _buildEmergencyResponderAgreement() {
     return InkWell(
       onTap: () {
         setState(() {
@@ -733,8 +738,8 @@ class _HeroCategoryCard extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: (_selected ? _njPink : Colors.black)
-                  .withValues(alpha: 0.28),
+              color:
+                  (_selected ? _njPink : Colors.black).withValues(alpha: 0.28),
               blurRadius: _selected ? 22 : 12,
               offset: const Offset(0, 10),
             ),

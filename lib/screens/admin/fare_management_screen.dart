@@ -16,7 +16,7 @@ class FareManagementScreen extends StatefulWidget {
 
 class _FareManagementScreenState extends State<FareManagementScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
+
   // Theme Colors
   static const Color _bg = Color(0xFF0A0A1A);
   static const Color _surface = Color(0xFF12121E);
@@ -29,7 +29,7 @@ class _FareManagementScreenState extends State<FareManagementScreen> {
   static const Color _border = Color(0x1AFFFFFF);
 
   bool _isLoading = true;
-  
+
   // Controllers for Bike Taxi
   final TextEditingController _bikeBaseFareCtrl = TextEditingController();
   final TextEditingController _bikePerKmCtrl = TextEditingController();
@@ -70,10 +70,11 @@ class _FareManagementScreenState extends State<FareManagementScreen> {
 
   Future<void> _fetchFares() async {
     try {
-      final doc = await _firestore.collection('settings').doc('ride_fares').get();
+      final doc =
+          await _firestore.collection('settings').doc('ride_fares').get();
       if (doc.exists) {
         final data = doc.data() ?? {};
-        
+
         // Bike
         final bike = data['bike'] as Map<String, dynamic>? ?? {};
         _bikeBaseFareCtrl.text = (bike['baseFare'] ?? '25').toString();
@@ -95,7 +96,10 @@ class _FareManagementScreenState extends State<FareManagementScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error fetching fares: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error fetching fares: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -120,7 +124,7 @@ class _FareManagementScreenState extends State<FareManagementScreen> {
 
     try {
       final Map<String, dynamic> updateData = {};
-      
+
       if (type == 'bike') {
         updateData['bike'] = {
           'baseFare': double.tryParse(_bikeBaseFareCtrl.text) ?? 25.0,
@@ -142,9 +146,9 @@ class _FareManagementScreenState extends State<FareManagementScreen> {
       }
 
       await _firestore.collection('settings').doc('ride_fares').set(
-        updateData,
-        SetOptions(merge: true),
-      );
+            updateData,
+            SetOptions(merge: true),
+          );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -158,7 +162,10 @@ class _FareManagementScreenState extends State<FareManagementScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Update Failed: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Update Failed: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -295,7 +302,7 @@ class _FareManagementScreenState extends State<FareManagementScreen> {
               ],
             ),
           ),
-          
+
           Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -386,14 +393,18 @@ class _FareManagementScreenState extends State<FareManagementScreen> {
             hintText: hint,
             hintStyle: TextStyle(color: _muted.withValues(alpha: 0.5)),
             suffixText: suffix,
-            suffixStyle: GoogleFonts.outfit(color: _secondary, fontWeight: FontWeight.bold),
+            suffixStyle: GoogleFonts.outfit(
+              color: _secondary,
+              fontWeight: FontWeight.bold,
+            ),
             filled: true,
             fillColor: _bg,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           ),
         ),
       ],

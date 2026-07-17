@@ -32,7 +32,7 @@ class SuperAdminHomeScreen extends StatelessWidget {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: _purple.withOpacity(0.4)),
+          side: BorderSide(color: _purple.withValues(alpha: 0.4)),
         ),
       ),
     );
@@ -100,10 +100,10 @@ class SuperAdminHomeScreen extends StatelessWidget {
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.white.withOpacity(0.28)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFFF1744).withOpacity(0.45),
+                color: const Color(0xFFFF1744).withValues(alpha: 0.45),
                 blurRadius: 24,
                 spreadRadius: 2,
                 offset: const Offset(0, 8),
@@ -177,7 +177,7 @@ class SuperAdminHomeScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: _surface,
         border: Border(
-          bottom: BorderSide(color: _purple.withOpacity(0.2)),
+          bottom: BorderSide(color: _purple.withValues(alpha: 0.2)),
         ),
       ),
       child: Row(
@@ -185,9 +185,9 @@ class SuperAdminHomeScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: _purple.withOpacity(0.15),
+              color: _purple.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _purple.withOpacity(0.3)),
+              border: Border.all(color: _purple.withValues(alpha: 0.3)),
             ),
             child: const Icon(Icons.lock, color: _purple, size: 22),
           ),
@@ -209,7 +209,7 @@ class SuperAdminHomeScreen extends StatelessWidget {
                 Text(
                   'NJ TECH Admin Portal',
                   style: TextStyle(
-                    color: _text.withOpacity(0.55),
+                    color: _text.withValues(alpha: 0.55),
                     fontSize: 13,
                     letterSpacing: 0.2,
                   ),
@@ -221,7 +221,7 @@ class SuperAdminHomeScreen extends StatelessWidget {
             onPressed: () {},
             icon: Icon(
               Icons.notifications_outlined,
-              color: _text.withOpacity(0.6),
+              color: _text.withValues(alpha: 0.6),
             ),
           ),
         ],
@@ -265,7 +265,7 @@ class SuperAdminHomeScreen extends StatelessWidget {
             decoration: BoxDecoration(
               color: _surface,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _purple.withOpacity(0.15)),
+              border: Border.all(color: _purple.withValues(alpha: 0.15)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -336,14 +336,14 @@ class SuperAdminHomeScreen extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           label,
-          style: TextStyle(color: _text.withOpacity(0.5), fontSize: 10.5),
+          style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 10.5),
         ),
       ],
     );
   }
 
   Widget _divider() =>
-      Container(height: 36, width: 1, color: _text.withOpacity(0.08));
+      Container(height: 36, width: 1, color: _text.withValues(alpha: 0.08));
 
   List<Widget> _buildCards(BuildContext context) {
     return [
@@ -456,7 +456,7 @@ class SuperAdminHomeScreen extends StatelessWidget {
           Text(
             'v1.0.0',
             style: TextStyle(
-              color: _text.withOpacity(0.3),
+              color: _text.withValues(alpha: 0.3),
               fontSize: 12,
               letterSpacing: 0.5,
             ),
@@ -493,10 +493,10 @@ class _ServiceCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0xFF1A1A2A),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: cardColor.withOpacity(0.3)),
+          border: Border.all(color: cardColor.withValues(alpha: 0.3)),
           boxShadow: [
             BoxShadow(
-              color: cardColor.withOpacity(0.1),
+              color: cardColor.withValues(alpha: 0.1),
               blurRadius: 8,
               spreadRadius: 1,
             ),
@@ -508,7 +508,7 @@ class _ServiceCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: cardColor.withOpacity(0.15),
+                color: cardColor.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, color: cardColor, size: 36),
@@ -528,8 +528,8 @@ class _ServiceCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
               decoration: BoxDecoration(
                 color: isActive
-                    ? _green.withOpacity(0.2)
-                    : Colors.grey.withOpacity(0.2),
+                    ? _green.withValues(alpha: 0.2)
+                    : Colors.grey.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(

@@ -51,22 +51,23 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
     User user,
     Map<String, dynamic>? heroData,
   ) async {
-    await FirebaseFirestore.instance.collection('heroes').doc(user.uid).set({
-      'uid': user.uid,
-      'heroId': user.uid,
-      'email': user.email ?? heroData?['email'] ?? '',
-      'phone': user.phoneNumber ?? heroData?['phone'] ?? '',
-      'phoneNumber':
-          user.phoneNumber ??
-          heroData?['phoneNumber'] ??
-          heroData?['phone'] ??
-          '',
-      'name':
-          user.displayName ??
-          heroData?['name'] ??
-          heroData?['captainName'] ??
-          '',
-    }, SetOptions(merge: true),);
+    await FirebaseFirestore.instance.collection('heroes').doc(user.uid).set(
+      {
+        'uid': user.uid,
+        'heroId': user.uid,
+        'email': user.email ?? heroData?['email'] ?? '',
+        'phone': user.phoneNumber ?? heroData?['phone'] ?? '',
+        'phoneNumber': user.phoneNumber ??
+            heroData?['phoneNumber'] ??
+            heroData?['phone'] ??
+            '',
+        'name': user.displayName ??
+            heroData?['name'] ??
+            heroData?['captainName'] ??
+            '',
+      },
+      SetOptions(merge: true),
+    );
   }
 
   @override
@@ -373,9 +374,9 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
           .collection('heroes')
           .doc(user.uid)
           .get();
- 
+
       if (!mounted) return;
- 
+
       if (!heroDoc.exists) {
         Navigator.pushReplacement(
           context,
@@ -385,15 +386,15 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
         );
         return;
       }
- 
+
       final heroData = heroDoc.data();
       await _syncHeroIdentityFields(user, heroData);
- 
+
       if (_isApprovedHero(heroData)) {
         Navigator.pushReplacementNamed(context, '/hero-home');
         return;
       }
- 
+
       if (_isPendingHero(heroData)) {
         Navigator.pushReplacement(
           context,

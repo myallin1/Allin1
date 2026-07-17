@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -21,8 +22,7 @@ class SellerOnboardingScreen extends StatefulWidget {
   const SellerOnboardingScreen({super.key});
 
   @override
-  State<SellerOnboardingScreen> createState() =>
-      _SellerOnboardingScreenState();
+  State<SellerOnboardingScreen> createState() => _SellerOnboardingScreenState();
 }
 
 class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
@@ -73,16 +73,13 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
       final seller = SellerModel(
         id: uid,
         name: _nameController.text.trim(),
-        category: 'food',
         subCategory: _selectedSubCategory,
         hotelType: _selectedHotelType,
         address: _addressController.text.trim(),
-        latitude: 0.0,
-        longitude: 0.0,
+        latitude: 0,
+        longitude: 0,
         phone: _phoneController.text.trim(),
         isOpen: false,
-        estimatedPrepTimeMin: 20,
-        status: 'active',
         createdAt: now,
         updatedAt: now,
       );
@@ -248,8 +245,9 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
               ),
               prefixIcon: const Icon(Icons.store, color: _teal),
             ),
-            validator: (v) =>
-                (v == null || v.trim().isEmpty) ? 'Hotel name is required' : null,
+            validator: (v) => (v == null || v.trim().isEmpty)
+                ? 'Hotel name is required'
+                : null,
           ),
         ],
       ),
@@ -329,7 +327,9 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
                   onTap: () => setState(() => _selectedSubCategory = cat.$1),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: isSelected ? _teal : _card2,
                       borderRadius: BorderRadius.circular(20),
@@ -423,11 +423,10 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
                 borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: _teal, width: 1.5),
               ),
-              prefixIcon:
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 30),
-                    child: Icon(Icons.location_on, color: _teal),
-                  ),
+              prefixIcon: const Padding(
+                padding: EdgeInsets.only(bottom: 30),
+                child: Icon(Icons.location_on, color: _teal),
+              ),
             ),
             validator: (v) =>
                 (v == null || v.trim().isEmpty) ? 'Address is required' : null,
@@ -513,7 +512,11 @@ class _TypeTile extends StatelessWidget {
                 color: isSelected ? _teal : _card,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: isSelected ? Colors.white : _muted, size: 20),
+              child: Icon(
+                icon,
+                color: isSelected ? Colors.white : _muted,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -555,5 +558,16 @@ class _TypeTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('label', label));
+    properties.add(StringProperty('title', title));
+    properties.add(StringProperty('subtitle', subtitle));
+    properties.add(DiagnosticsProperty<IconData>('icon', icon));
+    properties.add(DiagnosticsProperty<bool>('isSelected', isSelected));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }

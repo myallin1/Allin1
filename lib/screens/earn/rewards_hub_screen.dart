@@ -1447,28 +1447,47 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
         children: [
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-              Text('🎮 Quick Wins', style: GoogleFonts.outfit(
-                  fontSize: 15, color: _text, fontWeight: FontWeight.w800)),
-              Text('Fast coins while waiting for rides',
-                  style: GoogleFonts.outfit(fontSize: 10, color: _muted)),
-            ]),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '🎮 Quick Wins',
+                  style: GoogleFonts.outfit(
+                    fontSize: 15,
+                    color: _text,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  'Fast coins while waiting for rides',
+                  style: GoogleFonts.outfit(fontSize: 10, color: _muted),
+                ),
+              ],
+            ),
           ),
           ..._funTasks.map(_buildFunCard),
           const SizedBox(height: 24),
-          _rewardsSectionHeader('🪙 Paytm Scratchcards',
-              'Win real cashback every day!', _gold),
+          _rewardsSectionHeader(
+            '🪙 Paytm Scratchcards',
+            'Win real cashback every day!',
+            _gold,
+          ),
           const SizedBox(height: 10),
           _buildPaytmScratchSection(),
           const SizedBox(height: 24),
-          _rewardsSectionHeader('🎁 Accessories Gift Cards',
-              'Exclusive NJ Tech goodies & vouchers', _purple),
+          _rewardsSectionHeader(
+            '🎁 Accessories Gift Cards',
+            'Exclusive NJ Tech goodies & vouchers',
+            _purple,
+          ),
           const SizedBox(height: 10),
           _buildAccessoriesGiftSection(),
           const SizedBox(height: 24),
-          _rewardsSectionHeader('🧠 30-Days Quiz Challenge',
-              'Answer daily — climb the leaderboard!', _orange),
+          _rewardsSectionHeader(
+            '🧠 30-Days Quiz Challenge',
+            'Answer daily — climb the leaderboard!',
+            _orange,
+          ),
           const SizedBox(height: 10),
           _buildQuizSection(),
           const SizedBox(height: 20),
@@ -1654,7 +1673,9 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
         final ads = docs
             .map(
               (d) => _LocalAd.fromFirestore(
-                  d.id, d.data()! as Map<String, dynamic>,),
+                d.id,
+                d.data()! as Map<String, dynamic>,
+              ),
             )
             .toList();
         final idx = _carouselIdx % ads.length;
@@ -1923,18 +1944,26 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
         duration: const Duration(seconds: 3),
       ),
     );
-}
+  }
 
   // ================================================================
   // SECTION HELPERS — Paytm / Gift Cards / Quiz
   // ================================================================
 
-  Widget _rewardsSectionHeader(String title, String sub, Color color) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: GoogleFonts.outfit(
-            fontSize: 15, color: _text, fontWeight: FontWeight.w800)),
-        Text(sub, style: GoogleFonts.outfit(fontSize: 10, color: _muted)),
-      ]);
+  Widget _rewardsSectionHeader(String title, String sub, Color color) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.outfit(
+              fontSize: 15,
+              color: _text,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          Text(sub, style: GoogleFonts.outfit(fontSize: 10, color: _muted)),
+        ],
+      );
 
   // ── Paytm Scratch Cards ──────────────────────────────────────
   Widget _buildPaytmScratchSection() {
@@ -1943,39 +1972,58 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
       ('₹25 Cashback', '💰', 'Limited Today', _green),
       ('₹50 Cashback', '🎰', 'Lucky Draw', _orange),
     ];
-    return Row(children: cards.map((c) {
-      final (amount, emoji, tag, col) = c;
-      return Expanded(
-        child: GestureDetector(
-          onTap: () => _snack('Open Paytm app to scratch your $amount card!', col),
-          child: Container(
-            margin: const EdgeInsets.only(right: 8),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: col.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: col.withValues(alpha: 0.35)),
-            ),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text(emoji, style: const TextStyle(fontSize: 28)),
-              const SizedBox(height: 6),
-              Text(amount, style: GoogleFonts.outfit(
-                  color: col, fontSize: 12, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 2),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: col.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(tag, style: TextStyle(
-                    color: col, fontSize: 8, fontWeight: FontWeight.w700)),
+    return Row(
+      children: cards.map((c) {
+        final (amount, emoji, tag, col) = c;
+        return Expanded(
+          child: GestureDetector(
+            onTap: () =>
+                _snack('Open Paytm app to scratch your $amount card!', col),
+            child: Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: col.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: col.withValues(alpha: 0.35)),
               ),
-            ]),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(emoji, style: const TextStyle(fontSize: 28)),
+                  const SizedBox(height: 6),
+                  Text(
+                    amount,
+                    style: GoogleFonts.outfit(
+                      color: col,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: col.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      tag,
+                      style: TextStyle(
+                        color: col,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
-      );
-    }).toList());
+        );
+      }).toList(),
+    );
   }
 
   // ── Accessories Gift Cards ────────────────────────────────────
@@ -1996,7 +2044,8 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
       children: items.map((item) {
         final (emoji, name, card, col) = item;
         return GestureDetector(
-          onTap: () => _snack('$name gift card coming soon! Stay tuned 🎁', col),
+          onTap: () =>
+              _snack('$name gift card coming soon! Stay tuned 🎁', col),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
@@ -2004,20 +2053,38 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: col.withValues(alpha: 0.3)),
             ),
-            child: Row(children: [
-              Text(emoji, style: const TextStyle(fontSize: 22)),
-              const SizedBox(width: 8),
-              Expanded(child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                Text(name, style: GoogleFonts.outfit(
-                    color: _text, fontSize: 11, fontWeight: FontWeight.w700),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text(card, style: TextStyle(
-                    color: col, fontSize: 9, fontWeight: FontWeight.w600)),
-              ])),
-            ]),
+            child: Row(
+              children: [
+                Text(emoji, style: const TextStyle(fontSize: 22)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        name,
+                        style: GoogleFonts.outfit(
+                          color: _text,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        card,
+                        style: TextStyle(
+                          color: col,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       }).toList(),
@@ -2031,48 +2098,85 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
       ('Day 8–20', '🟡', 'Intermediate', '100 Coins/day', Color(0xFFFFBB00)),
       ('Day 21–30', '🔴', 'Expert Level', '200 Coins/day', Color(0xFFFF5252)),
     ];
-    return Column(children: quizzes.map((q) {
-      final (days, dot, level, reward, col) = q;
-      return Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: col.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: col.withValues(alpha: 0.3)),
-        ),
-        child: Row(children: [
-          Text(dot, style: const TextStyle(fontSize: 18)),
-          const SizedBox(width: 12),
-          Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(level, style: GoogleFonts.outfit(
-                color: _text, fontSize: 13, fontWeight: FontWeight.w800)),
-            Text(days, style: TextStyle(color: _muted, fontSize: 11)),
-          ])),
-          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text('🪙 $reward', style: GoogleFonts.outfit(
-                color: col, fontSize: 11, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 4),
-            GestureDetector(
-              onTap: () => _snack('Quiz for $level starts soon! 🧠', col),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 5),
-                decoration: BoxDecoration(
-                  color: col,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [BoxShadow(
-                      color: col.withValues(alpha: 0.35), blurRadius: 6)],
+    return Column(
+      children: quizzes.map((q) {
+        final (days, dot, level, reward, col) = q;
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: col.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: col.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              Text(dot, style: const TextStyle(fontSize: 18)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      level,
+                      style: GoogleFonts.outfit(
+                        color: _text,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      days,
+                      style: const TextStyle(color: _muted, fontSize: 11),
+                    ),
+                  ],
                 ),
-                child: Text('Play Now', style: GoogleFonts.outfit(
-                    color: Colors.black, fontSize: 10,
-                    fontWeight: FontWeight.w800)),
               ),
-            ),
-          ]),
-        ]),
-      );
-    }).toList());
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '🪙 $reward',
+                    style: GoogleFonts.outfit(
+                      color: col,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  GestureDetector(
+                    onTap: () => _snack('Quiz for $level starts soon! 🧠', col),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: col,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: col.withValues(alpha: 0.35),
+                            blurRadius: 6,
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        'Play Now',
+                        style: GoogleFonts.outfit(
+                          color: Colors.black,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
   }
 }

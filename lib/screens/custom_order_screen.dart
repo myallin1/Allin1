@@ -40,7 +40,10 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
   Future<void> _submit() async {
     if (_orderCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please describe your order first!'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Please describe your order first!'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
@@ -58,10 +61,12 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
         details: {'orderDescription': _orderCtrl.text.trim()},
       );
 
-      unawaited(Future.delayed(
-        const Duration(seconds: kServiceRequestPingExpirySeconds),
-        () => ServiceRequestService().markTimeoutIfStillPending(requestId),
-      ));
+      unawaited(
+        Future.delayed(
+          const Duration(seconds: kServiceRequestPingExpirySeconds),
+          () => ServiceRequestService().markTimeoutIfStillPending(requestId),
+        ),
+      );
 
       if (!mounted) return;
       await Navigator.pushReplacement(
@@ -76,7 +81,10 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send request: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Failed to send request: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -92,10 +100,21 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
         backgroundColor: _kBg,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _kText, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: _kText,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Custom Order', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 18)),
+        title: Text(
+          'Custom Order',
+          style: GoogleFonts.outfit(
+            color: _kText,
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+          ),
+        ),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
@@ -119,9 +138,19 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Order anything, from anywhere', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 14)),
+                        Text(
+                          'Order anything, from anywhere',
+                          style: GoogleFonts.outfit(
+                            color: _kText,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                          ),
+                        ),
                         const SizedBox(height: 2),
-                        const Text('Manpower, medicine, fresh fish, meat, or anything else — describe it and a Hero will handle it.', style: TextStyle(color: _kMuted, fontSize: 11)),
+                        const Text(
+                          'Manpower, medicine, fresh fish, meat, or anything else — describe it and a Hero will handle it.',
+                          style: TextStyle(color: _kMuted, fontSize: 11),
+                        ),
                       ],
                     ),
                   ),
@@ -129,18 +158,32 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            Text('What do you want to order?', style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
+            Text(
+              'What do you want to order?',
+              style: GoogleFonts.outfit(
+                color: _kText,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             const SizedBox(height: 8),
             TextField(
               controller: _orderCtrl,
               maxLines: 5,
               style: const TextStyle(fontSize: 14),
               decoration: InputDecoration(
-                hintText: 'e.g., 2kg fresh chicken from any shop on Perundurai Road',
-                hintStyle: TextStyle(color: _kMuted.withValues(alpha: 0.6), fontSize: 13),
+                hintText:
+                    'e.g., 2kg fresh chicken from any shop on Perundurai Road',
+                hintStyle: TextStyle(
+                  color: _kMuted.withValues(alpha: 0.6),
+                  fontSize: 13,
+                ),
                 filled: true,
                 fillColor: _kSurface,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
                 contentPadding: const EdgeInsets.all(16),
               ),
             ),
@@ -153,12 +196,28 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
                   backgroundColor: _kPink,
                   elevation: 4,
                   shadowColor: _kPink.withValues(alpha: 0.4),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
                 onPressed: _submitting ? null : _submit,
                 child: _submitting
-                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : Text('Send Order', style: GoogleFonts.outfit(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Text(
+                        'Send Order',
+                        style: GoogleFonts.outfit(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
             ),
           ],

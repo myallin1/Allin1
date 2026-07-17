@@ -54,7 +54,10 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not pick image: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Could not pick image: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -93,10 +96,12 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
         },
       );
 
-      unawaited(Future.delayed(
-        const Duration(seconds: kServiceRequestPingExpirySeconds),
-        () => ServiceRequestService().markTimeoutIfStillPending(requestId),
-      ));
+      unawaited(
+        Future.delayed(
+          const Duration(seconds: kServiceRequestPingExpirySeconds),
+          () => ServiceRequestService().markTimeoutIfStillPending(requestId),
+        ),
+      );
 
       if (!mounted) return;
       await Navigator.pushReplacement(
@@ -111,7 +116,10 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send order: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Failed to send order: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -127,10 +135,21 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
         backgroundColor: _kBg,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _kText, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: _kText,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Grocery Order', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 18)),
+        title: Text(
+          'Grocery Order',
+          style: GoogleFonts.outfit(
+            color: _kText,
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+          ),
+        ),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
@@ -154,9 +173,19 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Type it or snap a photo', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 14)),
+                        Text(
+                          'Type it or snap a photo',
+                          style: GoogleFonts.outfit(
+                            color: _kText,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                          ),
+                        ),
                         const SizedBox(height: 2),
-                        const Text('Write your grocery list below, upload a photo of a handwritten list, or both.', style: TextStyle(color: _kMuted, fontSize: 11)),
+                        const Text(
+                          'Write your grocery list below, upload a photo of a handwritten list, or both.',
+                          style: TextStyle(color: _kMuted, fontSize: 11),
+                        ),
                       ],
                     ),
                   ),
@@ -164,7 +193,14 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            Text('Your grocery list', style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
+            Text(
+              'Your grocery list',
+              style: GoogleFonts.outfit(
+                color: _kText,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             const SizedBox(height: 8),
             TextField(
               controller: _listCtrl,
@@ -173,15 +209,28 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 hintText: 'e.g., 1kg rice, 1L milk, 2 bread, tomatoes...',
-                hintStyle: TextStyle(color: _kMuted.withValues(alpha: 0.6), fontSize: 13),
+                hintStyle: TextStyle(
+                  color: _kMuted.withValues(alpha: 0.6),
+                  fontSize: 13,
+                ),
                 filled: true,
                 fillColor: _kSurface,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
                 contentPadding: const EdgeInsets.all(16),
               ),
             ),
             const SizedBox(height: 16),
-            Text('Or upload a photo of your list', style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
+            Text(
+              'Or upload a photo of your list',
+              style: GoogleFonts.outfit(
+                color: _kText,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             const SizedBox(height: 8),
             GestureDetector(
               onTap: _pickImage,
@@ -191,25 +240,38 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
                 decoration: BoxDecoration(
                   color: _kSurface,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: _pickedFile != null ? _kGreen.withValues(alpha: 0.4) : _kBorder),
+                  border: Border.all(
+                    color: _pickedFile != null
+                        ? _kGreen.withValues(alpha: 0.4)
+                        : _kBorder,
+                  ),
                 ),
                 child: Row(
                   children: [
                     Icon(
-                      _pickedFile != null ? Icons.check_circle_rounded : Icons.add_a_photo_outlined,
+                      _pickedFile != null
+                          ? Icons.check_circle_rounded
+                          : Icons.add_a_photo_outlined,
                       color: _pickedFile != null ? _kGreen : _kPink,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         _pickedFile?.name ?? 'Tap to choose an image',
-                        style: TextStyle(color: _pickedFile != null ? _kText : _kMuted, fontSize: 13),
+                        style: TextStyle(
+                          color: _pickedFile != null ? _kText : _kMuted,
+                          fontSize: 13,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     if (_pickedFile != null)
                       IconButton(
-                        icon: const Icon(Icons.close_rounded, color: _kMuted, size: 18),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: _kMuted,
+                          size: 18,
+                        ),
                         onPressed: () => setState(() => _pickedFile = null),
                       ),
                   ],
@@ -225,12 +287,28 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
                   backgroundColor: _kPink,
                   elevation: 4,
                   shadowColor: _kPink.withValues(alpha: 0.4),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
                 onPressed: _canSubmit ? _submit : null,
                 child: _submitting
-                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : Text('Send Order', style: GoogleFonts.outfit(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Text(
+                        'Send Order',
+                        style: GoogleFonts.outfit(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
             ),
           ],

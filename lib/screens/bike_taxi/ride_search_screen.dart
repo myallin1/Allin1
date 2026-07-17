@@ -78,7 +78,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   String _captainPhone = '';
   String _captainModel = '';
   double _captainRating = 0;
-  int _captainTrips = 0;
+  final int _captainTrips = 0;
   int _captainEta = 5;
   String _rideOtp = '----';
   bool _heroAcceptedOverlayShown = false;
@@ -145,7 +145,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     }
     debugPrint('🔥 [RIDE CREATION] About to fetch nearby heroes...');
     await _fetchNearbyHeroes();
-    debugPrint('🔥 [RIDE CREATION] Awaited _fetchNearbyHeroes. Moving to next step...');
+    debugPrint(
+      '🔥 [RIDE CREATION] Awaited _fetchNearbyHeroes. Moving to next step...',
+    );
     if (_heroesQueue.isEmpty) {
       debugPrint('[RideSearch] No nearby heroes found within 3km');
       if (mounted) {
@@ -198,9 +200,8 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       final pickupLng = widget.ride.pickupLongitude ?? 77.7172;
       print('[RideSearch] _fetchNearbyHeroes: pickup=$pickupLat,$pickupLng');
 
-      final onlineSnap = await FirebaseDatabase.instance
-          .ref('online_heroes')
-          .once();
+      final onlineSnap =
+          await FirebaseDatabase.instance.ref('online_heroes').once();
 
       final onlineData = onlineSnap.snapshot.value as Map<dynamic, dynamic>?;
       if (onlineData == null || onlineData.isEmpty) {
@@ -209,12 +210,16 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         return;
       }
 
-      print('[RideSearch] RTDB returned ${onlineData.length} online hero entries');
+      print(
+        '[RideSearch] RTDB returned ${onlineData.length} online hero entries',
+      );
 
-      const double rangeKm = 3.0;
-      const double earthRadius = 6371.0;
-      final double latDelta = rangeKm / earthRadius * (180.0 / pi);
-      final double lngDelta = rangeKm / earthRadius * (180.0 / pi) /
+      const double rangeKm = 3;
+      const double earthRadius = 6371;
+      const double latDelta = rangeKm / earthRadius * (180.0 / pi);
+      final double lngDelta = rangeKm /
+          earthRadius *
+          (180.0 / pi) /
           (pickupLat.abs() > 89.0 ? 1.0 : cos(pickupLat * pi / 180.0));
 
       final double minLat = pickupLat - latDelta;
@@ -234,7 +239,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         final heroId = entry.key.toString();
         final data = entry.value as Map<dynamic, dynamic>?;
         if (data == null) {
-          debugPrint('🔥 [REJECTED] Hero $heroId rejected because RTDB value is null');
+          debugPrint(
+            '🔥 [REJECTED] Hero $heroId rejected because RTDB value is null',
+          );
           continue;
         }
 
@@ -243,18 +250,25 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         final heroLng = (data['lng'] as num?)?.toDouble() ??
             (data['longitude'] as num?)?.toDouble();
         if (heroLat == null || heroLng == null) {
-          debugPrint('🔥 [REJECTED] Hero $heroId rejected because lat/lng is null. data keys: ${data.keys}');
+          debugPrint(
+            '🔥 [REJECTED] Hero $heroId rejected because lat/lng is null. data keys: ${data.keys}',
+          );
           continue;
         }
 
-        if (heroLat < minLat || heroLat > maxLat || heroLng < minLng || heroLng > maxLng) {
+        if (heroLat < minLat ||
+            heroLat > maxLat ||
+            heroLng < minLng ||
+            heroLng > maxLng) {
           debugPrint('🔥 [REJECTED] Hero $heroId rejected by bounding box.');
           continue;
         }
 
         final isAvailable = data['isAvailable'] as bool?;
         if (isAvailable == false) {
-          debugPrint('🔥 [REJECTED] Hero $heroId rejected because isAvailable=false');
+          debugPrint(
+            '🔥 [REJECTED] Hero $heroId rejected because isAvailable=false',
+          );
           continue;
         }
 
@@ -264,9 +278,11 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         // ── SMART MODE LOGIC: Parcel requests go to BOTH Parcel and Bike heroes ──
         bool categoryMatch = false;
         if (requestedCategory == 'parcel') {
-          categoryMatch = (heroCategory == 'parcel' || heroCategory == 'bike');
+          categoryMatch = heroCategory == 'parcel' || heroCategory == 'bike';
           if (categoryMatch && heroCategory == 'bike') {
-            debugPrint('🔥 [SMART MODE] Hero $heroId matched via bike-fallback for parcel request');
+            debugPrint(
+              '🔥 [SMART MODE] Hero $heroId matched via bike-fallback for parcel request',
+            );
           }
         } else {
           categoryMatch = (heroCategory == requestedCategory);
@@ -280,8 +296,11 @@ class _RideSearchScreenState extends State<RideSearchScreen>
           continue;
         }
 
-        final distance = _haversineDistance(pickupLocation, LatLng(heroLat, heroLng));
-        print('[RideSearch] Hero $heroId: distance=${distance.toStringAsFixed(2)}km');
+        final distance =
+            _haversineDistance(pickupLocation, LatLng(heroLat, heroLng));
+        print(
+          '[RideSearch] Hero $heroId: distance=${distance.toStringAsFixed(2)}km',
+        );
         validHeroes.add({
           'id': heroId,
           'distance': distance,
@@ -291,8 +310,12 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         });
       }
 
-      print('[RideSearch] _fetchNearbyHeroes: sorted queue has ${validHeroes.length} heroes');
-      validHeroes.sort((a, b) => (a['distance'] as num).compareTo(b['distance'] as num));
+      print(
+        '[RideSearch] _fetchNearbyHeroes: sorted queue has ${validHeroes.length} heroes',
+      );
+      validHeroes.sort(
+        (a, b) => (a['distance'] as num).compareTo(b['distance'] as num),
+      );
       _heroesQueue = validHeroes;
       debugPrint('[RideSearch] Found ${validHeroes.length} heroes within 3km');
     } catch (e) {
@@ -304,7 +327,8 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   Future<void> _createRideInRTDB(User user) async {
     try {
       if (_rideDocId.isEmpty) {
-        final firestoreRef = FirebaseFirestore.instance.collection('rides').doc();
+        final firestoreRef =
+            FirebaseFirestore.instance.collection('rides').doc();
         _rideDocId = firestoreRef.id;
         await firestoreRef.set({
           'status': 'searching',
@@ -342,7 +366,10 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       debugPrint('[RideSearch] createRideInRTDB error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Booking failed: $e'), backgroundColor: const Color(0xFFFF5252)),
+          SnackBar(
+            content: Text('Booking failed: $e'),
+            backgroundColor: const Color(0xFFFF5252),
+          ),
         );
       }
     }
@@ -365,25 +392,27 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   //      The loop now BLOCKS at each hero's 10s window before moving on.
   // ================================================================
   Future<void> _startSequentialPinging() async {
-    debugPrint('🔥 [SEQUENTIAL] _startSequentialPinging started. Queue: ${_heroesQueue.length}');
+    debugPrint(
+      '🔥 [SEQUENTIAL] _startSequentialPinging started. Queue: ${_heroesQueue.length}',
+    );
     if (_heroesQueue.isEmpty || _requestId.isEmpty) return;
 
     _isPinging = true;
     _currentHeroIndex = 0;
 
-    while (
-      _currentHeroIndex < _heroesQueue.length &&
-      !_captainFound &&
-      !_cancelled &&
-      !_rideFinalized &&
-      mounted
-    ) {
+    while (_currentHeroIndex < _heroesQueue.length &&
+        !_captainFound &&
+        !_cancelled &&
+        !_rideFinalized &&
+        mounted) {
       final hero = _heroesQueue[_currentHeroIndex];
       final heroId = hero['id'] as String;
 
       debugPrint('🔥 [SEQUENTIAL] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       debugPrint('🔥 [SEQUENTIAL] Pinging hero #$_currentHeroIndex: $heroId');
-      debugPrint('🔥 [SEQUENTIAL] Distance: ${(hero['distance'] as num).toStringAsFixed(2)}km');
+      debugPrint(
+        '🔥 [SEQUENTIAL] Distance: ${(hero['distance'] as num).toStringAsFixed(2)}km',
+      );
 
       if (mounted) {
         setState(() {
@@ -398,7 +427,8 @@ class _RideSearchScreenState extends State<RideSearchScreen>
           .update({'currentPingHeroId': heroId});
 
       // ── Step 2: Write ping to hero's inbox ────────────────────
-      final pingExpiresAt = DateTime.now().toUtc().millisecondsSinceEpoch + 10000;
+      final pingExpiresAt =
+          DateTime.now().toUtc().millisecondsSinceEpoch + 10000;
       await FirebaseDatabase.instance
           .ref('hero_pings/$heroId/$_requestId')
           .set({
@@ -430,11 +460,15 @@ class _RideSearchScreenState extends State<RideSearchScreen>
 
         // Early exit if ride was accepted/cancelled while waiting
         if (_rideFinalized || _captainFound) {
-          debugPrint('🔥 [SEQUENTIAL] ✅ Ride finalized during wait at second $w — stopping loop');
+          debugPrint(
+            '🔥 [SEQUENTIAL] ✅ Ride finalized during wait at second $w — stopping loop',
+          );
           break;
         }
         if (_cancelled || !mounted) {
-          debugPrint('🔥 [SEQUENTIAL] ❌ Cancelled during wait at second $w — stopping loop');
+          debugPrint(
+            '🔥 [SEQUENTIAL] ❌ Cancelled during wait at second $w — stopping loop',
+          );
           break;
         }
 
@@ -453,18 +487,24 @@ class _RideSearchScreenState extends State<RideSearchScreen>
 
       // ── Step 5: Check final state before moving to next hero ──
       if (_rideFinalized || _captainFound || _cancelled || !mounted) {
-        debugPrint('🔥 [SEQUENTIAL] Loop exit — finalized=$_rideFinalized found=$_captainFound cancelled=$_cancelled');
+        debugPrint(
+          '🔥 [SEQUENTIAL] Loop exit — finalized=$_rideFinalized found=$_captainFound cancelled=$_cancelled',
+        );
         break;
       }
 
       // Hero did not respond — move to next
-      debugPrint('🔥 [SEQUENTIAL] Hero $heroId timed out — moving to next hero');
+      debugPrint(
+        '🔥 [SEQUENTIAL] Hero $heroId timed out — moving to next hero',
+      );
       _currentHeroIndex++;
     }
 
     // ── Loop exhausted — no hero accepted ─────────────────────
     if (!_captainFound && !_cancelled && !_rideFinalized && mounted) {
-      debugPrint('🔥 [SEQUENTIAL] All ${_heroesQueue.length} heroes pinged — no acceptance');
+      debugPrint(
+        '🔥 [SEQUENTIAL] All ${_heroesQueue.length} heroes pinged — no acceptance',
+      );
 
       // Mark RTDB request as timeout
       if (_requestId.isNotEmpty) {
@@ -493,7 +533,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
 
   void _listenForAcceptance() {
     if (_requestId.isEmpty) {
-      debugPrint('❌ [CRITICAL ERROR] _listenForAcceptance failed because _requestId is empty!');
+      debugPrint(
+        '❌ [CRITICAL ERROR] _listenForAcceptance failed because _requestId is empty!',
+      );
       return;
     }
     _rtdbRequestSub = FirebaseDatabase.instance
@@ -507,7 +549,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       final status = data['status'] as String? ?? '';
       final acceptedHeroId = data['acceptedHeroId'] as String? ?? '';
 
-      if (status == 'accepted' && acceptedHeroId.isNotEmpty && !_rideFinalized) {
+      if (status == 'accepted' &&
+          acceptedHeroId.isNotEmpty &&
+          !_rideFinalized) {
         debugPrint('🔥 [ACCEPTANCE] Hero $acceptedHeroId accepted the ride!');
         _rideFinalized = true;
         _countTimer?.cancel();
@@ -518,20 +562,27 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     });
   }
 
-  Future<void> _finalizeRideToFirestore(String acceptedHeroId, Map<dynamic, dynamic> requestData) async {
+  Future<void> _finalizeRideToFirestore(
+    String acceptedHeroId,
+    Map<dynamic, dynamic> requestData,
+  ) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      final heroName = requestData['acceptedHeroName'] as String? ?? 'Hero Rider';
+      final heroName =
+          requestData['acceptedHeroName'] as String? ?? 'Hero Rider';
       final heroPhone = requestData['acceptedHeroPhone'] as String? ?? '';
       final heroVehicle = requestData['acceptedHeroVehicle'] as String? ?? '';
 
       if (_rideDocId.isEmpty) {
-        debugPrint('❌ [CRITICAL ERROR] _finalizeRideToFirestore called with empty _rideDocId — aborting!');
+        debugPrint(
+          '❌ [CRITICAL ERROR] _finalizeRideToFirestore called with empty _rideDocId — aborting!',
+        );
         return;
       }
-      final docRef = FirebaseFirestore.instance.collection('rides').doc(_rideDocId);
+      final docRef =
+          FirebaseFirestore.instance.collection('rides').doc(_rideDocId);
 
       final rideData = {
         'pickupAddress': widget.ride.pickupAddress ?? '',
@@ -586,7 +637,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     _countTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) {
         setState(() => _searchSeconds++);
-        if (_searchSeconds >= _searchTimeoutSeconds && !_captainFound && !_searchTimedOut) {
+        if (_searchSeconds >= _searchTimeoutSeconds &&
+            !_captainFound &&
+            !_searchTimedOut) {
           unawaited(_handleSearchTimeout());
         }
       }
@@ -668,10 +721,8 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   }
 
   void _listenToNearbyCaptains() {
-    _nearbyHeroesSub = FirebaseDatabase.instance
-        .ref('online_heroes')
-        .onValue
-        .listen((event) {
+    _nearbyHeroesSub =
+        FirebaseDatabase.instance.ref('online_heroes').onValue.listen((event) {
       if (!mounted) return;
       final data = event.snapshot.value as Map<dynamic, dynamic>?;
       if (data == null) {
@@ -684,11 +735,13 @@ class _RideSearchScreenState extends State<RideSearchScreen>
           final lat = (value['lat'] as num?)?.toDouble();
           final lng = (value['lng'] as num?)?.toDouble();
           if (lat != null && lng != null) {
-            newMarkers.add(MapMarker(
-              point: LatLng(lat, lng),
-              icon: Icons.electric_bike_rounded,
-              label: (value['name'] as String?) ?? 'Hero',
-            ));
+            newMarkers.add(
+              MapMarker(
+                point: LatLng(lat, lng),
+                icon: Icons.electric_bike_rounded,
+                label: (value['name'] as String?) ?? 'Hero',
+              ),
+            );
           }
         }
       });
@@ -709,9 +762,17 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   }
 
   void _initAnimations() {
-    _radarCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
-    _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat(reverse: true);
-    _foundCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
+    _radarCtrl =
+        AnimationController(vsync: this, duration: const Duration(seconds: 2))
+          ..repeat();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
+    _foundCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
     _radarAnim = Tween<double>(begin: 0, end: 1).animate(_radarCtrl);
     _foundFadeAnim = Tween<double>(begin: 0, end: 1)
         .animate(CurvedAnimation(parent: _foundCtrl, curve: Curves.easeOut));
@@ -724,7 +785,11 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   void _showCancelledSnack(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: const Color(0xFFE05555), behavior: SnackBarBehavior.floating),
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: const Color(0xFFE05555),
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
@@ -736,16 +801,39 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: _border),
-        boxShadow: const [BoxShadow(color: Color(0x12FF4FA3), blurRadius: 24, offset: Offset(0, 12))],
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12FF4FA3),
+            blurRadius: 24,
+            offset: Offset(0, 12),
+          ),
+        ],
       ),
       child: Column(
         children: [
-          Text('Encourage Hero with a quick tip', style: GoogleFonts.outfit(fontSize: 15, color: _text, fontWeight: FontWeight.w800)),
+          Text(
+            'Encourage Hero with a quick tip',
+            style: GoogleFonts.outfit(
+              fontSize: 15,
+              color: _text,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
           const SizedBox(height: 6),
-          Text('Boost your request with a premium tip to get noticed faster.', textAlign: TextAlign.center, style: GoogleFonts.outfit(fontSize: 11, color: _muted, fontWeight: FontWeight.w600)),
+          Text(
+            'Boost your request with a premium tip to get noticed faster.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(
+              fontSize: 11,
+              color: _muted,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 14),
           Wrap(
-            spacing: 10, runSpacing: 10, alignment: WrapAlignment.center,
+            spacing: 10,
+            runSpacing: 10,
+            alignment: WrapAlignment.center,
             children: [10, 20, 30, 40, 50].map((amount) {
               final isSelected = _selectedTipAmount == amount;
               return GestureDetector(
@@ -753,23 +841,61 @@ class _RideSearchScreenState extends State<RideSearchScreen>
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 220),
                   width: 86,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                   decoration: BoxDecoration(
                     gradient: isSelected
-                        ? const LinearGradient(colors: [Color(0xFFFF4FA3), Color(0xFFFF8FC8)], begin: Alignment.topLeft, end: Alignment.bottomRight)
-                        : const LinearGradient(colors: [Color(0xFFFFFFFF), Color(0xFFFFF3F9)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                        ? const LinearGradient(
+                            colors: [Color(0xFFFF4FA3), Color(0xFFFF8FC8)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          )
+                        : const LinearGradient(
+                            colors: [Color(0xFFFFFFFF), Color(0xFFFFF3F9)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
                     borderRadius: BorderRadius.circular(22),
-                    border: Border.all(color: isSelected ? _accent : _border.withValues(alpha: 0.8)),
+                    border: Border.all(
+                      color:
+                          isSelected ? _accent : _border.withValues(alpha: 0.8),
+                    ),
                     boxShadow: isSelected
-                        ? [BoxShadow(color: _accent.withValues(alpha: 0.28), blurRadius: 18, offset: const Offset(0, 10))]
-                        : [const BoxShadow(color: Color(0x0DFF4FA3), blurRadius: 12, offset: Offset(0, 6))],
+                        ? [
+                            BoxShadow(
+                              color: _accent.withValues(alpha: 0.28),
+                              blurRadius: 18,
+                              offset: const Offset(0, 10),
+                            ),
+                          ]
+                        : [
+                            const BoxShadow(
+                              color: Color(0x0DFF4FA3),
+                              blurRadius: 12,
+                              offset: Offset(0, 6),
+                            ),
+                          ],
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('Tip', style: GoogleFonts.outfit(fontSize: 11, color: isSelected ? Colors.white70 : _muted, fontWeight: FontWeight.w700)),
+                      Text(
+                        'Tip',
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          color: isSelected ? Colors.white70 : _muted,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                       const SizedBox(height: 4),
-                      Text('Rs $amount', style: GoogleFonts.outfit(fontSize: 18, color: isSelected ? Colors.white : _text, fontWeight: FontWeight.w900)),
+                      Text(
+                        'Rs $amount',
+                        style: GoogleFonts.outfit(
+                          fontSize: 18,
+                          color: isSelected ? Colors.white : _text,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -779,9 +905,22 @@ class _RideSearchScreenState extends State<RideSearchScreen>
           if (_selectedTipAmount > 0) ...[
             const SizedBox(height: 12),
             Container(
-              width: double.infinity, padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(color: const Color(0xFFFFF3F9), borderRadius: BorderRadius.circular(16), border: Border.all(color: _border)),
-              child: Text('Tip added: Rs $_selectedTipAmount. Heroes will see the boosted fare.', textAlign: TextAlign.center, style: GoogleFonts.outfit(fontSize: 12, color: _muted, fontWeight: FontWeight.w700)),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF3F9),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _border),
+              ),
+              child: Text(
+                'Tip added: Rs $_selectedTipAmount. Heroes will see the boosted fare.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  color: _muted,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ],
         ],
@@ -794,9 +933,25 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     _heroAcceptedOverlayShown = true;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        margin: EdgeInsets.fromLTRB(16, 18, 16, 0), behavior: SnackBarBehavior.floating,
-        backgroundColor: Color(0xFFFF4FA3), duration: Duration(seconds: 3),
-        content: Row(children: [Icon(Icons.verified_rounded, color: Colors.white), SizedBox(width: 10), Expanded(child: Text('Hero accepted', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)))]),
+        margin: EdgeInsets.fromLTRB(16, 18, 16, 0),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Color(0xFFFF4FA3),
+        duration: Duration(seconds: 3),
+        content: Row(
+          children: [
+            Icon(Icons.verified_rounded, color: Colors.white),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Hero accepted',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -805,7 +960,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     _heroLocationSubscription?.cancel();
     if (_rideDocId.isEmpty) return;
     _heroLocationSubscription = FirebaseDatabase.instance
-        .ref('live_locations/$_rideDocId').onValue.listen((event) {
+        .ref('live_locations/$_rideDocId')
+        .onValue
+        .listen((event) {
       if (!mounted) return;
       final data = event.snapshot.value as Map<dynamic, dynamic>?;
       if (data == null) return;
@@ -820,12 +977,23 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   void _fitAcceptedRideBounds() {
     final hero = _acceptedHeroLocation;
     if (hero == null || !mounted) return;
-    if (!_acceptedMapReady) { _pendingAcceptedFit = true; return; }
-    final customer = LatLng(widget.ride.pickupLatitude ?? 11.3410, widget.ride.pickupLongitude ?? 77.7172);
+    if (!_acceptedMapReady) {
+      _pendingAcceptedFit = true;
+      return;
+    }
+    final customer = LatLng(
+      widget.ride.pickupLatitude ?? 11.3410,
+      widget.ride.pickupLongitude ?? 77.7172,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       try {
-        _acceptedMapController.fitCamera(CameraFit.bounds(bounds: LatLngBounds.fromPoints([customer, hero]), padding: const EdgeInsets.fromLTRB(44, 110, 44, 240)));
+        _acceptedMapController.fitCamera(
+          CameraFit.bounds(
+            bounds: LatLngBounds.fromPoints([customer, hero]),
+            padding: const EdgeInsets.fromLTRB(44, 110, 44, 240),
+          ),
+        );
         _pendingAcceptedFit = false;
       } catch (e) {
         debugPrint('[RideSearchScreen] Map fit failed: $e');
@@ -858,9 +1026,11 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     Navigator.pushReplacement(
       context,
       PageRouteBuilder<void>(
-        pageBuilder: (_, anim, __) => RideTrackingScreen(ride: ride, rideDocId: _rideDocId),
+        pageBuilder: (_, anim, __) =>
+            RideTrackingScreen(ride: ride, rideDocId: _rideDocId),
         transitionDuration: const Duration(milliseconds: 400),
-        transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
+        transitionsBuilder: (_, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
       ),
     );
   }
@@ -870,7 +1040,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(
-        child: _captainFound ? _buildAcceptedRideScaffold() : _buildSearchingView(),
+        child: _captainFound
+            ? _buildAcceptedRideScaffold()
+            : _buildSearchingView(),
       ),
     );
   }
@@ -882,19 +1054,41 @@ class _RideSearchScreenState extends State<RideSearchScreen>
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
           child: Row(
             children: [
-              const Text('Finding a Hero...', style: TextStyle(fontSize: 18, color: _text, fontWeight: FontWeight.w700)),
+              const Text(
+                'Finding a Hero...',
+                style: TextStyle(
+                  fontSize: 18,
+                  color: _text,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const Spacer(),
-              TextButton(onPressed: _cancelRide, child: const Text('Cancel', style: TextStyle(color: Color(0xFFFF5252)))),
+              TextButton(
+                onPressed: _cancelRide,
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Color(0xFFFF5252)),
+                ),
+              ),
             ],
           ),
         ),
         Expanded(
           flex: 2,
           child: Allin1MapWidget(
-            center: LatLng(widget.ride.pickupLatitude ?? 11.3410, widget.ride.pickupLongitude ?? 77.7172),
+            center: LatLng(
+              widget.ride.pickupLatitude ?? 11.3410,
+              widget.ride.pickupLongitude ?? 77.7172,
+            ),
             zoom: 13,
             markers: [
-              MapMarker(point: LatLng(widget.ride.pickupLatitude ?? 11.3410, widget.ride.pickupLongitude ?? 77.7172), label: 'You'),
+              MapMarker(
+                point: LatLng(
+                  widget.ride.pickupLatitude ?? 11.3410,
+                  widget.ride.pickupLongitude ?? 77.7172,
+                ),
+                label: 'You',
+              ),
               ..._nearbyMarkers,
             ],
             interactive: false,
@@ -912,22 +1106,47 @@ class _RideSearchScreenState extends State<RideSearchScreen>
                   AnimatedBuilder(
                     animation: _radarAnim,
                     builder: (_, __) => SizedBox(
-                      width: 140, height: 140,
+                      width: 140,
+                      height: 140,
                       child: CustomPaint(
                         painter: _RadarPainter(_radarAnim.value),
                         child: Center(
                           child: Container(
-                            width: 60, height: 60,
-                            decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: _accent, width: 2),
-                              boxShadow: [BoxShadow(color: _accent.withValues(alpha: 0.4), blurRadius: 16)]),
-                            child: const Center(child: Text('🏍️', style: TextStyle(fontSize: 28))),
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: _accent, width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _accent.withValues(alpha: 0.4),
+                                  blurRadius: 16,
+                                ),
+                              ],
+                            ),
+                            child: const Center(
+                              child: Text(
+                                '🏍️',
+                                style: TextStyle(fontSize: 28),
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Text(_searchTimedOut ? 'No Heroes Available' : 'Finding Nearby Hero', style: TextStyle(fontSize: 18, color: _text, fontWeight: FontWeight.w700)),
+                  Text(
+                    _searchTimedOut
+                        ? 'No Heroes Available'
+                        : 'Finding Nearby Hero',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      color: _text,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   const SizedBox(height: 6),
                   Text(
                     _searchTimedOut
@@ -939,24 +1158,56 @@ class _RideSearchScreenState extends State<RideSearchScreen>
                   if (_searchTimedOut)
                     ElevatedButton(
                       onPressed: _tryAgainSearch,
-                      style: ElevatedButton.styleFrom(backgroundColor: _accent, foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                      child: const Text('Try Again', style: TextStyle(fontWeight: FontWeight.w700)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _accent,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        'Try Again',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
                     )
                   else
                     _tipIncentiveSection(),
                   if (_requestId.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(color: const Color(0x1A00C853), borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0x3300C853))),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0x1A00C853),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0x3300C853)),
+                      ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(width: 6, height: 6, decoration: const BoxDecoration(color: _green, shape: BoxShape.circle)),
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                              color: _green,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
                           const SizedBox(width: 6),
-                          const Text('Live', style: TextStyle(fontSize: 10, color: _green, fontWeight: FontWeight.w600)),
+                          const Text(
+                            'Live',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: _green,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -981,18 +1232,25 @@ class _RideSearchScreenState extends State<RideSearchScreen>
               child: Allin1MapWidget(
                 mapController: _acceptedMapController,
                 onMapReady: _handleAcceptedMapReady,
-                center: _acceptedHeroLocation ?? LatLng(widget.ride.pickupLatitude ?? 11.3410, widget.ride.pickupLongitude ?? 77.7172),
+                center: _acceptedHeroLocation ??
+                    LatLng(
+                      widget.ride.pickupLatitude ?? 11.3410,
+                      widget.ride.pickupLongitude ?? 77.7172,
+                    ),
                 zoom: 15,
                 markers: _acceptedRideMarkers,
                 interactive: false,
               ),
             ),
             Positioned(
-              left: 16, right: 16, bottom: 20,
+              left: 16,
+              right: 16,
+              bottom: 20,
               child: _ActiveRideSheet(
                 heroName: _captainName.isNotEmpty ? _captainName : 'Hero Rider',
                 bikeModel: _captainModel.isNotEmpty ? _captainModel : 'Bike',
-                vehicleNumber: _captainBike.isNotEmpty ? _captainBike : 'TN 00 AB 1234',
+                vehicleNumber:
+                    _captainBike.isNotEmpty ? _captainBike : 'TN 00 AB 1234',
                 etaMinutes: _captainEta,
                 rating: _captainRating,
                 rideOtp: _rideOtp,
@@ -1008,10 +1266,22 @@ class _RideSearchScreenState extends State<RideSearchScreen>
 
   List<MapMarker> get _acceptedRideMarkers {
     final markers = <MapMarker>[
-      MapMarker(point: LatLng(widget.ride.pickupLatitude ?? 11.3410, widget.ride.pickupLongitude ?? 77.7172), label: 'You'),
+      MapMarker(
+        point: LatLng(
+          widget.ride.pickupLatitude ?? 11.3410,
+          widget.ride.pickupLongitude ?? 77.7172,
+        ),
+        label: 'You',
+      ),
     ];
     if (_acceptedHeroLocation != null) {
-      markers.add(MapMarker(point: _acceptedHeroLocation!, icon: Icons.electric_bike_rounded, label: _captainName));
+      markers.add(
+        MapMarker(
+          point: _acceptedHeroLocation!,
+          icon: Icons.electric_bike_rounded,
+          label: _captainName,
+        ),
+      );
     }
     return markers;
   }
@@ -1029,9 +1299,14 @@ class _ActiveRideSheet extends StatelessWidget {
   final VoidCallback onTrackRide;
 
   const _ActiveRideSheet({
-    required this.heroName, required this.bikeModel, required this.vehicleNumber,
-    required this.etaMinutes, required this.rating, required this.rideOtp,
-    required this.onCallHero, required this.onTrackRide,
+    required this.heroName,
+    required this.bikeModel,
+    required this.vehicleNumber,
+    required this.etaMinutes,
+    required this.rating,
+    required this.rideOtp,
+    required this.onCallHero,
+    required this.onTrackRide,
   });
 
   @override
@@ -1041,7 +1316,13 @@ class _ActiveRideSheet extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 30, offset: const Offset(0, 8))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 30,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1050,29 +1331,64 @@ class _ActiveRideSheet extends StatelessWidget {
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: const Color(0xFF1A1A2E), borderRadius: BorderRadius.circular(14)),
-                child: const Icon(Icons.pedal_bike_rounded, color: Color(0xFFFF4FA3), size: 24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A2E),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.pedal_bike_rounded,
+                  color: Color(0xFFFF4FA3),
+                  size: 24,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(heroName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF3D1230))),
+                    Text(
+                      heroName,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF3D1230),
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Text('$bikeModel · $vehicleNumber', style: const TextStyle(fontSize: 12, color: Color(0xFF8F5A78))),
+                    Text(
+                      '$bikeModel · $vehicleNumber',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF8F5A78),
+                      ),
+                    ),
                   ],
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(color: const Color(0x1A00C853), borderRadius: BorderRadius.circular(20)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0x1A00C853),
+                  borderRadius: BorderRadius.circular(20),
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.timer_rounded, size: 14, color: Color(0xFF00A86B)),
+                    const Icon(
+                      Icons.timer_rounded,
+                      size: 14,
+                      color: Color(0xFF00A86B),
+                    ),
                     const SizedBox(width: 4),
-                    Text('$etaMinutes min', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF00A86B))),
+                    Text(
+                      '$etaMinutes min',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF00A86B),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1086,9 +1402,14 @@ class _ActiveRideSheet extends StatelessWidget {
                   onPressed: onCallHero,
                   icon: const Icon(Icons.phone_rounded, size: 18),
                   label: const Text('Call'),
-                  style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFFF4FA3),
-                    side: const BorderSide(color: Color(0x33FF4FA3)), padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFFF4FA3),
+                    side: const BorderSide(color: Color(0x33FF4FA3)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1097,10 +1418,16 @@ class _ActiveRideSheet extends StatelessWidget {
                   onPressed: onTrackRide,
                   icon: const Icon(Icons.navigation_rounded, size: 18),
                   label: const Text('Track'),
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4FA3), foregroundColor: Colors.white,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF4FA3),
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    shadowColor: const Color(0x40FF4FA3), elevation: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    shadowColor: const Color(0x40FF4FA3),
+                    elevation: 8,
+                  ),
                 ),
               ),
             ],
@@ -1108,6 +1435,21 @@ class _ActiveRideSheet extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('heroName', heroName));
+    properties.add(StringProperty('bikeModel', bikeModel));
+    properties.add(StringProperty('vehicleNumber', vehicleNumber));
+    properties.add(IntProperty('etaMinutes', etaMinutes));
+    properties.add(DoubleProperty('rating', rating));
+    properties.add(StringProperty('rideOtp', rideOtp));
+    properties
+        .add(ObjectFlagProperty<VoidCallback>.has('onCallHero', onCallHero));
+    properties
+        .add(ObjectFlagProperty<VoidCallback>.has('onTrackRide', onTrackRide));
   }
 }
 
@@ -1120,16 +1462,25 @@ class _RadarPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
-    final paint = Paint()..color = const Color(0x20FF4FA3)..style = PaintingStyle.fill;
+    final paint = Paint()
+      ..color = const Color(0x20FF4FA3)
+      ..style = PaintingStyle.fill;
     canvas.drawCircle(center, radius, paint);
     final sweepPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [const Color(0x30FF4FA3), const Color(0x00FF4FA3)],
+      ..shader = const RadialGradient(
+        colors: [Color(0x30FF4FA3), Color(0x00FF4FA3)],
         stops: [0.0, 1.0],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
-    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), -pi / 2, 2 * pi * progress, true, sweepPaint);
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -pi / 2,
+      2 * pi * progress,
+      true,
+      sweepPaint,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _RadarPainter oldDelegate) => oldDelegate.progress != progress;
+  bool shouldRepaint(covariant _RadarPainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }

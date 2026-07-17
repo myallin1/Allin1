@@ -69,7 +69,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       input,
       persona: widget.persona,
       history: _messages
-          .where((message) => message.role == 'user' || message.role == 'assistant')
+          .where(
+            (message) => message.role == 'user' || message.role == 'assistant',
+          )
           .map(
             (message) => <String, String>{
               'role': message.role,
@@ -293,9 +295,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                   child: Text(
                     message.text,
                     style: GoogleFonts.notoSansTamil(
-                      color: isUser
-                          ? Colors.white
-                          : const Color(0xFF351124),
+                      color: isUser ? Colors.white : const Color(0xFF351124),
                       fontSize: 13,
                       height: 1.45,
                     ),

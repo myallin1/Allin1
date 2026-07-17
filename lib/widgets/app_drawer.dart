@@ -13,7 +13,23 @@ const Color _drawerBorder = Color(0x33FF4FA3);
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({
-    required this.user, required this.displayName, required this.phoneNumber, required this.photoUrl, required this.onLoginTap, required this.onMyProfileTap, required this.onRideHistoryTap, required this.onWalletTap, required this.onPaymentMethodsTap, required this.onNotificationsTap, required this.onLanguageTap, required this.onDownloadMobileAppTap, required this.onSavedAddressesTap, required this.onHelpSupportTap, required this.onSettingsTap, required this.onLogoutTap, super.key,
+    required this.user,
+    required this.displayName,
+    required this.phoneNumber,
+    required this.photoUrl,
+    required this.onLoginTap,
+    required this.onMyProfileTap,
+    required this.onRideHistoryTap,
+    required this.onWalletTap,
+    required this.onPaymentMethodsTap,
+    required this.onNotificationsTap,
+    required this.onLanguageTap,
+    required this.onDownloadMobileAppTap,
+    required this.onSavedAddressesTap,
+    required this.onHelpSupportTap,
+    required this.onSettingsTap,
+    required this.onLogoutTap,
+    super.key,
   });
 
   final User? user;
@@ -177,7 +193,9 @@ class AppDrawer extends StatelessWidget {
                           if (kIsWeb) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Open Settings → Check for Updates to refresh the app'),
+                                content: Text(
+                                  'Open Settings → Check for Updates to refresh the app',
+                                ),
                                 backgroundColor: Color(0xFFFF4FA3),
                                 behavior: SnackBarBehavior.floating,
                               ),
@@ -222,18 +240,61 @@ class AppDrawer extends StatelessWidget {
     properties.add(StringProperty('displayName', displayName));
     properties.add(StringProperty('phoneNumber', phoneNumber));
     properties.add(StringProperty('photoUrl', photoUrl));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onLoginTap', onLoginTap));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onMyProfileTap', onMyProfileTap));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onRideHistoryTap', onRideHistoryTap));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onWalletTap', onWalletTap));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onPaymentMethodsTap', onPaymentMethodsTap));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onNotificationsTap', onNotificationsTap));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onLanguageTap', onLanguageTap));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onDownloadMobileAppTap', onDownloadMobileAppTap));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onSavedAddressesTap', onSavedAddressesTap));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onHelpSupportTap', onHelpSupportTap));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onSettingsTap', onSettingsTap));
-    properties.add(ObjectFlagProperty<Future<dynamic> Function()>.has('onLogoutTap', onLogoutTap));
+    properties
+        .add(ObjectFlagProperty<VoidCallback>.has('onLoginTap', onLoginTap));
+    properties.add(
+      ObjectFlagProperty<VoidCallback>.has('onMyProfileTap', onMyProfileTap),
+    );
+    properties.add(
+      ObjectFlagProperty<VoidCallback>.has(
+        'onRideHistoryTap',
+        onRideHistoryTap,
+      ),
+    );
+    properties
+        .add(ObjectFlagProperty<VoidCallback>.has('onWalletTap', onWalletTap));
+    properties.add(
+      ObjectFlagProperty<VoidCallback>.has(
+        'onPaymentMethodsTap',
+        onPaymentMethodsTap,
+      ),
+    );
+    properties.add(
+      ObjectFlagProperty<VoidCallback>.has(
+        'onNotificationsTap',
+        onNotificationsTap,
+      ),
+    );
+    properties.add(
+      ObjectFlagProperty<VoidCallback>.has('onLanguageTap', onLanguageTap),
+    );
+    properties.add(
+      ObjectFlagProperty<VoidCallback>.has(
+        'onDownloadMobileAppTap',
+        onDownloadMobileAppTap,
+      ),
+    );
+    properties.add(
+      ObjectFlagProperty<VoidCallback>.has(
+        'onSavedAddressesTap',
+        onSavedAddressesTap,
+      ),
+    );
+    properties.add(
+      ObjectFlagProperty<VoidCallback>.has(
+        'onHelpSupportTap',
+        onHelpSupportTap,
+      ),
+    );
+    properties.add(
+      ObjectFlagProperty<VoidCallback>.has('onSettingsTap', onSettingsTap),
+    );
+    properties.add(
+      ObjectFlagProperty<Future<dynamic> Function()>.has(
+        'onLogoutTap',
+        onLogoutTap,
+      ),
+    );
   }
 }
 
@@ -353,7 +414,8 @@ class _GuestHeader extends StatelessWidget {
     properties.add(DoubleProperty('titleSize', titleSize));
     properties.add(DoubleProperty('subtitleSize', subtitleSize));
     properties.add(DoubleProperty('headerSpacing', headerSpacing));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onLoginTap', onLoginTap));
+    properties
+        .add(ObjectFlagProperty<VoidCallback>.has('onLoginTap', onLoginTap));
   }
 }
 

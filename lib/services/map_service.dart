@@ -77,8 +77,11 @@ class MapService extends ChangeNotifier {
       }
 
       debugPrint('[MapService] Ola availability check result=$olaAvailable');
-      if (!olaAvailable || _olaProvider.apiKey.isEmpty || _olaProvider.apiKey.length < 16) {
-        final failureReason = (_olaProvider.apiKey.isEmpty || _olaProvider.apiKey.length < 16)
+      if (!olaAvailable ||
+          _olaProvider.apiKey.isEmpty ||
+          _olaProvider.apiKey.length < 16) {
+        final failureReason = (_olaProvider.apiKey.isEmpty ||
+                _olaProvider.apiKey.length < 16)
             ? 'Ola API key missing or invalid'
             : 'Ola Maps availability check failed (HTTP error or outdated endpoint)';
         debugPrint('ℹ️ MapService Ola failure reason: $failureReason');
@@ -126,7 +129,9 @@ class MapService extends ChangeNotifier {
     try {
       final osmResults = await searchNearErode(query);
       if (osmResults.isNotEmpty) {
-        debugPrint('[MapService] Nominatim: ${osmResults.length} results for "$query"');
+        debugPrint(
+          '[MapService] Nominatim: ${osmResults.length} results for "$query"',
+        );
         return osmResults;
       }
     } catch (e) {
@@ -136,9 +141,9 @@ class MapService extends ChangeNotifier {
     // OLA fallback — only when Nominatim returns empty.
     try {
       final results = await _olaProvider.search(query).timeout(
-        const Duration(seconds: 5),
-        onTimeout: () => throw Exception('Search timeout'),
-      );
+            const Duration(seconds: 5),
+            onTimeout: () => throw Exception('Search timeout'),
+          );
       if (results.isNotEmpty) {
         _currentProvider = _olaProvider;
         _selectedProvider = MapProviderType.ola;
@@ -160,9 +165,9 @@ class MapService extends ChangeNotifier {
     try {
       final osm = _osmProvider as OSMProvider;
       return await osm.searchNearErode(query).timeout(
-        const Duration(seconds: 6),
-        onTimeout: () => <Map<String, dynamic>>[],
-      );
+            const Duration(seconds: 6),
+            onTimeout: () => <Map<String, dynamic>>[],
+          );
     } catch (e) {
       debugPrint('🔎 Erode search error: $e');
       return [];
@@ -175,9 +180,9 @@ class MapService extends ChangeNotifier {
     try {
       final ola = _olaProvider as OlaMapsProvider;
       final result = await ola.reverseGeocode(point).timeout(
-        const Duration(seconds: 6),
-        onTimeout: () => null,
-      );
+            const Duration(seconds: 6),
+            onTimeout: () => null,
+          );
       if (result != null) {
         _currentProvider = _olaProvider;
         _selectedProvider = MapProviderType.ola;
@@ -193,9 +198,9 @@ class MapService extends ChangeNotifier {
     try {
       final osm = _osmProvider as OSMProvider;
       return await osm.reverseGeocode(point).timeout(
-        const Duration(seconds: 6),
-        onTimeout: () => null,
-      );
+            const Duration(seconds: 6),
+            onTimeout: () => null,
+          );
     } catch (e) {
       debugPrint('📍 Reverse geocode error: $e');
       return null;
@@ -207,9 +212,9 @@ class MapService extends ChangeNotifier {
 
     try {
       final route = await _olaProvider.getRoute(start, end).timeout(
-        const Duration(seconds: 8),
-        onTimeout: () => throw Exception('Route timeout'),
-      );
+            const Duration(seconds: 8),
+            onTimeout: () => throw Exception('Route timeout'),
+          );
       if (route != null && route.points.length > 2) {
         _currentProvider = _olaProvider;
         _selectedProvider = MapProviderType.ola;
@@ -230,9 +235,9 @@ class MapService extends ChangeNotifier {
     try {
       final osm = _osmProvider as OSMProvider;
       final route = await osm.getRoute(start, end).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => null,
-      );
+            const Duration(seconds: 10),
+            onTimeout: () => null,
+          );
       if (route != null) {
         _uiErrorMessage = null;
         notifyListeners();
@@ -254,15 +259,16 @@ class MapService extends ChangeNotifier {
   }
 
   double _haversineDistance(LatLng p1, LatLng p2) {
-     const double r = 6371000.0;
-     final double dLat = (p2.latitude - p1.latitude) * (math.pi / 180.0);
-     final double dLon = (p2.longitude - p1.longitude) * (math.pi / 180.0);
-     final double a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-         math.cos(p1.latitude * (math.pi / 180.0)) *
-         math.cos(p2.latitude * (math.pi / 180.0)) *
-         math.sin(dLon / 2) * math.sin(dLon / 2);
-     return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-   }
+    const double r = 6371000;
+    final double dLat = (p2.latitude - p1.latitude) * (math.pi / 180.0);
+    final double dLon = (p2.longitude - p1.longitude) * (math.pi / 180.0);
+    final double a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(p1.latitude * (math.pi / 180.0)) *
+            math.cos(p2.latitude * (math.pi / 180.0)) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
 
   Future<bool> isAvailable() async {
     await initialize();

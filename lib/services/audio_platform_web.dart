@@ -11,7 +11,8 @@ class AudioPlatform {
     if (_unlocked) return;
     try {
       final jsWindow = js.context;
-      final audioCtxConstructor = jsWindow['AudioContext'] ?? jsWindow['webkitAudioContext'];
+      final audioCtxConstructor =
+          jsWindow['AudioContext'] ?? jsWindow['webkitAudioContext'];
       if (audioCtxConstructor == null) return;
 
       final ctx = js.JsObject(audioCtxConstructor as js.JsFunction, []);
@@ -30,7 +31,8 @@ class AudioPlatform {
     if (!_unlocked) return;
     try {
       final jsWindow = js.context;
-      final audioCtxConstructor = jsWindow['AudioContext'] ?? jsWindow['webkitAudioContext'];
+      final audioCtxConstructor =
+          jsWindow['AudioContext'] ?? jsWindow['webkitAudioContext'];
       if (audioCtxConstructor == null) return;
 
       final ctx = js.JsObject(audioCtxConstructor as js.JsFunction, []);

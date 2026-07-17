@@ -35,7 +35,10 @@ class PromoOverlay extends StatelessWidget {
   final VoidCallback onClose;
 
   const PromoOverlay({
-    required this.offers, required this.onClaim, required this.onClose, super.key,
+    required this.offers,
+    required this.onClaim,
+    required this.onClose,
+    super.key,
   });
 
   @override
@@ -103,7 +106,8 @@ class PromoOverlay extends StatelessWidget {
                                 Text(
                                   'Claim your launch offers and unlock extra value across Allin1.',
                                   style: GoogleFonts.outfit(
-                                    color: _promoTextDark.withValues(alpha: 0.68),
+                                    color:
+                                        _promoTextDark.withValues(alpha: 0.68),
                                     fontSize: 13,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -154,7 +158,8 @@ class PromoOverlay extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(IterableProperty<PromoOfferItem>('offers', offers));
-    properties.add(ObjectFlagProperty<ValueChanged<String>>.has('onClaim', onClaim));
+    properties
+        .add(ObjectFlagProperty<ValueChanged<String>>.has('onClaim', onClaim));
     properties.add(ObjectFlagProperty<VoidCallback>.has('onClose', onClose));
   }
 }

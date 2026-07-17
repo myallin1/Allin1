@@ -3,14 +3,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 class PrefsCache {
   PrefsCache._();
 
-  static const _kUserName  = 'pref_user_name';
-  static const _kUserRole  = 'pref_user_role';
-  static const _kLastTab   = 'pref_last_tab';
+  static const _kUserName = 'pref_user_name';
+  static const _kUserRole = 'pref_user_role';
+  static const _kLastTab = 'pref_last_tab';
   static const _kOnboarded = 'pref_onboarded';
-  static const _kThemeKey  = 'pref_theme_key';
-  static const _kLangCode  = 'pref_lang_code';
+  static const _kThemeKey = 'pref_theme_key';
+  static const _kLangCode = 'pref_lang_code';
 
-  static Future<void> saveUserMeta({required String name, required String role}) async {
+  static Future<void> saveUserMeta({
+    required String name,
+    required String role,
+  }) async {
     final p = await SharedPreferences.getInstance();
     await p.setString(_kUserName, name);
     await p.setString(_kUserRole, role);
@@ -18,7 +21,10 @@ class PrefsCache {
 
   static Future<({String name, String role})> loadUserMeta() async {
     final p = await SharedPreferences.getInstance();
-    return (name: p.getString(_kUserName) ?? '', role: p.getString(_kUserRole) ?? 'customer');
+    return (
+      name: p.getString(_kUserName) ?? '',
+      role: p.getString(_kUserRole) ?? 'customer'
+    );
   }
 
   static Future<void> saveLastTab(int index) async {

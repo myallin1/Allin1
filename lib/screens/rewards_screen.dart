@@ -9,9 +9,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 import 'package:scratcher/scratcher.dart';
 
+import '../widgets/banner_slider.dart';
 import '../widgets/promo_overlay.dart';
 import '../widgets/soundbox_easter_egg_overlay.dart';
-import '../widgets/banner_slider.dart';
 import 'guru_chat_screen.dart';
 
 const Color _paytmBlue = Color(0xFF00BAF2);
@@ -23,7 +23,9 @@ const String _quizReward = 'Free Tempered Glass / ₹200 Off!';
 
 class RewardsScreen extends StatefulWidget {
   const RewardsScreen({
-    this.promoOffers = const [], this.onClaimPromo, super.key,
+    this.promoOffers = const [],
+    this.onClaimPromo,
+    super.key,
   });
 
   final List<PromoOfferItem> promoOffers;
@@ -35,8 +37,14 @@ class RewardsScreen extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(IterableProperty<PromoOfferItem>('promoOffers', promoOffers));
-    properties.add(ObjectFlagProperty<Future<dynamic> Function(String offerId)>.has('onClaimPromo', onClaimPromo));
+    properties
+        .add(IterableProperty<PromoOfferItem>('promoOffers', promoOffers));
+    properties.add(
+      ObjectFlagProperty<Future<dynamic> Function(String offerId)>.has(
+        'onClaimPromo',
+        onClaimPromo,
+      ),
+    );
   }
 }
 
@@ -209,20 +217,31 @@ class _RewardsScreenState extends State<RewardsScreen>
               );
             },
             child: Container(
-              width: 60, height: 60,
+              width: 60,
+              height: 60,
               decoration: BoxDecoration(
-                color: Colors.white, shape: BoxShape.circle,
-                border: Border.all(color: _paytmBlue.withValues(alpha: 0.35), width: 2),
-                boxShadow: [BoxShadow(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: _paytmBlue.withValues(alpha: 0.35),
+                  width: 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
                     color: _paytmBlue.withValues(alpha: 0.25),
-                    blurRadius: 16, spreadRadius: 2)],
+                    blurRadius: 16,
+                    spreadRadius: 2,
+                  ),
+                ],
               ),
               child: ClipOval(
                 child: Image.asset(
                   'assets/images/assistant.gif',
-                  width: 46, height: 46,
+                  width: 46,
+                  height: 46,
                   fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const Text('🤖', style: TextStyle(fontSize: 28)),
+                  errorBuilder: (_, __, ___) =>
+                      const Text('🤖', style: TextStyle(fontSize: 28)),
                 ),
               ),
             ),
@@ -464,7 +483,8 @@ class _GlowingPaytmQuizCard extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<Animation<double>>('animation', animation));
+    properties
+        .add(DiagnosticsProperty<Animation<double>>('animation', animation));
     properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
     properties.add(DiagnosticsProperty<bool>('disabled', disabled));
     properties.add(StringProperty('lockedMessage', lockedMessage));
@@ -552,17 +572,20 @@ class _PaytmQuizScratchDialogState extends State<_PaytmQuizScratchDialog> {
     final code = _generateCouponCode();
     final expiresAt = DateTime.now().add(const Duration(hours: 48));
     try {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'lastQuizWonAt': FieldValue.serverTimestamp(),
-        'activeCoupon': {
-          'code': code,
-          'reward': _quizReward,
-          'source': 'paytm_quiz',
-          'expiresAt': Timestamp.fromDate(expiresAt),
-          'createdAt': FieldValue.serverTimestamp(),
-          'status': 'active',
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set(
+        {
+          'lastQuizWonAt': FieldValue.serverTimestamp(),
+          'activeCoupon': {
+            'code': code,
+            'reward': _quizReward,
+            'source': 'paytm_quiz',
+            'expiresAt': Timestamp.fromDate(expiresAt),
+            'createdAt': FieldValue.serverTimestamp(),
+            'status': 'active',
+          },
         },
-      }, SetOptions(merge: true),);
+        SetOptions(merge: true),
+      );
       if (!mounted) return;
       setState(() {
         _couponCode = code;
@@ -1065,7 +1088,14 @@ class _RewardsFloatingGiftBox extends StatefulWidget {
   final VoidCallback onTap;
   const _RewardsFloatingGiftBox({required this.onTap});
   @override
-  State<_RewardsFloatingGiftBox> createState() => _RewardsFloatingGiftBoxState();
+  State<_RewardsFloatingGiftBox> createState() =>
+      _RewardsFloatingGiftBoxState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+  }
 }
 
 class _RewardsFloatingGiftBoxState extends State<_RewardsFloatingGiftBox>
@@ -1077,14 +1107,19 @@ class _RewardsFloatingGiftBoxState extends State<_RewardsFloatingGiftBox>
   void initState() {
     super.initState();
     _glow = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1200))
-      ..repeat(reverse: true);
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
     _pulse = Tween<double>(begin: 0.85, end: 1.08).animate(
-        CurvedAnimation(parent: _glow, curve: Curves.easeInOut));
+      CurvedAnimation(parent: _glow, curve: Curves.easeInOut),
+    );
   }
 
   @override
-  void dispose() { _glow.dispose(); super.dispose(); }
+  void dispose() {
+    _glow.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1095,18 +1130,23 @@ class _RewardsFloatingGiftBoxState extends State<_RewardsFloatingGiftBox>
         child: GestureDetector(
           onTap: widget.onTap,
           child: Container(
-            width: 60, height: 60,
+            width: 60,
+            height: 60,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: const RadialGradient(colors: [
-                Color(0xFFFFDD00), Color(0xFFFF9800),
-              ]),
+              gradient: const RadialGradient(
+                colors: [
+                  Color(0xFFFFDD00),
+                  Color(0xFFFF9800),
+                ],
+              ),
               boxShadow: [
                 BoxShadow(
-                    color: const Color(0xFFFFBB00)
-                        .withValues(alpha: 0.5 + 0.35 * _pulse.value),
-                    blurRadius: 22,
-                    spreadRadius: 4),
+                  color: const Color(0xFFFFBB00)
+                      .withValues(alpha: 0.5 + 0.35 * _pulse.value),
+                  blurRadius: 22,
+                  spreadRadius: 4,
+                ),
               ],
             ),
             child: const Center(

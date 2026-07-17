@@ -276,8 +276,10 @@ class _EarningsHubContent extends StatelessWidget {
                   label: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(category['icon']!,
-                          style: const TextStyle(fontSize: 14),),
+                      Text(
+                        category['icon']!,
+                        style: const TextStyle(fontSize: 14),
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         category['name']!,

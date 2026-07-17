@@ -168,7 +168,11 @@ class _CustomerRidesScreenState extends State<CustomerRidesScreen> {
             final actualFare = (rd['actualFare'] as num?)?.toDouble();
             final tipAmount = (rd['tipAmount'] as num?)?.toDouble();
             final estFare = (rd['fare'] as num?)?.toDouble();
-            return s + (finalFare ?? ((actualFare ?? 0) + (tipAmount ?? 0)) ?? estFare ?? 0.0);
+            return s +
+                (finalFare ??
+                    ((actualFare ?? 0) + (tipAmount ?? 0)) ??
+                    estFare ??
+                    0.0);
           },
         );
         final completed = rides
@@ -239,7 +243,8 @@ class _CustomerRidesScreenState extends State<CustomerRidesScreen> {
               final status = rd['status'] as String? ?? 'unknown';
               final fare = (rd['fare'] as num?)?.toInt() ?? 0;
               final tip = (rd['tipAmount'] as num?)?.toInt() ?? 0;
-              final finalFare = (rd['finalFare'] as num?)?.toInt() ?? (fare + tip);
+              final finalFare =
+                  (rd['finalFare'] as num?)?.toInt() ?? (fare + tip);
               final pickup = rd['pickup'] as String? ?? '—';
               final drop = rd['drop'] as String? ?? '—';
               final ts = rd['createdAt'] as Timestamp?;
@@ -270,7 +275,9 @@ class _CustomerRidesScreenState extends State<CustomerRidesScreen> {
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 3,),
+                            horizontal: 7,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: color.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(6),

@@ -353,18 +353,18 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
   ) async {
     try {
       final db = FirebaseFirestore.instance;
-      
+
       await db.runTransaction((transaction) async {
         final taskRef = db.collection('task_completions').doc(docId);
         final taskSnap = await transaction.get(taskRef);
-        
+
         if (!taskSnap.exists || taskSnap.data()?['status'] != 'pending') {
           throw Exception('Task already processed');
         }
 
         final userRef = db.collection('users').doc(userId);
         final userSnap = await transaction.get(userRef);
-        
+
         final currentPending =
             (userSnap.data()?['pending_coins'] as num? ?? 0).toInt();
 
@@ -413,11 +413,11 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
   ) async {
     try {
       final db = FirebaseFirestore.instance;
-      
+
       await db.runTransaction((transaction) async {
         final taskRef = db.collection('task_completions').doc(docId);
         final taskSnap = await transaction.get(taskRef);
-        
+
         if (!taskSnap.exists || taskSnap.data()?['status'] != 'pending') {
           throw Exception('Task already processed');
         }
@@ -532,8 +532,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
             final totalRides = rides.length;
             final totalEarnings = rides.fold<num>(
               0,
-              (sum, ride) =>
-                  sum + (ride['fare'] as num),
+              (sum, ride) => sum + (ride['fare'] as num),
             );
 
             return FutureBuilder<DocumentSnapshot>(

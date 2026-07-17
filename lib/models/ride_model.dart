@@ -98,7 +98,8 @@ class RideModel {
 
     final baseFare = (vehicleFares['baseFare'] as num?)?.toDouble() ?? 25.0;
     final perKm = (vehicleFares['perKm'] as num?)?.toDouble() ?? 10.0;
-    final baseDistance = (vehicleFares['baseDistance'] as num?)?.toDouble() ?? 2.0;
+    final baseDistance =
+        (vehicleFares['baseDistance'] as num?)?.toDouble() ?? 2.0;
 
     double calculatedFare;
     if (distanceKm <= baseDistance) {

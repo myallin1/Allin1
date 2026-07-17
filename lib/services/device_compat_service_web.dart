@@ -40,9 +40,8 @@ Future<DeviceCompatProfile> _detectProfile({
   final architecture = os == DeviceOs.android
       ? CpuArchitecture.universal
       : CpuArchitecture.universal;
-  final primaryUrl = architecture == CpuArchitecture.arm64
-      ? arm64Url
-      : universalUrl;
+  final primaryUrl =
+      architecture == CpuArchitecture.arm64 ? arm64Url : universalUrl;
   final primaryLabel = architecture == CpuArchitecture.arm64
       ? '$labelPrefix ARM64 APK'
       : '$labelPrefix Universal APK';

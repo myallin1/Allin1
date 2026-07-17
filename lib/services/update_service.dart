@@ -29,22 +29,20 @@ class UpdateService {
   Map<String, dynamic> buildNotificationPayload({
     required String userId,
     required Map<String, dynamic> data,
-    required String defaultAppVariant, String? title,
+    required String defaultAppVariant,
+    String? title,
     String? body,
     String? messageId,
   }) {
-    final appVariant =
-        _stringValue(data['app_variant']).isNotEmpty
-            ? _stringValue(data['app_variant'])
-            : defaultAppVariant;
-    final apkUrl =
-        _stringValue(data['apk_url']).isNotEmpty
-            ? _stringValue(data['apk_url'])
-            : fallbackApkUrl(appVariant);
-    final versionName =
-        _stringValue(data['version_name']).isNotEmpty
-            ? _stringValue(data['version_name'])
-            : _stringValue(data['new_version']);
+    final appVariant = _stringValue(data['app_variant']).isNotEmpty
+        ? _stringValue(data['app_variant'])
+        : defaultAppVariant;
+    final apkUrl = _stringValue(data['apk_url']).isNotEmpty
+        ? _stringValue(data['apk_url'])
+        : fallbackApkUrl(appVariant);
+    final versionName = _stringValue(data['version_name']).isNotEmpty
+        ? _stringValue(data['version_name'])
+        : _stringValue(data['new_version']);
     final featureList = _parseFeatureList(
       data['feature_list'] ?? data['release_notes'] ?? data['features'],
     );

@@ -9,7 +9,8 @@ import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart' hide Transaction;
-import 'package:firebase_database/firebase_database.dart' as rtdb show Transaction;
+import 'package:firebase_database/firebase_database.dart' as rtdb
+    show Transaction;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -103,7 +104,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
   // Cached stats — loaded once per session in _loadHeroData()
   int _totalRides = 0;
-  double _totalEarnings = 0.0;
+  double _totalEarnings = 0;
   bool _statsLoaded = false;
 
   // ── SOS Emergency state ──────────────────────────────────────
@@ -223,19 +224,26 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
   String _normalizeHeroVehicleType(String? value) {
     switch (value?.trim().toLowerCase() ?? '') {
-      case 'auto': return 'auto';
+      case 'auto':
+        return 'auto';
       case 'emergency_manpower':
-      case 'manpower': return 'emergency_manpower';
+      case 'manpower':
+        return 'emergency_manpower';
       case 'mini_truck':
       case 'mini-truck':
-      case 'truck': return 'mini_truck';
-      case 'lorry': return 'lorry';
-      case 'parcel': return 'parcel';
+      case 'truck':
+        return 'mini_truck';
+      case 'lorry':
+        return 'lorry';
+      case 'parcel':
+        return 'parcel';
       case 'cab':
       case 'car':
-      case 'mini': return 'car';
+      case 'mini':
+        return 'car';
       case 'bike':
-      default: return 'bike';
+      default:
+        return 'bike';
     }
   }
 
@@ -659,7 +667,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               .get();
           double earn = 0;
           for (final d in ridesSnap.docs) {
-            earn += ((d.data())['fare'] as num? ?? 0).toDouble();
+            earn += (d.data()['fare'] as num? ?? 0).toDouble();
           }
           if (mounted) {
             setState(() {
@@ -755,7 +763,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         _lastUploadedPosition = null;
         _lastGpsUpdate = null;
         if (currentPos != null) {
-          await FirebaseDatabase.instance.ref('online_heroes/${_user!.uid}').set({
+          await FirebaseDatabase.instance
+              .ref('online_heroes/${_user!.uid}')
+              .set({
             'lat': currentPos.latitude,
             'lng': currentPos.longitude,
             'latitude': currentPos.latitude,
@@ -767,7 +777,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             'lastUpdated': ServerValue.timestamp,
           });
           _lastUploadedPosition = currentPos;
-          debugPrint('🔥 [ONLINE] Force-wrote hero position to RTDB online_heroes/${_user!.uid}');
+          debugPrint(
+            '🔥 [ONLINE] Force-wrote hero position to RTDB online_heroes/${_user!.uid}',
+          );
         }
       }
 
@@ -818,9 +830,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     });
 
     // Listen to location stream to keep _latestPosition fresh
-    _globalLocationSub = LocationService().getLocationStream(
-      highAccuracy: false, // radar mode — battery efficient
-    ).listen(
+    _globalLocationSub = LocationService().getLocationStream().listen(
       (position) {
         _latestPosition = position;
         _animateHeroMarkerTo(position);
@@ -847,7 +857,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             pos.longitude,
           );
           if (dist < 50) {
-            debugPrint('[Location] Skipped RTDB update — moved only ${dist.toStringAsFixed(1)}m');
+            debugPrint(
+              '[Location] Skipped RTDB update — moved only ${dist.toStringAsFixed(1)}m',
+            );
             return;
           }
         }
@@ -1208,78 +1220,91 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     // Track when listener was attached — ignore pings older than this
     final listenerAttachedAt = DateTime.now().toUtc().millisecondsSinceEpoch;
 
-    _heroPingSub = FirebaseDatabase.instance
-        .ref('hero_pings/$uid')
-        .onChildAdded
-        .listen((event) {
-      if (!mounted || !_isOnline || _activeRideId.isNotEmpty) return;
-      if (_isShowingRideDialog) return;
+    _heroPingSub =
+        FirebaseDatabase.instance.ref('hero_pings/$uid').onChildAdded.listen(
+      (event) {
+        if (!mounted || !_isOnline || _activeRideId.isNotEmpty) return;
+        if (_isShowingRideDialog) return;
 
-      final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
-      final requestId = event.snapshot.key as String? ?? '';
-      if (pingData == null || requestId.isEmpty) return;
+        final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
+        final requestId = event.snapshot.key ?? '';
+        if (pingData == null || requestId.isEmpty) return;
 
-      final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
-      if (pingExpiresAt == null) return;
-      if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
-        FirebaseDatabase.instance.ref('hero_pings/$uid/$requestId').remove();
-        return;
-      }
-
-      // ✅ FIX: Ignore pings that existed before this listener attached
-      // Prevents stale pings from re-triggering on app resume
-      final pingCreatedAt = pingExpiresAt - 10000; // expiresAt - 10s window
-      if (pingCreatedAt < listenerAttachedAt - 2000) {
-        debugPrint('[HeroHomeScreen] Ignoring pre-existing ping: $requestId');
-        return;
-      }
-
-      debugPrint('[HeroHomeScreen] RTDB ping received: $requestId');
-
-      // ── CATEGORY FILTER: Only show rides matching hero's vehicle ──
-      final requestedCategory = (pingData['category'] as String?)?.trim().toLowerCase() ??
-          (pingData['vehicleType'] as String?)?.trim().toLowerCase() ?? '';
-      // Ensure _vehicleType is converted to lowercase for comparison
-      final heroCategory = _vehicleType.trim().toLowerCase();
-
-      // ── SMART MODE: parcel requests are accepted by BOTH parcel and bike
-      // heroes — must mirror the customer-side filter in ride_search_screen,
-      // otherwise bike heroes get pinged for parcels but silently drop them.
-      bool categoryMatch = true;
-      if (requestedCategory.isNotEmpty && heroCategory.isNotEmpty) {
-        if (requestedCategory == 'parcel') {
-          categoryMatch = heroCategory == 'parcel' || heroCategory == 'bike';
-        } else {
-          categoryMatch = heroCategory == requestedCategory;
+        final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
+        if (pingExpiresAt == null) return;
+        if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
+          FirebaseDatabase.instance.ref('hero_pings/$uid/$requestId').remove();
+          return;
         }
-      }
-      if (!categoryMatch) {
-        debugPrint('[HeroHomeScreen] Skipping ping: requested $requestedCategory, hero $heroCategory');
-        // Silently remove the ping to clean up RTDB node
-        FirebaseDatabase.instance.ref('hero_pings/${_user!.uid}/$requestId').remove();
-        return;
-      }
 
-      // Notification: only if global listener hasn't fired yet
-      if (!kIsWeb && !HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
-        debugPrint('[HeroHomeScreen] Notification already fired by global listener. Showing dialog only.');
-      } else if (!kIsWeb) {
-        try {
-          HeroRideNotificationService.showRideAssigned(
-            rideId: requestId,
-            data: Map<String, dynamic>.from(pingData as Map<dynamic, dynamic>),
-            playAlertTone: true,
+        // ✅ FIX: Ignore pings that existed before this listener attached
+        // Prevents stale pings from re-triggering on app resume
+        final pingCreatedAt = pingExpiresAt - 10000; // expiresAt - 10s window
+        if (pingCreatedAt < listenerAttachedAt - 2000) {
+          debugPrint('[HeroHomeScreen] Ignoring pre-existing ping: $requestId');
+          return;
+        }
+
+        debugPrint('[HeroHomeScreen] RTDB ping received: $requestId');
+
+        // ── CATEGORY FILTER: Only show rides matching hero's vehicle ──
+        final requestedCategory =
+            (pingData['category'] as String?)?.trim().toLowerCase() ??
+                (pingData['vehicleType'] as String?)?.trim().toLowerCase() ??
+                '';
+        // Ensure _vehicleType is converted to lowercase for comparison
+        final heroCategory = _vehicleType.trim().toLowerCase();
+
+        // ── SMART MODE: parcel requests are accepted by BOTH parcel and bike
+        // heroes — must mirror the customer-side filter in ride_search_screen,
+        // otherwise bike heroes get pinged for parcels but silently drop them.
+        bool categoryMatch = true;
+        if (requestedCategory.isNotEmpty && heroCategory.isNotEmpty) {
+          if (requestedCategory == 'parcel') {
+            categoryMatch = heroCategory == 'parcel' || heroCategory == 'bike';
+          } else {
+            categoryMatch = heroCategory == requestedCategory;
+          }
+        }
+        if (!categoryMatch) {
+          debugPrint(
+            '[HeroHomeScreen] Skipping ping: requested $requestedCategory, hero $heroCategory',
           );
-        } catch (e) {
-          debugPrint('[HeroHomeScreen] Ringtone error: $e');
+          // Silently remove the ping to clean up RTDB node
+          FirebaseDatabase.instance
+              .ref('hero_pings/${_user!.uid}/$requestId')
+              .remove();
+          return;
         }
-      }
 
-      _showRideRequestDialog(
-          requestId, Map<String, dynamic>.from(pingData as Map<dynamic, dynamic>));
-    }, onError: (Object e) {
-      debugPrint('[HeroHomeScreen] RTDB ping listener error: $e');
-    });
+        // Notification: only if global listener hasn't fired yet
+        if (!kIsWeb &&
+            !HeroRideNotificationService.shouldProcessRideNotification(
+              requestId,
+            )) {
+          debugPrint(
+            '[HeroHomeScreen] Notification already fired by global listener. Showing dialog only.',
+          );
+        } else if (!kIsWeb) {
+          try {
+            HeroRideNotificationService.showRideAssigned(
+              rideId: requestId,
+              data: Map<String, dynamic>.from(pingData),
+            );
+          } catch (e) {
+            debugPrint('[HeroHomeScreen] Ringtone error: $e');
+          }
+        }
+
+        _showRideRequestDialog(
+          requestId,
+          Map<String, dynamic>.from(pingData),
+        );
+      },
+      onError: (Object e) {
+        debugPrint('[HeroHomeScreen] RTDB ping listener error: $e');
+      },
+    );
   }
 
   // ================================================================
@@ -1293,71 +1318,90 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     final uid = _user?.uid;
     if (uid == null) return;
     _servicePingSub?.cancel();
-    debugPrint('🔥 [DEBUG] Hero is LISTENING to EXACT PATH: hero_service_pings/$uid');
+    debugPrint(
+      '🔥 [DEBUG] Hero is LISTENING to EXACT PATH: hero_service_pings/$uid',
+    );
 
     final listenerAttachedAt = DateTime.now().toUtc().millisecondsSinceEpoch;
 
     _servicePingSub = FirebaseDatabase.instance
         .ref('hero_service_pings/$uid')
         .onChildAdded
-        .listen((event) {
-      if (!mounted || !_isOnline || _activeRideId.isNotEmpty) return;
-      if (_isShowingServiceDialog) return;
+        .listen(
+      (event) {
+        if (!mounted || !_isOnline || _activeRideId.isNotEmpty) return;
+        if (_isShowingServiceDialog) return;
 
-      final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
-      final requestId = event.snapshot.key as String? ?? '';
-      if (pingData == null || requestId.isEmpty) return;
+        final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
+        final requestId = event.snapshot.key ?? '';
+        if (pingData == null || requestId.isEmpty) return;
 
-      final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
-      if (pingExpiresAt == null) return;
-      if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
-        FirebaseDatabase.instance.ref('hero_service_pings/$uid/$requestId').remove();
-        return;
-      }
-
-      // Ignore pings that existed before this listener attached (same
-      // guard as ride pings — prevents stale-ping re-trigger on resume).
-      // 90s broadcast window, same reasoning as the 10s ride window.
-      final pingCreatedAt = pingExpiresAt - kServiceRequestPingExpirySeconds * 1000;
-      if (pingCreatedAt < listenerAttachedAt - 2000) {
-        debugPrint('[HeroHomeScreen] Ignoring pre-existing service ping: $requestId');
-        return;
-      }
-
-      if (_shownServicePingIds.contains(requestId)) return;
-      _shownServicePingIds.add(requestId);
-
-      debugPrint('[HeroHomeScreen] RTDB service ping received: $requestId');
-
-      if (!kIsWeb && !HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
-        debugPrint('[HeroHomeScreen] Notification already fired by global listener. Showing dialog only.');
-      } else if (!kIsWeb) {
-        try {
-          HeroRideNotificationService.showRideAssigned(
-            rideId: requestId,
-            data: Map<String, dynamic>.from(pingData),
-            playAlertTone: true,
-            title: 'New Service Request',
-            channelDescription:
-                'Lock-screen ride and service-request alerts with ACCEPT action and ringtone.',
-            ticker: 'New service request assigned',
-            emptyBodyFallback: 'Tap ACCEPT to open the request.',
-          );
-        } catch (e) {
-          debugPrint('[HeroHomeScreen] Ringtone error: $e');
+        final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
+        if (pingExpiresAt == null) return;
+        if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
+          FirebaseDatabase.instance
+              .ref('hero_service_pings/$uid/$requestId')
+              .remove();
+          return;
         }
-      }
 
-      _showServiceRequestDialog(requestId, Map<String, dynamic>.from(pingData));
-    }, onError: (Object e) {
-      debugPrint('[HeroHomeScreen] RTDB service ping listener error: $e');
-    });
+        // Ignore pings that existed before this listener attached (same
+        // guard as ride pings — prevents stale-ping re-trigger on resume).
+        // 90s broadcast window, same reasoning as the 10s ride window.
+        final pingCreatedAt =
+            pingExpiresAt - kServiceRequestPingExpirySeconds * 1000;
+        if (pingCreatedAt < listenerAttachedAt - 2000) {
+          debugPrint(
+            '[HeroHomeScreen] Ignoring pre-existing service ping: $requestId',
+          );
+          return;
+        }
+
+        if (_shownServicePingIds.contains(requestId)) return;
+        _shownServicePingIds.add(requestId);
+
+        debugPrint('[HeroHomeScreen] RTDB service ping received: $requestId');
+
+        if (!kIsWeb &&
+            !HeroRideNotificationService.shouldProcessRideNotification(
+              requestId,
+            )) {
+          debugPrint(
+            '[HeroHomeScreen] Notification already fired by global listener. Showing dialog only.',
+          );
+        } else if (!kIsWeb) {
+          try {
+            HeroRideNotificationService.showRideAssigned(
+              rideId: requestId,
+              data: Map<String, dynamic>.from(pingData),
+              title: 'New Service Request',
+              channelDescription:
+                  'Lock-screen ride and service-request alerts with ACCEPT action and ringtone.',
+              ticker: 'New service request assigned',
+              emptyBodyFallback: 'Tap ACCEPT to open the request.',
+            );
+          } catch (e) {
+            debugPrint('[HeroHomeScreen] Ringtone error: $e');
+          }
+        }
+
+        _showServiceRequestDialog(
+          requestId,
+          Map<String, dynamic>.from(pingData),
+        );
+      },
+      onError: (Object e) {
+        debugPrint('[HeroHomeScreen] RTDB service ping listener error: $e');
+      },
+    );
   }
 
   void _showServiceRequestDialog(String requestId, Map<String, dynamic> data) {
     if (!mounted) return;
     if (_isShowingServiceDialog) {
-      debugPrint('[HeroHomeScreen] Service dialog already open — skipping $requestId');
+      debugPrint(
+        '[HeroHomeScreen] Service dialog already open — skipping $requestId',
+      );
       return;
     }
     setState(() => _isShowingServiceDialog = true);
@@ -1376,11 +1420,17 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     });
   }
 
-  void _doShowServiceDialog(String requestId, Map<String, dynamic> data, [int attempt = 0]) {
+  void _doShowServiceDialog(
+    String requestId,
+    Map<String, dynamic> data, [
+    int attempt = 0,
+  ]) {
     final dialogContext = navigatorKey.currentContext;
     if (dialogContext == null) {
       if (attempt >= 2) {
-        debugPrint('[HeroHomeScreen] dialogContext null after 2 retries — giving up');
+        debugPrint(
+          '[HeroHomeScreen] dialogContext null after 2 retries — giving up',
+        );
         if (mounted) setState(() => _isShowingServiceDialog = false);
         return;
       }
@@ -1402,12 +1452,18 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(_serviceRequestTitle(requestType), style: GoogleFonts.outfit(fontWeight: FontWeight.w800)),
+        title: Text(
+          _serviceRequestTitle(requestType),
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w800),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('From: $customerName', style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+              'From: $customerName',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 8),
             Text(summary, style: const TextStyle(color: Colors.black54)),
           ],
@@ -1421,12 +1477,20 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             child: const Text('Decline', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4FA3)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF4FA3),
+            ),
             onPressed: () {
               Navigator.pop(ctx);
               _acceptServiceRequest(requestId, data);
             },
-            child: const Text('ACCEPT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'ACCEPT',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -1459,17 +1523,25 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       case 'custom_food_order':
         final items = (details['items'] as String?) ?? '';
         final pref = (details['restaurantOrPreference'] as String?) ?? '';
-        return [if (pref.isNotEmpty) 'From: $pref', if (items.isNotEmpty) items].join('\n');
+        return [if (pref.isNotEmpty) 'From: $pref', if (items.isNotEmpty) items]
+            .join('\n');
       case 'grocery_order':
         final text = (details['listText'] as String?) ?? '';
-        final hasImage = (details['listImageUrl'] as String?)?.isNotEmpty ?? false;
-        return [if (text.isNotEmpty) text, if (hasImage) '📷 Photo list attached'].join('\n');
+        final hasImage =
+            (details['listImageUrl'] as String?)?.isNotEmpty ?? false;
+        return [
+          if (text.isNotEmpty) text,
+          if (hasImage) '📷 Photo list attached',
+        ].join('\n');
       default:
         return '';
     }
   }
 
-  Future<void> _acceptServiceRequest(String requestId, Map<String, dynamic> data) async {
+  Future<void> _acceptServiceRequest(
+    String requestId,
+    Map<String, dynamic> data,
+  ) async {
     if (_user == null) return;
 
     // Same clock-skew-tolerant expiry buffer as _acceptRide — reject
@@ -1491,12 +1563,19 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         heroPhone: _user!.phoneNumber ?? '',
       );
       if (!won) {
-        debugPrint('[HeroHomeScreen] Service request already accepted by another hero — aborting');
+        debugPrint(
+          '[HeroHomeScreen] Service request already accepted by another hero — aborting',
+        );
         return;
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Request accepted! Check "My Requests" to update status.'), backgroundColor: Color(0xFF00C853)),
+          const SnackBar(
+            content: Text(
+              'Request accepted! Check "My Requests" to update status.',
+            ),
+            backgroundColor: Color(0xFF00C853),
+          ),
         );
       }
     } catch (e) {
@@ -1508,7 +1587,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     final uid = _user?.uid;
     if (uid == null) return;
     try {
-      await FirebaseDatabase.instance.ref('hero_service_pings/$uid/$requestId').remove();
+      await FirebaseDatabase.instance
+          .ref('hero_service_pings/$uid/$requestId')
+          .remove();
     } catch (e) {
       debugPrint('[HeroHomeScreen] rejectServiceRequest error: $e');
     }
@@ -1518,8 +1599,8 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     return _PingCountdownDialog(
       requestId: requestId.toString(),
       pingData: Map<String, dynamic>.from(pingData),
-      onAccept: (id, data) => _acceptRide(id, data),
-      onReject: (id) => _rejectRide(id),
+      onAccept: _acceptRide,
+      onReject: _rejectRide,
     );
   }
 
@@ -1563,7 +1644,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             if (thirdCtx != null) {
               _showDialogNow(thirdCtx, rideId, rideData);
             } else {
-              debugPrint('[HeroHomeScreen] dialogContext null after 2 retries — giving up');
+              debugPrint(
+                '[HeroHomeScreen] dialogContext null after 2 retries — giving up',
+              );
               setState(() => _isShowingRideDialog = false);
             }
           });
@@ -1575,7 +1658,11 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     _showDialogNow(dialogContext, rideId, rideData);
   }
 
-  void _showDialogNow(BuildContext dialogContext, String rideId, Map<String, dynamic> rideData) {
+  void _showDialogNow(
+    BuildContext dialogContext,
+    String rideId,
+    Map<String, dynamic> rideData,
+  ) {
     showDialog<void>(
       context: dialogContext,
       barrierDismissible: false,
@@ -1617,7 +1704,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
   // Accept a ride from Firestore — DISPATCH v2.0
   Future<void> _acceptRide(
-      String requestId, Map<String, dynamic> pingData) async {
+    String requestId,
+    Map<String, dynamic> pingData,
+  ) async {
     if (_user == null) return;
     setState(() => _accepting = true);
     debugPrint('[HeroHomeScreen] Accepting ride via RTDB: $requestId');
@@ -1627,7 +1716,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       // ── P0 FIX 1: Clock-skew-tolerant expiry check (5s buffer) ──
       final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt() ?? 0;
       final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
-      
+
       // 🚀 FIX: Only enforce expiry check if pingExpiresAt was explicitly provided (>0)
       if (pingExpiresAt > 0 && nowMs > pingExpiresAt + 5000) {
         // 5-second tolerance for device clock skew
@@ -1639,7 +1728,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       // ── P0 FIX 1: Atomic RTDB transaction — only ONE hero can win ──
       final requestRef =
           FirebaseDatabase.instance.ref('active_ride_requests/$requestId');
-      final transResult = await requestRef.runTransaction((Object? currentData) {
+      final transResult = await requestRef.runTransaction((currentData) {
         if (currentData == null) {
           // Optimistic local cache run. NEVER abort here!
           // Return intended data so the server compares it and returns the real data.
@@ -1658,8 +1747,12 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         debugPrint('🔍 [DEBUG] Current DB Status is: "$status"');
 
         // BLACKLIST APPROACH: Only abort if explicitly taken by another hero or cancelled
-        if (status == 'accepted' || status == 'cancelled' || status == 'timeout') {
-          debugPrint('❌ [TRANSACTION ABORTED] Ride already taken/dead. Status: $status');
+        if (status == 'accepted' ||
+            status == 'cancelled' ||
+            status == 'timeout') {
+          debugPrint(
+            '❌ [TRANSACTION ABORTED] Ride already taken/dead. Status: $status',
+          );
           return rtdb.Transaction.abort();
         }
 
@@ -1675,7 +1768,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
       if (!transResult.committed) {
         // Another hero accepted first — abort silently
-        debugPrint('[HeroHomeScreen] Ride already accepted by another hero — aborting');
+        debugPrint(
+          '[HeroHomeScreen] Ride already accepted by another hero — aborting',
+        );
         await FirebaseDatabase.instance
             .ref('hero_pings/$uid/$requestId')
             .remove();
@@ -1692,14 +1787,15 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           .collection('heroes')
           .doc(uid)
           .update({'isAvailable': false});
-          
+
       await FirebaseDatabase.instance
           .ref('online_heroes/$uid')
           .update({'isAvailable': false});
 
       if (mounted) {
         // Use the Firestore doc ID from the ping (not the RTDB push key)
-        final firestoreDocId = pingData['firestoreDocId'] as String? ?? requestId;
+        final firestoreDocId =
+            pingData['firestoreDocId'] as String? ?? requestId;
         final rideModel = RideModel(
           rideId: firestoreDocId,
           customerId: pingData['customerId'] as String? ?? '',
@@ -1714,12 +1810,16 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           status: 'accepted',
           heroId: uid,
         );
-        debugPrint('✅ [RIDE ACCEPTED] firestoreDocId confirmed: $firestoreDocId');
+        debugPrint(
+          '✅ [RIDE ACCEPTED] firestoreDocId confirmed: $firestoreDocId',
+        );
         Navigator.push(
-            context,
-            MaterialPageRoute<void>(
-                builder: (_) =>
-                    CaptainRideScreen(ride: rideModel, rideDocId: firestoreDocId)));
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                CaptainRideScreen(ride: rideModel, rideDocId: firestoreDocId),
+          ),
+        );
       }
     } catch (e) {
       debugPrint('[HeroHomeScreen] Accept ride error: $e');
@@ -1852,9 +1952,11 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     _heroPingSub?.cancel();
     _heroPingSub = null;
     _stopServicePingListening();
-    _locationSubscription = LocationService().getLocationStream(
+    _locationSubscription = LocationService()
+        .getLocationStream(
       highAccuracy: true, // active ride — full navigation accuracy
-    ).listen(
+    )
+        .listen(
       (position) {
         _latestPosition = position;
         _animateHeroMarkerTo(position);
@@ -2006,8 +2108,14 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       stream: FirebaseFirestore.instance
           .collection('service_requests')
           .where('assignedHeroId', isEqualTo: uid)
-          .where('status', whereIn: ['hero_assigned', 'in_progress', 'nearing_completion'])
-          .snapshots(),
+          .where(
+        'status',
+        whereIn: [
+          'hero_assigned',
+          'in_progress',
+          'nearing_completion',
+        ],
+      ).snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const SizedBox.shrink();
@@ -2346,7 +2454,8 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'SOS sent! NJ Tech team and nearby customers have been alerted.'),
+            'SOS sent! NJ Tech team and nearby customers have been alerted.',
+          ),
           backgroundColor: Color(0xFF00C853),
           behavior: SnackBarBehavior.floating,
         ),
@@ -2966,7 +3075,8 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                   // FIX-B1: Use the cached stream object. Passing the same
                   // Stream instance on every build() means StreamBuilder never
                   // resets to ConnectionState.waiting on GPS-tick setStates.
-                  stream: Stream<QuerySnapshot<Map<String, dynamic>>>.empty(),
+                  stream:
+                      const Stream<QuerySnapshot<Map<String, dynamic>>>.empty(),
                   builder: (context, snap) {
                     // T2 FIX: The full-screen HeroPremiumLoader was blocking
                     // the ride list even when rides were available.
@@ -2979,19 +3089,23 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                       Future.delayed(const Duration(seconds: 4), () {
                         if (!mounted || !_isOnline) return;
                         debugPrint(
-                            '[HeroHomeScreen] Stream error — auto-retrying: ${snap.error}');
+                          '[HeroHomeScreen] Stream error — auto-retrying: ${snap.error}',
+                        );
                         setState(() {});
                       });
-                      return Center(
+                      return const Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.wifi_off_rounded,
-                                color: _red, size: 32),
-                            const SizedBox(height: 8),
+                            Icon(
+                              Icons.wifi_off_rounded,
+                              color: _red,
+                              size: 32,
+                            ),
+                            SizedBox(height: 8),
                             Text(
                               'Connection error — retrying...',
-                              style: const TextStyle(color: _red, fontSize: 12),
+                              style: TextStyle(color: _red, fontSize: 12),
                             ),
                           ],
                         ),
@@ -3014,13 +3128,13 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                               children: [
                                 // Base layer: Map showing the service zone
                                 FlutterMap(
-                                  options: MapOptions(
+                                  options: const MapOptions(
                                     initialCenter: _erodeBusStandCenter,
-                                    initialZoom: 13,
                                     minZoom: 10,
                                     maxZoom: 18,
                                     interactionOptions: InteractionOptions(
-                                        flags: InteractiveFlag.none),
+                                      flags: InteractiveFlag.none,
+                                    ),
                                   ),
                                   children: [
                                     TileLayer(
@@ -3029,30 +3143,34 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                                       userAgentPackageName:
                                           'com.allin1.superapp',
                                     ),
-                                    CircleLayer(circles: [
-                                      CircleMarker(
-                                        point: _erodeBusStandCenter,
-                                        radius: 5000,
-                                        useRadiusInMeter: true,
-                                        color: const Color(0x08FF4FA3),
-                                        borderColor: const Color(0x40FF4FA3),
-                                        borderStrokeWidth: 2,
-                                      ),
-                                    ]),
+                                    const CircleLayer(
+                                      circles: [
+                                        CircleMarker(
+                                          point: _erodeBusStandCenter,
+                                          radius: 5000,
+                                          useRadiusInMeter: true,
+                                          color: Color(0x08FF4FA3),
+                                          borderColor: Color(0x40FF4FA3),
+                                          borderStrokeWidth: 2,
+                                        ),
+                                      ],
+                                    ),
                                   ],
                                 ),
                                 // Radar animation calibrated to match service zone circle
                                 Positioned.fill(
                                   child: LayoutBuilder(
                                     builder: (_, constraints) {
-                                      final diameter = constraints.maxWidth < constraints.maxHeight
+                                      final diameter = constraints.maxWidth <
+                                              constraints.maxHeight
                                           ? constraints.maxWidth
                                           : constraints.maxHeight;
                                       return Center(
                                         child: SizedBox(
                                           width: diameter,
                                           height: diameter,
-                                          child: _HeroRadarVisual(size: diameter),
+                                          child:
+                                              _HeroRadarVisual(size: diameter),
                                         ),
                                       );
                                     },
@@ -3854,7 +3972,17 @@ class _ServiceRequestStatusCard extends StatefulWidget {
   });
 
   @override
-  State<_ServiceRequestStatusCard> createState() => _ServiceRequestStatusCardState();
+  State<_ServiceRequestStatusCard> createState() =>
+      _ServiceRequestStatusCardState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestId', requestId));
+    properties.add(StringProperty('requestType', requestType));
+    properties.add(StringProperty('status', status));
+    properties.add(StringProperty('customerName', customerName));
+  }
 }
 
 class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
@@ -3889,7 +4017,8 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
   @override
   Widget build(BuildContext context) {
     final currentIndex = kServiceRequestAdvanceOrder.indexOf(widget.status);
-    final nextStatus = currentIndex >= 0 && currentIndex < kServiceRequestAdvanceOrder.length - 1
+    final nextStatus = currentIndex >= 0 &&
+            currentIndex < kServiceRequestAdvanceOrder.length - 1
         ? kServiceRequestAdvanceOrder[currentIndex + 1]
         : null;
 
@@ -3899,8 +4028,15 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFF4FA3).withValues(alpha: 0.2)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 3))],
+        border:
+            Border.all(color: const Color(0xFFFF4FA3).withValues(alpha: 0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3911,15 +4047,37 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_typeLabel(), style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 13)),
-                    Text('For ${widget.customerName}', style: const TextStyle(color: Colors.black54, fontSize: 11)),
+                    Text(
+                      _typeLabel(),
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      'For ${widget.customerName}',
+                      style: const TextStyle(
+                        color: Colors.black54,
+                        fontSize: 11,
+                      ),
+                    ),
                   ],
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: const Color(0xFFFF4FA3).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                child: Text(widget.status.replaceAll('_', ' '), style: const TextStyle(color: Color(0xFFFF4FA3), fontSize: 10, fontWeight: FontWeight.w700)),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF4FA3).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  widget.status.replaceAll('_', ' '),
+                  style: const TextStyle(
+                    color: Color(0xFFFF4FA3),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ],
           ),
@@ -3929,11 +4087,27 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
               width: double.infinity,
               height: 38,
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4FA3)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF4FA3),
+                ),
                 onPressed: _updating ? null : () => _advanceTo(nextStatus),
                 child: _updating
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : Text(_buttonLabelFor(nextStatus), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Text(
+                        _buttonLabelFor(nextStatus),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
               ),
             ),
           ],
@@ -4019,6 +4193,12 @@ class _HeroRadarVisual extends StatefulWidget {
 
   @override
   State<_HeroRadarVisual> createState() => _HeroRadarVisualState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DoubleProperty('size', size));
+  }
 }
 
 class _HeroRadarVisualState extends State<_HeroRadarVisual>
@@ -4152,10 +4332,9 @@ class _RadarPainter extends CustomPainter {
     // ── Sweeping sector (transparent gradient arc) ─────────────
     final sweepPaint = Paint()
       ..shader = SweepGradient(
-        center: Alignment.center,
-        colors: [
-          const Color(0x00FF4FA3),
-          const Color(0x30FF4FA3),
+        colors: const [
+          Color(0x00FF4FA3),
+          Color(0x30FF4FA3),
         ],
         startAngle: sweepAngle - 0.9,
         endAngle: sweepAngle,
@@ -4675,7 +4854,8 @@ class _HeroSoundboxPromoButton extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(
-        DiagnosticsProperty<AnimationController>('controller', controller));
+      DiagnosticsProperty<AnimationController>('controller', controller),
+    );
     properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }
@@ -4693,6 +4873,27 @@ class _PingCountdownDialog extends StatefulWidget {
   });
   @override
   State<_PingCountdownDialog> createState() => _PingCountdownDialogState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestId', requestId));
+    properties
+        .add(DiagnosticsProperty<Map<String, dynamic>>('pingData', pingData));
+    properties.add(
+      ObjectFlagProperty<
+          Function(String requestId, Map<String, dynamic> pingData)>.has(
+        'onAccept',
+        onAccept,
+      ),
+    );
+    properties.add(
+      ObjectFlagProperty<Function(String requestId)>.has(
+        'onReject',
+        onReject,
+      ),
+    );
+  }
 }
 
 class _PingCountdownDialogState extends State<_PingCountdownDialog> {
@@ -4702,18 +4903,20 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
   @override
   void initState() {
     super.initState();
-    int pingExpiresAt = (widget.pingData['pingExpiresAt'] as num?)?.toInt() ?? 0;
-    
+    int pingExpiresAt =
+        (widget.pingData['pingExpiresAt'] as num?)?.toInt() ?? 0;
+
     // 🚀 FIX: Fallback for Push Notifications (Firestore data doesn't have pingExpiresAt)
     if (pingExpiresAt == 0) {
-      pingExpiresAt = DateTime.now().toUtc().millisecondsSinceEpoch + 15000; // 15s from now
+      pingExpiresAt =
+          DateTime.now().toUtc().millisecondsSinceEpoch + 15000; // 15s from now
     }
-    
+
     final remainingMs =
         (pingExpiresAt - DateTime.now().toUtc().millisecondsSinceEpoch)
             .clamp(0, 15000);
     _remainingSec = (remainingMs / 1000).ceil();
-    
+
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) {
         t.cancel();
@@ -4759,9 +4962,10 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
       ),
       titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 0),
       contentPadding: const EdgeInsets.fromLTRB(24, 18, 24, 10),
-      title: const Text('\U0001f680 New Ride Request',
-          style:
-              TextStyle(color: Color(0xFFFF4FA3), fontWeight: FontWeight.w800)),
+      title: const Text(
+        'U0001f680 New Ride Request',
+        style: TextStyle(color: Color(0xFFFF4FA3), fontWeight: FontWeight.w800),
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4770,60 +4974,80 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-                color: const Color(0xFF1A1A2E),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0x26FF4FA3))),
-            child: Row(children: [
-              const Text('\U0001f7e2', style: TextStyle(fontSize: 14)),
-              const SizedBox(width: 10),
-              Expanded(
+              color: const Color(0xFF1A1A2E),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0x26FF4FA3)),
+            ),
+            child: Row(
+              children: [
+                const Text('U0001f7e2', style: TextStyle(fontSize: 14)),
+                const SizedBox(width: 10),
+                Expanded(
                   child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('PICKUP',
-                      style: TextStyle(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'PICKUP',
+                        style: TextStyle(
                           color: Color(0xFF8F5A78),
                           fontSize: 10,
-                          fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
-                  Text(pickup,
-                      style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        pickup,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 13,
-                          fontWeight: FontWeight.w700)),
-                ],
-              )),
-            ]),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 8),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-                color: const Color(0xFF1A1A2E),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0x26FF4FA3))),
-            child: Row(children: [
-              const Text('\U0001f534', style: TextStyle(fontSize: 14)),
-              const SizedBox(width: 10),
-              Expanded(
+              color: const Color(0xFF1A1A2E),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0x26FF4FA3)),
+            ),
+            child: Row(
+              children: [
+                const Text('U0001f534', style: TextStyle(fontSize: 14)),
+                const SizedBox(width: 10),
+                Expanded(
                   child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('DROP',
-                      style: TextStyle(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'DROP',
+                        style: TextStyle(
                           color: Color(0xFF8F5A78),
                           fontSize: 10,
-                          fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
-                  Text(drop,
-                      style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        drop,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 13,
-                          fontWeight: FontWeight.w700)),
-                ],
-              )),
-            ]),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
           Container(
@@ -4833,160 +5057,206 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
               color: const Color(0xFF1A1A2E),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                  color: tipAmount > 0
-                      ? const Color(0xFF00A86B).withValues(alpha: 0.45)
-                      : const Color(0x26FF4FA3)),
-            ),
-            child: Row(children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Fare',
-                        style: TextStyle(
-                            color: Color(0xFF8F5A78),
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 2),
-                    Text('\u{20b9}${estimatedFare.toStringAsFixed(0)}',
-                        style: const TextStyle(
-                            color: Color(0xFFFF4FA3),
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900)),
-                  ],
-                ),
+                color: tipAmount > 0
+                    ? const Color(0xFF00A86B).withValues(alpha: 0.45)
+                    : const Color(0x26FF4FA3),
               ),
-              if (tipAmount > 0) ...[
-                const Text('  +  ',
-                    style: TextStyle(color: Color(0xFF8F5A78), fontSize: 11)),
+            ),
+            child: Row(
+              children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Tip',
-                          style: TextStyle(
-                              color: Color(0xFF8F5A78),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700)),
+                      const Text(
+                        'Fare',
+                        style: TextStyle(
+                          color: Color(0xFF8F5A78),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                       const SizedBox(height: 2),
-                      Text('\u{20b9}${tipAmount.toStringAsFixed(0)}',
+                      Text(
+                        '\u{20b9}${estimatedFare.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          color: Color(0xFFFF4FA3),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (tipAmount > 0) ...[
+                  const Text(
+                    '  +  ',
+                    style: TextStyle(color: Color(0xFF8F5A78), fontSize: 11),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Tip',
+                          style: TextStyle(
+                            color: Color(0xFF8F5A78),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '\u{20b9}${tipAmount.toStringAsFixed(0)}',
                           style: const TextStyle(
-                              color: Color(0xFFFFBB00),
-                              fontSize: 16,
-                              fontWeight: FontWeight.w900)),
+                            color: Color(0xFFFFBB00),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const Text(
+                  '  =  ',
+                  style: TextStyle(
+                    color: Color(0xFF8F5A78),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Total',
+                        style: TextStyle(
+                          color: Color(0xFF8F5A78),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '\u{20b9}${boostedFare.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          color: Color(0xFF00A86B),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ],
-              const Text('  =  ',
-                  style: TextStyle(
-                      color: Color(0xFF8F5A78),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Total',
-                        style: TextStyle(
-                            color: Color(0xFF8F5A78),
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 2),
-                    Text('\u{20b9}${boostedFare.toStringAsFixed(0)}',
-                        style: const TextStyle(
-                            color: Color(0xFF00A86B),
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900)),
-                  ],
-                ),
-              ),
-            ]),
+            ),
           ),
           const SizedBox(height: 12),
           Center(
-            child: Text('Expires in $_remainingSec s',
-                style: const TextStyle(
-                    color: Color(0xFFFF5252),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700)),
+            child: Text(
+              'Expires in $_remainingSec s',
+              style: const TextStyle(
+                color: Color(0xFFFF5252),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
       actions: [
-        Row(children: [
-          Expanded(
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFFFF5252),
                   side: const BorderSide(color: Color(0x40FF5252)),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(vertical: 14)),
-              onPressed: () {
-                _countdownTimer?.cancel();
-                widget.onReject(widget.requestId);
-                Navigator.pop(context);
-              },
-              child: const Text('REJECT',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11)),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                onPressed: () {
+                  _countdownTimer?.cancel();
+                  widget.onReject(widget.requestId);
+                  Navigator.pop(context);
+                },
+                child: const Text(
+                  'REJECT',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
+                ),
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFF8F5A78),
                   side: const BorderSide(color: Color(0x338F5A78)),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(vertical: 14)),
-              onPressed: () {
-                _countdownTimer?.cancel();
-                widget.onReject(widget.requestId);
-                Navigator.pop(context);
-              },
-              child: const Text('SKIP',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11)),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                onPressed: () {
+                  _countdownTimer?.cancel();
+                  widget.onReject(widget.requestId);
+                  Navigator.pop(context);
+                },
+                child: const Text(
+                  'SKIP',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
+                ),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 2,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                    colors: [Color(0xFFFF4FA3), Color(0xFFFF9AC8)]),
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: const [
-                  BoxShadow(
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 2,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF4FA3), Color(0xFFFF9AC8)],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: const [
+                    BoxShadow(
                       color: Color(0x40FF4FA3),
                       blurRadius: 16,
-                      offset: Offset(0, 6))
-                ],
-              ),
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
+                      offset: Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.transparent,
                     shadowColor: Colors.transparent,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                    padding: const EdgeInsets.symmetric(vertical: 14)),
-                onPressed: () {
-                  _countdownTimer?.cancel();
-                  final data = Map<String, dynamic>.from(widget.pingData);
-                  widget.onAccept(widget.requestId, data);
-                  Navigator.pop(context);
-                },
-                child: const Text('ACCEPT',
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: () {
+                    _countdownTimer?.cancel();
+                    final data = Map<String, dynamic>.from(widget.pingData);
+                    widget.onAccept(widget.requestId, data);
+                    Navigator.pop(context);
+                  },
+                  child: const Text(
+                    'ACCEPT',
                     style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 15)),
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
-        ]),
+          ],
+        ),
       ],
     );
   }

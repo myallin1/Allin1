@@ -167,7 +167,8 @@ class _NjTechServiceScreenState extends State<NjTechServiceScreen> {
                                 borderRadius: BorderRadius.circular(28),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: item.colors.first.withValues(alpha: 0.32),
+                                    color: item.colors.first
+                                        .withValues(alpha: 0.32),
                                     blurRadius: 28,
                                     offset: const Offset(0, 14),
                                   ),
@@ -191,7 +192,8 @@ class _NjTechServiceScreenState extends State<NjTechServiceScreen> {
                                           begin: Alignment.bottomCenter,
                                           end: Alignment.topCenter,
                                           colors: [
-                                            Colors.black.withValues(alpha: 0.42),
+                                            Colors.black
+                                                .withValues(alpha: 0.42),
                                             Colors.transparent,
                                           ],
                                         ),
@@ -203,7 +205,8 @@ class _NjTechServiceScreenState extends State<NjTechServiceScreen> {
                                     right: 20,
                                     bottom: 22,
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Container(
                                           padding: const EdgeInsets.symmetric(
@@ -211,8 +214,10 @@ class _NjTechServiceScreenState extends State<NjTechServiceScreen> {
                                             vertical: 6,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: Colors.white.withValues(alpha: 0.18),
-                                            borderRadius: BorderRadius.circular(999),
+                                            color: Colors.white
+                                                .withValues(alpha: 0.18),
+                                            borderRadius:
+                                                BorderRadius.circular(999),
                                           ),
                                           child: Text(
                                             item.subtitle,
@@ -254,7 +259,9 @@ class _NjTechServiceScreenState extends State<NjTechServiceScreen> {
                           width: _currentIndex == index ? 22 : 8,
                           height: 8,
                           decoration: BoxDecoration(
-                            color: _currentIndex == index ? _njPink : Colors.white24,
+                            color: _currentIndex == index
+                                ? _njPink
+                                : Colors.white24,
                             borderRadius: BorderRadius.circular(999),
                           ),
                         ),
@@ -294,7 +301,8 @@ class _NjTechServiceScreenState extends State<NjTechServiceScreen> {
                           const SizedBox(height: 22),
                           _leadButton(
                             label: 'WhatsApp Us',
-                            subtitle: 'Fast lead capture with a pre-filled service message',
+                            subtitle:
+                                'Fast lead capture with a pre-filled service message',
                             icon: Icons.chat_bubble_rounded,
                             color: _njGreen,
                             onTap: _openWhatsApp,

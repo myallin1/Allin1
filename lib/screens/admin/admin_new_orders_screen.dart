@@ -10,6 +10,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -50,11 +51,14 @@ String _requestSummary(String requestType, Map<String, dynamic> details) {
     case 'custom_food_order':
       final items = (details['items'] as String?) ?? '';
       final pref = (details['restaurantOrPreference'] as String?) ?? '';
-      return [if (pref.isNotEmpty) 'From: $pref', if (items.isNotEmpty) items].join(' — ');
+      return [if (pref.isNotEmpty) 'From: $pref', if (items.isNotEmpty) items]
+          .join(' — ');
     case 'grocery_order':
       final text = (details['listText'] as String?) ?? '';
-      final hasImage = (details['listImageUrl'] as String?)?.isNotEmpty ?? false;
-      return [if (text.isNotEmpty) text, if (hasImage) '📷 Photo list attached'].join(' — ');
+      final hasImage =
+          (details['listImageUrl'] as String?)?.isNotEmpty ?? false;
+      return [if (text.isNotEmpty) text, if (hasImage) '📷 Photo list attached']
+          .join(' — ');
     default:
       return '';
   }
@@ -99,10 +103,14 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
       case AppLifecycleState.detached:
         _pendingReviewSub?.cancel();
         _adminManagedSub?.cancel();
-        debugPrint('[AdminNewOrders] Backgrounded — stopped service_requests listeners');
+        debugPrint(
+          '[AdminNewOrders] Backgrounded — stopped service_requests listeners',
+        );
         break;
       case AppLifecycleState.resumed:
-        debugPrint('[AdminNewOrders] Resumed — restarting service_requests listeners');
+        debugPrint(
+          '[AdminNewOrders] Resumed — restarting service_requests listeners',
+        );
         _listenToNewOrders();
         break;
     }
@@ -131,16 +139,19 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
     _adminManagedSub = FirebaseFirestore.instance
         .collection('service_requests')
         .where('assignmentMethod', isEqualTo: 'admin_manual')
-        .where('status', whereIn: ['hero_assigned', 'in_progress', 'nearing_completion'])
+        .where(
+          'status',
+          whereIn: ['hero_assigned', 'in_progress', 'nearing_completion'],
+        )
         .snapshots()
         .listen(
-      (snapshot) {
-        if (mounted) setState(() => _adminManagedActive = snapshot.docs);
-      },
-      onError: (Object e) {
-        debugPrint('[AdminNewOrders] Admin-managed listener error: $e');
-      },
-    );
+          (snapshot) {
+            if (mounted) setState(() => _adminManagedActive = snapshot.docs);
+          },
+          onError: (Object e) {
+            debugPrint('[AdminNewOrders] Admin-managed listener error: $e');
+          },
+        );
   }
 
   Future<void> _call(String phone) async {
@@ -156,7 +167,10 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
       backgroundColor: _bg,
       appBar: AppBar(
         backgroundColor: _surface,
-        title: Text('New Orders', style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800)),
+        title: Text(
+          'New Orders',
+          style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800),
+        ),
         actions: [
           Container(
             margin: const EdgeInsets.only(right: 12),
@@ -166,19 +180,38 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: _red.withValues(alpha: 0.4)),
             ),
-            child: Text('$totalCount Pending', style: const TextStyle(color: _red, fontSize: 12, fontWeight: FontWeight.bold)),
+            child: Text(
+              '$totalCount Pending',
+              style: const TextStyle(
+                color: _red,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
       body: totalCount == 0
-          ? Center(child: Text('No orders awaiting review', style: TextStyle(color: _muted)))
+          ? const Center(
+              child: Text(
+                'No orders awaiting review',
+                style: TextStyle(color: _muted),
+              ),
+            )
           : ListView(
               padding: const EdgeInsets.all(12),
               children: [
                 if (_pendingReview.isNotEmpty) ...[
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8, left: 4),
-                    child: Text('AWAITING ASSIGNMENT', style: GoogleFonts.outfit(color: _muted, fontSize: 11, fontWeight: FontWeight.w800)),
+                    child: Text(
+                      'AWAITING ASSIGNMENT',
+                      style: GoogleFonts.outfit(
+                        color: _muted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
                   ..._pendingReview.map(_buildPendingReviewCard),
                   const SizedBox(height: 16),
@@ -186,7 +219,14 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
                 if (_adminManagedActive.isNotEmpty) ...[
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8, left: 4),
-                    child: Text('MANUALLY ASSIGNED — IN PROGRESS', style: GoogleFonts.outfit(color: _muted, fontSize: 11, fontWeight: FontWeight.w800)),
+                    child: Text(
+                      'MANUALLY ASSIGNED — IN PROGRESS',
+                      style: GoogleFonts.outfit(
+                        color: _muted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
                   ..._adminManagedActive.map(_buildAdminManagedCard),
                 ],
@@ -195,7 +235,9 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
     );
   }
 
-  Widget _buildPendingReviewCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+  Widget _buildPendingReviewCard(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
     final data = doc.data();
     final requestType = data['requestType'] as String? ?? 'hero_booking';
     final customerName = data['customerName'] as String? ?? 'Customer';
@@ -205,7 +247,10 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
     return Card(
       color: _card,
       margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: _border)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: _border),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -214,9 +259,20 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: _pink.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                  child: Text(_requestTypeLabel(requestType), style: const TextStyle(color: _pink, fontSize: 10, fontWeight: FontWeight.bold)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _pink.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _requestTypeLabel(requestType),
+                    style: const TextStyle(
+                      color: _pink,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
                 const Spacer(),
                 IconButton(
@@ -226,18 +282,38 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
               ],
             ),
             const SizedBox(height: 6),
-            Text(customerName, style: const TextStyle(color: _text, fontWeight: FontWeight.w700, fontSize: 14)),
+            Text(
+              customerName,
+              style: const TextStyle(
+                color: _text,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+            ),
             if (customerPhone.isNotEmpty)
-              Text(customerPhone, style: const TextStyle(color: _muted, fontSize: 11)),
+              Text(
+                customerPhone,
+                style: const TextStyle(color: _muted, fontSize: 11),
+              ),
             const SizedBox(height: 6),
-            Text(_requestSummary(requestType, details), style: const TextStyle(color: _muted, fontSize: 12)),
+            Text(
+              _requestSummary(requestType, details),
+              style: const TextStyle(color: _muted, fontSize: 12),
+            ),
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: _pink),
-                onPressed: () => _showAssignSheet(context, doc.id, customerName),
-                child: const Text('Assign to Hero', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                onPressed: () =>
+                    _showAssignSheet(context, doc.id, customerName),
+                child: const Text(
+                  'Assign to Hero',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
           ],
@@ -246,7 +322,9 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
     );
   }
 
-  Widget _buildAdminManagedCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+  Widget _buildAdminManagedCard(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
     final data = doc.data();
     final requestType = data['requestType'] as String? ?? 'hero_booking';
     final customerName = data['customerName'] as String? ?? 'Customer';
@@ -257,7 +335,10 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
     return Card(
       color: _card,
       margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: _border)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: _border),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -266,15 +347,37 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: _pink.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                  child: Text(_requestTypeLabel(requestType), style: const TextStyle(color: _pink, fontSize: 10, fontWeight: FontWeight.bold)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _pink.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _requestTypeLabel(requestType),
+                    style: const TextStyle(
+                      color: _pink,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: _green.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                  child: Text(status.replaceAll('_', ' '), style: const TextStyle(color: _green, fontSize: 10, fontWeight: FontWeight.bold)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _green.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    status.replaceAll('_', ' '),
+                    style: const TextStyle(
+                      color: _green,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
                 IconButton(
                   onPressed: () => _call(customerPhone),
@@ -283,22 +386,40 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
               ],
             ),
             const SizedBox(height: 6),
-            Text(customerName, style: const TextStyle(color: _text, fontWeight: FontWeight.w700, fontSize: 14)),
-            Text('Hero: $assignedHeroName', style: const TextStyle(color: _muted, fontSize: 11)),
+            Text(
+              customerName,
+              style: const TextStyle(
+                color: _text,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+            ),
+            Text(
+              'Hero: $assignedHeroName',
+              style: const TextStyle(color: _muted, fontSize: 11),
+            ),
             const SizedBox(height: 10),
-            ServiceRequestManualStatusControl(requestId: doc.id, currentStatus: status),
+            ServiceRequestManualStatusControl(
+              requestId: doc.id,
+              currentStatus: status,
+            ),
           ],
         ),
       ),
     );
   }
 
-  void _showAssignSheet(BuildContext context, String requestId, String customerName) {
+  void _showAssignSheet(
+    BuildContext context,
+    String requestId,
+    String customerName,
+  ) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _AssignHeroSheet(requestId: requestId, customerName: customerName),
+      builder: (_) =>
+          _AssignHeroSheet(requestId: requestId, customerName: customerName),
     );
   }
 }
@@ -315,6 +436,13 @@ class _AssignHeroSheet extends StatefulWidget {
 
   @override
   State<_AssignHeroSheet> createState() => _AssignHeroSheetState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestId', requestId));
+    properties.add(StringProperty('customerName', customerName));
+  }
 }
 
 class _AssignHeroSheetState extends State<_AssignHeroSheet> {
@@ -325,7 +453,8 @@ class _AssignHeroSheetState extends State<_AssignHeroSheet> {
   @override
   void initState() {
     super.initState();
-    _heroesSub = FirebaseDatabase.instance.ref('online_heroes').onValue.listen((event) {
+    _heroesSub =
+        FirebaseDatabase.instance.ref('online_heroes').onValue.listen((event) {
       final raw = event.snapshot.value;
       if (raw is! Map) {
         if (mounted) setState(() => _onlineHeroes = []);
@@ -377,7 +506,8 @@ class _AssignHeroSheetState extends State<_AssignHeroSheet> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
+      constraints:
+          BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
       padding: const EdgeInsets.all(20),
       decoration: const BoxDecoration(
         color: _surface,
@@ -387,15 +517,28 @@ class _AssignHeroSheetState extends State<_AssignHeroSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Assign Hero for ${widget.customerName}', style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800, fontSize: 16)),
+          Text(
+            'Assign Hero for ${widget.customerName}',
+            style: GoogleFonts.outfit(
+              color: _text,
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+            ),
+          ),
           const SizedBox(height: 4),
-          const Text('Confirm with the hero by phone before assigning.', style: TextStyle(color: _muted, fontSize: 11)),
+          const Text(
+            'Confirm with the hero by phone before assigning.',
+            style: TextStyle(color: _muted, fontSize: 11),
+          ),
           const SizedBox(height: 16),
           Flexible(
             child: _onlineHeroes.isEmpty
                 ? const Padding(
                     padding: EdgeInsets.all(20),
-                    child: Text('No heroes online', style: TextStyle(color: _muted)),
+                    child: Text(
+                      'No heroes online',
+                      style: TextStyle(color: _muted),
+                    ),
                   )
                 : ListView.builder(
                     shrinkWrap: true,
@@ -406,17 +549,44 @@ class _AssignHeroSheetState extends State<_AssignHeroSheet> {
                       return Card(
                         color: _card,
                         margin: const EdgeInsets.symmetric(vertical: 4),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         child: ListTile(
                           enabled: !_assigning,
                           onTap: () => _assign(hero),
                           leading: CircleAvatar(
-                            backgroundColor: isAvailable ? _green.withValues(alpha: 0.2) : _red.withValues(alpha: 0.2),
-                            child: Text(((hero['name'] as String).isNotEmpty ? hero['name'] as String : 'H')[0].toUpperCase(), style: TextStyle(color: isAvailable ? _green : _red)),
+                            backgroundColor: isAvailable
+                                ? _green.withValues(alpha: 0.2)
+                                : _red.withValues(alpha: 0.2),
+                            child: Text(
+                              ((hero['name'] as String).isNotEmpty
+                                      ? hero['name'] as String
+                                      : 'H')[0]
+                                  .toUpperCase(),
+                              style: TextStyle(
+                                color: isAvailable ? _green : _red,
+                              ),
+                            ),
                           ),
-                          title: Text(hero['name'] as String, style: const TextStyle(color: _text)),
-                          subtitle: Text('${hero['vehicleType']}${isAvailable ? '' : ' · on a task'}', style: const TextStyle(color: _muted, fontSize: 11)),
-                          trailing: _assigning ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _pink)) : null,
+                          title: Text(
+                            hero['name'] as String,
+                            style: const TextStyle(color: _text),
+                          ),
+                          subtitle: Text(
+                            '${hero['vehicleType']}${isAvailable ? '' : ' · on a task'}',
+                            style: const TextStyle(color: _muted, fontSize: 11),
+                          ),
+                          trailing: _assigning
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: _pink,
+                                  ),
+                                )
+                              : null,
                         ),
                       );
                     },
@@ -435,16 +605,25 @@ class ServiceRequestManualStatusControl extends StatefulWidget {
   final String requestId;
   final String currentStatus;
   const ServiceRequestManualStatusControl({
-    super.key,
     required this.requestId,
     required this.currentStatus,
+    super.key,
   });
 
   @override
-  State<ServiceRequestManualStatusControl> createState() => _ServiceRequestManualStatusControlState();
+  State<ServiceRequestManualStatusControl> createState() =>
+      _ServiceRequestManualStatusControlState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestId', requestId));
+    properties.add(StringProperty('currentStatus', currentStatus));
+  }
 }
 
-class _ServiceRequestManualStatusControlState extends State<ServiceRequestManualStatusControl> {
+class _ServiceRequestManualStatusControlState
+    extends State<ServiceRequestManualStatusControl> {
   bool _updating = false;
 
   Future<void> _advanceTo(String newStatus) async {
@@ -473,8 +652,10 @@ class _ServiceRequestManualStatusControlState extends State<ServiceRequestManual
 
   @override
   Widget build(BuildContext context) {
-    final currentIndex = kServiceRequestAdvanceOrder.indexOf(widget.currentStatus);
-    final nextStatus = currentIndex >= 0 && currentIndex < kServiceRequestAdvanceOrder.length - 1
+    final currentIndex =
+        kServiceRequestAdvanceOrder.indexOf(widget.currentStatus);
+    final nextStatus = currentIndex >= 0 &&
+            currentIndex < kServiceRequestAdvanceOrder.length - 1
         ? kServiceRequestAdvanceOrder[currentIndex + 1]
         : null;
     if (nextStatus == null) return const SizedBox.shrink();
@@ -485,8 +666,21 @@ class _ServiceRequestManualStatusControlState extends State<ServiceRequestManual
         style: ElevatedButton.styleFrom(backgroundColor: _pink),
         onPressed: _updating ? null : () => _advanceTo(nextStatus),
         child: _updating
-            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-            : Text(_buttonLabelFor(nextStatus), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              )
+            : Text(
+                _buttonLabelFor(nextStatus),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
       ),
     );
   }

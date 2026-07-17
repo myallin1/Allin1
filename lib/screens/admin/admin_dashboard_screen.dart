@@ -11,10 +11,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'ads_management_screen.dart';
 import 'admin_hero_dispatch_screen.dart';
 import 'admin_new_orders_screen.dart';
 import 'admin_ride_tracking_screen.dart';
+import 'ads_management_screen.dart';
 import 'approved_heroes_screen.dart';
 import 'commission_settings_screen.dart';
 import 'credentials_admin_screen.dart';
@@ -599,13 +599,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         ),
         // T2: Download latest admin APK from Firebase hosting
         IconButton(
-          icon: const Icon(Icons.download_rounded,
-              color: Color(0xFFFF4FA3), size: 20),
+          icon: const Icon(
+            Icons.download_rounded,
+            color: Color(0xFFFF4FA3),
+            size: 20,
+          ),
           onPressed: _downloadAdminApp,
           tooltip: 'Download Latest App',
         ),
         IconButton(
-          icon: const Icon(Icons.map_rounded, color: Color(0xFFFF4FA3), size: 22),
+          icon:
+              const Icon(Icons.map_rounded, color: Color(0xFFFF4FA3), size: 22),
           onPressed: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const AdminHeroDispatchScreen()),
@@ -613,7 +617,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           tooltip: 'Dispatch Heroes',
         ),
         IconButton(
-          icon: const Icon(Icons.timeline_rounded, color: Color(0xFFFF4FA3), size: 22),
+          icon: const Icon(
+            Icons.timeline_rounded,
+            color: Color(0xFFFF4FA3),
+            size: 22,
+          ),
           onPressed: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const AdminRideTrackingScreen()),
@@ -739,10 +747,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
                 const SizedBox(width: 12),
                 StreamBuilder<DatabaseEvent>(
-                  stream: FirebaseDatabase.instance.ref('online_heroes').onValue,
+                  stream:
+                      FirebaseDatabase.instance.ref('online_heroes').onValue,
                   builder: (context, rtdbSnap) {
                     int activeNow = 0;
-                    if (rtdbSnap.hasData && rtdbSnap.data!.snapshot.value != null) {
+                    if (rtdbSnap.hasData &&
+                        rtdbSnap.data!.snapshot.value != null) {
                       final val = rtdbSnap.data!.snapshot.value;
                       if (val is Map) activeNow = val.length;
                     }
@@ -1113,16 +1123,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             final doc = docs[i];
             final d = doc.data()! as Map<String, dynamic>;
             final status = d['status'] as String? ?? 'unknown';
-            final pickup = d['pickup'] as String? ??
-                d['pickupAddress'] as String? ?? '—';
-            final drop = d['drop'] as String? ??
-                d['dropAddress'] as String? ?? '—';
+            final pickup =
+                d['pickup'] as String? ?? d['pickupAddress'] as String? ?? '—';
+            final drop =
+                d['drop'] as String? ?? d['dropAddress'] as String? ?? '—';
             final fare = (d['fare'] as num?)?.toInt() ?? 0;
             final tip = (d['tipAmount'] as num?)?.toInt() ?? 0;
             final finalFare = (d['finalFare'] as num?)?.toInt() ?? (fare + tip);
             final rating = (d['customerRating'] as num?)?.toInt();
-            final captain = d['captainName'] as String? ??
-                d['heroName'] as String? ?? '—';
+            final captain =
+                d['captainName'] as String? ?? d['heroName'] as String? ?? '—';
             final cust = d['customerName'] as String? ?? '—';
             final ts = d['createdAt'] as Timestamp?;
             final time = ts != null
@@ -1265,27 +1275,37 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   // T4: Category helpers for admin fleet monitoring
   String _categoryEmoji(String category) {
     switch (category) {
-      case 'auto':       return '🛺';
+      case 'auto':
+        return '🛺';
       case 'car':
-      case 'cab':        return '🚘';
-      case 'parcel':     return '📦';
+      case 'cab':
+        return '🚘';
+      case 'parcel':
+        return '📦';
       case 'emergency_manpower':
-      case 'manpower':   return '🚨';
+      case 'manpower':
+        return '🚨';
       case 'bike':
-      default:           return '🏍️';
+      default:
+        return '🏍️';
     }
   }
 
   String _categoryLabel(String category) {
     switch (category) {
-      case 'auto':             return 'Auto';
+      case 'auto':
+        return 'Auto';
       case 'car':
-      case 'cab':              return 'Cab/Mini';
-      case 'parcel':           return 'Parcel';
+      case 'cab':
+        return 'Cab/Mini';
+      case 'parcel':
+        return 'Parcel';
       case 'emergency_manpower':
-      case 'manpower':         return 'Emergency';
+      case 'manpower':
+        return 'Emergency';
       case 'bike':
-      default:                 return 'Bike';
+      default:
+        return 'Bike';
     }
   }
 

@@ -657,7 +657,8 @@ class _HeroApprovalCard extends StatelessWidget {
     properties.add(StringProperty('uid', uid));
     properties.add(DiagnosticsProperty<Map<String, dynamic>>('data', data));
     properties.add(ObjectFlagProperty<VoidCallback>.has('onView', onView));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onApprove', onApprove));
+    properties
+        .add(ObjectFlagProperty<VoidCallback>.has('onApprove', onApprove));
     properties.add(ObjectFlagProperty<VoidCallback>.has('onReject', onReject));
   }
 }

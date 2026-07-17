@@ -145,8 +145,9 @@ class WalletResponse {
       success: json['success'] as bool? ?? false,
       message: json['message'] as String? ?? '',
       wallet: UserWalletModel.fromFirestore(
-          json['wallet'] as Map<String, dynamic>,
-          json['wallet']['userId'] as String? ?? '',),
+        json['wallet'] as Map<String, dynamic>,
+        json['wallet']['userId'] as String? ?? '',
+      ),
     );
   }
 

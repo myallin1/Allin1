@@ -126,7 +126,14 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   bool get _isPaymentSettled {
     final status = _paymentStatus?.trim() ?? '';
     // Added 'settled' and 'confirmed' to sync with Hero and Admin app updates
-    return ['completed', 'paid', 'paid_by_wallet', 'paid_offline_p2p', 'settled', 'confirmed'].contains(status);
+    return [
+      'completed',
+      'paid',
+      'paid_by_wallet',
+      'paid_offline_p2p',
+      'settled',
+      'confirmed',
+    ].contains(status);
   }
 
   LatLng? _pickupTarget() {
@@ -153,7 +160,8 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   }
 
   ({double lat, double lng})? _extractHeroCoordinates(
-      Map<String, dynamic> data,) {
+    Map<String, dynamic> data,
+  ) {
     final rawLoc = data['currentLocation'];
     if (rawLoc is Map) {
       final loc = Map<String, dynamic>.from(rawLoc);
@@ -315,7 +323,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     final now = DateTime.now();
     if (target != null &&
         (_lastRouteDrawAt == null ||
-         now.difference(_lastRouteDrawAt!).inSeconds >= 30)) {
+            now.difference(_lastRouteDrawAt!).inSeconds >= 30)) {
       _lastRouteDrawAt = now;
       unawaited(
         _drawRoute(
@@ -501,10 +509,13 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       await FirebaseFirestore.instance
           .collection('rides')
           .doc(widget.rideDocId)
-          .set({
-        'preferredPaymentMethod': method,
-        'paymentStatus': 'awaiting_confirmation',
-      }, SetOptions(merge: true),);
+          .set(
+        {
+          'preferredPaymentMethod': method,
+          'paymentStatus': 'awaiting_confirmation',
+        },
+        SetOptions(merge: true),
+      );
       if (!mounted) {
         return;
       }
@@ -557,10 +568,10 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    
+
     // ✅ Set local OTP immediately upon screen load
-    _rideOtp = _generateLocalOtp(widget.rideDocId); 
-    
+    _rideOtp = _generateLocalOtp(widget.rideDocId);
+
     _rideStatus = widget.ride.status ?? _rideStatus;
     _captainName = widget.ride.heroName;
     _captainBike = widget.ride.heroVehicleNumber;
@@ -599,7 +610,8 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       debugPrint(
-          '[RideTrackingScreen] App paused/inactive',);
+        '[RideTrackingScreen] App paused/inactive',
+      );
     }
   }
 
@@ -638,8 +650,6 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     }
   }
 
-
-
   void _bindRideDocument() {
     if (widget.rideDocId.isEmpty) {
       _isRideLoading = false;
@@ -676,7 +686,8 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
           .doc(heroId)
           .get();
       String? phone =
-          (heroSnap.data()?['phoneNumber'] as String?)?.trim().isNotEmpty ?? false
+          (heroSnap.data()?['phoneNumber'] as String?)?.trim().isNotEmpty ??
+                  false
               ? (heroSnap.data()!['phoneNumber'] as String).trim()
               : (heroSnap.data()?['phone'] as String?)?.trim();
 
@@ -686,7 +697,8 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
             .doc(heroId)
             .get();
         phone =
-            (userSnap.data()?['phoneNumber'] as String?)?.trim().isNotEmpty ?? false
+            (userSnap.data()?['phoneNumber'] as String?)?.trim().isNotEmpty ??
+                    false
                 ? (userSnap.data()!['phoneNumber'] as String).trim()
                 : (userSnap.data()?['phone'] as String?)?.trim();
       }
@@ -787,10 +799,10 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
               widget.ride.vehicleType)
           ?.toString(),
     );
-    
+
     // ✅ Always use local deterministic OTP based on rideDocId
-    final nextRideOtp = _generateLocalOtp(widget.rideDocId); 
-    
+    final nextRideOtp = _generateLocalOtp(widget.rideDocId);
+
     final nextCaptainLat = ((data['captainLat'] ??
             data['heroLat'] ??
             data['latitude'] ??
@@ -908,7 +920,8 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
         );
 
         debugPrint(
-            '🛰️ Hero location updated (RTDB): ${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}',);
+          '🛰️ Hero location updated (RTDB): ${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}',
+        );
       }
     });
   }
@@ -1141,7 +1154,8 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
           const Text('🎉', style: TextStyle(fontSize: 40)),
           const SizedBox(height: 8),
           Text(
-            _paymentStatus == 'pending_collection' || _paymentStatus == 'awaiting_confirmation'
+            _paymentStatus == 'pending_collection' ||
+                    _paymentStatus == 'awaiting_confirmation'
                 ? 'Ride Completed — Awaiting Payment'
                 : 'Ride Successful — Paid Offline',
             style: const TextStyle(

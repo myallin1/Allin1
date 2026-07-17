@@ -57,9 +57,8 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
               ? 'Guru AI configuration cleared for this device.'
               : 'Guru AI is ready on this device.',
         ),
-        backgroundColor: key.isEmpty
-            ? const Color(0xFFFFB74D)
-            : const Color(0xFFFF4FA3),
+        backgroundColor:
+            key.isEmpty ? const Color(0xFFFFB74D) : const Color(0xFFFF4FA3),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -219,7 +218,9 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
                         )
                       : const Icon(Icons.save_rounded),
                   label: Text(
-                    activated ? 'Update Guru AI Key' : 'Save & Activate Guru AI',
+                    activated
+                        ? 'Update Guru AI Key'
+                        : 'Save & Activate Guru AI',
                     style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
                   ),
                   style: ElevatedButton.styleFrom(

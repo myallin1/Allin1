@@ -63,12 +63,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   double get _total => _subtotal + _deliveryFee + _platformFee;
 
   // ── Payment Processing ───────────────────────────────────
-  int _coinsToUse = 0;
+  final int _coinsToUse = 0;
 
   Future<bool> _canRedeemCoins(int requestedCoins) async {
     if (requestedCoins <= 0) return true;
 
-    final todayKey = 'redeemed_${DateTime.now().toIso8601String().substring(0, 10)}';
+    final todayKey =
+        'redeemed_${DateTime.now().toIso8601String().substring(0, 10)}';
     final redeemedToday = (HiveCache.get(todayKey) as int?) ?? 0;
 
     if (redeemedToday + requestedCoins > 20) {
@@ -118,7 +119,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
 
     // 5. Update daily coin usage counter
-    final todayKey = 'redeemed_${DateTime.now().toIso8601String().substring(0, 10)}';
+    final todayKey =
+        'redeemed_${DateTime.now().toIso8601String().substring(0, 10)}';
     final redeemedToday = (HiveCache.get(todayKey) as int?) ?? 0;
     HiveCache.put(todayKey, redeemedToday + _coinsToUse);
 

@@ -148,7 +148,7 @@ class _HeroSosScreenState extends State<HeroSosScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to send SOS: $e'),
-            backgroundColor: Color(0xFFB00020),
+            backgroundColor: const Color(0xFFB00020),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -160,7 +160,7 @@ class _HeroSosScreenState extends State<HeroSosScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [Color(0xFFFFF7FB), Color(0xFFFFEEF6), Color(0xFFFFFFFF)],
@@ -174,7 +174,11 @@ class _HeroSosScreenState extends State<HeroSosScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const SizedBox(height: 40),
-              const Icon(Icons.emergency_rounded, color: Color(0xFFFF5252), size: 80),
+              const Icon(
+                Icons.emergency_rounded,
+                color: Color(0xFFFF5252),
+                size: 80,
+              ),
               const SizedBox(height: 16),
               Text(
                 'Emergency SOS',
@@ -198,14 +202,14 @@ class _HeroSosScreenState extends State<HeroSosScreen> {
                 child: Container(
                   width: 200,
                   height: 200,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: const LinearGradient(
+                    gradient: LinearGradient(
                       colors: [Color(0xFFFF5252), Color(0xFFB00020)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    boxShadow: const [
+                    boxShadow: [
                       BoxShadow(
                         color: Color(0x4AFF5252),
                         blurRadius: 30,
@@ -218,7 +222,9 @@ class _HeroSosScreenState extends State<HeroSosScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          _sendingSos ? Icons.hourglass_top : Icons.emergency_rounded,
+                          _sendingSos
+                              ? Icons.hourglass_top
+                              : Icons.emergency_rounded,
                           color: Colors.white,
                           size: 64,
                         ),
@@ -243,7 +249,8 @@ class _HeroSosScreenState extends State<HeroSosScreen> {
                   padding: EdgeInsets.symmetric(horizontal: 32),
                   child: LinearProgressIndicator(
                     backgroundColor: Color(0x20FF5252),
-                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF5252)),
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(Color(0xFFFF5252)),
                   ),
                 ),
               const SizedBox(height: 16),
@@ -256,15 +263,21 @@ class _HeroSosScreenState extends State<HeroSosScreen> {
                       await launchUrl(uri);
                     }
                   },
-                  icon: const Icon(Icons.phone_rounded, color: Color(0xFFFF5252)),
+                  icon:
+                      const Icon(Icons.phone_rounded, color: Color(0xFFFF5252)),
                   label: const Text(
                     'Call Emergency 100',
-                    style: TextStyle(color: Color(0xFFFF5252), fontWeight: FontWeight.w800),
+                    style: TextStyle(
+                      color: Color(0xFFFF5252),
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Color(0x40FF5252)),
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
                 ),
               ),
@@ -299,7 +312,10 @@ class _SosCountdownDialogState extends State<_SosCountdownDialog> {
   void initState() {
     super.initState();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) { timer.cancel(); return; }
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       if (_secondsLeft <= 1) {
         timer.cancel();
         Navigator.of(context).pop(true);
@@ -333,7 +349,11 @@ class _SosCountdownDialogState extends State<_SosCountdownDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.warning_amber_rounded, color: Color(0xFFFF5252), size: 64),
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: Color(0xFFFF5252),
+            size: 64,
+          ),
           const SizedBox(height: 16),
           const Text(
             'Sending emergency alert to all nearby heroes...',

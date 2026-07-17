@@ -25,7 +25,7 @@ class _SplashSetupScreenState extends State<SplashSetupScreen> {
     } catch (e) {
       debugPrint('SplashSetupScreen init error: $e');
     }
-    
+
     if (mounted) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => widget.nextScreen),

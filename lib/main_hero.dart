@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -19,7 +20,6 @@ import 'services/hero_web_audio_service.dart';
 import 'services/map_service.dart';
 import 'services/session_service.dart';
 import 'widgets/hero_premium_loader.dart';
-import 'package:flutter/foundation.dart';
 
 String? _rideIdFromPushData(Map<String, dynamic> data) {
   for (final key in const <String>[
@@ -68,7 +68,7 @@ StreamSubscription<User?>? _authSub;
 
 void _initGlobalHeroPingListener() {
   _authSub?.cancel();
-  _authSub = FirebaseAuth.instance.authStateChanges().listen((User? user) {
+  _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
     _globalHeroPingSub?.cancel(); // Clear existing listener
     _globalServicePingSub?.cancel();
 
@@ -80,100 +80,119 @@ void _initGlobalHeroPingListener() {
     final uid = user.uid;
     debugPrint('[GlobalPing] Attaching global hero_pings/$uid listener');
 
-    _globalHeroPingSub = FirebaseDatabase.instance
-        .ref('hero_pings/$uid')
-        .onChildAdded
-        .listen((event) async {
-      final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
-      final requestId = event.snapshot.key as String? ?? '';
-      if (pingData == null || requestId.isEmpty) return;
+    _globalHeroPingSub =
+        FirebaseDatabase.instance.ref('hero_pings/$uid').onChildAdded.listen(
+      (event) async {
+        final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
+        final requestId = event.snapshot.key ?? '';
+        if (pingData == null || requestId.isEmpty) return;
 
-      // Expiry check
-      final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
-      if (pingExpiresAt == null) return;
-      if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
-        debugPrint('[GlobalPing] Expired ping — removing: $requestId');
-        await FirebaseDatabase.instance.ref('hero_pings/$uid/$requestId').remove();
-        return;
-      }
-
-      debugPrint('[GlobalPing] ✅ New ping received: $requestId');
-
-      // De-duplication check
-      if (!HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
-        debugPrint('[GlobalPing] ⏭️ Duplicate ping skipped: $requestId');
-        return;
-      }
-
-      // Fire local notification using the new v5 channel configuration
-      // Note: playAlertTone: false here — ringtone will be triggered by _showRideRequestDialog
-      // AFTER the dialog is visible, so it loops continuously while the hero sees it.
-      if (!kIsWeb) {
-        try {
-          await HeroRideNotificationService.showRideAssigned(
-            rideId: requestId,
-            data: Map<String, dynamic>.from(pingData),
-            playAlertTone: false,
-          );
-          debugPrint('[GlobalPing] 🔔 Notification fired for: $requestId');
-        } catch (e) {
-          debugPrint('[GlobalPing] Notification error: $e');
+        // Expiry check
+        final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
+        if (pingExpiresAt == null) return;
+        if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
+          debugPrint('[GlobalPing] Expired ping — removing: $requestId');
+          await FirebaseDatabase.instance
+              .ref('hero_pings/$uid/$requestId')
+              .remove();
+          return;
         }
-      }
-    }, onError: (Object e) {
-      debugPrint('[GlobalPing] RTDB listener error: $e');
-    });
+
+        debugPrint('[GlobalPing] ✅ New ping received: $requestId');
+
+        // De-duplication check
+        if (!HeroRideNotificationService.shouldProcessRideNotification(
+          requestId,
+        )) {
+          debugPrint('[GlobalPing] ⏭️ Duplicate ping skipped: $requestId');
+          return;
+        }
+
+        // Fire local notification using the new v5 channel configuration
+        // Note: playAlertTone: false here — ringtone will be triggered by _showRideRequestDialog
+        // AFTER the dialog is visible, so it loops continuously while the hero sees it.
+        if (!kIsWeb) {
+          try {
+            await HeroRideNotificationService.showRideAssigned(
+              rideId: requestId,
+              data: Map<String, dynamic>.from(pingData),
+              playAlertTone: false,
+            );
+            debugPrint('[GlobalPing] 🔔 Notification fired for: $requestId');
+          } catch (e) {
+            debugPrint('[GlobalPing] Notification error: $e');
+          }
+        }
+      },
+      onError: (Object e) {
+        debugPrint('[GlobalPing] RTDB listener error: $e');
+      },
+    );
 
     // ── Broadcast Order System — parallel ping channel ────────────
     // Same wake/notification mechanism as hero_pings, generic text.
     // The in-app accept dialog is handled by hero_home_screen.dart's
     // own hero_service_pings listener; this only fires the
     // lock-screen notification so the hero is woken up.
-    debugPrint('[GlobalServicePing] Attaching global hero_service_pings/$uid listener');
+    debugPrint(
+      '[GlobalServicePing] Attaching global hero_service_pings/$uid listener',
+    );
     _globalServicePingSub = FirebaseDatabase.instance
         .ref('hero_service_pings/$uid')
         .onChildAdded
-        .listen((event) async {
-      final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
-      final requestId = event.snapshot.key as String? ?? '';
-      if (pingData == null || requestId.isEmpty) return;
+        .listen(
+      (event) async {
+        final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
+        final requestId = event.snapshot.key ?? '';
+        if (pingData == null || requestId.isEmpty) return;
 
-      final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
-      if (pingExpiresAt == null) return;
-      if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
-        debugPrint('[GlobalServicePing] Expired ping — removing: $requestId');
-        await FirebaseDatabase.instance.ref('hero_service_pings/$uid/$requestId').remove();
-        return;
-      }
-
-      debugPrint('[GlobalServicePing] ✅ New service ping received: $requestId');
-
-      if (!HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
-        debugPrint('[GlobalServicePing] ⏭️ Duplicate ping skipped: $requestId');
-        return;
-      }
-
-      if (!kIsWeb) {
-        try {
-          await HeroRideNotificationService.showRideAssigned(
-            rideId: requestId,
-            data: Map<String, dynamic>.from(pingData),
-            playAlertTone: false,
-            title: 'New Service Request',
-            channelName: 'Hero Ride Alerts',
-            channelDescription:
-                'Lock-screen ride and service-request alerts with ACCEPT action and ringtone.',
-            ticker: 'New service request assigned',
-            emptyBodyFallback: 'Tap ACCEPT to open the request.',
-          );
-          debugPrint('[GlobalServicePing] 🔔 Notification fired for: $requestId');
-        } catch (e) {
-          debugPrint('[GlobalServicePing] Notification error: $e');
+        final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
+        if (pingExpiresAt == null) return;
+        if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
+          debugPrint('[GlobalServicePing] Expired ping — removing: $requestId');
+          await FirebaseDatabase.instance
+              .ref('hero_service_pings/$uid/$requestId')
+              .remove();
+          return;
         }
-      }
-    }, onError: (Object e) {
-      debugPrint('[GlobalServicePing] RTDB listener error: $e');
-    });
+
+        debugPrint(
+          '[GlobalServicePing] ✅ New service ping received: $requestId',
+        );
+
+        if (!HeroRideNotificationService.shouldProcessRideNotification(
+          requestId,
+        )) {
+          debugPrint(
+            '[GlobalServicePing] ⏭️ Duplicate ping skipped: $requestId',
+          );
+          return;
+        }
+
+        if (!kIsWeb) {
+          try {
+            await HeroRideNotificationService.showRideAssigned(
+              rideId: requestId,
+              data: Map<String, dynamic>.from(pingData),
+              playAlertTone: false,
+              title: 'New Service Request',
+              channelDescription:
+                  'Lock-screen ride and service-request alerts with ACCEPT action and ringtone.',
+              ticker: 'New service request assigned',
+              emptyBodyFallback: 'Tap ACCEPT to open the request.',
+            );
+            debugPrint(
+              '[GlobalServicePing] 🔔 Notification fired for: $requestId',
+            );
+          } catch (e) {
+            debugPrint('[GlobalServicePing] Notification error: $e');
+          }
+        }
+      },
+      onError: (Object e) {
+        debugPrint('[GlobalServicePing] RTDB listener error: $e');
+      },
+    );
   });
 }
 
@@ -257,8 +276,10 @@ class HeroApp extends StatelessWidget {
         initialRoute: '/',
         routes: {
           '/': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
-          '/hero-home': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
-          '/hero-ride': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
+          '/hero-home': (_) =>
+              const SplashSetupScreen(nextScreen: _HeroSetupGate()),
+          '/hero-ride': (_) =>
+              const SplashSetupScreen(nextScreen: _HeroSetupGate()),
         },
       ),
     );
@@ -317,10 +338,12 @@ class _HeroSetupGate extends StatelessWidget {
               .collection('users')
               .doc(user.uid)
               .get(const GetOptions(source: Source.cache))
-              .catchError((_) => FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(user.uid)
-                  .get()),
+              .catchError(
+                (_) => FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user.uid)
+                    .get(),
+              ),
           builder: (context, userSnapshot) {
             // Show loader only on true cold start when cache is empty
             if (userSnapshot.connectionState == ConnectionState.waiting &&

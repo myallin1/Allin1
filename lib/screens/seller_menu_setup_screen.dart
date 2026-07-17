@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -24,8 +25,8 @@ class _MenuItemEntry {
 
   _MenuItemEntry({
     required this.defaultItem,
-    this.enabled = false,
-  }) : priceController = TextEditingController();
+  })  : enabled = false,
+        priceController = TextEditingController();
 }
 
 class SellerMenuSetupScreen extends StatefulWidget {
@@ -35,6 +36,12 @@ class SellerMenuSetupScreen extends StatefulWidget {
 
   @override
   State<SellerMenuSetupScreen> createState() => _SellerMenuSetupScreenState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('sellerId', sellerId));
+  }
 }
 
 class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
@@ -75,23 +82,20 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
     _expandedCategories.addAll(DefaultMenuData.categoryOrder);
     for (final item in items) {
       _categoryItems.putIfAbsent(item.category, () => []);
-      _categoryItems[item.category]!
-          .add(_MenuItemEntry(defaultItem: item));
+      _categoryItems[item.category]!.add(_MenuItemEntry(defaultItem: item));
     }
     _updateCount();
   }
 
   Future<void> _loadExistingMenuItems() async {
     try {
-      final existing =
-          await _service.getAvailableMenuItems(widget.sellerId);
+      final existing = await _service.getAvailableMenuItems(widget.sellerId);
       for (final menuItem in existing) {
         for (final entries in _categoryItems.values) {
           for (final entry in entries) {
             if (entry.defaultItem.id == menuItem.id) {
               entry.enabled = true;
-              entry.priceController.text =
-                  menuItem.price.toStringAsFixed(0);
+              entry.priceController.text = menuItem.price.toStringAsFixed(0);
             }
           }
         }
@@ -154,17 +158,20 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
         for (final entry in entries) {
           if (!entry.enabled) continue;
           final price = double.parse(entry.priceController.text.trim());
-          batchItems.add(MenuItemModel(
-            id: entry.defaultItem.id,
-            name: entry.defaultItem.name,
-            price: price,
-            isVeg: entry.defaultItem.isVeg,
-            isAvailable: true,
-            tags: entry.defaultItem.tags,
-            categoryName: DefaultMenuData.categoryLabels[entry.defaultItem.category] ?? entry.defaultItem.category,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          ));
+          batchItems.add(
+            MenuItemModel(
+              id: entry.defaultItem.id,
+              name: entry.defaultItem.name,
+              price: price,
+              isVeg: entry.defaultItem.isVeg,
+              tags: entry.defaultItem.tags,
+              categoryName:
+                  DefaultMenuData.categoryLabels[entry.defaultItem.category] ??
+                      entry.defaultItem.category,
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ),
+          );
         }
       }
 
@@ -312,7 +319,7 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: Container(
+          child: DecoratedBox(
             decoration: BoxDecoration(
               color: _card,
               borderRadius: BorderRadius.circular(16),
@@ -350,7 +357,9 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
                           Container(
                             margin: const EdgeInsets.only(right: 8),
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: _teal.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(8),
@@ -374,8 +383,7 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
                     ),
                   ),
                 ),
-                if (isExpanded)
-                  ...items.map((entry) => _buildMenuItemTile(entry)),
+                if (isExpanded) ...items.map(_buildMenuItemTile),
               ],
             ),
           ),
@@ -420,8 +428,9 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
               ),
               child: AnimatedAlign(
                 duration: const Duration(milliseconds: 200),
-                alignment:
-                    entry.enabled ? Alignment.centerRight : Alignment.centerLeft,
+                alignment: entry.enabled
+                    ? Alignment.centerRight
+                    : Alignment.centerLeft,
                 child: Container(
                   margin: const EdgeInsets.all(2),
                   width: 20,
@@ -443,8 +452,10 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
               children: [
                 Row(
                   children: [
-                    Text(entry.defaultItem.emoji,
-                        style: const TextStyle(fontSize: 18)),
+                    Text(
+                      entry.defaultItem.emoji,
+                      style: const TextStyle(fontSize: 18),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -465,7 +476,9 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
                       Container(
                         margin: const EdgeInsets.only(right: 6),
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 1),
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
                         decoration: BoxDecoration(
                           color: _red.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4),
@@ -513,7 +526,8 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
                   fontSize: 13,
                 ),
                 filled: true,
-                fillColor: entry.enabled ? _card2 : _card2.withValues(alpha: 0.5),
+                fillColor:
+                    entry.enabled ? _card2 : _card2.withValues(alpha: 0.5),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide.none,
@@ -563,7 +577,7 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: _surface,
         border: Border(top: BorderSide(color: _border)),
       ),

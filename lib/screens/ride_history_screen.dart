@@ -38,7 +38,10 @@ class RideHistoryScreen extends StatelessWidget {
               child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('rides')
-                    .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                    .where(
+                      'userId',
+                      isEqualTo: FirebaseAuth.instance.currentUser?.uid,
+                    )
                     .orderBy('createdAt', descending: true)
                     .limit(20)
                     .snapshots(),

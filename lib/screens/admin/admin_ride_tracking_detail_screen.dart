@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -23,13 +24,19 @@ const LatLng _erodeCenter = LatLng(11.3410, 77.7172);
 class AdminRideTrackingDetailScreen extends StatefulWidget {
   final String rideId;
   const AdminRideTrackingDetailScreen({
-    super.key,
     required this.rideId,
+    super.key,
   });
 
   @override
   State<AdminRideTrackingDetailScreen> createState() =>
       _AdminRideTrackingDetailScreenState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('rideId', rideId));
+  }
 }
 
 class _AdminRideTrackingDetailScreenState
@@ -43,18 +50,21 @@ class _AdminRideTrackingDetailScreenState
     _liveLocationSub = FirebaseDatabase.instance
         .ref('live_locations/${widget.rideId}')
         .onValue
-        .listen((event) {
-      final raw = event.snapshot.value;
-      if (raw is Map) {
-        final lat = (raw['lat'] as num?)?.toDouble();
-        final lng = (raw['lng'] as num?)?.toDouble();
-        if (lat != null && lng != null && mounted) {
-          setState(() => _heroLocation = LatLng(lat, lng));
+        .listen(
+      (event) {
+        final raw = event.snapshot.value;
+        if (raw is Map) {
+          final lat = (raw['lat'] as num?)?.toDouble();
+          final lng = (raw['lng'] as num?)?.toDouble();
+          if (lat != null && lng != null && mounted) {
+            setState(() => _heroLocation = LatLng(lat, lng));
+          }
         }
-      }
-    }, onError: (Object e) {
-      debugPrint('live_locations stream error: $e');
-    });
+      },
+      onError: (Object e) {
+        debugPrint('live_locations stream error: $e');
+      },
+    );
   }
 
   @override
@@ -108,7 +118,7 @@ class _AdminRideTrackingDetailScreenState
               height: 12,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: reached ? _green : _muted.withOpacity(0.3),
+                color: reached ? _green : _muted.withValues(alpha: 0.3),
               ),
             ),
             if (!isLast)
@@ -116,8 +126,8 @@ class _AdminRideTrackingDetailScreenState
                 width: 2,
                 height: 28,
                 color: reached
-                    ? _green.withOpacity(0.4)
-                    : _muted.withOpacity(0.2),
+                    ? _green.withValues(alpha: 0.4)
+                    : _muted.withValues(alpha: 0.2),
               ),
           ],
         ),
@@ -185,8 +195,7 @@ class _AdminRideTrackingDetailScreenState
           final customerPhone = (d['customerPhone'] as String?) ?? '';
           final heroName = (d['heroName'] as String?) ?? 'Unassigned';
           final heroPhone = (d['heroPhone'] as String?) ?? '';
-          final heroVehicleNumber =
-              (d['heroVehicleNumber'] as String?) ?? '';
+          final heroVehicleNumber = (d['heroVehicleNumber'] as String?) ?? '';
           final pickupAddress = (d['pickupAddress'] as String?) ??
               (d['pickupLocation'] as String?) ??
               '-';
@@ -259,7 +268,6 @@ class _AdminRideTrackingDetailScreenState
                           )
                         : Allin1MapWidget(
                             center: mapCenter,
-                            zoom: 14,
                             markers: markers,
                           ),
                   ),
@@ -273,7 +281,6 @@ class _AdminRideTrackingDetailScreenState
                     ),
                   ),
                 const SizedBox(height: 16),
-
                 Row(
                   children: [
                     Expanded(
@@ -381,7 +388,6 @@ class _AdminRideTrackingDetailScreenState
                   ],
                 ),
                 const SizedBox(height: 16),
-
                 Card(
                   color: _card,
                   shape: RoundedRectangleBorder(
@@ -463,7 +469,6 @@ class _AdminRideTrackingDetailScreenState
                   ),
                 ),
                 const SizedBox(height: 16),
-
                 Card(
                   color: _card,
                   shape: RoundedRectangleBorder(

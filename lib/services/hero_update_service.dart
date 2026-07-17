@@ -32,7 +32,7 @@ class HeroUpdateService {
   /// Web-safe update handler - Opens link in new tab.
   Future<void> _handleWebUpdate(BuildContext context) async {
     final Uri uri = Uri.parse(updateUrl);
-    
+
     // Show feedback as requested for Web UI Test
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -86,7 +86,9 @@ class HeroUpdateService {
         onReceiveProgress: (received, total) {
           // Progress can be piped here if a dialog is used
           if (total != -1) {
-            debugPrint('Download Progress: ${(received / total * 100).toStringAsFixed(0)}%');
+            debugPrint(
+              'Download Progress: ${(received / total * 100).toStringAsFixed(0)}%',
+            );
           }
         },
       );

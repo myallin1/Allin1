@@ -98,11 +98,21 @@ class _PaymentScreenState extends State<PaymentScreen>
   Future<void> _checkPaymentStatus() async {
     final rideDocId = _rideDocId;
     if (rideDocId == null) return;
-    final snap = await FirebaseFirestore.instance.collection('rides').doc(rideDocId).get();
+    final snap = await FirebaseFirestore.instance
+        .collection('rides')
+        .doc(rideDocId)
+        .get();
     final data = snap.data();
     if (data == null) return;
     final paymentStatus = (data['paymentStatus'] as String? ?? '').trim();
-    if (['paid', 'paid_by_wallet', 'paid_offline_p2p', 'completed', 'settled', 'confirmed'].contains(paymentStatus)) {
+    if ([
+      'paid',
+      'paid_by_wallet',
+      'paid_offline_p2p',
+      'completed',
+      'settled',
+      'confirmed',
+    ].contains(paymentStatus)) {
       if (!_paid) {
         setState(() {
           _paid = true;
@@ -133,51 +143,53 @@ class _PaymentScreenState extends State<PaymentScreen>
         .collection('rides')
         .doc(rideDocId)
         .snapshots()
-        .listen((snap) {
-          if (!mounted || !snap.exists) {
-            return;
-          }
-          final data = snap.data();
-          if (data == null) {
-            return;
-          }
+        .listen(
+      (snap) {
+        if (!mounted || !snap.exists) {
+          return;
+        }
+        final data = snap.data();
+        if (data == null) {
+          return;
+        }
 
-          final liveFare =
-              (data['actualFare'] as num?)?.toDouble() ??
-              (data['amountPaid'] as num?)?.toDouble() ??
-              (data['estimatedFare'] as num?)?.toDouble() ??
-              (data['fare'] as num?)?.toDouble();
-          final paymentStatus = (data['paymentStatus'] as String? ?? '').trim();
-          final paymentMethod =
-              (data['paymentMethod'] as String? ?? 'Payment').trim();
-          final shouldUnlock = <String>{
-            'paid',
-            'paid_by_wallet',
-            'paid_offline_p2p',
-            'completed',
-            'settled',
-            'confirmed',
-          }.contains(paymentStatus);
+        final liveFare = (data['actualFare'] as num?)?.toDouble() ??
+            (data['amountPaid'] as num?)?.toDouble() ??
+            (data['estimatedFare'] as num?)?.toDouble() ??
+            (data['fare'] as num?)?.toDouble();
+        final paymentStatus = (data['paymentStatus'] as String? ?? '').trim();
+        final paymentMethod =
+            (data['paymentMethod'] as String? ?? 'Payment').trim();
+        final shouldUnlock = <String>{
+          'paid',
+          'paid_by_wallet',
+          'paid_offline_p2p',
+          'completed',
+          'settled',
+          'confirmed',
+        }.contains(paymentStatus);
 
-          if (liveFare != null && liveFare > 0 && liveFare != _fare) {
-            setState(() {
-              _fare = liveFare;
-            });
-          }
+        if (liveFare != null && liveFare > 0 && liveFare != _fare) {
+          setState(() {
+            _fare = liveFare;
+          });
+        }
 
-          if (shouldUnlock && !_paid) {
-            setState(() {
-              _summaryPaymentMethod = paymentMethod.replaceAll('_', ' ');
-              _paid = true;
-              _awaitingHeroConfirmation = false;
-            });
-            _successCtrl
-              ..reset()
-              ..forward();
-          }
-        }, onError: (Object e) {
-          debugPrint('[PaymentScreen] Ride status listener error: $e');
-        });
+        if (shouldUnlock && !_paid) {
+          setState(() {
+            _summaryPaymentMethod = paymentMethod.replaceAll('_', ' ');
+            _paid = true;
+            _awaitingHeroConfirmation = false;
+          });
+          _successCtrl
+            ..reset()
+            ..forward();
+        }
+      },
+      onError: (Object e) {
+        debugPrint('[PaymentScreen] Ride status listener error: $e');
+      },
+    );
   }
 
   Future<void> _loadWalletBalance() async {
@@ -427,40 +439,39 @@ class _PaymentScreenState extends State<PaymentScreen>
           child: Container(height: 1, color: _border),
         ),
       ),
-      body:
-          _paid
-              ? _buildSuccessView()
-              : SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    _buildPaytmBillHero(),
-                    const SizedBox(height: 16),
-                    _buildFareCard(),
-                    const SizedBox(height: 16),
-                    if (_walletBal >= _fare) ...[
-                      _buildWalletCard(),
-                      const SizedBox(height: 12),
-                    ],
-                    _buildUpiSection(),
-                    if (_awaitingHeroConfirmation) ...[
-                      const SizedBox(height: 16),
-                      _buildAwaitingHeroCard(),
-                    ],
-                    const SizedBox(height: 18),
-                    Text(
-                      'Erode la all in one vanthachu inimel yentha kavalayum vendam 😊',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        color: _muted,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 28),
+      body: _paid
+          ? _buildSuccessView()
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  _buildPaytmBillHero(),
+                  const SizedBox(height: 16),
+                  _buildFareCard(),
+                  const SizedBox(height: 16),
+                  if (_walletBal >= _fare) ...[
+                    _buildWalletCard(),
+                    const SizedBox(height: 12),
                   ],
-                ),
+                  _buildUpiSection(),
+                  if (_awaitingHeroConfirmation) ...[
+                    const SizedBox(height: 16),
+                    _buildAwaitingHeroCard(),
+                  ],
+                  const SizedBox(height: 18),
+                  Text(
+                    'Erode la all in one vanthachu inimel yentha kavalayum vendam 😊',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      color: _muted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                ],
               ),
+            ),
     );
   }
 
@@ -553,12 +564,11 @@ class _PaymentScreenState extends State<PaymentScreen>
                 child: Image.asset(
                   'assets/images/paytm_soundbox.png',
                   fit: BoxFit.contain,
-                  errorBuilder:
-                      (context, error, stackTrace) => const Icon(
-                        Icons.speaker_group_rounded,
-                        color: _orange,
-                        size: 34,
-                      ),
+                  errorBuilder: (context, error, stackTrace) => const Icon(
+                    Icons.speaker_group_rounded,
+                    color: _orange,
+                    size: 34,
+                  ),
                 ),
               ),
               const SizedBox(width: 14),
@@ -637,157 +647,159 @@ class _PaymentScreenState extends State<PaymentScreen>
   Widget _buildAwaitingHeroCard() {
     final localization = context.read<LocalizationService>();
     return Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(18),
-    decoration: BoxDecoration(
-      color: const Color(0xFFFFF4FA),
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: _border),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x12FF4FA3),
-          blurRadius: 20,
-          offset: Offset(0, 10),
-        ),
-      ],
-    ),
-    child: Row(
-      children: [
-        Container(
-          width: 52,
-          height: 52,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _border),
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4FA),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12FF4FA3),
+            blurRadius: 20,
+            offset: Offset(0, 10),
           ),
-          child: const Center(
-            child: SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: _gold,
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _border),
+            ),
+            child: const Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: _gold,
+                ),
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                localization.t('awaiting_hero_payment'),
-                style: GoogleFonts.outfit(
-                  fontSize: 16,
-                  color: _text,
-                  fontWeight: FontWeight.w800,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  localization.t('awaiting_hero_payment'),
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    color: _text,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                localization.t('scan_and_wait_hero'),
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  color: _muted,
-                  fontWeight: FontWeight.w500,
+                const SizedBox(height: 4),
+                Text(
+                  localization.t('scan_and_wait_hero'),
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    color: _muted,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
   }
 
   Widget _buildWalletCard() => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: _walletBal >= _fare ? const Color(0xFFEFFFF6) : _card,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(
-        color: _walletBal >= _fare ? _green.withValues(alpha: 0.4) : _border,
-      ),
-    ),
-    child: Row(
-      children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: _walletBal >= _fare ? const Color(0xFFEFFFF6) : _card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
             color:
-                _walletBal >= _fare ? _green.withValues(alpha: 0.12) : _card2,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Center(
-            child: Text(
-              _walletBal >= _fare ? '💚' : '💳',
-              style: const TextStyle(fontSize: 22),
-            ),
+                _walletBal >= _fare ? _green.withValues(alpha: 0.4) : _border,
           ),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Allin1 Wallet',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: _text,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Text(
-                'Balance: ₹${_walletBal.toStringAsFixed(2)}',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: _walletBal >= _fare ? _green : _muted,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (_walletBal >= _fare)
-          GestureDetector(
-            onTap: _payingWallet ? null : _payWithWallet,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
-                color: _green,
+                color: _walletBal >= _fare
+                    ? _green.withValues(alpha: 0.12)
+                    : _card2,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child:
-                  _payingWallet
-                      ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                      : Text(
-                        'Send via Wallet',
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
+              child: Center(
+                child: Text(
+                  _walletBal >= _fare ? '💚' : '💳',
+                  style: const TextStyle(fontSize: 22),
+                ),
+              ),
             ),
-          )
-        else
-          Text(
-            'Low balance',
-            style: GoogleFonts.outfit(fontSize: 10, color: _red),
-          ),
-      ],
-    ),
-  );
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Allin1 Wallet',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: _text,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    'Balance: ₹${_walletBal.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: _walletBal >= _fare ? _green : _muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_walletBal >= _fare)
+              GestureDetector(
+                onTap: _payingWallet ? null : _payWithWallet,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: _green,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: _payingWallet
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text(
+                          'Send via Wallet',
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                ),
+              )
+            else
+              Text(
+                'Low balance',
+                style: GoogleFonts.outfit(fontSize: 10, color: _red),
+              ),
+          ],
+        ),
+      );
 
   Widget _buildUpiSection() {
     final localization = context.read<LocalizationService>();
@@ -886,86 +898,86 @@ class _PaymentScreenState extends State<PaymentScreen>
   }
 
   Widget _buildSuccessView() => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ScaleTransition(
-            scale: _successAnim,
-            child: Container(
-              width: 92,
-              height: 92,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFCE7F3),
-                shape: BoxShape.circle,
-                border: Border.all(color: _border),
-              ),
-              child: const Icon(
-                Icons.favorite_rounded,
-                color: _gold,
-                size: 42,
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Thanks for riding with Allin1 Stay with us 🙂💥',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.outfit(
-              fontSize: 24,
-              color: _text,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            '$_summaryPaymentMethod confirmed · ₹${_fare.toStringAsFixed(2)}',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.outfit(
-              fontSize: 14,
-              color: _muted,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 26),
-          Text(
-            'Rate your ride',
-            style: GoogleFonts.outfit(
-              fontSize: 16,
-              color: _gold,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List<Widget>.generate(5, (index) {
-              final star = index + 1;
-              final selected = _selectedRating >= star;
-              return IconButton(
-                onPressed: () => _submitRatingAndReturn(star),
-                icon: Icon(
-                  selected ? Icons.star_rounded : Icons.star_border_rounded,
-                  color: _gold,
-                  size: 34,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ScaleTransition(
+                scale: _successAnim,
+                child: Container(
+                  width: 92,
+                  height: 92,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFCE7F3),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: _border),
+                  ),
+                  child: const Icon(
+                    Icons.favorite_rounded,
+                    color: _gold,
+                    size: 42,
+                  ),
                 ),
-              );
-            }),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Thanks for riding with Allin1 Stay with us 🙂💥',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 24,
+                  color: _text,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '$_summaryPaymentMethod confirmed · ₹${_fare.toStringAsFixed(2)}',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 14,
+                  color: _muted,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 26),
+              Text(
+                'Rate your ride',
+                style: GoogleFonts.outfit(
+                  fontSize: 16,
+                  color: _gold,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List<Widget>.generate(5, (index) {
+                  final star = index + 1;
+                  final selected = _selectedRating >= star;
+                  return IconButton(
+                    onPressed: () => _submitRatingAndReturn(star),
+                    icon: Icon(
+                      selected ? Icons.star_rounded : Icons.star_border_rounded,
+                      color: _gold,
+                      size: 34,
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _selectedRating == 0
+                    ? 'Tap a star and we will take you back to booking.'
+                    : 'Redirecting you back to booking...',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  color: _muted,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            _selectedRating == 0
-                ? 'Tap a star and we will take you back to booking.'
-                : 'Redirecting you back to booking...',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.outfit(
-              fontSize: 12,
-              color: _muted,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
+        ),
+      );
 }

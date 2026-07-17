@@ -5,6 +5,7 @@
 import 'dart:async';
 
 import 'package:carousel_slider/carousel_slider.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -109,7 +110,7 @@ class _BiriyaniMenuScreenState extends State<BiriyaniMenuScreen>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
-    _pulse = Tween<double>(begin: 1.0, end: 1.04)
+    _pulse = Tween<double>(begin: 1, end: 1.04)
         .animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
   }
 
@@ -137,8 +138,10 @@ class _BiriyaniMenuScreenState extends State<BiriyaniMenuScreen>
       'Hi NJ Tech! I want to order ${item.name} (${item.price}). '
       'Please confirm availability and delivery slot. 🍛',
     );
-    final uri = Uri.parse('https://wa.me/${_bPhone.replaceAll('+', '')}?text=$msg');
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+    final uri =
+        Uri.parse('https://wa.me/${_bPhone.replaceAll('+', '')}?text=$msg');
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+        mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Could not open WhatsApp'),
@@ -162,12 +165,15 @@ class _BiriyaniMenuScreenState extends State<BiriyaniMenuScreen>
             pinned: true,
             backgroundColor: _bBg,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                  color: Colors.white, size: 20),
+              icon: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
               onPressed: () => Navigator.pop(context),
             ),
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
+              background: DecoratedBox(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
                     colors: [Color(0xFF1A0A2E), Color(0xFF0C0A14)],
@@ -299,10 +305,10 @@ class _BiriyaniMenuScreenState extends State<BiriyaniMenuScreen>
                       _BiriyaniCTAButton(
                         label: '📞  Call Now',
                         sublabel: _bPhone,
-                        gradient: LinearGradient(
+                        gradient: const LinearGradient(
                           colors: [
                             _bPink,
-                            const Color(0xFFFF8AC4),
+                            Color(0xFFFF8AC4),
                           ],
                         ),
                         onTap: _call,
@@ -365,7 +371,7 @@ class _BiriyaniCarouselCard extends StatelessWidget {
                   fit: BoxFit.cover,
                   loadingBuilder: (_, child, progress) => progress == null
                       ? child
-                      : Container(
+                      : ColoredBox(
                           color: _bSurface,
                           child: Center(
                             child: CircularProgressIndicator(
@@ -374,7 +380,7 @@ class _BiriyaniCarouselCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                  errorBuilder: (_, __, ___) => Container(
+                  errorBuilder: (_, __, ___) => ColoredBox(
                     color: _bSurface,
                     child: Center(
                       child: Text(
@@ -469,12 +475,19 @@ class _BiriyaniCarouselCard extends StatelessWidget {
       ),
     );
   }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<_BiriyaniItem>('item', item));
+    properties.add(DiagnosticsProperty<bool>('isActive', isActive));
+  }
 }
 
 // ── Info Panel ───────────────────────────────────────────────────
 class _BiriyaniInfoPanel extends StatelessWidget {
   final _BiriyaniItem item;
-  const _BiriyaniInfoPanel({super.key, required this.item});
+  const _BiriyaniInfoPanel({required this.item, super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -503,8 +516,10 @@ class _BiriyaniInfoPanel extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: Center(
-                child: Text(item.emoji,
-                    style: const TextStyle(fontSize: 28)),
+                child: Text(
+                  item.emoji,
+                  style: const TextStyle(fontSize: 28),
+                ),
               ),
             ),
             const SizedBox(width: 16),
@@ -532,8 +547,7 @@ class _BiriyaniInfoPanel extends StatelessWidget {
               ),
             ),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: item.accent.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
@@ -552,6 +566,12 @@ class _BiriyaniInfoPanel extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<_BiriyaniItem>('item', item));
   }
 }
 
@@ -575,8 +595,7 @@ class _BiriyaniCTAButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        padding:
-            const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
+        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
         decoration: BoxDecoration(
           gradient: gradient,
           borderRadius: BorderRadius.circular(20),
@@ -610,6 +629,15 @@ class _BiriyaniCTAButton extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('label', label));
+    properties.add(StringProperty('sublabel', sublabel));
+    properties.add(DiagnosticsProperty<Gradient>('gradient', gradient));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }
 

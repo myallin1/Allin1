@@ -57,7 +57,8 @@ class LocationService {
 
       _currentPosition = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high, // bestForNavigation only needed during active ride
+          accuracy: LocationAccuracy
+              .high, // bestForNavigation only needed during active ride
           timeLimit: Duration(seconds: 15),
         ),
       );

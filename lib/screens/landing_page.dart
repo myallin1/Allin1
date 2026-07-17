@@ -26,7 +26,8 @@ class _LandingPageState extends State<LandingPage> {
   @override
   void initState() {
     super.initState();
-    _customerCompatFuture = DeviceCompatService.instance.detectCustomerApkProfile();
+    _customerCompatFuture =
+        DeviceCompatService.instance.detectCustomerApkProfile();
     _heroCompatFuture = DeviceCompatService.instance.detectHeroApkProfile();
   }
 
@@ -112,7 +113,8 @@ class _LandingPageState extends State<LandingPage> {
                   ),
                   const SizedBox(height: 14),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                     decoration: BoxDecoration(
                       color: _pink.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(999),
@@ -275,9 +277,14 @@ class _LandingPageState extends State<LandingPage> {
               _MetaChip(label: resolvedProfile.architectureLabel),
               _MetaChip(label: resolvedProfile.performanceLabel),
               if (resolvedProfile.deviceMemoryGb != null)
-                _MetaChip(label: '${resolvedProfile.deviceMemoryGb!.toStringAsFixed(0)}GB RAM'),
+                _MetaChip(
+                  label:
+                      '${resolvedProfile.deviceMemoryGb!.toStringAsFixed(0)}GB RAM',
+                ),
               if (resolvedProfile.hardwareConcurrency != null)
-                _MetaChip(label: '${resolvedProfile.hardwareConcurrency} cores'),
+                _MetaChip(
+                  label: '${resolvedProfile.hardwareConcurrency} cores',
+                ),
             ],
           ),
           const SizedBox(height: 18),
@@ -289,7 +296,8 @@ class _LandingPageState extends State<LandingPage> {
                 backgroundColor: _pink,
                 foregroundColor: Colors.white,
                 elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(18),
                 ),
@@ -308,7 +316,8 @@ class _LandingPageState extends State<LandingPage> {
           Center(
             child: TextButton.icon(
               onPressed: () => _launchUrl(resolvedProfile.universalDownloadUrl),
-              icon: const Icon(Icons.shield_outlined, size: 18, color: _pinkSoft),
+              icon:
+                  const Icon(Icons.shield_outlined, size: 18, color: _pinkSoft),
               label: const Text(
                 'Download Universal APK',
                 style: TextStyle(

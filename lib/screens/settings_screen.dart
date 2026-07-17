@@ -395,9 +395,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                activated
-                    ? Icons.auto_awesome_rounded
-                    : Icons.key_rounded,
+                activated ? Icons.auto_awesome_rounded : Icons.key_rounded,
                 color: activated ? kGreen : kPurple,
                 size: 20,
               ),
@@ -500,9 +498,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 child: Icon(
                   isOla ? Icons.star_rounded : Icons.public_rounded,
-                  color: isOla
-                      ? const Color(0xFFFF6B35)
-                      : const Color(0xFF3DBA6F),
+                  color:
+                      isOla ? const Color(0xFFFF6B35) : const Color(0xFF3DBA6F),
                   size: 20,
                 ),
               ),
@@ -545,8 +542,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       },
     );
   }
-
-
 
   Widget _buildLanguageSettings() {
     return DecoratedBox(
@@ -956,9 +951,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               );
             }),
-
             const SizedBox(height: 10),
-
             Container(
               padding: const EdgeInsets.all(11),
               decoration: BoxDecoration(

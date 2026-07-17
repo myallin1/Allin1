@@ -59,6 +59,8 @@ dependencies:
   video_player:
   carousel_slider:
 
+  colorful_iconify_flutter: any
+  flutter_svg: any
 dev_dependencies:
   build_runner: ^2.4.8
   flutter_lints: ^4.0.0

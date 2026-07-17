@@ -47,8 +47,7 @@ class AiActivationService extends ChangeNotifier {
           .get();
       final data = snapshot.data() ?? <String, dynamic>{};
       final claims =
-          (data['promoClaims'] as Map<String, dynamic>?) ??
-              <String, dynamic>{};
+          (data['promoClaims'] as Map<String, dynamic>?) ?? <String, dynamic>{};
       final nextClaimed = claims['ai_assistant'] == true;
 
       if (_isAiClaimed != nextClaimed) {

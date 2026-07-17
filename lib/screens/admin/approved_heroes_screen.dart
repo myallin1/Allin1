@@ -122,7 +122,8 @@ class _ApprovedHeroesScreenState extends State<ApprovedHeroesScreen> {
                       )
                     : null,
               ),
-              onChanged: (value) => setState(() => _searchQuery = value.trim().toLowerCase()),
+              onChanged: (value) =>
+                  setState(() => _searchQuery = value.trim().toLowerCase()),
             ),
           ),
           // Hero list
@@ -166,9 +167,13 @@ class _ApprovedHeroesScreenState extends State<ApprovedHeroesScreen> {
                 final filtered = docs.where((doc) {
                   if (_searchQuery.isEmpty) return true;
                   final data = doc.data()! as Map<String, dynamic>;
-                  final name = (data['captainName'] as String? ?? data['name'] as String? ?? '').toLowerCase();
+                  final name = (data['captainName'] as String? ??
+                          data['name'] as String? ??
+                          '')
+                      .toLowerCase();
                   final phone = (data['phone'] as String? ?? '').toLowerCase();
-                  final vehicle = (data['vehicleNumber'] as String? ?? '').toLowerCase();
+                  final vehicle =
+                      (data['vehicleNumber'] as String? ?? '').toLowerCase();
                   return name.contains(_searchQuery) ||
                       phone.contains(_searchQuery) ||
                       vehicle.contains(_searchQuery);
@@ -234,7 +239,8 @@ class _ApprovedHeroesScreenState extends State<ApprovedHeroesScreen> {
                             const SizedBox(width: 8),
                             Text(
                               '(filtered from ${docs.length})',
-                              style: const TextStyle(fontSize: 11, color: _muted),
+                              style:
+                                  const TextStyle(fontSize: 11, color: _muted),
                             ),
                           ],
                         ],
@@ -294,7 +300,8 @@ class _ApprovedHeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = data['captainName'] as String? ?? data['name'] as String? ?? 'Unknown';
+    final name =
+        data['captainName'] as String? ?? data['name'] as String? ?? 'Unknown';
     final phone = data['phone'] as String? ?? '';
     final vehicleNumber = data['vehicleNumber'] as String? ?? '';
     final vehicleType = data['vehicleType'] as String? ?? '';

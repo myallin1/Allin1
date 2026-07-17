@@ -22,13 +22,13 @@ class SellerModel {
   SellerModel({
     required this.id,
     required this.name,
-    this.category = 'food',
     required this.subCategory,
-    this.hotelType = 'both',
     required this.address,
     required this.latitude,
     required this.longitude,
     required this.phone,
+    this.category = 'food',
+    this.hotelType = 'both',
     this.rating = 0.0,
     this.isOpen = true,
     this.estimatedPrepTimeMin = 20,
@@ -52,7 +52,8 @@ class SellerModel {
       phone: json['phone'] as String? ?? '',
       rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
       isOpen: (json['isOpen'] as bool?) ?? true,
-      estimatedPrepTimeMin: (json['estimatedPrepTimeMin'] as num?)?.toInt() ?? 20,
+      estimatedPrepTimeMin:
+          (json['estimatedPrepTimeMin'] as num?)?.toInt() ?? 20,
       status: json['status'] as String? ?? 'active',
       imageUrl: json['imageUrl'] as String?,
       coverImageUrl: json['coverImageUrl'] as String?,
@@ -146,8 +147,8 @@ class MenuItemModel {
   MenuItemModel({
     required this.id,
     required this.name,
-    this.description,
     required this.price,
+    this.description,
     this.discountedPrice,
     this.isVeg = false,
     this.isAvailable = true,
@@ -168,10 +169,9 @@ class MenuItemModel {
       discountedPrice: (json['discountedPrice'] as num?)?.toDouble(),
       isVeg: (json['isVeg'] as bool?) ?? false,
       isAvailable: (json['isAvailable'] as bool?) ?? true,
-      tags: (json['tags'] as List<dynamic>?)
-              ?.map((e) => e as String)
-              .toList() ??
-          [],
+      tags:
+          (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList() ??
+              [],
       imageUrl: json['imageUrl'] as String?,
       categoryName: json['categoryName'] as String?,
       variants: (json['variants'] as List<dynamic>?)
@@ -378,9 +378,8 @@ class FoodOrderModel {
     final parsedTimeline = <String, DateTime?>{};
     if (rawTimeline != null) {
       for (final entry in rawTimeline.entries) {
-        parsedTimeline[entry.key] = entry.value != null
-            ? (entry.value as Timestamp).toDate()
-            : null;
+        parsedTimeline[entry.key] =
+            entry.value != null ? (entry.value as Timestamp).toDate() : null;
       }
     }
 

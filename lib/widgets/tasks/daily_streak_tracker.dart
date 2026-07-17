@@ -82,8 +82,11 @@ class DailyStreakTracker extends StatelessWidget {
                     ),
                     child: Center(
                       child: isCompleted
-                          ? const Icon(Icons.check,
-                              size: 18, color: Colors.black,)
+                          ? const Icon(
+                              Icons.check,
+                              size: 18,
+                              color: Colors.black,
+                            )
                           : Text(
                               '$day',
                               style: TextStyle(

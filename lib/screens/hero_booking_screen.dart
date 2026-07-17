@@ -4,11 +4,11 @@
 // doc (requestType: hero_booking) and broadcasts to all online +
 // available heroes, then hands off to the shared tracking screen.
 // ================================================================
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-
-import 'dart:async';
 
 import '../services/service_request_service.dart';
 import 'service_request_tracking_screen.dart';
@@ -38,7 +38,10 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
   Future<void> _submit() async {
     if (_taskCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please describe your task first!'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Please describe your task first!'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
@@ -60,10 +63,12 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
       // window, route this request to the admin "New Orders" tab.
       // Detached from this screen's lifecycle since the customer
       // navigates away immediately after this call.
-      unawaited(Future.delayed(
-        const Duration(seconds: kServiceRequestPingExpirySeconds),
-        () => ServiceRequestService().markTimeoutIfStillPending(requestId),
-      ));
+      unawaited(
+        Future.delayed(
+          const Duration(seconds: kServiceRequestPingExpirySeconds),
+          () => ServiceRequestService().markTimeoutIfStillPending(requestId),
+        ),
+      );
 
       if (!mounted) return;
       await Navigator.pushReplacement(
@@ -78,7 +83,10 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send request: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Failed to send request: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -94,10 +102,21 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         backgroundColor: _kBg,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _kText, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: _kText,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Hero Booking', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 18)),
+        title: Text(
+          'Hero Booking',
+          style: GoogleFonts.outfit(
+            color: _kText,
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+          ),
+        ),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
@@ -121,9 +140,19 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Hire a Hero for anything', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 14)),
+                        Text(
+                          'Hire a Hero for anything',
+                          style: GoogleFonts.outfit(
+                            color: _kText,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                          ),
+                        ),
                         const SizedBox(height: 2),
-                        const Text('Errands, deliveries, help with tasks — describe it and we\'ll send the nearest available Hero.', style: TextStyle(color: _kMuted, fontSize: 11)),
+                        const Text(
+                          "Errands, deliveries, help with tasks — describe it and we'll send the nearest available Hero.",
+                          style: TextStyle(color: _kMuted, fontSize: 11),
+                        ),
                       ],
                     ),
                   ),
@@ -131,18 +160,32 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            Text('What do you need help with?', style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
+            Text(
+              'What do you need help with?',
+              style: GoogleFonts.outfit(
+                color: _kText,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             const SizedBox(height: 8),
             TextField(
               controller: _taskCtrl,
               maxLines: 5,
               style: const TextStyle(fontSize: 14),
               decoration: InputDecoration(
-                hintText: 'e.g., Pick up documents from Erode Collector Office and deliver to my home',
-                hintStyle: TextStyle(color: _kMuted.withValues(alpha: 0.6), fontSize: 13),
+                hintText:
+                    'e.g., Pick up documents from Erode Collector Office and deliver to my home',
+                hintStyle: TextStyle(
+                  color: _kMuted.withValues(alpha: 0.6),
+                  fontSize: 13,
+                ),
                 filled: true,
                 fillColor: _kSurface,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
                 contentPadding: const EdgeInsets.all(16),
               ),
             ),
@@ -155,12 +198,28 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                   backgroundColor: _kPink,
                   elevation: 4,
                   shadowColor: _kPink.withValues(alpha: 0.4),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
                 onPressed: _submitting ? null : _submit,
                 child: _submitting
-                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : Text('Find Me a Hero', style: GoogleFonts.outfit(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Text(
+                        'Find Me a Hero',
+                        style: GoogleFonts.outfit(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
             ),
           ],

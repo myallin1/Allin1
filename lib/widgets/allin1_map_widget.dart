@@ -1,11 +1,10 @@
-﻿// lib/widgets/allin1_map_widget.dart
+// lib/widgets/allin1_map_widget.dart
 // Dual Map Provider Architecture | Ola + OSM
 // Architecture: ListenableBuilder only (NO Streams, NO ValueKey)
 // ─────────────────────────────────────────────
 
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -129,8 +128,11 @@ class Allin1MapWidget extends StatefulWidget {
     properties.add(IterableProperty<MapRoute>('routes', routes));
     properties.add(IterableProperty<MapCircle>('circles', circles));
     properties.add(DiagnosticsProperty<bool>('interactive', interactive));
-    properties.add(DiagnosticsProperty<MapController?>('mapController', mapController));
-    properties.add(ObjectFlagProperty<VoidCallback?>.has('onMapReady', onMapReady));
+    properties.add(
+      DiagnosticsProperty<MapController?>('mapController', mapController),
+    );
+    properties
+        .add(ObjectFlagProperty<VoidCallback?>.has('onMapReady', onMapReady));
   }
 }
 
@@ -412,7 +414,7 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
                                     'Allin1 map loading...',
                                     textAlign: TextAlign.center,
                                     style: GoogleFonts.outfit(
-                                      color: Color(0xFF4A1236),
+                                      color: const Color(0xFF4A1236),
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
                                     ),

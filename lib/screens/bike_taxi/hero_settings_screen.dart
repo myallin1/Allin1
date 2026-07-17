@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
- import '../../services/map_service.dart';
+import '../../services/map_service.dart';
 
 class HeroSettingsScreen extends StatefulWidget {
   const HeroSettingsScreen({super.key});
@@ -28,13 +28,15 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
   String _selectedMapProvider = 'Ola Maps';
   String _selectedLanguage = 'English';
 
-  static const List<Map<String, String>> _languageOptions = <Map<String, String>>[
+  static const List<Map<String, String>> _languageOptions =
+      <Map<String, String>>[
     {'code': 'english', 'name': 'English'},
     {'code': 'tamil', 'name': 'Tamil'},
     {'code': 'thanglish', 'name': 'Thanglish'},
   ];
 
-  static const List<Map<String, String>> _mapProviderOptions = <Map<String, String>>[
+  static const List<Map<String, String>> _mapProviderOptions =
+      <Map<String, String>>[
     {'code': 'ola', 'name': 'Ola Maps'},
     {'code': 'osm', 'name': 'OpenStreetMap (OSM)'},
   ];
@@ -49,7 +51,8 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       setState(() {
-        _notificationsEnabled = prefs.getBool('hero_notifications_enabled') ?? true;
+        _notificationsEnabled =
+            prefs.getBool('hero_notifications_enabled') ?? true;
         _rideAlertsEnabled = prefs.getBool('hero_ride_alerts_enabled') ?? true;
         _selectedMapProvider = _getMapProviderNameFromCode(
           prefs.getString('hero_map_provider') ?? 'ola',
@@ -105,8 +108,6 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
     return match['name']!;
   }
 
-
-
   Future<void> _switchMapProvider(String providerName) async {
     final code = _getMapProviderCodeFromName(providerName);
     await _saveStringSetting('hero_map_provider', code);
@@ -121,7 +122,9 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
           // Switch to OSM by designating fallback path
           // MapService auto-falls back when Ola fails; we can trigger by clearing API key check
           // For now, persist the preference; MapService respects it on next init
-          debugPrint('[HeroSettings] Map provider set to OSM (will apply on restart)');
+          debugPrint(
+            '[HeroSettings] Map provider set to OSM (will apply on restart)',
+          );
         } else {
           debugPrint('[HeroSettings] Map provider set to Ola Maps');
         }
@@ -137,7 +140,8 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Map provider set to $providerName. Restart app to apply.'),
+          content:
+              Text('Map provider set to $providerName. Restart app to apply.'),
           backgroundColor: _pink,
           behavior: SnackBarBehavior.floating,
         ),
@@ -204,7 +208,7 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
   }
 
   Widget _buildNotificationSettings() {
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(20),
@@ -224,10 +228,10 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
             title: 'All Notifications',
             subtitle: 'Enable all push notifications',
             value: _notificationsEnabled,
-             onChanged: (bool val) {
-               setState(() => _notificationsEnabled = val);
-               _saveSetting('hero_notifications_enabled', val);
-             },
+            onChanged: (val) {
+              setState(() => _notificationsEnabled = val);
+              _saveSetting('hero_notifications_enabled', val);
+            },
           ),
           const Divider(height: 1, indent: 56, endIndent: 16),
           _buildSwitchTile(
@@ -235,7 +239,7 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
             title: 'Ride Alerts',
             subtitle: 'Sound + vibration for new rides',
             value: _rideAlertsEnabled,
-            onChanged: (bool val) {
+            onChanged: (val) {
               setState(() => _rideAlertsEnabled = val);
               _saveSetting('hero_ride_alerts_enabled', val);
             },
@@ -281,13 +285,13 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
       trailing: Switch(
         value: value,
         onChanged: onChanged,
-        activeColor: _pink,
+        activeThumbColor: _pink,
       ),
     );
   }
 
   Widget _buildMapProviderSettings() {
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(20),
@@ -304,7 +308,10 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
         children: [
           _buildProviderTile('Ola Maps', 'Default, high-detail Indian maps'),
           const Divider(height: 1, indent: 56, endIndent: 16),
-          _buildProviderTile('OpenStreetMap', 'Community maps, offline-friendly'),
+          _buildProviderTile(
+            'OpenStreetMap',
+            'Community maps, offline-friendly',
+          ),
         ],
       ),
     );
@@ -315,15 +322,17 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
     return RadioListTile<String>(
       value: providerName,
       groupValue: _selectedMapProvider,
-       onChanged: (String? val) {
-         if (val != null) {
-           _switchMapProvider(val);
-         }
-       },
+      onChanged: (val) {
+        if (val != null) {
+          _switchMapProvider(val);
+        }
+      },
       title: Row(
         children: [
           Icon(
-            providerName.contains('Ola') ? Icons.map_rounded : Icons.public_rounded,
+            providerName.contains('Ola')
+                ? Icons.map_rounded
+                : Icons.public_rounded,
             color: isSelected ? _pink : _muted,
             size: 20,
           ),
@@ -347,14 +356,14 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
         ),
       ),
       secondary: isSelected
-          ? Icon(Icons.check_circle_rounded, color: _pink, size: 20)
-          : Icon(Icons.circle_outlined, color: _muted, size: 20),
+          ? const Icon(Icons.check_circle_rounded, color: _pink, size: 20)
+          : const Icon(Icons.circle_outlined, color: _muted, size: 20),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
     );
   }
 
   Widget _buildLanguageSettings() {
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(20),
@@ -384,12 +393,12 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
     return RadioListTile<String>(
       value: displayName,
       groupValue: _selectedLanguage,
-       onChanged: (String? val) {
-         if (val != null) {
-           setState(() => _selectedLanguage = val);
-           _saveStringSetting('hero_language_code', code);
-         }
-       },
+      onChanged: (val) {
+        if (val != null) {
+          setState(() => _selectedLanguage = val);
+          _saveStringSetting('hero_language_code', code);
+        }
+      },
       title: Text(
         displayName,
         style: GoogleFonts.outfit(
@@ -399,8 +408,8 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
         ),
       ),
       secondary: isSelected
-          ? Icon(Icons.check_circle_rounded, color: _pink, size: 20)
-          : Icon(Icons.circle_outlined, color: _muted, size: 20),
+          ? const Icon(Icons.check_circle_rounded, color: _pink, size: 20)
+          : const Icon(Icons.circle_outlined, color: _muted, size: 20),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
     );
   }
