@@ -1161,14 +1161,14 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       final docs = snap.docs.where((doc) {
         final activityAt = _rideActivityAt(doc.data());
         return activityAt != null && activityAt.isAfter(cutoff);
-      }).toList();
-      docs.sort((a, b) {
-        final aTime =
-            _rideActivityAt(a.data()) ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final bTime =
-            _rideActivityAt(b.data()) ?? DateTime.fromMillisecondsSinceEpoch(0);
-        return bTime.compareTo(aTime);
-      });
+      }).toList()
+        ..sort((a, b) {
+          final aTime = _rideActivityAt(a.data()) ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          final bTime = _rideActivityAt(b.data()) ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          return bTime.compareTo(aTime);
+        });
       if (docs.isNotEmpty && mounted) {
         final doc = docs.first;
         setState(() {
@@ -3978,10 +3978,11 @@ class _ServiceRequestStatusCard extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('requestId', requestId));
-    properties.add(StringProperty('requestType', requestType));
-    properties.add(StringProperty('status', status));
-    properties.add(StringProperty('customerName', customerName));
+    properties
+      ..add(StringProperty('requestId', requestId))
+      ..add(StringProperty('requestType', requestType))
+      ..add(StringProperty('status', status))
+      ..add(StringProperty('customerName', customerName));
   }
 }
 
@@ -4853,10 +4854,11 @@ class _HeroSoundboxPromoButton extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(
-      DiagnosticsProperty<AnimationController>('controller', controller),
-    );
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+    properties
+      ..add(
+        DiagnosticsProperty<AnimationController>('controller', controller),
+      )
+      ..add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }
 
@@ -4877,22 +4879,22 @@ class _PingCountdownDialog extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('requestId', requestId));
     properties
-        .add(DiagnosticsProperty<Map<String, dynamic>>('pingData', pingData));
-    properties.add(
-      ObjectFlagProperty<
-          Function(String requestId, Map<String, dynamic> pingData)>.has(
-        'onAccept',
-        onAccept,
-      ),
-    );
-    properties.add(
-      ObjectFlagProperty<Function(String requestId)>.has(
-        'onReject',
-        onReject,
-      ),
-    );
+      ..add(StringProperty('requestId', requestId))
+      ..add(DiagnosticsProperty<Map<String, dynamic>>('pingData', pingData))
+      ..add(
+        ObjectFlagProperty<
+            Function(String requestId, Map<String, dynamic> pingData)>.has(
+          'onAccept',
+          onAccept,
+        ),
+      )
+      ..add(
+        ObjectFlagProperty<Function(String requestId)>.has(
+          'onReject',
+          onReject,
+        ),
+      );
   }
 }
 

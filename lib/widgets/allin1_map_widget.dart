@@ -122,17 +122,17 @@ class Allin1MapWidget extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<LatLng>('center', center));
-    properties.add(DoubleProperty('zoom', zoom));
-    properties.add(IterableProperty<MapMarker>('markers', markers));
-    properties.add(IterableProperty<MapRoute>('routes', routes));
-    properties.add(IterableProperty<MapCircle>('circles', circles));
-    properties.add(DiagnosticsProperty<bool>('interactive', interactive));
-    properties.add(
-      DiagnosticsProperty<MapController?>('mapController', mapController),
-    );
     properties
-        .add(ObjectFlagProperty<VoidCallback?>.has('onMapReady', onMapReady));
+      ..add(DiagnosticsProperty<LatLng>('center', center))
+      ..add(DoubleProperty('zoom', zoom))
+      ..add(IterableProperty<MapMarker>('markers', markers))
+      ..add(IterableProperty<MapRoute>('routes', routes))
+      ..add(IterableProperty<MapCircle>('circles', circles))
+      ..add(DiagnosticsProperty<bool>('interactive', interactive))
+      ..add(
+        DiagnosticsProperty<MapController?>('mapController', mapController),
+      )
+      ..add(ObjectFlagProperty<VoidCallback?>.has('onMapReady', onMapReady));
   }
 }
 
@@ -598,10 +598,11 @@ class _DefaultMarker extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(ColorProperty('color', color));
-    properties.add(DiagnosticsProperty<IconData>('icon', icon));
-    properties.add(StringProperty('assetPath', assetPath));
-    properties.add(DoubleProperty('bearingDegrees', bearingDegrees));
+    properties
+      ..add(ColorProperty('color', color))
+      ..add(DiagnosticsProperty<IconData>('icon', icon))
+      ..add(StringProperty('assetPath', assetPath))
+      ..add(DoubleProperty('bearingDegrees', bearingDegrees));
   }
 }
 
