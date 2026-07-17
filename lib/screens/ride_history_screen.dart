@@ -1,11 +1,15 @@
 // Full ride history for logged-in customer
 // Shows past rides with: date, pickup, drop, fare, rating, status
 
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+import '../services/hive_cache.dart';
 
 // Theme Constants
 const Color kBg = Color(0xFF08080F);
@@ -21,8 +25,118 @@ const Color kText = Color(0xFFEEEEF5);
 const Color kMuted = Color(0xFF7777A0);
 const Color kBorder = Color(0x2E7B6FE0);
 
-class RideHistoryScreen extends StatelessWidget {
+class RideHistoryScreen extends StatefulWidget {
   const RideHistoryScreen({super.key});
+
+  @override
+  State<RideHistoryScreen> createState() => _RideHistoryScreenState();
+}
+
+class _RideHistoryScreenState extends State<RideHistoryScreen> {
+  // FIX B: replaced the live .snapshots() listener with the same
+  // cache-first, one-time-.get() pattern hero_history_screen.dart already
+  // uses successfully — this screen shows completed/immutable ride
+  // history, so a live listener was never actually needed here and was
+  // the single biggest source of re-reads (see FIX A's comment for the
+  // rebuild-multiplication half of the problem; this fixes the "why does
+  // it re-read AT ALL on a normal, non-rebuild open" half).
+  //
+  // Built once in initState() (same reasoning as FIX A) so the query
+  // object itself stays stable even though it's no longer a live stream.
+  late final Query<Map<String, dynamic>> _rideHistoryQuery;
+
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _rides = <Map<String, dynamic>>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _rideHistoryQuery = FirebaseFirestore.instance
+        .collection('rides')
+        .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+        .orderBy('createdAt', descending: true)
+        .limit(20)
+        .withConverter<Map<String, dynamic>>(
+          fromFirestore: (snap, _) => snap.data() ?? <String, dynamic>{},
+          toFirestore: (data, _) => data,
+        );
+    unawaited(_loadRideHistory());
+  }
+
+  // Firestore's Timestamp type isn't one of Hive's natively-supported
+  // types, so it can't be stored in the cache box as-is — encode to a
+  // plain millisecondsSinceEpoch int for caching, and decode it back to
+  // a Timestamp when reading from cache, so _RideHistoryCard (which
+  // expects a Timestamp) doesn't need to know or care whether its data
+  // came from cache or from a fresh Firestore read.
+  Map<String, dynamic> _encodeRideForCache(Map<String, dynamic> data) {
+    final copy = Map<String, dynamic>.from(data);
+    final createdAt = copy['createdAt'];
+    if (createdAt is Timestamp) {
+      copy['createdAt'] = createdAt.millisecondsSinceEpoch;
+    }
+    return copy;
+  }
+
+  Map<String, dynamic> _decodeCachedRide(Map<String, dynamic> data) {
+    final copy = Map<String, dynamic>.from(data);
+    final createdAt = copy['createdAt'];
+    if (createdAt is int) {
+      copy['createdAt'] = Timestamp.fromMillisecondsSinceEpoch(createdAt);
+    }
+    return copy;
+  }
+
+  // forceRefresh:true is used by pull-to-refresh below to bypass the
+  // cache and always hit Firestore, regardless of TTL freshness.
+  Future<void> _loadRideHistory({bool forceRefresh = false}) async {
+    if (!forceRefresh) {
+      final cached =
+          await HiveCache.get<List<dynamic>>(HiveCache.kRideHistory);
+      if (cached != null) {
+        if (mounted) {
+          setState(() {
+            _rides = cached
+                .map((e) => _decodeCachedRide(Map<String, dynamic>.from(e as Map)))
+                .toList();
+            _loading = false;
+            _error = null;
+          });
+        }
+        return; // Fresh cache hit — zero Firestore reads.
+      }
+    }
+
+    if (mounted && forceRefresh) {
+      setState(() => _loading = true);
+    }
+
+    try {
+      final snap = await _rideHistoryQuery.get();
+      final rides = snap.docs.map((d) => d.data()).toList();
+      if (mounted) {
+        setState(() {
+          _rides = rides;
+          _loading = false;
+          _error = null;
+        });
+      }
+      await HiveCache.put(
+        HiveCache.kRideHistory,
+        rides.map(_encodeRideForCache).toList(),
+        ttl: HiveCache.ttlRideHistory,
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'Could not load ride history. Pull down to retry.';
+        });
+      }
+      debugPrint('[RideHistoryScreen] Load failed: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,32 +147,29 @@ class RideHistoryScreen extends StatelessWidget {
           children: [
             // AppBar with back button
             _buildHeader(context),
-            // StreamBuilder on rides where customerPhone == uid
+            // Cache-first ride history — see _loadRideHistory(). Wrapped
+            // in RefreshIndicator so the customer can still force a fresh
+            // Firestore read on demand, since this no longer auto-updates
+            // live the way the old .snapshots() listener did.
             Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('rides')
-                    .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
-                    .orderBy('createdAt', descending: true)
-                    .limit(20)
-                    .snapshots(),
-                builder: (ctx, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return const Center(
-                      child: CircularProgressIndicator(color: kGold),
-                    );
-                  }
-                  final docs = snap.data?.docs ?? [];
-                  if (docs.isEmpty) return _emptyState();
-                  return ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: docs.length,
-                    itemBuilder: (_, i) {
-                      final d = docs[i].data()! as Map<String, dynamic>;
-                      return _RideHistoryCard(data: d);
-                    },
-                  );
-                },
+              child: RefreshIndicator(
+                color: kGold,
+                backgroundColor: kSurface,
+                onRefresh: () => _loadRideHistory(forceRefresh: true),
+                child: _loading
+                    ? const Center(
+                        child: CircularProgressIndicator(color: kGold),
+                      )
+                    : _error != null
+                        ? _errorState(_error!)
+                        : _rides.isEmpty
+                            ? _emptyStateScrollable()
+                            : ListView.builder(
+                                padding: const EdgeInsets.all(16),
+                                itemCount: _rides.length,
+                                itemBuilder: (_, i) =>
+                                    _RideHistoryCard(data: _rides[i]),
+                              ),
               ),
             ),
           ],
@@ -121,6 +232,44 @@ class RideHistoryScreen extends StatelessWidget {
             ),
           ],
         ),
+      );
+
+  // RefreshIndicator's pull gesture needs a scrollable child underneath
+  // it to detect the drag even when there's nothing to actually scroll —
+  // a bare Center() (like _emptyState() alone) won't trigger it. This
+  // wraps the same empty-state content in a minimal scrollable so
+  // pull-to-refresh still works on a first-ever-open (empty history).
+  Widget _emptyStateScrollable() => ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.6,
+            child: _emptyState(),
+          ),
+        ],
+      );
+
+  Widget _errorState(String message) => ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.6,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline, size: 44, color: kOrange),
+                  const SizedBox(height: 14),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(fontSize: 13, color: kMuted),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       );
 }
 
