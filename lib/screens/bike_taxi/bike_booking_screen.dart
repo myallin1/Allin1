@@ -365,6 +365,11 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   String? _pendingActiveRideStatus;
   String? _pendingActiveRidePaymentStatus;
   double? _pendingActiveRideAmount;
+  // Guards _continueActiveRide() against a fast double-tap firing the
+  // method twice concurrently (each independently pushing its own
+  // PaymentScreen/RideSearchScreen/RideTrackingScreen route) before the
+  // first call's rideRef.get() has even returned.
+  bool _isContinuingRide = false;
 
   // ── Fare State ────────────────────────────────────────────────
   Map<String, dynamic>? _fares;
@@ -651,6 +656,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   Future<void> _continueActiveRide() async {
+    if (_isContinuingRide) {
+      return;
+    }
     final ride = _pendingActiveRide;
     final rideDocId = _pendingActiveRideDocId;
     var status = (_pendingActiveRideStatus ?? '').trim();
@@ -665,6 +673,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       return;
     }
 
+    setState(() => _isContinuingRide = true);
+    try {
     try {
       final rideSnap = await FirebaseFirestore.instance
           .collection('rides')
@@ -814,6 +824,11 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         ),
       ),
     );
+    } finally {
+      if (mounted) {
+        setState(() => _isContinuingRide = false);
+      }
+    }
   }
 
   Future<void> _cancelPendingActiveRide() async {
@@ -1693,8 +1708,18 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
               : ((userData['phone'] as String?)?.trim().isNotEmpty ?? false)
                   ? (userData['phone'] as String).trim()
                   : (user.phoneNumber ?? '').trim();
-      final pickupAddress = (_pickupLocation!['name'] as String? ?? '').trim();
-      final dropAddress = (_dropLocation!['name'] as String? ?? '').trim();
+      // Use the full address ('full') rather than the short label ('name')
+      // when saving to Firestore — the picker UI shows both (name as the
+      // title, full as the subtitle), but only the short label was being
+      // persisted, so every downstream screen (tracking, hero pings, admin)
+      // only ever saw the truncated label instead of the actual address the
+      // customer confirmed. Falls back to 'name' if 'full' is ever missing.
+      final pickupAddress = ((_pickupLocation!['full'] as String?)?.trim().isNotEmpty ?? false)
+          ? (_pickupLocation!['full'] as String).trim()
+          : (_pickupLocation!['name'] as String? ?? '').trim();
+      final dropAddress = ((_dropLocation!['full'] as String?)?.trim().isNotEmpty ?? false)
+          ? (_dropLocation!['full'] as String).trim()
+          : (_dropLocation!['name'] as String? ?? '').trim();
 
       // ── Optimistic UI: Prepare the model and state before network call ──
       final rideModel = RideModel(
@@ -3221,7 +3246,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
               ],
               Expanded(
                 child: ElevatedButton(
-                  onPressed: _continueActiveRide,
+                  onPressed:
+                      _isContinuingRide ? null : _continueActiveRide,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: _accentOrange,
@@ -3231,13 +3257,23 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                       borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  child: Text(
-                    _continueActionLabel(status, paymentStatus),
-                    style: GoogleFonts.outfit(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+                  child: _isContinuingRide
+                      ? SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(_accentOrange),
+                          ),
+                        )
+                      : Text(
+                          _continueActionLabel(status, paymentStatus),
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                 ),
               ),
             ],

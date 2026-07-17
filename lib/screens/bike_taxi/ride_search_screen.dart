@@ -631,6 +631,14 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   }
 
   Future<void> _tryAgainSearch() async {
+    // _isPinging is set true for the duration of _startSequentialPinging()
+    // (see its start/end points below) — guard against a stray re-entrant
+    // call (e.g. a fast double-tap) starting a second overlapping pinging
+    // loop against the same _heroesQueue/_requestId state, which would
+    // double-write to active_ride_requests/hero_pings.
+    if (_isPinging) {
+      return;
+    }
     _pingCountdown?.cancel();
     _countTimer?.cancel();
     _heroAcceptedOverlayShown = false;
