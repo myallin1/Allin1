@@ -7,7 +7,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/update_service.dart';
 
 const Color _drawerPink = Color(0xFFFF4FA3);
-const Color _drawerPinkSoft = Color(0xFFFFA8CF);
 const Color _drawerWhite = Color(0xFFFFFFFF);
 const Color _drawerBorder = Color(0x33FF4FA3);
 
@@ -236,65 +235,64 @@ class AppDrawer extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<User?>('user', user));
-    properties.add(StringProperty('displayName', displayName));
-    properties.add(StringProperty('phoneNumber', phoneNumber));
-    properties.add(StringProperty('photoUrl', photoUrl));
     properties
-        .add(ObjectFlagProperty<VoidCallback>.has('onLoginTap', onLoginTap));
-    properties.add(
-      ObjectFlagProperty<VoidCallback>.has('onMyProfileTap', onMyProfileTap),
-    );
-    properties.add(
-      ObjectFlagProperty<VoidCallback>.has(
-        'onRideHistoryTap',
-        onRideHistoryTap,
-      ),
-    );
-    properties
-        .add(ObjectFlagProperty<VoidCallback>.has('onWalletTap', onWalletTap));
-    properties.add(
-      ObjectFlagProperty<VoidCallback>.has(
-        'onPaymentMethodsTap',
-        onPaymentMethodsTap,
-      ),
-    );
-    properties.add(
-      ObjectFlagProperty<VoidCallback>.has(
-        'onNotificationsTap',
-        onNotificationsTap,
-      ),
-    );
-    properties.add(
-      ObjectFlagProperty<VoidCallback>.has('onLanguageTap', onLanguageTap),
-    );
-    properties.add(
-      ObjectFlagProperty<VoidCallback>.has(
-        'onDownloadMobileAppTap',
-        onDownloadMobileAppTap,
-      ),
-    );
-    properties.add(
-      ObjectFlagProperty<VoidCallback>.has(
-        'onSavedAddressesTap',
-        onSavedAddressesTap,
-      ),
-    );
-    properties.add(
-      ObjectFlagProperty<VoidCallback>.has(
-        'onHelpSupportTap',
-        onHelpSupportTap,
-      ),
-    );
-    properties.add(
-      ObjectFlagProperty<VoidCallback>.has('onSettingsTap', onSettingsTap),
-    );
-    properties.add(
-      ObjectFlagProperty<Future<dynamic> Function()>.has(
-        'onLogoutTap',
-        onLogoutTap,
-      ),
-    );
+      ..add(DiagnosticsProperty<User?>('user', user))
+      ..add(StringProperty('displayName', displayName))
+      ..add(StringProperty('phoneNumber', phoneNumber))
+      ..add(StringProperty('photoUrl', photoUrl))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onLoginTap', onLoginTap))
+      ..add(
+        ObjectFlagProperty<VoidCallback>.has('onMyProfileTap', onMyProfileTap),
+      )
+      ..add(
+        ObjectFlagProperty<VoidCallback>.has(
+          'onRideHistoryTap',
+          onRideHistoryTap,
+        ),
+      )
+      ..add(ObjectFlagProperty<VoidCallback>.has('onWalletTap', onWalletTap))
+      ..add(
+        ObjectFlagProperty<VoidCallback>.has(
+          'onPaymentMethodsTap',
+          onPaymentMethodsTap,
+        ),
+      )
+      ..add(
+        ObjectFlagProperty<VoidCallback>.has(
+          'onNotificationsTap',
+          onNotificationsTap,
+        ),
+      )
+      ..add(
+        ObjectFlagProperty<VoidCallback>.has('onLanguageTap', onLanguageTap),
+      )
+      ..add(
+        ObjectFlagProperty<VoidCallback>.has(
+          'onDownloadMobileAppTap',
+          onDownloadMobileAppTap,
+        ),
+      )
+      ..add(
+        ObjectFlagProperty<VoidCallback>.has(
+          'onSavedAddressesTap',
+          onSavedAddressesTap,
+        ),
+      )
+      ..add(
+        ObjectFlagProperty<VoidCallback>.has(
+          'onHelpSupportTap',
+          onHelpSupportTap,
+        ),
+      )
+      ..add(
+        ObjectFlagProperty<VoidCallback>.has('onSettingsTap', onSettingsTap),
+      )
+      ..add(
+        ObjectFlagProperty<Future<dynamic> Function()>.has(
+          'onLogoutTap',
+          onLogoutTap,
+        ),
+      );
   }
 }
 
@@ -411,11 +409,11 @@ class _GuestHeader extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DoubleProperty('titleSize', titleSize));
-    properties.add(DoubleProperty('subtitleSize', subtitleSize));
-    properties.add(DoubleProperty('headerSpacing', headerSpacing));
     properties
-        .add(ObjectFlagProperty<VoidCallback>.has('onLoginTap', onLoginTap));
+      ..add(DoubleProperty('titleSize', titleSize))
+      ..add(DoubleProperty('subtitleSize', subtitleSize))
+      ..add(DoubleProperty('headerSpacing', headerSpacing))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onLoginTap', onLoginTap));
   }
 }
 
@@ -517,13 +515,14 @@ class _LoggedInHeader extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<User>('user', user));
-    properties.add(StringProperty('displayName', displayName));
-    properties.add(StringProperty('phoneNumber', phoneNumber));
-    properties.add(StringProperty('photoUrl', photoUrl));
-    properties.add(DoubleProperty('titleSize', titleSize));
-    properties.add(DoubleProperty('subtitleSize', subtitleSize));
-    properties.add(DoubleProperty('headerSpacing', headerSpacing));
+    properties
+      ..add(DiagnosticsProperty<User>('user', user))
+      ..add(StringProperty('displayName', displayName))
+      ..add(StringProperty('phoneNumber', phoneNumber))
+      ..add(StringProperty('photoUrl', photoUrl))
+      ..add(DoubleProperty('titleSize', titleSize))
+      ..add(DoubleProperty('subtitleSize', subtitleSize))
+      ..add(DoubleProperty('headerSpacing', headerSpacing));
   }
 }
 
@@ -577,8 +576,9 @@ class _DrawerTile extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<IconData>('icon', icon));
-    properties.add(StringProperty('label', label));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+    properties
+      ..add(DiagnosticsProperty<IconData>('icon', icon))
+      ..add(StringProperty('label', label))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }

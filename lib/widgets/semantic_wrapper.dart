@@ -159,30 +159,28 @@ class SemanticButton extends StatelessWidget {
     HapticFeedback.lightImpact();
 
     // Call the tap callback
-    if (onTap != null) {
-      onTap!();
-    }
+    onTap?.call();
   }
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('label', label));
-    properties.add(StringProperty('hint', hint));
-    properties.add(DiagnosticsProperty<bool?>('isSelected', isSelected));
-    properties.add(DiagnosticsProperty<bool>('enabled', enabled));
-    properties.add(ObjectFlagProperty<VoidCallback?>.has('onTap', onTap));
-    properties.add(DoubleProperty('size', size));
-    properties.add(DoubleProperty('borderRadius', borderRadius));
     properties
-        .add(DiagnosticsProperty<EdgeInsetsGeometry?>('padding', padding));
-    properties.add(DiagnosticsProperty<FocusNode?>('focusNode', focusNode));
-    properties.add(
-      ObjectFlagProperty<ValueChanged<bool>?>.has(
-        'onFocusChange',
-        onFocusChange,
-      ),
-    );
+      ..add(StringProperty('label', label))
+      ..add(StringProperty('hint', hint))
+      ..add(DiagnosticsProperty<bool?>('isSelected', isSelected))
+      ..add(DiagnosticsProperty<bool>('enabled', enabled))
+      ..add(ObjectFlagProperty<VoidCallback?>.has('onTap', onTap))
+      ..add(DoubleProperty('size', size))
+      ..add(DoubleProperty('borderRadius', borderRadius))
+      ..add(DiagnosticsProperty<EdgeInsetsGeometry?>('padding', padding))
+      ..add(DiagnosticsProperty<FocusNode?>('focusNode', focusNode))
+      ..add(
+        ObjectFlagProperty<ValueChanged<bool>?>.has(
+          'onFocusChange',
+          onFocusChange,
+        ),
+      );
   }
 }
 
@@ -241,10 +239,11 @@ class SemanticLink extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('label', label));
-    properties.add(StringProperty('hint', hint));
-    properties.add(ObjectFlagProperty<VoidCallback?>.has('onTap', onTap));
-    properties.add(DiagnosticsProperty<bool>('visited', visited));
+    properties
+      ..add(StringProperty('label', label))
+      ..add(StringProperty('hint', hint))
+      ..add(ObjectFlagProperty<VoidCallback?>.has('onTap', onTap))
+      ..add(DiagnosticsProperty<bool>('visited', visited));
   }
 }
 
@@ -312,11 +311,12 @@ class SemanticCard extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('label', label));
-    properties.add(StringProperty('hint', hint));
-    properties.add(ObjectFlagProperty<VoidCallback?>.has('onTap', onTap));
-    properties.add(DoubleProperty('borderRadius', borderRadius));
-    properties.add(DoubleProperty('elevation', elevation));
+    properties
+      ..add(StringProperty('label', label))
+      ..add(StringProperty('hint', hint))
+      ..add(ObjectFlagProperty<VoidCallback?>.has('onTap', onTap))
+      ..add(DoubleProperty('borderRadius', borderRadius))
+      ..add(DoubleProperty('elevation', elevation));
   }
 }
 
@@ -389,14 +389,15 @@ class SemanticIconButton extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('label', label));
-    properties.add(StringProperty('hint', hint));
-    properties.add(DiagnosticsProperty<IconData>('icon', icon));
-    properties.add(ObjectFlagProperty<VoidCallback?>.has('onTap', onTap));
-    properties.add(DoubleProperty('iconSize', iconSize));
-    properties.add(DoubleProperty('buttonSize', buttonSize));
-    properties.add(DiagnosticsProperty<bool>('enabled', enabled));
-    properties.add(ColorProperty('color', color));
+    properties
+      ..add(StringProperty('label', label))
+      ..add(StringProperty('hint', hint))
+      ..add(DiagnosticsProperty<IconData>('icon', icon))
+      ..add(ObjectFlagProperty<VoidCallback?>.has('onTap', onTap))
+      ..add(DoubleProperty('iconSize', iconSize))
+      ..add(DoubleProperty('buttonSize', buttonSize))
+      ..add(DiagnosticsProperty<bool>('enabled', enabled))
+      ..add(ColorProperty('color', color));
   }
 }
 
@@ -486,15 +487,16 @@ class TamilText extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('data', data));
-    properties.add(StringProperty('semanticsLabel', semanticsLabel));
-    properties.add(DoubleProperty('fontSize', fontSize));
-    properties.add(DiagnosticsProperty<FontWeight>('fontWeight', fontWeight));
-    properties.add(ColorProperty('color', color));
-    properties.add(DoubleProperty('height', height));
-    properties.add(EnumProperty<TextAlign>('textAlign', textAlign));
-    properties.add(IntProperty('maxLines', maxLines));
-    properties.add(DiagnosticsProperty<TextStyle?>('style', style));
+    properties
+      ..add(StringProperty('data', data))
+      ..add(StringProperty('semanticsLabel', semanticsLabel))
+      ..add(DoubleProperty('fontSize', fontSize))
+      ..add(DiagnosticsProperty<FontWeight>('fontWeight', fontWeight))
+      ..add(ColorProperty('color', color))
+      ..add(DoubleProperty('height', height))
+      ..add(EnumProperty<TextAlign>('textAlign', textAlign))
+      ..add(IntProperty('maxLines', maxLines))
+      ..add(DiagnosticsProperty<TextStyle?>('style', style));
   }
 }
 
@@ -558,9 +560,10 @@ class TamilRichText extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(IterableProperty<InlineSpan>('children', children));
-    properties.add(DiagnosticsProperty<TextStyle?>('style', style));
-    properties.add(EnumProperty<TextAlign>('textAlign', textAlign));
+    properties
+      ..add(IterableProperty<InlineSpan>('children', children))
+      ..add(DiagnosticsProperty<TextStyle?>('style', style))
+      ..add(EnumProperty<TextAlign>('textAlign', textAlign));
   }
 }
 
@@ -631,11 +634,12 @@ class AccessibleCheckbox extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('label', label));
-    properties.add(DiagnosticsProperty<bool>('value', value));
-    properties.add(
-      ObjectFlagProperty<ValueChanged<bool>?>.has('onChanged', onChanged),
-    );
+    properties
+      ..add(StringProperty('label', label))
+      ..add(DiagnosticsProperty<bool>('value', value))
+      ..add(
+        ObjectFlagProperty<ValueChanged<bool>?>.has('onChanged', onChanged),
+      );
   }
 }
 
@@ -756,9 +760,10 @@ class SkipLink extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('label', label));
-    properties.add(StringProperty('focusNodeId', focusNodeId));
-    properties.add(ObjectFlagProperty<VoidCallback?>.has('onSkip', onSkip));
+    properties
+      ..add(StringProperty('label', label))
+      ..add(StringProperty('focusNodeId', focusNodeId))
+      ..add(ObjectFlagProperty<VoidCallback?>.has('onSkip', onSkip));
   }
 }
 
