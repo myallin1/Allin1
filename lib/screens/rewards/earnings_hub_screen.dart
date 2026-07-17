@@ -542,8 +542,9 @@ class _HowItWorksStep extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('number', number));
-    properties.add(StringProperty('title', title));
-    properties.add(StringProperty('description', description));
+    properties
+      ..add(StringProperty('number', number))
+      ..add(StringProperty('title', title))
+      ..add(StringProperty('description', description));
   }
 }

@@ -289,9 +289,10 @@ class SellerCard extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<Map<String, dynamic>>('seller', seller));
-    properties.add(EnumProperty<Category>('category', category));
-    properties.add(ObjectFlagProperty<VoidCallback?>.has('onTap', onTap));
+    properties
+      ..add(DiagnosticsProperty<Map<String, dynamic>>('seller', seller))
+      ..add(EnumProperty<Category>('category', category))
+      ..add(ObjectFlagProperty<VoidCallback?>.has('onTap', onTap));
   }
 }
 

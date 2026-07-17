@@ -219,8 +219,9 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('requestId', requestId));
-    properties.add(StringProperty('requestType', requestType));
+    properties
+      ..add(StringProperty('requestId', requestId))
+      ..add(StringProperty('requestType', requestType));
   }
 }
 
@@ -278,8 +279,9 @@ class _StatusStepper extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(IterableProperty<String>('labels', labels));
-    properties.add(IntProperty('currentIndex', currentIndex));
+    properties
+      ..add(IterableProperty<String>('labels', labels))
+      ..add(IntProperty('currentIndex', currentIndex));
   }
 }
 
@@ -320,7 +322,8 @@ class _StepCircle extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<bool>('isCompleted', isCompleted));
-    properties.add(DiagnosticsProperty<bool>('isCurrent', isCurrent));
+    properties
+      ..add(DiagnosticsProperty<bool>('isCompleted', isCompleted))
+      ..add(DiagnosticsProperty<bool>('isCurrent', isCurrent));
   }
 }

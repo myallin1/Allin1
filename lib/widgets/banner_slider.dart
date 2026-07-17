@@ -20,9 +20,10 @@ class BannerAdsSlider extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(IterableProperty<String>('imageUrls', imageUrls));
-    properties.add(DoubleProperty('height', height));
-    properties.add(DoubleProperty('viewportFraction', viewportFraction));
+    properties
+      ..add(IterableProperty<String>('imageUrls', imageUrls))
+      ..add(DoubleProperty('height', height))
+      ..add(DoubleProperty('viewportFraction', viewportFraction));
   }
 }
 

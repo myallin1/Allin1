@@ -855,9 +855,10 @@ class _ProductCard extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<_Product>('product', product));
-    properties.add(IntProperty('qty', qty));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onAdd', onAdd));
+    properties
+      ..add(DiagnosticsProperty<_Product>('product', product))
+      ..add(IntProperty('qty', qty))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onAdd', onAdd));
   }
 }
 

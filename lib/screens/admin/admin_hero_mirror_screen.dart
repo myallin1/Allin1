@@ -172,9 +172,9 @@ class AdminHeroMirrorScreen extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('heroUid', heroUid));
     properties
-        .add(DiagnosticsProperty<Map<String, dynamic>>('heroData', heroData));
+      ..add(StringProperty('heroUid', heroUid))
+      ..add(DiagnosticsProperty<Map<String, dynamic>>('heroData', heroData));
   }
 }
 
@@ -269,8 +269,9 @@ class _MirrorRow extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('label', label));
-    properties.add(StringProperty('value', value));
-    properties.add(DiagnosticsProperty<bool>('mono', mono));
+    properties
+      ..add(StringProperty('label', label))
+      ..add(StringProperty('value', value))
+      ..add(DiagnosticsProperty<bool>('mono', mono));
   }
 }

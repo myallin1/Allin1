@@ -459,9 +459,10 @@ class _ActionButton extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('label', label));
-    properties.add(ColorProperty('color', color));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+    properties
+      ..add(StringProperty('label', label))
+      ..add(ColorProperty('color', color))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }
 

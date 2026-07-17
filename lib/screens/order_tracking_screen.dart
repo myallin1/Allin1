@@ -42,9 +42,10 @@ class OrderTrackingScreen extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(IterableProperty<CartItem>('items', items));
-    properties.add(DoubleProperty('total', total));
-    properties.add(StringProperty('storeType', storeType));
+    properties
+      ..add(IterableProperty<CartItem>('items', items))
+      ..add(DoubleProperty('total', total))
+      ..add(StringProperty('storeType', storeType));
   }
 }
 
