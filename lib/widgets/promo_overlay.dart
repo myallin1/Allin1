@@ -157,10 +157,10 @@ class PromoOverlay extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(IterableProperty<PromoOfferItem>('offers', offers));
     properties
-        .add(ObjectFlagProperty<ValueChanged<String>>.has('onClaim', onClaim));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onClose', onClose));
+      ..add(IterableProperty<PromoOfferItem>('offers', offers))
+      ..add(ObjectFlagProperty<ValueChanged<String>>.has('onClaim', onClaim))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onClose', onClose));
   }
 }
 
@@ -293,7 +293,8 @@ class _PromoOfferCard extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<PromoOfferItem>('offer', offer));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onClaim', onClaim));
+    properties
+      ..add(DiagnosticsProperty<PromoOfferItem>('offer', offer))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onClaim', onClaim));
   }
 }

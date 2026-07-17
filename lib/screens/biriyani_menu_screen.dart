@@ -479,8 +479,9 @@ class _BiriyaniCarouselCard extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<_BiriyaniItem>('item', item));
-    properties.add(DiagnosticsProperty<bool>('isActive', isActive));
+    properties
+      ..add(DiagnosticsProperty<_BiriyaniItem>('item', item))
+      ..add(DiagnosticsProperty<bool>('isActive', isActive));
   }
 }
 
@@ -634,10 +635,11 @@ class _BiriyaniCTAButton extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('label', label));
-    properties.add(StringProperty('sublabel', sublabel));
-    properties.add(DiagnosticsProperty<Gradient>('gradient', gradient));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+    properties
+      ..add(StringProperty('label', label))
+      ..add(StringProperty('sublabel', sublabel))
+      ..add(DiagnosticsProperty<Gradient>('gradient', gradient))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }
 

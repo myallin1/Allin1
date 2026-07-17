@@ -449,10 +449,11 @@ class _PanelButton extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('emoji', emoji));
-    properties.add(StringProperty('title', title));
-    properties.add(StringProperty('subtitle', subtitle));
-    properties.add(IterableProperty<Color>('gradient', gradient));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+    properties
+      ..add(StringProperty('emoji', emoji))
+      ..add(StringProperty('title', title))
+      ..add(StringProperty('subtitle', subtitle))
+      ..add(IterableProperty<Color>('gradient', gradient))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }

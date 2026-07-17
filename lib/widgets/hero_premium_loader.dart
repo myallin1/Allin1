@@ -24,10 +24,11 @@ class HeroPremiumLoader extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('title', title));
-    properties.add(StringProperty('subtitle', subtitle));
-    properties.add(DiagnosticsProperty<bool>('compact', compact));
-    properties.add(DiagnosticsProperty<IconData>('icon', icon));
+    properties
+      ..add(StringProperty('title', title))
+      ..add(StringProperty('subtitle', subtitle))
+      ..add(DiagnosticsProperty<bool>('compact', compact))
+      ..add(DiagnosticsProperty<IconData>('icon', icon));
   }
 }
 

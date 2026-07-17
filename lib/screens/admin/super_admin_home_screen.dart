@@ -550,10 +550,11 @@ class _ServiceCard extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('title', title));
-    properties.add(DiagnosticsProperty<IconData>('icon', icon));
-    properties.add(ColorProperty('cardColor', cardColor));
-    properties.add(DiagnosticsProperty<bool>('isActive', isActive));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+    properties
+      ..add(StringProperty('title', title))
+      ..add(DiagnosticsProperty<IconData>('icon', icon))
+      ..add(ColorProperty('cardColor', cardColor))
+      ..add(DiagnosticsProperty<bool>('isActive', isActive))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }

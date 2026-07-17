@@ -161,10 +161,10 @@ class NJCoinsBalanceCard extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(IntProperty('balance', balance));
-    properties.add(IntProperty('expiring', expiring));
-    properties.add(IntProperty('pending', pending));
     properties
-        .add(ObjectFlagProperty<VoidCallback?>.has('onSpendTap', onSpendTap));
+      ..add(IntProperty('balance', balance))
+      ..add(IntProperty('expiring', expiring))
+      ..add(IntProperty('pending', pending))
+      ..add(ObjectFlagProperty<VoidCallback?>.has('onSpendTap', onSpendTap));
   }
 }

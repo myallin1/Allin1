@@ -30,16 +30,17 @@ class VehicleSelectionBottomSheet extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DoubleProperty('distanceKm', distanceKm));
-    properties.add(DiagnosticsProperty<Map<String, dynamic>?>('fares', fares));
-    properties.add(
-      ObjectFlagProperty<
-          void Function(String vehicleType, double estimatedFare)>.has(
-        'onConfirm',
-        onConfirm,
-      ),
-    );
-    properties.add(StringProperty('initialVehicleType', initialVehicleType));
+    properties
+      ..add(DoubleProperty('distanceKm', distanceKm))
+      ..add(DiagnosticsProperty<Map<String, dynamic>?>('fares', fares))
+      ..add(
+        ObjectFlagProperty<
+            void Function(String vehicleType, double estimatedFare)>.has(
+          'onConfirm',
+          onConfirm,
+        ),
+      )
+      ..add(StringProperty('initialVehicleType', initialVehicleType));
   }
 }
 

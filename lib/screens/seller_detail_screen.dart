@@ -27,8 +27,9 @@ class SellerDetailScreen extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<Map<String, dynamic>>('seller', seller));
-    properties.add(EnumProperty<Category>('category', category));
+    properties
+      ..add(DiagnosticsProperty<Map<String, dynamic>>('seller', seller))
+      ..add(EnumProperty<Category>('category', category));
   }
 }
 
@@ -294,8 +295,9 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
       category: product['category'] as String?,
     );
 
-    _cart.addItem(item);
-    _cart.setCurrentSeller(sellerId, sellerName);
+    _cart
+      ..addItem(item)
+      ..setCurrentSeller(sellerId, sellerName);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -744,10 +746,11 @@ class _CartItemTile extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<CartItem>('item', item));
-    properties.add(
-      ObjectFlagProperty<void Function(int)>.has('onUpdateQty', onUpdateQty),
-    );
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onRemove', onRemove));
+    properties
+      ..add(DiagnosticsProperty<CartItem>('item', item))
+      ..add(
+        ObjectFlagProperty<void Function(int)>.has('onUpdateQty', onUpdateQty),
+      )
+      ..add(ObjectFlagProperty<VoidCallback>.has('onRemove', onRemove));
   }
 }

@@ -785,10 +785,11 @@ class _SupportButton extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<IconData>('icon', icon));
-    properties.add(StringProperty('title', title));
-    properties.add(StringProperty('subtitle', subtitle));
-    properties.add(ColorProperty('color', color));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+    properties
+      ..add(DiagnosticsProperty<IconData>('icon', icon))
+      ..add(StringProperty('title', title))
+      ..add(StringProperty('subtitle', subtitle))
+      ..add(ColorProperty('color', color))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }
