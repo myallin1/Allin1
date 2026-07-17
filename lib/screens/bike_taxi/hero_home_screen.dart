@@ -1537,7 +1537,13 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     return _PingCountdownDialog(
       requestId: requestId.toString(),
       pingData: Map<String, dynamic>.from(pingData),
-      onAccept: (id, data) => _acceptRide(id, data),
+      // dlgCtx is the dialog's own BuildContext (see onPressed in
+      // _PingCountdownDialogState) — passed through so _acceptRide can
+      // pop the dialog's own route itself, right before pushing
+      // CaptainRideScreen, instead of racing a delayed pop from the
+      // dialog side against _acceptRide's internal Navigator.push.
+      onAccept: (id, data, dlgCtx) =>
+          _acceptRide(id, data, dialogContext: dlgCtx),
       onReject: (id) => _rejectRide(id),
     );
   }
@@ -1647,7 +1653,8 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
   // Accept a ride from Firestore — DISPATCH v2.0
   Future<void> _acceptRide(
-      String requestId, Map<String, dynamic> pingData) async {
+      String requestId, Map<String, dynamic> pingData,
+      {BuildContext? dialogContext}) async {
     if (_user == null) return;
     setState(() => _accepting = true);
     debugPrint('[HeroHomeScreen] Accepting ride via RTDB: $requestId');
@@ -1760,6 +1767,38 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           heroId: uid,
         );
         debugPrint('✅ [RIDE ACCEPTED] firestoreDocId confirmed: $firestoreDocId');
+        // Pop the ACCEPT dialog's own route BEFORE pushing the ride
+        // screen. Previously the dialog popped itself (via its own
+        // ambient `context`) only after awaiting this whole method —
+        // but by then this push below had already landed on top of
+        // the still-open dialog route, so that later pop removed the
+        // freshly-pushed CaptainRideScreen instead of the dialog,
+        // leaving the dialog stuck open forever with its spinner
+        // running. Popping the dialog's own route here, right before
+        // the push, keeps the stack order correct: dialog closes,
+        // then the ride screen is pushed on a clean stack.
+        // ── DIAGNOSTIC LOGGING (temporary) ──────────────────────
+        // Investigating a report where this pop silently doesn't
+        // dismiss the dialog. These prints (and the isolated
+        // try/catch below) exist only to pinpoint which branch
+        // actually runs on the next test — no behavior change other
+        // than ensuring a pop-time exception can no longer prevent
+        // the push below from running.
+        debugPrint(
+          '🔍 [DIALOG-POP-CHECK] dialogContext=${dialogContext == null ? 'null' : 'non-null'} '
+          'mounted=${dialogContext?.mounted}',
+        );
+        if (dialogContext != null && dialogContext.mounted) {
+          try {
+            Navigator.pop(dialogContext);
+            debugPrint('🔍 [DIALOG-POP-CHECK] branch=popped (no exception)');
+          } catch (e, st) {
+            debugPrint('❌ [DIALOG-POP-ERROR] Navigator.pop(dialogContext) threw: $e\n$st');
+          }
+        } else {
+          debugPrint('🔍 [DIALOG-POP-CHECK] branch=skipped (null or unmounted)');
+        }
+        debugPrint('🔍 [DIALOG-POP-CHECK] about to call Navigator.push for CaptainRideScreen');
         Navigator.push(
             context,
             MaterialPageRoute<void>(
@@ -1768,6 +1807,18 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       }
     } catch (e) {
       debugPrint('[HeroHomeScreen] Accept ride error: $e');
+      // Previously this error was only logged to debugPrint — the hero
+      // got no feedback at all and was left stuck on the radar screen
+      // with no indication anything had gone wrong. Surface it so the
+      // hero knows to retry.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to accept ride — please try again.'),
+            backgroundColor: Color(0xFFE05555),
+          ),
+        );
+      }
     }
     if (mounted) setState(() => _accepting = false);
   }
@@ -4768,7 +4819,8 @@ class _HeroSoundboxPromoButton extends StatelessWidget {
 class _PingCountdownDialog extends StatefulWidget {
   final String requestId;
   final Map<String, dynamic> pingData;
-  final Function(String requestId, Map<String, dynamic> pingData) onAccept;
+  final Function(String requestId, Map<String, dynamic> pingData,
+      BuildContext dialogContext) onAccept;
   final Function(String requestId) onReject;
   const _PingCountdownDialog({
     required this.requestId,
@@ -4783,6 +4835,12 @@ class _PingCountdownDialog extends StatefulWidget {
 class _PingCountdownDialogState extends State<_PingCountdownDialog> {
   Timer? _countdownTimer;
   int _remainingSec = 15;
+  // Guards the ACCEPT button against firing before the previous tap's
+  // accept write has finished — previously this dialog popped itself
+  // immediately on tap without awaiting widget.onAccept(), so a slow or
+  // failed write left the hero stuck with no feedback (see onPressed
+  // below).
+  bool _isAccepting = false;
 
   @override
   void initState() {
@@ -5057,17 +5115,86 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
                     padding: const EdgeInsets.symmetric(vertical: 14)),
-                onPressed: () {
-                  _countdownTimer?.cancel();
-                  final data = Map<String, dynamic>.from(widget.pingData);
-                  widget.onAccept(widget.requestId, data);
-                  Navigator.pop(context);
-                },
-                child: const Text('ACCEPT',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 15)),
+                onPressed: _isAccepting
+                    ? null
+                    : () async {
+                        _countdownTimer?.cancel();
+                        setState(() => _isAccepting = true);
+                        final data =
+                            Map<String, dynamic>.from(widget.pingData);
+                        try {
+                          // Previously this fired widget.onAccept() without
+                          // awaiting it and popped the dialog on the very
+                          // next line — the dialog closed before the accept
+                          // write even started, so a slow/failed write left
+                          // the hero stuck on the radar with no feedback.
+                          // Awaiting here, plus a timeout, ensures we only
+                          // move on once the outcome is known.
+                          //
+                          // Note: we no longer pop the dialog here on
+                          // success. _acceptRide (via the dialogContext
+                          // passed as the 3rd arg below) now pops this
+                          // dialog's own route itself, right before it
+                          // pushes CaptainRideScreen — this avoids a race
+                          // where this dialog's own delayed pop (running
+                          // after the push already landed) ended up
+                          // popping the freshly-pushed ride screen instead
+                          // of the dialog. On failure/timeout below,
+                          // _acceptRide's success path (including its
+                          // dialog-pop) never runs, so this dialog stays
+                          // open and only resets its own accepting state.
+                          await (widget.onAccept(
+                                  widget.requestId, data, context)
+                              as Future<void>)
+                              .timeout(const Duration(seconds: 12));
+                        } on TimeoutException {
+                          if (mounted) {
+                            setState(() => _isAccepting = false);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Taking longer than expected — check your '
+                                  'connection and try again.',
+                                ),
+                                backgroundColor: Color(0xFFE05555),
+                              ),
+                            );
+                          }
+                          // Do NOT navigate/pop — the RTDB transaction is
+                          // atomic, so retapping ACCEPT safely no-ops if
+                          // the write actually did succeed server-side.
+                        } catch (e) {
+                          if (mounted) {
+                            setState(() => _isAccepting = false);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: const Text(
+                                  'Failed to accept ride — please try again.',
+                                ),
+                                backgroundColor: const Color(0xFFE05555),
+                              ),
+                            );
+                          }
+                          debugPrint(
+                            '[_PingCountdownDialog] Accept failed: $e',
+                          );
+                        }
+                      },
+                child: _isAccepting
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text('ACCEPT',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 15)),
               ),
             ),
           ),
