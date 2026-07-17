@@ -27,8 +27,9 @@ class TaskListItem extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<TaskModel>('task', task));
-    properties.add(ObjectFlagProperty<VoidCallback?>.has('onTap', onTap));
+    properties
+      ..add(DiagnosticsProperty<TaskModel>('task', task))
+      ..add(ObjectFlagProperty<VoidCallback?>.has('onTap', onTap));
   }
 }
 

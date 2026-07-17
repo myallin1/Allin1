@@ -399,8 +399,9 @@ class _StatChip extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('label', label));
-    properties.add(StringProperty('value', value));
+    properties
+      ..add(StringProperty('label', label))
+      ..add(StringProperty('value', value));
   }
 }
 

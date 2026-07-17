@@ -1045,8 +1045,9 @@ class _DayTile extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(IntProperty('day', day));
-    properties.add(DiagnosticsProperty<bool>('unlocked', unlocked));
-    properties.add(ObjectFlagProperty<VoidCallback?>.has('onTap', onTap));
+    properties
+      ..add(IntProperty('day', day))
+      ..add(DiagnosticsProperty<bool>('unlocked', unlocked))
+      ..add(ObjectFlagProperty<VoidCallback?>.has('onTap', onTap));
   }
 }

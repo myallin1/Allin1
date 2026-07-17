@@ -1845,8 +1845,7 @@ class _UserAssignmentsViewState extends State<_UserAssignmentsView> {
 
         final List<String> assignedUsers = List.from(
           doc.get('assignedUserIds') as List<dynamic>? ?? [],
-        );
-        assignedUsers.remove(userId);
+        )..remove(userId);
 
         await FirebaseFirestore.instance
             .collection('adminCredentials')

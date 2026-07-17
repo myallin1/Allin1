@@ -190,8 +190,8 @@ class CustomerApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AiActivationService()),
         ChangeNotifierProvider<SoundboxEasterEggService>(
           create: (_) {
-            final svc = SoundboxEasterEggService();
-            svc.init(); // loads SharedPreferences: tap count + permanent hide flag
+            // init() loads SharedPreferences: tap count + permanent hide flag
+            final svc = SoundboxEasterEggService()..init();
             return svc;
           },
         ),

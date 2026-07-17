@@ -115,8 +115,9 @@ class _Pill extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('text', text));
-    properties.add(ColorProperty('color', color));
+    properties
+      ..add(StringProperty('text', text))
+      ..add(ColorProperty('color', color));
   }
 }
 

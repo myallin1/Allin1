@@ -150,7 +150,8 @@ class DailyStreakTracker extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(IntProperty('currentStreak', currentStreak));
-    properties.add(IntProperty('longestStreak', longestStreak));
+    properties
+      ..add(IntProperty('currentStreak', currentStreak))
+      ..add(IntProperty('longestStreak', longestStreak));
   }
 }

@@ -830,9 +830,10 @@ class _HistoryCard extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<_HeroHistoryItem>('item', item));
-    properties.add(
-      ObjectFlagProperty<VoidCallback>.has('onReportIssue', onReportIssue),
-    );
+    properties
+      ..add(DiagnosticsProperty<_HeroHistoryItem>('item', item))
+      ..add(
+        ObjectFlagProperty<VoidCallback>.has('onReportIssue', onReportIssue),
+      );
   }
 }

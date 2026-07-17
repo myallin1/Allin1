@@ -143,8 +143,7 @@ class ProductCard extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties
-        .add(DiagnosticsProperty<Map<String, dynamic>>('product', product));
-    properties
-        .add(ObjectFlagProperty<VoidCallback>.has('onAddToCart', onAddToCart));
+      ..add(DiagnosticsProperty<Map<String, dynamic>>('product', product))
+      ..add(ObjectFlagProperty<VoidCallback>.has('onAddToCart', onAddToCart));
   }
 }

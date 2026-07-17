@@ -167,9 +167,8 @@ class _BouncingSoundboxOverlayState extends State<_BouncingSoundboxOverlay>
 
   void _handleTap() {
     HapticFeedback.lightImpact();
-    final service = context.read<SoundboxEasterEggService>();
-    service
-        .registerTap(); // async — fire and forget, UI updates via notifyListeners
+    // registerTap() is async — fire and forget, UI updates via notifyListeners
+    final service = context.read<SoundboxEasterEggService>()..registerTap();
     setState(() {
       _pulseScale = 1.14;
     });

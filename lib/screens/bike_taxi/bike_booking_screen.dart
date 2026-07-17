@@ -1800,8 +1800,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         ),
       );
     }
-    markers.addAll(_nearbyCaptainMarkersNotifier.value);
-    markers.addAll(_dummyHeroMarkersNotifier.value);
+    markers
+      ..addAll(_nearbyCaptainMarkersNotifier.value)
+      ..addAll(_dummyHeroMarkersNotifier.value);
     return markers;
   }
 

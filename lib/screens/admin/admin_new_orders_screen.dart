@@ -440,8 +440,9 @@ class _AssignHeroSheet extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('requestId', requestId));
-    properties.add(StringProperty('customerName', customerName));
+    properties
+      ..add(StringProperty('requestId', requestId))
+      ..add(StringProperty('customerName', customerName));
   }
 }
 
@@ -617,8 +618,9 @@ class ServiceRequestManualStatusControl extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(StringProperty('requestId', requestId));
-    properties.add(StringProperty('currentStatus', currentStatus));
+    properties
+      ..add(StringProperty('requestId', requestId))
+      ..add(StringProperty('currentStatus', currentStatus));
   }
 }
 

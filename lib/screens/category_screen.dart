@@ -28,8 +28,9 @@ class CategoryScreen extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(EnumProperty<Category>('category', category));
-    properties.add(IterableProperty<Map<String, dynamic>>('sellers', sellers));
+    properties
+      ..add(EnumProperty<Category>('category', category))
+      ..add(IterableProperty<Map<String, dynamic>>('sellers', sellers));
   }
 }
 
