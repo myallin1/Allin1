@@ -1550,7 +1550,10 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     }
   }
 
-  String _serviceRequestSummary(String requestType, Map details) {
+  String _serviceRequestSummary(
+    String requestType,
+    Map<dynamic, dynamic> details,
+  ) {
     switch (requestType) {
       case 'hero_booking':
         return (details['taskDescription'] as String?) ?? '';

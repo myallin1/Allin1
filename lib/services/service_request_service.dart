@@ -231,7 +231,10 @@ class ServiceRequestService {
   /// on the exact same document — the customer tracking screen cannot
   /// tell (and does not need to know) which side triggered the update.
   Future<void> advanceStatus(String requestId, String newStatus) async {
-    assert(kServiceRequestStatuses.contains(newStatus));
+    assert(
+      kServiceRequestStatuses.contains(newStatus),
+      'Unknown service request status: $newStatus',
+    );
     await FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)

@@ -546,8 +546,8 @@ class _AdsManagementScreenState extends State<AdsManagementScreen> {
         }).length;
         final views = docs.fold<int>(
           0,
-          (sum, d) =>
-              sum + ((d.data()! as Map<String, dynamic>)['views'] as int? ?? 0),
+          (acc, d) =>
+              acc + ((d.data()! as Map<String, dynamic>)['views'] as int? ?? 0),
         );
 
         return Container(

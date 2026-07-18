@@ -532,7 +532,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
             final totalRides = rides.length;
             final totalEarnings = rides.fold<num>(
               0,
-              (sum, ride) => sum + (ride['fare'] as num),
+              (acc, ride) => acc + (ride['fare'] as num),
             );
 
             return FutureBuilder<DocumentSnapshot>(

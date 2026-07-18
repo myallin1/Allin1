@@ -16,11 +16,11 @@ class HiveCache {
   static const ttlRideHistory = Duration(hours: 24);
   static const ttlActiveRide = Duration(hours: 4);
 
-  static Future<Box> _box() async {
+  static Future<Box<dynamic>> _box() async {
     if (Hive.isBoxOpen(_boxName)) {
-      return Hive.box(_boxName);
+      return Hive.box<dynamic>(_boxName);
     }
-    return await Hive.openBox(_boxName);
+    return Hive.openBox<dynamic>(_boxName);
   }
 
   static Future<void> put(
