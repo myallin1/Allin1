@@ -202,19 +202,19 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     try {
       final pickupLat = widget.ride.pickupLatitude ?? 11.3410;
       final pickupLng = widget.ride.pickupLongitude ?? 77.7172;
-      print('[RideSearch] _fetchNearbyHeroes: pickup=$pickupLat,$pickupLng');
+      debugPrint('[RideSearch] _fetchNearbyHeroes: pickup=$pickupLat,$pickupLng');
 
       final onlineSnap =
           await FirebaseDatabase.instance.ref('online_heroes').once();
 
       final onlineData = onlineSnap.snapshot.value as Map<dynamic, dynamic>?;
       if (onlineData == null || onlineData.isEmpty) {
-        print('[RideSearch] No online heroes found in RTDB');
+        debugPrint('[RideSearch] No online heroes found in RTDB');
         _heroesQueue = [];
         return;
       }
 
-      print(
+      debugPrint(
         '[RideSearch] RTDB returned ${onlineData.length} online hero entries',
       );
 
@@ -302,7 +302,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
 
         final distance =
             _haversineDistance(pickupLocation, LatLng(heroLat, heroLng));
-        print(
+        debugPrint(
           '[RideSearch] Hero $heroId: distance=${distance.toStringAsFixed(2)}km',
         );
         validHeroes.add({
@@ -314,7 +314,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         });
       }
 
-      print(
+      debugPrint(
         '[RideSearch] _fetchNearbyHeroes: sorted queue has ${validHeroes.length} heroes',
       );
       validHeroes.sort(
