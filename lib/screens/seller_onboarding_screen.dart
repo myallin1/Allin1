@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -93,10 +95,12 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
         return;
       }
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute<void>(
-          builder: (_) => SellerMenuSetupScreen(sellerId: uid),
+      unawaited(
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => SellerMenuSetupScreen(sellerId: uid),
+          ),
         ),
       );
     } catch (e) {

@@ -65,10 +65,12 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
       }
 
       if (seller == null) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute<void>(
-            builder: (_) => const SellerOnboardingScreen(),
+        unawaited(
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => const SellerOnboardingScreen(),
+            ),
           ),
         );
         return;
@@ -80,7 +82,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
       });
 
       _listenToOrders(uid);
-      _loadMenuItemCount(uid);
+      unawaited(_loadMenuItemCount(uid));
     } catch (e) {
       if (mounted) {
         setState(() => _isLoadingProfile = false);

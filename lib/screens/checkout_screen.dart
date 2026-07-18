@@ -126,7 +126,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final todayKey =
         'redeemed_${DateTime.now().toIso8601String().substring(0, 10)}';
     final redeemedToday = (HiveCache.get(todayKey) as int?) ?? 0;
-    HiveCache.put(todayKey, redeemedToday + _coinsToUse);
+    unawaited(HiveCache.put(todayKey, redeemedToday + _coinsToUse));
 
     // 6. Show success then navigate
     await Future<void>.delayed(const Duration(milliseconds: 150));

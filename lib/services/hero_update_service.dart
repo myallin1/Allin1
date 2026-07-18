@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -23,7 +25,7 @@ class HeroUpdateService {
   /// On Mobile: Downloads and installs the APK.
   Future<void> triggerUpdate(BuildContext context) async {
     if (kIsWeb) {
-      _handleWebUpdate(context);
+      unawaited(_handleWebUpdate(context));
     } else {
       await _handleMobileUpdate(context);
     }

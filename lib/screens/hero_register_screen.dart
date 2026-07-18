@@ -3,6 +3,8 @@
 // Allin1 Super App - Hero Onboarding
 // ================================================================
 
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -242,10 +244,12 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
         // ROUTING FIX: Do NOT sign the user out.
         // Navigate directly to the verification pending screen so the
         // hero can see their status and contact admin immediately.
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute<void>(
-            builder: (_) => HeroVerificationPendingScreen(heroId: user.uid),
+        unawaited(
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => HeroVerificationPendingScreen(heroId: user.uid),
+            ),
           ),
         );
       }

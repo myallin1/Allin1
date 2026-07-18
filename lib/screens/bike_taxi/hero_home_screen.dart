@@ -1067,9 +1067,11 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       return;
     }
     if (openedByUser) {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => const NotificationsScreen(),
+      unawaited(
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const NotificationsScreen(),
+          ),
         ),
       );
       return;
@@ -1873,11 +1875,15 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         debugPrint(
           '✅ [RIDE ACCEPTED] firestoreDocId confirmed: $firestoreDocId',
         );
-        Navigator.push(
-          context,
-          MaterialPageRoute<void>(
-            builder: (_) =>
-                CaptainRideScreen(ride: rideModel, rideDocId: firestoreDocId),
+        unawaited(
+          Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => CaptainRideScreen(
+                ride: rideModel,
+                rideDocId: firestoreDocId,
+              ),
+            ),
           ),
         );
       }

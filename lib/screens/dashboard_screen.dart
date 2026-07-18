@@ -219,7 +219,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         SetOptions(merge: true),
       );
 
-      HiveCache.put('lastCoinsBackupDate', now.toIso8601String());
+      unawaited(HiveCache.put('lastCoinsBackupDate', now.toIso8601String()));
       debugPrint(
         '[Dashboard] Silent backup completed: ${currentCoins.toStringAsFixed(0)} coins',
       );
@@ -341,7 +341,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         );
         if ((exit ?? false) && context.mounted) {
-          SystemNavigator.pop();
+          unawaited(SystemNavigator.pop());
         }
       },
       child: Scaffold(
@@ -2563,35 +2563,38 @@ Future<void> _checkForUpdates(BuildContext context) async {
   const msg =
       kIsWeb ? 'Please wait, app is updating...' : 'Checking for updates...';
 
-  showDialog<void>(
-    context: navigator.context,
-    barrierDismissible: false,
-    builder: (_) => AlertDialog(
-      backgroundColor: const Color(0xFF1A1A26),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 8),
-          const SizedBox(
-            width: 48,
-            height: 48,
-            child: CircularProgressIndicator(
-              strokeWidth: 3,
-              valueColor: AlwaysStoppedAnimation<Color>(kPink),
+  unawaited(
+    showDialog<void>(
+      context: navigator.context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A26),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            const SizedBox(
+              width: 48,
+              height: 48,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                valueColor: AlwaysStoppedAnimation<Color>(kPink),
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            msg,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.outfit(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+            const SizedBox(height: 20),
+            Text(
+              msg,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     ),
   );
@@ -2610,34 +2613,37 @@ Future<void> _checkForUpdates(BuildContext context) async {
       }
     }
   } else {
-    showDialog<void>(
-      context: navigator.context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A26),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Text('✅ ', style: TextStyle(fontSize: 20)),
-            Text(
-              'Up to Date',
-              style: GoogleFonts.outfit(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
+    unawaited(
+      showDialog<void>(
+        context: navigator.context,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A26),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Text('✅ ', style: TextStyle(fontSize: 20)),
+              Text(
+                'Up to Date',
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
+            ],
+          ),
+          content: Text(
+            'App is up to date!\nBackground updates are active via Shorebird OTA.',
+            style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13),
+          ),
+          actions: [
+            TextButton(
+              onPressed: navigator.pop,
+              child: const Text('Got it', style: TextStyle(color: kPink)),
             ),
           ],
         ),
-        content: Text(
-          'App is up to date!\nBackground updates are active via Shorebird OTA.',
-          style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-            onPressed: navigator.pop,
-            child: const Text('Got it', style: TextStyle(color: kPink)),
-          ),
-        ],
       ),
     );
   }

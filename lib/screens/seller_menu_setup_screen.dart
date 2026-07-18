@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -71,7 +73,7 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
           setState(() => _isLoadingSeller = false);
         }
       }
-      _loadExistingMenuItems();
+      unawaited(_loadExistingMenuItems());
     } catch (_) {
       final items = DefaultMenuData.filterByHotelType('both');
       _buildItemList(items);

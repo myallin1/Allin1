@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -90,13 +92,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         return;
       }
 
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute<void>(
-          builder: (_) => _isHeroSetup
-              ? const HeroDashboardShell()
-              : const DashboardScreen(),
+      unawaited(
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute<void>(
+            builder: (_) => _isHeroSetup
+                ? const HeroDashboardShell()
+                : const DashboardScreen(),
+          ),
+          (route) => false,
         ),
-        (route) => false,
       );
     } catch (error) {
       if (!mounted) {

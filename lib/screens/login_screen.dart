@@ -4,6 +4,8 @@
 // No Blaze plan needed · No brand verification · Works instantly
 // ================================================================
 
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -122,12 +124,14 @@ class _LoginScreenState extends State<LoginScreen>
           setState(() {
             _loading = false;
           });
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute<void>(
-              builder: (_) => ProfileSetupScreen(
-                preferredRole: _selectedUserType == UserType.hero
-                    ? UserType.hero
-                    : UserType.customer,
+          unawaited(
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute<void>(
+                builder: (_) => ProfileSetupScreen(
+                  preferredRole: _selectedUserType == UserType.hero
+                      ? UserType.hero
+                      : UserType.customer,
+                ),
               ),
             ),
           );

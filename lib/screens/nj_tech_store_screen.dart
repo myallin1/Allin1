@@ -4,6 +4,8 @@
 // Premium Grid UI + Category Modal + WhatsApp Enquiry
 // ================================================================
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -422,7 +424,7 @@ class NJTechStoreScreen extends StatelessWidget {
       onTap: () async {
         final uri = Uri.parse('tel:$_kNJPhone');
         if (await canLaunchUrl(uri)) {
-          launchUrl(uri);
+          unawaited(launchUrl(uri));
         }
       },
       child: Container(

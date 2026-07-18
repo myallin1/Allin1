@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../services/map_service.dart';
@@ -27,8 +29,10 @@ class _SplashSetupScreenState extends State<SplashSetupScreen> {
     }
 
     if (mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(builder: (_) => widget.nextScreen),
+      unawaited(
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute<void>(builder: (_) => widget.nextScreen),
+        ),
       );
     }
   }

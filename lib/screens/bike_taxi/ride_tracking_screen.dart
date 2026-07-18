@@ -480,9 +480,11 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     if (!mounted) {
       return;
     }
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const BikeBookingScreen()),
-      (route) => false,
+    unawaited(
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute<void>(builder: (_) => const BikeBookingScreen()),
+        (route) => false,
+      ),
     );
   }
 

@@ -53,10 +53,12 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
       if (!mounted) {
         return;
       }
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute<void>(builder: (_) => const HeroLoginScreen()),
-        (route) => false,
+      unawaited(
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute<void>(builder: (_) => const HeroLoginScreen()),
+          (route) => false,
+        ),
       );
       return;
     }
@@ -75,10 +77,14 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
           await FirebaseAuth.instance.signOut();
           await GoogleSignIn().signOut();
           if (mounted) {
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute<void>(builder: (_) => const HeroLoginScreen()),
-              (route) => false,
+            unawaited(
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => const HeroLoginScreen(),
+                ),
+                (route) => false,
+              ),
             );
           }
         });
@@ -114,10 +120,14 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
           await FirebaseAuth.instance.signOut();
           await GoogleSignIn().signOut();
           if (mounted) {
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute<void>(builder: (_) => const HeroLoginScreen()),
-              (route) => false,
+            unawaited(
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => const HeroLoginScreen(),
+                ),
+                (route) => false,
+              ),
             );
           }
         });

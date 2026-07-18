@@ -1712,42 +1712,46 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
 
       // ── Background Write: Start Firebase task without awaiting blocking ──
       debugPrint('🔥 [RIDE CREATION] About to create Firestore document...');
-      rideRef.set({
-        'rideId': rideRef.id,
-        'userId': user.uid,
-        'customerId': user.uid,
-        'customerPhone': customerPhone,
-        'pickupAddress': pickupAddress,
-        'dropAddress': dropAddress,
-        'pickupLatitude': _pickupLocation!['lat'],
-        'pickupLongitude': _pickupLocation!['lng'],
-        'dropLatitude': _dropLocation!['lat'],
-        'dropLongitude': _dropLocation!['lng'],
-        'fare': fare,
-        'estimatedFare': fare,
-        'distanceKm': normalizedDist,
-        'distance_km': normalizedDist,
-        'etaMinutes': _eta,
-        'vehicleType': vehicleType,
-        'category': _normalizeCategoryKey(vehicleType),
-        'vehicle_category': _normalizeCategoryKey(vehicleType),
-        'status': 'searching',
-        'createdAt': FieldValue.serverTimestamp(),
-        'heroId': null,
-        'captainId': null,
-        'heroName': null,
-        'heroPhone': null,
-        'heroVehicleNumber': null,
-        'heroModel': null,
-        'heroRating': null,
-        'heroEta': null,
-      }).then((_) {
-        debugPrint(
-          '🔥 [RIDE CREATION] Firestore document created successfully! Doc ID: ${rideRef.id}',
-        );
-      }).catchError((Object e) {
-        debugPrint('[BikeBookingScreen] Background ride creation failed: $e');
-      });
+      unawaited(
+        rideRef.set({
+          'rideId': rideRef.id,
+          'userId': user.uid,
+          'customerId': user.uid,
+          'customerPhone': customerPhone,
+          'pickupAddress': pickupAddress,
+          'dropAddress': dropAddress,
+          'pickupLatitude': _pickupLocation!['lat'],
+          'pickupLongitude': _pickupLocation!['lng'],
+          'dropLatitude': _dropLocation!['lat'],
+          'dropLongitude': _dropLocation!['lng'],
+          'fare': fare,
+          'estimatedFare': fare,
+          'distanceKm': normalizedDist,
+          'distance_km': normalizedDist,
+          'etaMinutes': _eta,
+          'vehicleType': vehicleType,
+          'category': _normalizeCategoryKey(vehicleType),
+          'vehicle_category': _normalizeCategoryKey(vehicleType),
+          'status': 'searching',
+          'createdAt': FieldValue.serverTimestamp(),
+          'heroId': null,
+          'captainId': null,
+          'heroName': null,
+          'heroPhone': null,
+          'heroVehicleNumber': null,
+          'heroModel': null,
+          'heroRating': null,
+          'heroEta': null,
+        }).then((_) {
+          debugPrint(
+            '🔥 [RIDE CREATION] Firestore document created successfully! Doc ID: ${rideRef.id}',
+          );
+        }).catchError((Object e) {
+          debugPrint(
+            '[BikeBookingScreen] Background ride creation failed: $e',
+          );
+        }),
+      );
 
       if (!mounted) {
         return;
