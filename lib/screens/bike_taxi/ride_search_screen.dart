@@ -621,7 +621,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       final finalRideId = docRef.id;
       debugPrint('[RideSearch] Ride finalized in Firestore: $finalRideId');
 
-      _foundCtrl.forward();
+      unawaited(_foundCtrl.forward());
       if (mounted) {
         setState(() {
           _captainFound = true;
@@ -683,7 +683,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     setState(() => _cancelled = true);
     _countTimer?.cancel();
     _pingCountdown?.cancel();
-    _rtdbRequestSub?.cancel();
+    unawaited(_rtdbRequestSub?.cancel());
     if (_requestId.isNotEmpty) {
       await FirebaseDatabase.instance
           .ref('active_ride_requests/$_requestId')
@@ -721,7 +721,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       _searchSeconds = 0;
       _rideStatus = 'searching';
     });
-    _radarCtrl.repeat();
+    unawaited(_radarCtrl.repeat());
     await _fetchNearbyHeroes();
     if (_heroesQueue.isNotEmpty) {
       _startCountTimer();

@@ -801,13 +801,13 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         _listenForHeroPings();
         _listenForServicePings();
       } else {
-        _heroPingSub?.cancel();
+        unawaited(_heroPingSub?.cancel());
         _heroPingSub = null;
         _stopServicePingListening();
       }
     } catch (e) {
       debugPrint('[HeroHomeScreen] syncOnlineStatus error: ');
-      _heroPingSub?.cancel();
+      unawaited(_heroPingSub?.cancel());
       _heroPingSub = null;
       _stopServicePingListening();
       if (mounted) {
@@ -938,12 +938,12 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         '[HeroHomeScreen] Notification permission: ${settings.authorizationStatus}',
       );
 
-      _foregroundMessageSub?.cancel();
+      unawaited(_foregroundMessageSub?.cancel());
       _foregroundMessageSub = FirebaseMessaging.onMessage.listen((message) {
         unawaited(_handleIncomingPush(message, openedByUser: false));
       });
 
-      _messageOpenedSub?.cancel();
+      unawaited(_messageOpenedSub?.cancel());
       _messageOpenedSub =
           FirebaseMessaging.onMessageOpenedApp.listen((message) {
         unawaited(_handleIncomingPush(message, openedByUser: true));

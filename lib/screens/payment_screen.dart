@@ -122,7 +122,7 @@ class _PaymentScreenState extends State<PaymentScreen>
           _paid = true;
           _awaitingHeroConfirmation = false;
         });
-        _successCtrl.forward();
+        unawaited(_successCtrl.forward());
         _snack('Payment confirmed! Thank you.', _green);
       }
     }

@@ -230,7 +230,7 @@ class CredentialCacheService {
       _startCleanupTimer();
 
       // Check if there are pending operations to sync
-      _checkPendingOperations();
+      unawaited(_checkPendingOperations());
     } catch (e) {
       _isInitialized = false;
       rethrow;

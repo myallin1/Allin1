@@ -92,12 +92,14 @@ class HeroRideNotificationService {
       // 🚀 FIX: Switched from AndroidSounds.ringtone to AndroidSounds.alarm.
       // This forces the sound through the ALARM stream (bypassing silent mode)
       // and plays at maximum alarm volume, ensuring the driver never misses a ride.
-      FlutterRingtonePlayer().play(
-        android: AndroidSounds.alarm,
-        ios: IosSounds.alarm,
-        looping: looping,
-        volume: 1,
-        asAlarm: true,
+      unawaited(
+        FlutterRingtonePlayer().play(
+          android: AndroidSounds.alarm,
+          ios: IosSounds.alarm,
+          looping: looping,
+          volume: 1,
+          asAlarm: true,
+        ),
       );
     } catch (e) {
       debugPrint('[HeroRideNotificationService] Ringtone play failed: $e');
@@ -109,7 +111,7 @@ class HeroRideNotificationService {
       return;
     }
     try {
-      FlutterRingtonePlayer().stop();
+      unawaited(FlutterRingtonePlayer().stop());
     } catch (e) {
       debugPrint('[HeroRideNotificationService] Ringtone stop failed: $e');
     }
