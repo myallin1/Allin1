@@ -81,7 +81,7 @@ class UpdateService {
     };
   }
 
-  List<String> _parseFeatureList(raw) {
+  List<String> _parseFeatureList(Object? raw) {
     if (raw is List) {
       return raw
           .map((item) => item?.toString().trim() ?? '')
@@ -99,7 +99,7 @@ class UpdateService {
         .toList(growable: false);
   }
 
-  bool _asBool(value) {
+  bool _asBool(Object? value) {
     if (value is bool) {
       return value;
     }
@@ -107,7 +107,7 @@ class UpdateService {
     return normalized == 'true' || normalized == '1' || normalized == 'yes';
   }
 
-  String _stringValue(value) {
+  String _stringValue(Object? value) {
     return value?.toString().trim() ?? '';
   }
 }

@@ -43,7 +43,7 @@ class CacheService {
   Future<void> _cacheData(
     Box<dynamic> box,
     String key,
-    data,
+    Object? data,
     Duration ttl,
   ) async {
     await box.put(key, data);

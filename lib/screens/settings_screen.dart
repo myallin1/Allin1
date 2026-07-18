@@ -129,7 +129,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return 'English';
   }
 
-  Future<void> _saveSetting(String key, value) async {
+  Future<void> _saveSetting(String key, Object? value) async {
     try {
       await _settingsBox.put(key, value);
     } catch (e) {

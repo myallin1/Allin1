@@ -141,7 +141,7 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
           setState(() => _onlineHeroes = heroes);
         }
       },
-      onError: (e) {
+      onError: (Object e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -178,7 +178,7 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
   }
 
   void _showDispatchDialog() {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

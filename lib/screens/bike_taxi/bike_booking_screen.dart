@@ -1745,7 +1745,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         debugPrint(
           '🔥 [RIDE CREATION] Firestore document created successfully! Doc ID: ${rideRef.id}',
         );
-      }).catchError((e) {
+      }).catchError((Object e) {
         debugPrint('[BikeBookingScreen] Background ride creation failed: $e');
       });
 

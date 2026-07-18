@@ -153,7 +153,7 @@ class OlaMapsProvider extends MapProvider {
     }
   }
 
-  List<dynamic> _extractPlaceList(data) {
+  List<dynamic> _extractPlaceList(Object? data) {
     if (data is List) {
       return data;
     }
@@ -184,7 +184,7 @@ class OlaMapsProvider extends MapProvider {
   }
 
   Map<String, dynamic>? _parsePlaceResult(
-    item, {
+    Object? item, {
     LatLng? fallbackPoint,
   }) {
     if (item is! Map) {
@@ -208,7 +208,7 @@ class OlaMapsProvider extends MapProvider {
     };
   }
 
-  String? _extractDisplayText(item) {
+  String? _extractDisplayText(Object? item) {
     if (item is! Map) {
       return null;
     }
@@ -243,7 +243,7 @@ class OlaMapsProvider extends MapProvider {
     return null;
   }
 
-  String? _extractPrimaryText(item) {
+  String? _extractPrimaryText(Object? item) {
     if (item is! Map) {
       return null;
     }
@@ -270,7 +270,7 @@ class OlaMapsProvider extends MapProvider {
     return null;
   }
 
-  double? _extractLatitude(item) {
+  double? _extractLatitude(Object? item) {
     if (item is! Map) {
       return null;
     }
@@ -282,7 +282,7 @@ class OlaMapsProvider extends MapProvider {
         _asDouble(_coordinateAt(coordinates, 1));
   }
 
-  double? _extractLongitude(item) {
+  double? _extractLongitude(Object? item) {
     if (item is! Map) {
       return null;
     }
@@ -297,14 +297,14 @@ class OlaMapsProvider extends MapProvider {
         _asDouble(_coordinateAt(coordinates, 0));
   }
 
-  dynamic _coordinateAt(coordinates, int index) {
+  dynamic _coordinateAt(Object? coordinates, int index) {
     if (coordinates is List && coordinates.length > index) {
       return coordinates[index];
     }
     return null;
   }
 
-  double? _asDouble(value) {
+  double? _asDouble(Object? value) {
     if (value is num) {
       return value.toDouble();
     }

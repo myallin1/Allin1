@@ -51,7 +51,7 @@ class _HeroBuddyFormScreenState extends State<HeroBuddyFormScreen> {
   }
 
   void _showTimeoutDialog() {
-    showDialog(
+    showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(

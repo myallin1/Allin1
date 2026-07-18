@@ -23,7 +23,7 @@ class HiveCache {
 
   static Future<void> put(
     String key,
-    value, {
+    Object? value, {
     Duration ttl = const Duration(minutes: 30),
   }) async {
     try {
