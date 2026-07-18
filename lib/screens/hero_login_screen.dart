@@ -3,6 +3,8 @@
 // Allin1 Super App - Hero Onboarding
 // ================================================================
 
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -175,16 +177,18 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
       }
       if (heroDoc.exists && _isApprovedHero(heroData)) {
         if (mounted) {
-          Navigator.pushReplacementNamed(context, '/hero-home');
+          unawaited(Navigator.pushReplacementNamed(context, '/hero-home'));
         }
         return;
       }
       if (heroDoc.exists && _isPendingHero(heroData)) {
         if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute<void>(
-              builder: (_) => const HeroPendingScreen(),
+          unawaited(
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => const HeroPendingScreen(),
+              ),
             ),
           );
         }
@@ -213,10 +217,12 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
 
       // 3) New user - redirect to registration
       if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute<void>(
-            builder: (_) => const HeroRegisterScreen(),
+        unawaited(
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => const HeroRegisterScreen(),
+            ),
           ),
         );
       }
@@ -275,16 +281,18 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
       }
       if (heroDoc.exists && _isApprovedHero(heroData)) {
         if (mounted) {
-          Navigator.pushReplacementNamed(context, '/hero-home');
+          unawaited(Navigator.pushReplacementNamed(context, '/hero-home'));
         }
         return;
       }
       if (heroDoc.exists && _isPendingHero(heroData)) {
         if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute<void>(
-              builder: (_) => const HeroPendingScreen(),
+          unawaited(
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => const HeroPendingScreen(),
+              ),
             ),
           );
         }
@@ -383,10 +391,12 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
       }
 
       if (!heroDoc.exists) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute<void>(
-            builder: (_) => const HeroRegisterScreen(),
+        unawaited(
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => const HeroRegisterScreen(),
+            ),
           ),
         );
         return;
@@ -396,15 +406,17 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
       await _syncHeroIdentityFields(user, heroData);
 
       if (_isApprovedHero(heroData)) {
-        Navigator.pushReplacementNamed(context, '/hero-home');
+        unawaited(Navigator.pushReplacementNamed(context, '/hero-home'));
         return;
       }
 
       if (_isPendingHero(heroData)) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute<void>(
-            builder: (_) => const HeroPendingScreen(),
+        unawaited(
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => const HeroPendingScreen(),
+            ),
           ),
         );
         return;
