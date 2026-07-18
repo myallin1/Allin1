@@ -29,7 +29,6 @@ class HeroRideNotificationService {
   // ── De-duplication guards ──────────────────────────────────
   static String? lastProcessedRideId;
   static DateTime? lastProcessedAt;
-  static const Duration _deduplicationWindow = Duration(seconds: 3);
 
   static Future<void> initialize() async {
     if (kIsWeb || _initialized) {

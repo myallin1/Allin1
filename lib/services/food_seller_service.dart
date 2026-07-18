@@ -7,7 +7,6 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/food_models.dart';
@@ -18,7 +17,6 @@ class FoodSellerService {
   static final FoodSellerService _instance = FoodSellerService._internal();
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // ── Collection References ─────────────────────────────────────
   CollectionReference get _sellersRef => _firestore.collection('sellers');

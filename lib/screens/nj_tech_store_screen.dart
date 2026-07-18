@@ -12,7 +12,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 // ── Brand Colors (matches dashboard theme) ───────────────────────
 const Color _kPink = Color(0xFFFF4FA3);
-const Color _kPinkDark = Color(0xFFBE2A7A);
 const Color _kNJDark = Color(0xFF130B28);
 const Color _kNJDark2 = Color(0xFF2A1060);
 const Color _kBg = Color(0xFFFFFFFF);

@@ -17,7 +17,6 @@ class _LandingPageState extends State<LandingPage> {
   static const Color _pink = Color(0xFFFF4FA3);
   static const Color _pinkSoft = Color(0xFFFF92C8);
   static const Color _text = Color(0xFFFFF5FB);
-  static const Color _muted = Color(0xFFDDA8C5);
   static const Color _border = Color(0x33FF92C8);
 
   late final Future<DeviceCompatProfile> _customerCompatFuture;

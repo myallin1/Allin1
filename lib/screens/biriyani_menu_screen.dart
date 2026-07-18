@@ -15,8 +15,6 @@ const Color _bBg = Color(0xFF0C0A14);
 const Color _bSurface = Color(0xFF15121F);
 const Color _bPink = Color(0xFFFF4FA3);
 const Color _bGold = Color(0xFFFFBB33);
-const Color _bOrange = Color(0xFFFF8A00);
-const Color _bGreen = Color(0xFF00E5A0);
 
 // ── Contact ──────────────────────────────────────────────────────
 const String _bPhone = '+918681869091';

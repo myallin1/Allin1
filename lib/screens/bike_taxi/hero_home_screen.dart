@@ -72,7 +72,6 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   static const Color _green = Color(0xFF00C853);
   static const Color _gold = Color(0xFFFFB347);
   static const Color _red = Color(0xFFFF5252);
-  static const Color _darkRed = Color(0xFFB00020);
   static const Color _purple = Color(0xFFBE5CFF);
   static const Color _njPink = Color(0xFFFF4FA3);
   static const Color _njPinkSoft = Color(0xFFFF9AC8);
@@ -150,8 +149,6 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   final Set<String> _shownServicePingIds = {};
 
   bool _isOnRide = false;
-  DateTime? _lastFirestoreLocationWriteAt;
-  Position? _lastFirestoreLocationPosition;
   DateTime? _lastFirestoreStatusWriteAt;
 
   DateTime _staleRideCutoff() => DateTime.now().subtract(_staleRideWindow);

@@ -13,7 +13,6 @@ const Color _card = Color(0xFF141420);
 const Color _card2 = Color(0xFF1A1A28);
 const Color _teal = Color(0xFF11998E);
 const Color _tealLight = Color(0xFF38EF7D);
-const Color _gold = Color(0xFFF5C542);
 const Color _text = Color(0xFFEEEEF5);
 const Color _muted = Color(0xFF7777A0);
 const Color _border = Color(0x267B6FE0);

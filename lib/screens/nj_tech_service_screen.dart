@@ -7,7 +7,6 @@ import 'package:url_launcher/url_launcher.dart';
 const Color _njSurface = Color(0xFF12121E);
 const Color _njCard = Color(0xFF1A1A2A);
 const Color _njPink = Color(0xFFFF4FA3);
-const Color _njPinkSoft = Color(0xFFFFA4CF);
 const Color _njWhite = Color(0xFFFFFBFE);
 const Color _njMuted = Color(0xFFB89AB0);
 const Color _njBorder = Color(0x1AFFFFFF);

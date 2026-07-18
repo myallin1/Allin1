@@ -14,8 +14,6 @@ import 'hero_pending_screen.dart';
 import 'hero_register_screen.dart';
 
 const Color _bg = Color(0xFF0A0A12);
-const Color _card = Color(0xFF1A1A2A);
-const Color _green = Color(0xFF00C853);
 const Color _gold = Color(0xFFFFBB00);
 const Color _text = Color(0xFFEEEEF5);
 const Color _muted = Color(0xFF7777A0);
@@ -34,7 +32,6 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _otpSent = false;
-  final bool _showEmailLogin = false;
   String _verificationId = '';
 
   bool _isApprovedHero(Map<String, dynamic>? heroData) {

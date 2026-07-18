@@ -39,9 +39,7 @@ class RideSearchScreen extends StatefulWidget {
 class _RideSearchScreenState extends State<RideSearchScreen>
     with TickerProviderStateMixin {
   static const Color _bg = Colors.white;
-  static const Color _card = Color(0xFFFFF7FB);
   static const Color _accent = Color(0xFFFF4FA3);
-  static const Color _gold = Color(0xFFFF4FA3);
   static const Color _green = Color(0xFFFF4FA3);
   static const Color _text = Color(0xFF3D1230);
   static const Color _muted = Color(0xFF8F5A78);
@@ -78,7 +76,6 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   String _captainPhone = '';
   String _captainModel = '';
   double _captainRating = 0;
-  final int _captainTrips = 0;
   int _captainEta = 5;
   String _rideOtp = '----';
   bool _heroAcceptedOverlayShown = false;
