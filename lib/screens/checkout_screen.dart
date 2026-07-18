@@ -102,7 +102,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Future<void> _processPayment(String method) async {
-    if (!await _canRedeemCoins(_coinsToUse)) return;
+    if (!await _canRedeemCoins(_coinsToUse)) {
+      return;
+    }
 
     // 1. Close the bottom sheet
     if (mounted) {

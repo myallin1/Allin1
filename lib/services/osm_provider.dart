@@ -26,7 +26,9 @@ class OSMProvider extends MapProvider {
 
   @override
   Future<List<Map<String, dynamic>>> search(String query) async {
-    if (query.trim().isEmpty) return [];
+    if (query.trim().isEmpty) {
+      return [];
+    }
 
     try {
       final response = await http.get(
@@ -68,7 +70,9 @@ class OSMProvider extends MapProvider {
   }
 
   Future<List<Map<String, dynamic>>> searchNearErode(String query) async {
-    if (query.trim().length < 3) return [];
+    if (query.trim().length < 3) {
+      return [];
+    }
 
     const west = _erodeCenterLng - _erodeRadiusDegrees;
     const east = _erodeCenterLng + _erodeRadiusDegrees;

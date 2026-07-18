@@ -340,7 +340,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
         );
-        if ((exit ?? false) && context.mounted) SystemNavigator.pop();
+        if ((exit ?? false) && context.mounted) {
+          SystemNavigator.pop();
+        }
       },
       child: Scaffold(
         key: _scaffoldKey,

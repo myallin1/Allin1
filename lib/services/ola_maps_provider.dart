@@ -71,7 +71,9 @@ class OlaMapsProvider extends MapProvider {
           }
 
           final label = _extractDisplayText(item);
-          if (label == null || label.trim().isEmpty) continue;
+          if (label == null || label.trim().isEmpty) {
+            continue;
+          }
 
           final geocoded = await _geocodeAddress(
             label.toLowerCase().contains('erode')
@@ -193,7 +195,9 @@ class OlaMapsProvider extends MapProvider {
 
     final lat = _extractLatitude(item) ?? fallbackPoint?.latitude;
     final lng = _extractLongitude(item) ?? fallbackPoint?.longitude;
-    if (lat == null || lng == null || (lat == 0.0 && lng == 0.0)) return null;
+    if (lat == null || lng == null || (lat == 0.0 && lng == 0.0)) {
+      return null;
+    }
 
     final full = _extractDisplayText(item) ?? 'Selected location';
     final name = _extractPrimaryText(item) ?? full.split(',').first.trim();

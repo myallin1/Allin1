@@ -1381,7 +1381,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           return;
         }
 
-        if (_shownServicePingIds.contains(requestId)) return;
+        if (_shownServicePingIds.contains(requestId)) {
+          return;
+        }
         _shownServicePingIds.add(requestId);
 
         debugPrint('[HeroHomeScreen] RTDB service ping received: $requestId');

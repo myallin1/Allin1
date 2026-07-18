@@ -163,7 +163,9 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
       return;
     }
     final uri = Uri.parse('tel:$phone');
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
   }
 
   @override

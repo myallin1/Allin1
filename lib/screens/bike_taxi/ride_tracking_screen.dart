@@ -196,7 +196,9 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
 
   String _normalizeHeroVehicleType(String? value) {
     final normalized = value?.trim().toLowerCase() ?? '';
-    if (normalized.contains('auto')) return 'auto';
+    if (normalized.contains('auto')) {
+      return 'auto';
+    }
     if (normalized.contains('car') ||
         normalized.contains('cab') ||
         normalized.contains('truck')) {

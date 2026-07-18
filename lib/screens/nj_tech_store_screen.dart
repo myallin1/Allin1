@@ -422,7 +422,9 @@ class NJTechStoreScreen extends StatelessWidget {
     return GestureDetector(
       onTap: () async {
         final uri = Uri.parse('tel:$_kNJPhone');
-        if (await canLaunchUrl(uri)) launchUrl(uri);
+        if (await canLaunchUrl(uri)) {
+          launchUrl(uri);
+        }
       },
       child: Container(
         padding: const EdgeInsets.all(18),
@@ -678,7 +680,9 @@ class _CategoryModalState extends State<_CategoryModal> {
   }
 
   Future<void> _sendWhatsApp() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
 
     setState(() => _sending = true);
 
@@ -734,7 +738,9 @@ _Please contact me regarding this service._''';
 
   Future<void> _callNow() async {
     final uri = Uri.parse('tel:$_kNJPhone');
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
   }
 
   @override

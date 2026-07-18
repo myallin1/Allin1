@@ -288,7 +288,10 @@ class ServiceRequestService {
     }
 
     final status = doc.data()?['status'] as String? ?? '';
-    if (status != 'pending') return; // Already progressed — nothing to do.
+    // Already progressed — nothing to do.
+    if (status != 'pending') {
+      return;
+    }
 
     await docRef.update({
       'status': 'admin_review',

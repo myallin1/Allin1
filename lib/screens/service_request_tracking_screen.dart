@@ -199,7 +199,9 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
                           IconButton(
                             onPressed: () async {
                               final uri = Uri.parse('tel:$heroPhone');
-                              if (await canLaunchUrl(uri)) await launchUrl(uri);
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri);
+                              }
                             },
                             icon:
                                 const Icon(Icons.call_rounded, color: _kGreen),

@@ -17,7 +17,9 @@ class HiveCache {
   static const ttlActiveRide = Duration(hours: 4);
 
   static Future<Box> _box() async {
-    if (Hive.isBoxOpen(_boxName)) return Hive.box(_boxName);
+    if (Hive.isBoxOpen(_boxName)) {
+      return Hive.box(_boxName);
+    }
     return await Hive.openBox(_boxName);
   }
 

@@ -61,7 +61,9 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
   }
 
   Future<void> _onSubmit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
 
     setState(() => _isSaving = true);
 

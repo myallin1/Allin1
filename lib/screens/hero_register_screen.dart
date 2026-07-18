@@ -112,7 +112,9 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
 
   String _normalizeVehicleType(String value) {
     final normalized = value.trim().toLowerCase();
-    if (normalized.contains('auto')) return 'auto';
+    if (normalized.contains('auto')) {
+      return 'auto';
+    }
     if (normalized.contains('emergency') || normalized.contains('manpower')) {
       return 'emergency_manpower';
     }

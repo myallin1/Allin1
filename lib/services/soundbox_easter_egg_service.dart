@@ -33,7 +33,10 @@ class SoundboxEasterEggService extends ChangeNotifier {
 
   // ── Called every time the bouncing button is tapped ──────────────
   Future<void> registerTap() async {
-    if (_isHiddenGlobally) return; // already permanently hidden
+    // already permanently hidden
+    if (_isHiddenGlobally) {
+      return;
+    }
 
     _tapCount += 1;
     notifyListeners();

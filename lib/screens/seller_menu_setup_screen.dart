@@ -105,7 +105,9 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
         }
       }
       _updateCount();
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {});
+      }
     } catch (_) {}
   }
 

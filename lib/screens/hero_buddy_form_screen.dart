@@ -89,7 +89,9 @@ class _HeroBuddyFormScreenState extends State<HeroBuddyFormScreen> {
             onPressed: () async {
               Navigator.pop(ctx);
               final uri = Uri.parse('tel:+$_phone');
-              if (await canLaunchUrl(uri)) launchUrl(uri);
+              if (await canLaunchUrl(uri)) {
+                unawaited(launchUrl(uri));
+              }
             },
             icon: const Icon(
               Icons.support_agent_rounded,
