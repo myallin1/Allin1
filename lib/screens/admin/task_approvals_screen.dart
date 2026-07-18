@@ -372,17 +372,16 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
           throw Exception('Pending coins insufficient!');
         }
 
-        // Safe to proceed - move from pending to verified
-        transaction.update(userRef, {
-          'pending_coins': FieldValue.increment(-coinsReward),
-          'verified_coins': FieldValue.increment(coinsReward),
-        });
-
-        // Update task status
-        transaction.update(taskRef, {
-          'status': 'approved',
-          'approvedAt': FieldValue.serverTimestamp(),
-        });
+        // Safe to proceed - move from pending to verified, update task status
+        transaction
+          ..update(userRef, {
+            'pending_coins': FieldValue.increment(-coinsReward),
+            'verified_coins': FieldValue.increment(coinsReward),
+          })
+          ..update(taskRef, {
+            'status': 'approved',
+            'approvedAt': FieldValue.serverTimestamp(),
+          });
       });
 
       if (mounted) {
@@ -424,15 +423,16 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
 
         final userRef = db.collection('users').doc(userId);
 
-        transaction.update(taskRef, {
-          'status': 'rejected',
-          'rejectedAt': FieldValue.serverTimestamp(),
-        });
-
-        // Refund pending coins (remove what was added on submission)
-        transaction.update(userRef, {
-          'pending_coins': FieldValue.increment(-coinsReward),
-        });
+        // Reject task, then refund pending coins (remove what was added on
+        // submission)
+        transaction
+          ..update(taskRef, {
+            'status': 'rejected',
+            'rejectedAt': FieldValue.serverTimestamp(),
+          })
+          ..update(userRef, {
+            'pending_coins': FieldValue.increment(-coinsReward),
+          });
       });
 
       if (mounted) {

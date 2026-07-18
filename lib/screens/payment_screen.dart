@@ -270,28 +270,28 @@ class _PaymentScreenState extends State<PaymentScreen>
           final totalRides =
               (heroSnap.data()?['totalRides'] as num?)?.toInt() ?? 0;
 
-          txn.set(
-            heroRef,
-            {
-              'walletBalance': heroBalance + _fare,
-              'totalEarnings': totalEarnings + _fare,
-              'totalRides': totalRides + 1,
-              'lastRideCompletedAt': FieldValue.serverTimestamp(),
-              'status': 'online',
-              'isAvailable': true,
-              'activeRideId': null,
-            },
-            SetOptions(merge: true),
-          );
-
-          txn.set(db.collection('wallet_transactions').doc(), {
-            'heroId': heroId,
-            'type': 'credit',
-            'amount': _fare,
-            'rideId': rideDocId,
-            'description': 'Wallet payment received for ride',
-            'timestamp': FieldValue.serverTimestamp(),
-          });
+          txn
+            ..set(
+              heroRef,
+              {
+                'walletBalance': heroBalance + _fare,
+                'totalEarnings': totalEarnings + _fare,
+                'totalRides': totalRides + 1,
+                'lastRideCompletedAt': FieldValue.serverTimestamp(),
+                'status': 'online',
+                'isAvailable': true,
+                'activeRideId': null,
+              },
+              SetOptions(merge: true),
+            )
+            ..set(db.collection('wallet_transactions').doc(), {
+              'heroId': heroId,
+              'type': 'credit',
+              'amount': _fare,
+              'rideId': rideDocId,
+              'description': 'Wallet payment received for ride',
+              'timestamp': FieldValue.serverTimestamp(),
+            });
         }
 
         txn.set(db.collection('wallet_transactions').doc(), {

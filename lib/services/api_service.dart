@@ -265,9 +265,8 @@ class ApiService {
     // Configure HTTP client with connection pooling (Not supported on Web)
     if (!kIsWeb) {
       (_dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
-        final client = HttpClient();
         // Connection pooling settings
-        client
+        final client = HttpClient()
           ..maxConnectionsPerHost = 10
           ..idleTimeout = const Duration(seconds: 30);
         return client;

@@ -353,34 +353,36 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
         return;
       }
 
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            '✅ ${data['name'] ?? 'Hero'} approved successfully!',
-            style: GoogleFonts.notoSansTamil(color: Colors.white),
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              '✅ ${data['name'] ?? 'Hero'} approved successfully!',
+              style: GoogleFonts.notoSansTamil(color: Colors.white),
+            ),
+            backgroundColor: _green,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-          backgroundColor: _green,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+        );
     } catch (e) {
       if (!mounted) {
         return;
       }
 
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('❌ Approval failed: $e'),
-          backgroundColor: _red,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text('❌ Approval failed: $e'),
+            backgroundColor: _red,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
     }
   }
 
@@ -460,31 +462,33 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
         return;
       }
 
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('❌ ${data['name'] ?? 'Hero'} rejected.'),
-          backgroundColor: _red,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text('❌ ${data['name'] ?? 'Hero'} rejected.'),
+            backgroundColor: _red,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
     } catch (e) {
       if (!mounted) {
         return;
       }
 
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('❌ Rejection failed: $e'),
-          backgroundColor: _red,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text('❌ Rejection failed: $e'),
+            backgroundColor: _red,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
     }
   }
 }

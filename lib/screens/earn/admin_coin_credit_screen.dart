@@ -71,24 +71,24 @@ class _AdminCoinCreditScreenState extends State<AdminCoinCreditScreen> {
               'Run "Move to Pending" first!');
         }
 
-        // All guards passed — atomic credit
+        // All guards passed — atomic credit:
         // 1. Mark transaction verified
-        txn.update(txnRef, {
-          'status': 'verified',
-          'verifiedAt': FieldValue.serverTimestamp(),
-          'verifiedBy': 'admin_manual',
-        });
-
         // 2. Move coins: pending → verified (cannot go negative)
-        txn.set(
-          userRef,
-          {
-            'pending_coins': FieldValue.increment(-coins),
-            'verified_coins': FieldValue.increment(coins),
-            'lifetime_coins': FieldValue.increment(coins),
-          },
-          SetOptions(merge: true),
-        );
+        txn
+          ..update(txnRef, {
+            'status': 'verified',
+            'verifiedAt': FieldValue.serverTimestamp(),
+            'verifiedBy': 'admin_manual',
+          })
+          ..set(
+            userRef,
+            {
+              'pending_coins': FieldValue.increment(-coins),
+              'verified_coins': FieldValue.increment(coins),
+              'lifetime_coins': FieldValue.increment(coins),
+            },
+            SetOptions(merge: true),
+          );
       });
 
       if (mounted) {
@@ -132,16 +132,17 @@ class _AdminCoinCreditScreenState extends State<AdminCoinCreditScreen> {
     try {
       final db = FirebaseFirestore.instance;
       await db.runTransaction((txn) async {
-        txn.update(db.collection('coin_transactions').doc(txnId), {
-          'status': 'pending',
-        });
-        txn.set(
-          db.collection('users').doc(userId),
-          {
-            'pending_coins': FieldValue.increment(coins),
-          },
-          SetOptions(merge: true),
-        );
+        txn
+          ..update(db.collection('coin_transactions').doc(txnId), {
+            'status': 'pending',
+          })
+          ..set(
+            db.collection('users').doc(userId),
+            {
+              'pending_coins': FieldValue.increment(coins),
+            },
+            SetOptions(merge: true),
+          );
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

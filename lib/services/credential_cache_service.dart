@@ -477,8 +477,7 @@ class CredentialCacheService {
     if (data != null) {
       final operation = OfflineOperation.fromJson(
         jsonDecode(data as String) as Map<String, dynamic>,
-      );
-      operation
+      )
         ..retryCount = retryCount
         ..lastError = error;
 
