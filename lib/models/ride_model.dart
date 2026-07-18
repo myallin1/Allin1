@@ -82,8 +82,8 @@ class RideModel {
   };
 
   /// Calculates the estimated fare for a ride based on distance and vehicle type.
-  /// Standard logic: baseFare covers the first [baseDistance] km.
-  /// Additional distance is charged at [perKm].
+  /// Standard logic: baseFare covers the first `baseDistance` km.
+  /// Additional distance is charged at `perKm`.
   static double calculateFare(
     double distanceKm,
     String vehicleType, {

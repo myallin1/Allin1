@@ -3154,8 +3154,6 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                     // the ride list even when rides were available.
                     // Rule: NEVER show a blocking loader once the stream is
                     // attached — use a compact top-bar spinner instead.
-                    snap.connectionState == ConnectionState.waiting &&
-                        !snap.hasData;
                     if (snap.hasError) {
                       // Auto-retry: reinitialise stream after 4s
                       Future.delayed(const Duration(seconds: 4), () {

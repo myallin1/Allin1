@@ -34,7 +34,7 @@ class FoodSellerService {
   // ================================================================
 
   /// Create a new seller profile in Firestore.
-  /// [sellerId] should match the Firebase Auth UID for seller users.
+  /// `sellerId` should match the Firebase Auth UID for seller users.
   Future<void> createSellerProfile(SellerModel seller) async {
     try {
       await _sellerDocRef(seller.id).set(seller.toJson());

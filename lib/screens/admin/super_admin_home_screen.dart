@@ -253,11 +253,7 @@ class SuperAdminHomeScreen extends StatelessWidget {
               final finalFare = (data['finalFare'] as num?)?.toDouble();
               final actualFare = (data['actualFare'] as num?)?.toDouble();
               final tipAmount = (data['tipAmount'] as num?)?.toDouble();
-              final estFare = (data['fare'] as num?)?.toDouble();
-              revenue += finalFare ??
-                  ((actualFare ?? 0) + (tipAmount ?? 0)) ??
-                  estFare ??
-                  0.0;
+              revenue += finalFare ?? ((actualFare ?? 0) + (tipAmount ?? 0));
             }
           }
           return Container(

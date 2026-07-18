@@ -533,13 +533,13 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          '${item.quantity ?? 1}x ${item.name ?? 'Unknown'}',
+                          '${item.quantity}x ${item.name}',
                           style:
                               GoogleFonts.outfit(color: _muted, fontSize: 13),
                         ),
                       ),
                       Text(
-                        '₹${(item.totalPrice ?? 0).toStringAsFixed(0)}',
+                        '₹${item.totalPrice.toStringAsFixed(0)}',
                         style: GoogleFonts.outfit(color: _muted, fontSize: 13),
                       ),
                     ],

@@ -15,8 +15,10 @@ class RideSearchService {
   /// Passes through numbers that already carry a `+` prefix.
   static String normalizePhone(String phone) {
     final trimmed = phone.trim();
-    if (trimmed.startsWith('+')) return trimmed;
-    final digits = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
+    if (trimmed.startsWith('+')) {
+      return trimmed;
+    }
+    final digits = trimmed.replaceAll(RegExp('[^0-9]'), '');
     if (digits.length == 10) {
       return '+91$digits';
     }

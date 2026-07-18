@@ -55,14 +55,13 @@ class LocationService {
         return null;
       }
 
-      _currentPosition = await Geolocator.getCurrentPosition(
+      return _currentPosition = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy
               .high, // bestForNavigation only needed during active ride
           timeLimit: Duration(seconds: 15),
         ),
       );
-      return _currentPosition;
     } catch (e) {
       return null;
     }
@@ -78,8 +77,7 @@ class LocationService {
         return null;
       }
 
-      _currentPosition = await Geolocator.getLastKnownPosition();
-      return _currentPosition;
+      return _currentPosition = await Geolocator.getLastKnownPosition();
     } catch (e) {
       return null;
     }
