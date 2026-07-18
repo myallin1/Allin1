@@ -28,7 +28,7 @@ class _SplashSetupScreenState extends State<SplashSetupScreen> {
 
     if (mounted) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => widget.nextScreen),
+        MaterialPageRoute<void>(builder: (_) => widget.nextScreen),
       );
     }
   }

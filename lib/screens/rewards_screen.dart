@@ -217,7 +217,9 @@ class _RewardsScreenState extends State<RewardsScreen>
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const GuruChatScreen()),
+                MaterialPageRoute<void>(
+                  builder: (_) => const GuruChatScreen(),
+                ),
               );
             },
             child: Container(

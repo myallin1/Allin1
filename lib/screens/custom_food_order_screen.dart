@@ -82,7 +82,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
       }
       await Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
+        MaterialPageRoute<void>(
           builder: (_) => ServiceRequestTrackingScreen(
             requestId: requestId,
             requestType: 'custom_food_order',

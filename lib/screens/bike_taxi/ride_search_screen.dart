@@ -462,7 +462,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       // FIX: This loop now ACTUALLY BLOCKS because _startSequentialPinging
       // is awaited by _startRideCreation. Each 1-second delay is real.
       for (int w = 0; w < 10; w++) {
-        await Future.delayed(const Duration(seconds: 1));
+        await Future<void>.delayed(const Duration(seconds: 1));
 
         // Early exit if ride was accepted/cancelled while waiting
         if (_rideFinalized || _captainFound) {

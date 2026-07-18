@@ -112,7 +112,7 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
       }
       await Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
+        MaterialPageRoute<void>(
           builder: (_) => ServiceRequestTrackingScreen(
             requestId: requestId,
             requestType: 'grocery_order',

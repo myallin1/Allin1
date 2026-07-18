@@ -75,7 +75,7 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
       }
       await Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
+        MaterialPageRoute<void>(
           builder: (_) => ServiceRequestTrackingScreen(
             requestId: requestId,
             requestType: 'custom_order',

@@ -77,7 +77,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
       }
       await Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
+        MaterialPageRoute<void>(
           builder: (_) => ServiceRequestTrackingScreen(
             requestId: requestId,
             requestType: 'hero_booking',

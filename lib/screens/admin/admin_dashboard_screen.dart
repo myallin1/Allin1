@@ -614,7 +614,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               const Icon(Icons.map_rounded, color: Color(0xFFFF4FA3), size: 22),
           onPressed: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const AdminHeroDispatchScreen()),
+            MaterialPageRoute<void>(
+              builder: (_) => const AdminHeroDispatchScreen(),
+            ),
           ),
           tooltip: 'Dispatch Heroes',
         ),
@@ -626,7 +628,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
           onPressed: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const AdminRideTrackingScreen()),
+            MaterialPageRoute<void>(
+              builder: (_) => const AdminRideTrackingScreen(),
+            ),
           ),
           tooltip: 'Track Active Rides',
         ),
