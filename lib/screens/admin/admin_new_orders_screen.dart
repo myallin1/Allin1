@@ -676,7 +676,9 @@ class _ServiceRequestManualStatusControlState
             currentIndex < kServiceRequestAdvanceOrder.length - 1
         ? kServiceRequestAdvanceOrder[currentIndex + 1]
         : null;
-    if (nextStatus == null) return const SizedBox.shrink();
+    if (nextStatus == null) {
+      return const SizedBox.shrink();
+    }
 
     return SizedBox(
       width: double.infinity,

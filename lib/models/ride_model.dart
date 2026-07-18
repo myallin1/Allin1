@@ -89,7 +89,9 @@ class RideModel {
     String vehicleType, {
     Map<String, dynamic>? fares,
   }) {
-    if (distanceKm <= 0) return 0;
+    if (distanceKm <= 0) {
+      return 0;
+    }
 
     // Use provided fares or fallback to hardcoded defaults
     final vehicleFares = fares?[vehicleType] as Map<String, dynamic>? ??

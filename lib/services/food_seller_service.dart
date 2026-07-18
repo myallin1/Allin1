@@ -64,7 +64,9 @@ class FoodSellerService {
   Future<SellerModel?> getSeller(String sellerId) async {
     try {
       final doc = await _sellerDocRef(sellerId).get();
-      if (!doc.exists) return null;
+      if (!doc.exists) {
+        return null;
+      }
       final data = doc.data()! as Map<String, dynamic>;
       return SellerModel.fromJson(data);
     } catch (e) {
@@ -287,7 +289,9 @@ class FoodSellerService {
   Future<FoodOrderModel?> getOrderById(String orderId) async {
     try {
       final doc = await _ordersRef.doc(orderId).get();
-      if (!doc.exists) return null;
+      if (!doc.exists) {
+        return null;
+      }
       final data = doc.data()! as Map<String, dynamic>;
       return FoodOrderModel.fromJson(data);
     } catch (e) {
@@ -321,10 +325,14 @@ class FoodSellerService {
   Future<bool> cancelOrder(String orderId, {String? reason}) async {
     try {
       final orderDoc = await _ordersRef.doc(orderId).get();
-      if (!orderDoc.exists) return false;
+      if (!orderDoc.exists) {
+        return false;
+      }
 
       final data = orderDoc.data()! as Map<String, dynamic>;
-      if (data['status'] != 'placed') return false;
+      if (data['status'] != 'placed') {
+        return false;
+      }
 
       await _ordersRef.doc(orderId).update({
         'status': 'cancelled',

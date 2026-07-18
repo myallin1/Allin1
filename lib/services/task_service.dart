@@ -239,7 +239,9 @@ class TaskService {
   Future<List<TaskCompletionModel>> getPendingCompletions() async {
     try {
       final userId = _auth.currentUser?.uid;
-      if (userId == null) return [];
+      if (userId == null) {
+        return [];
+      }
 
       final snapshot = await _firestore
           .collection('task_completions')
@@ -262,7 +264,9 @@ class TaskService {
   Future<List<TaskCompletionModel>> getVerifiedCompletions() async {
     try {
       final userId = _auth.currentUser?.uid;
-      if (userId == null) return [];
+      if (userId == null) {
+        return [];
+      }
 
       final snapshot = await _firestore
           .collection('task_completions')

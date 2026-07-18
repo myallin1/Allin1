@@ -96,7 +96,9 @@ class CacheService {
 
   List<Map<String, dynamic>>? getSellers(String category) {
     final data = _getCachedData(_sellersBox, category);
-    if (data == null) return null;
+    if (data == null) {
+      return null;
+    }
     return List<dynamic>.from(data as Iterable? ?? [])
         .cast<Map<String, dynamic>>();
   }
@@ -115,7 +117,9 @@ class CacheService {
 
   List<Map<String, dynamic>>? getProducts(String sellerId) {
     final data = _getCachedData(_productsBox, sellerId);
-    if (data == null) return null;
+    if (data == null) {
+      return null;
+    }
     return List<dynamic>.from(data as Iterable? ?? [])
         .cast<Map<String, dynamic>>();
   }
@@ -131,7 +135,9 @@ class CacheService {
 
   Map<String, dynamic>? getSettings() {
     final data = _getCachedData(_settingsBox, 'platform_settings');
-    if (data == null) return null;
+    if (data == null) {
+      return null;
+    }
     return Map<String, dynamic>.from(data as Map? ?? {});
   }
 
@@ -146,7 +152,9 @@ class CacheService {
 
   List<Map<String, dynamic>>? getAds() {
     final data = _getCachedData(_adsBox, 'local_ads');
-    if (data == null) return null;
+    if (data == null) {
+      return null;
+    }
     return List<dynamic>.from(data as Iterable? ?? [])
         .cast<Map<String, dynamic>>();
   }
@@ -162,7 +170,9 @@ class CacheService {
 
   Map<String, dynamic>? getRideFares() {
     final data = _getCachedData(_rideFaresBox, 'ride_fares');
-    if (data == null) return null;
+    if (data == null) {
+      return null;
+    }
     return Map<String, dynamic>.from(data as Map? ?? {});
   }
 

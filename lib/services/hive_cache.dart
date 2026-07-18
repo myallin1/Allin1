@@ -41,7 +41,9 @@ class HiveCache {
     try {
       final box = await _box();
       final raw = box.get(key);
-      if (raw == null) return null;
+      if (raw == null) {
+        return null;
+      }
 
       final entry = Map<String, dynamic>.from(raw as Map);
       final expiresAt = (entry['expiresAt'] as int?) ?? 0;
@@ -71,7 +73,9 @@ class HiveCache {
     try {
       final box = await _box();
       final raw = box.get(key);
-      if (raw == null) return false;
+      if (raw == null) {
+        return false;
+      }
 
       final entry = Map<String, dynamic>.from(raw as Map);
       final expiresAt = (entry['expiresAt'] as int?) ?? 0;

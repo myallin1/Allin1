@@ -227,7 +227,9 @@ class WalletService {
   }) async {
     try {
       final userId = _auth.currentUser?.uid;
-      if (userId == null) return false;
+      if (userId == null) {
+        return false;
+      }
 
       if (isPending) {
         // Credit to pending coins (awaiting affiliate verification)
@@ -266,7 +268,9 @@ class WalletService {
   }) async {
     try {
       final userId = _auth.currentUser?.uid;
-      if (userId == null) return [];
+      if (userId == null) {
+        return [];
+      }
 
       Query query = _firestore
           .collection('wallet_transactions')

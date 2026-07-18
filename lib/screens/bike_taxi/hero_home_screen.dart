@@ -357,7 +357,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
   bool _rideTargetsCurrentHero(Map<String, dynamic> data) {
     final uid = _user?.uid;
-    if (uid == null || uid.isEmpty) return false;
+    if (uid == null || uid.isEmpty) {
+      return false;
+    }
     final status = data['status'] as String?;
     final heroId = data['heroId'] as String?;
     final captainId = data['captainId'] as String?;
@@ -372,7 +374,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     }
 
     if (status == 'searching') {
-      if (targetedHeroId == null || targetedHeroId.isEmpty) return true;
+      if (targetedHeroId == null || targetedHeroId.isEmpty) {
+        return true;
+      }
       return targetedHeroId == uid;
     }
     if (status == 'assigned') {
@@ -2160,7 +2164,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   // simple 3-button status-advance control.
   Widget _buildActiveServiceRequestsBanner() {
     final uid = _user?.uid;
-    if (uid == null) return const SizedBox.shrink();
+    if (uid == null) {
+      return const SizedBox.shrink();
+    }
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance

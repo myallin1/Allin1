@@ -236,7 +236,9 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   }
 
   Widget _buildOnlineToggle() {
-    if (_seller == null) return const SizedBox.shrink();
+    if (_seller == null) {
+      return const SizedBox.shrink();
+    }
     final isOpen = _seller!.isOpen;
 
     return GestureDetector(

@@ -122,7 +122,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       {'code': 'tamil_tech', 'name': 'Tamil + Tech'},
     ];
     for (final lang in languages) {
-      if (lang['code'] == code) return lang['name']!;
+      if (lang['code'] == code) {
+        return lang['name']!;
+      }
     }
     return 'English';
   }

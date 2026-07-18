@@ -165,7 +165,9 @@ class _ApprovedHeroesScreenState extends State<ApprovedHeroesScreen> {
 
                 // Apply client-side search filter
                 final filtered = docs.where((doc) {
-                  if (_searchQuery.isEmpty) return true;
+                  if (_searchQuery.isEmpty) {
+                    return true;
+                  }
                   final data = doc.data()! as Map<String, dynamic>;
                   final name = (data['captainName'] as String? ??
                           data['name'] as String? ??

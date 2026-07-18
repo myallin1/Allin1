@@ -107,7 +107,9 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   // ─── LOCAL DETERMINISTIC OTP GENERATOR (NO DB REQUIRED) ───
   String _generateLocalOtp(String docId) {
     final cleanId = docId.trim().replaceAll(RegExp(r'\s+'), '');
-    if (cleanId.isEmpty) return '1234';
+    if (cleanId.isEmpty) {
+      return '1234';
+    }
     final hash = cleanId.hashCode.abs();
     return (1000 + (hash % 9000)).toString(); // Generates 1000-9999
   }
@@ -1768,11 +1770,15 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   }
 
   double _calculateFareFromDistance(double km) {
-    if (km <= 0) return 25;
+    if (km <= 0) {
+      return 25;
+    }
     const double baseFare = 25;
     const double baseDistance = 1;
     const double perKm = 6;
-    if (km <= baseDistance) return baseFare;
+    if (km <= baseDistance) {
+      return baseFare;
+    }
     return (baseFare + ((km - baseDistance) * perKm)).roundToDouble();
   }
 

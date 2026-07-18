@@ -17,7 +17,9 @@ class RideSearchService {
     final trimmed = phone.trim();
     if (trimmed.startsWith('+')) return trimmed;
     final digits = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.length == 10) return '+91$digits';
+    if (digits.length == 10) {
+      return '+91$digits';
+    }
     return '+$digits';
   }
 

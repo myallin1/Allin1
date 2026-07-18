@@ -748,7 +748,9 @@ class AdminCredentialService {
   /// Get user's assigned credentials count
   Future<int> getAssignedCredentialsCount() async {
     try {
-      if (!isLoggedIn) return 0;
+      if (!isLoggedIn) {
+        return 0;
+      }
 
       final userId = currentUserId!;
 

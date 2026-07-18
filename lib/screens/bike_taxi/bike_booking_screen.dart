@@ -1823,7 +1823,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   List<MapRoute> get _mapRoutes {
-    if (_routePoints.isEmpty) return const [];
+    if (_routePoints.isEmpty) {
+      return const [];
+    }
     return [
       MapRoute(
         points: _routePoints,

@@ -201,7 +201,9 @@ class OSMProvider extends MapProvider {
           // FIX #2: Explicitly type geometry as List?
           final geometry = route['geometry']?['coordinates'] as List?;
 
-          if (geometry == null) return null;
+          if (geometry == null) {
+            return null;
+          }
 
           // FIX #3: Safe coordinate conversion with (num).toDouble()
           final points = geometry.map<LatLng>((coord) {

@@ -31,8 +31,12 @@ class OlaMapsProvider extends MapProvider {
   @override
   Future<List<Map<String, dynamic>>> search(String query) async {
     final trimmedQuery = query.trim();
-    if (trimmedQuery.isEmpty) return [];
-    if (apiKey.isEmpty) return [];
+    if (trimmedQuery.isEmpty) {
+      return [];
+    }
+    if (apiKey.isEmpty) {
+      return [];
+    }
 
     try {
       final erodeBiasedQuery = trimmedQuery.toLowerCase().contains('erode')
@@ -79,7 +83,9 @@ class OlaMapsProvider extends MapProvider {
           }
         }
 
-        if (results.isNotEmpty) return _dedupeResults(results);
+        if (results.isNotEmpty) {
+          return _dedupeResults(results);
+        }
 
         final geocoded = await _geocodeAddress(erodeBiasedQuery);
         return geocoded == null ? [] : <Map<String, dynamic>>[geocoded];
@@ -92,7 +98,9 @@ class OlaMapsProvider extends MapProvider {
   }
 
   Future<Map<String, dynamic>?> reverseGeocode(LatLng point) async {
-    if (apiKey.isEmpty) return null;
+    if (apiKey.isEmpty) {
+      return null;
+    }
 
     try {
       final uri = Uri.https(
@@ -104,7 +112,9 @@ class OlaMapsProvider extends MapProvider {
         },
       );
       final response = await http.get(uri).timeout(const Duration(seconds: 10));
-      if (response.statusCode != 200) return null;
+      if (response.statusCode != 200) {
+        return null;
+      }
 
       final data = json.decode(response.body);
       final places = _extractPlaceList(data);
@@ -128,11 +138,15 @@ class OlaMapsProvider extends MapProvider {
         },
       );
       final response = await http.get(uri).timeout(const Duration(seconds: 10));
-      if (response.statusCode != 200) return null;
+      if (response.statusCode != 200) {
+        return null;
+      }
 
       final data = json.decode(response.body);
       final places = _extractPlaceList(data);
-      if (places.isNotEmpty) return _parsePlaceResult(places.first);
+      if (places.isNotEmpty) {
+        return _parsePlaceResult(places.first);
+      }
       return _parsePlaceResult(data);
     } catch (e) {
       return null;
@@ -140,8 +154,12 @@ class OlaMapsProvider extends MapProvider {
   }
 
   List<dynamic> _extractPlaceList(data) {
-    if (data is List) return data;
-    if (data is! Map) return const [];
+    if (data is List) {
+      return data;
+    }
+    if (data is! Map) {
+      return const [];
+    }
 
     for (final key in const <String>[
       'predictions',
@@ -152,10 +170,14 @@ class OlaMapsProvider extends MapProvider {
       'places',
     ]) {
       final value = data[key];
-      if (value is List) return value;
+      if (value is List) {
+        return value;
+      }
       if (value is Map) {
         final nested = _extractPlaceList(value);
-        if (nested.isNotEmpty) return nested;
+        if (nested.isNotEmpty) {
+          return nested;
+        }
       }
     }
     return const [];
@@ -165,7 +187,9 @@ class OlaMapsProvider extends MapProvider {
     item, {
     LatLng? fallbackPoint,
   }) {
-    if (item is! Map) return null;
+    if (item is! Map) {
+      return null;
+    }
 
     final lat = _extractLatitude(item) ?? fallbackPoint?.latitude;
     final lng = _extractLongitude(item) ?? fallbackPoint?.longitude;
@@ -185,7 +209,9 @@ class OlaMapsProvider extends MapProvider {
   }
 
   String? _extractDisplayText(item) {
-    if (item is! Map) return null;
+    if (item is! Map) {
+      return null;
+    }
 
     for (final key in const <String>[
       'formatted_address',
@@ -198,7 +224,9 @@ class OlaMapsProvider extends MapProvider {
       'vicinity',
     ]) {
       final value = item[key]?.toString().trim();
-      if (value != null && value.isNotEmpty) return value;
+      if (value != null && value.isNotEmpty) {
+        return value;
+      }
     }
 
     final structured = item['structured_formatting'];
@@ -216,26 +244,36 @@ class OlaMapsProvider extends MapProvider {
   }
 
   String? _extractPrimaryText(item) {
-    if (item is! Map) return null;
+    if (item is! Map) {
+      return null;
+    }
     for (final key in const <String>['name', 'main_text', 'title']) {
       final value = item[key]?.toString().trim();
-      if (value != null && value.isNotEmpty) return value;
+      if (value != null && value.isNotEmpty) {
+        return value;
+      }
     }
     final structured = item['structured_formatting'];
     if (structured is Map) {
       final value = structured['main_text']?.toString().trim();
-      if (value != null && value.isNotEmpty) return value;
+      if (value != null && value.isNotEmpty) {
+        return value;
+      }
     }
     final terms = item['terms'];
     if (terms is List && terms.isNotEmpty && terms.first is Map) {
       final value = (terms.first as Map)['value']?.toString().trim();
-      if (value != null && value.isNotEmpty) return value;
+      if (value != null && value.isNotEmpty) {
+        return value;
+      }
     }
     return null;
   }
 
   double? _extractLatitude(item) {
-    if (item is! Map) return null;
+    if (item is! Map) {
+      return null;
+    }
     final coordinates = item['geometry']?['coordinates'];
     return _asDouble(item['lat']) ??
         _asDouble(item['latitude']) ??
@@ -245,7 +283,9 @@ class OlaMapsProvider extends MapProvider {
   }
 
   double? _extractLongitude(item) {
-    if (item is! Map) return null;
+    if (item is! Map) {
+      return null;
+    }
     final coordinates = item['geometry']?['coordinates'];
     return _asDouble(item['lng']) ??
         _asDouble(item['lon']) ??
@@ -265,8 +305,12 @@ class OlaMapsProvider extends MapProvider {
   }
 
   double? _asDouble(value) {
-    if (value is num) return value.toDouble();
-    if (value is String) return double.tryParse(value.trim());
+    if (value is num) {
+      return value.toDouble();
+    }
+    if (value is String) {
+      return double.tryParse(value.trim());
+    }
     return null;
   }
 

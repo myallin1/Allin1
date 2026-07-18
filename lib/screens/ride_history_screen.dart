@@ -52,7 +52,9 @@ class RideHistoryScreen extends StatelessWidget {
                     );
                   }
                   final docs = snap.data?.docs ?? [];
-                  if (docs.isEmpty) return _emptyState();
+                  if (docs.isEmpty) {
+                    return _emptyState();
+                  }
                   return ListView.builder(
                     padding: const EdgeInsets.all(16),
                     itemCount: docs.length,

@@ -423,7 +423,9 @@ class DefaultMenuData {
 
   /// Filter items by hotelType ('veg', 'non-veg', 'both')
   static List<DefaultMenuItem> filterByHotelType(String hotelType) {
-    if (hotelType == 'both') return items;
+    if (hotelType == 'both') {
+      return items;
+    }
     if (hotelType == 'veg') {
       return items.where((item) => item.isVeg).toList();
     }

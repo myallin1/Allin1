@@ -474,14 +474,18 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
   // ── Helper: Open/Closed ─────────────────────────────────────
   bool _isOpen() {
     final hours = widget.seller['hours'] as Map<String, dynamic>?;
-    if (hours == null) return true;
+    if (hours == null) {
+      return true;
+    }
 
     final now = DateTime.now();
     final currentTime = now.hour * 60 + now.minute;
     final openTime = hours['open'] as int?;
     final closeTime = hours['close'] as int?;
 
-    if (openTime == null || closeTime == null) return true;
+    if (openTime == null || closeTime == null) {
+      return true;
+    }
     return currentTime >= openTime && currentTime <= closeTime;
   }
 

@@ -66,7 +66,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final int _coinsToUse = 0;
 
   Future<bool> _canRedeemCoins(int requestedCoins) async {
-    if (requestedCoins <= 0) return true;
+    if (requestedCoins <= 0) {
+      return true;
+    }
 
     final todayKey =
         'redeemed_${DateTime.now().toIso8601String().substring(0, 10)}';

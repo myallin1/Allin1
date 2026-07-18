@@ -113,7 +113,9 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
     _totalEnabled = 0;
     for (final entries in _categoryItems.values) {
       for (final entry in entries) {
-        if (entry.enabled) _totalEnabled++;
+        if (entry.enabled) {
+          _totalEnabled++;
+        }
       }
     }
   }
@@ -323,7 +325,9 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
       itemBuilder: (context, index) {
         final catKey = DefaultMenuData.categoryOrder[index];
         final items = _categoryItems[catKey];
-        if (items == null || items.isEmpty) return const SizedBox.shrink();
+        if (items == null || items.isEmpty) {
+          return const SizedBox.shrink();
+        }
 
         final label = DefaultMenuData.categoryLabels[catKey] ?? catKey;
         final isExpanded = _expandedCategories.contains(catKey);

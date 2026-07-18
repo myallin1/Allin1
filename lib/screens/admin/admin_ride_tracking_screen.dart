@@ -29,13 +29,21 @@ class AdminRideTrackingScreen extends StatelessWidget {
 
   double _readFare(Map<String, dynamic> d) {
     final finalFare = (d['finalFare'] as num?)?.toDouble();
-    if (finalFare != null) return finalFare;
+    if (finalFare != null) {
+      return finalFare;
+    }
     final actualFare = (d['actualFare'] as num?)?.toDouble();
-    if (actualFare != null) return actualFare;
+    if (actualFare != null) {
+      return actualFare;
+    }
     final lockedFare = (d['lockedFare'] as num?)?.toDouble();
-    if (lockedFare != null) return lockedFare;
+    if (lockedFare != null) {
+      return lockedFare;
+    }
     final estimatedFare = (d['estimatedFare'] as num?)?.toDouble();
-    if (estimatedFare != null) return estimatedFare;
+    if (estimatedFare != null) {
+      return estimatedFare;
+    }
     return (d['fare'] as num?)?.toDouble() ?? 0.0;
   }
 

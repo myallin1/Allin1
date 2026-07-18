@@ -108,7 +108,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   // ─── LOCAL DETERMINISTIC OTP GENERATOR (NO DB REQUIRED) ───
   String _generateLocalOtp(String docId) {
     final cleanId = docId.trim().replaceAll(RegExp(r'\s+'), '');
-    if (cleanId.isEmpty) return '1234';
+    if (cleanId.isEmpty) {
+      return '1234';
+    }
     // Platform-independent checksum — avoids String.hashCode, which
     // differs between native (VM) and web (dart2js/dart2wasm) builds,
     // causing OTP mismatches between mobile app and PWA.

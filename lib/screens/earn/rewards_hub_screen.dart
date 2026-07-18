@@ -1668,7 +1668,9 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
         }
         // No ads — hide gracefully
         final docs = snap.data?.docs ?? [];
-        if (docs.isEmpty) return const SizedBox.shrink();
+        if (docs.isEmpty) {
+          return const SizedBox.shrink();
+        }
 
         final ads = docs
             .map(

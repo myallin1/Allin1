@@ -559,7 +559,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 stream: _pendingHeroApprovalsStream,
                 builder: (context, snap) {
                   final count = snap.data?.docs.length ?? 0;
-                  if (count == 0) return const SizedBox.shrink();
+                  if (count == 0) {
+                    return const SizedBox.shrink();
+                  }
                   return Container(
                     padding: const EdgeInsets.all(3),
                     decoration: const BoxDecoration(

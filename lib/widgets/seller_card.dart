@@ -192,7 +192,9 @@ class SellerCard extends StatelessWidget {
   // ── Helper: Shop Emoji ───────────────────────────────────────
   String _getShopEmoji() {
     final emoji = seller['emoji'] as String?;
-    if (emoji != null && emoji.isNotEmpty) return emoji;
+    if (emoji != null && emoji.isNotEmpty) {
+      return emoji;
+    }
 
     // Fallback based on category
     switch (category) {
@@ -214,14 +216,18 @@ class SellerCard extends StatelessWidget {
   // ── Helper: Rating ───────────────────────────────────────────
   String _getRating() {
     final rating = seller['rating'] as num?;
-    if (rating == null) return 'New';
+    if (rating == null) {
+      return 'New';
+    }
     return rating.toStringAsFixed(1);
   }
 
   // ── Helper: Open/Closed ──────────────────────────────────────
   bool _isOpen() {
     final hours = seller['hours'] as Map<String, dynamic>?;
-    if (hours == null) return true;
+    if (hours == null) {
+      return true;
+    }
 
     final now = DateTime.now();
     final currentTime = now.hour * 60 + now.minute;
@@ -229,7 +235,9 @@ class SellerCard extends StatelessWidget {
     final openTime = hours['open'] as int?;
     final closeTime = hours['close'] as int?;
 
-    if (openTime == null || closeTime == null) return true;
+    if (openTime == null || closeTime == null) {
+      return true;
+    }
 
     return currentTime >= openTime && currentTime <= closeTime;
   }
