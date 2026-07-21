@@ -12,6 +12,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../../config/fare_rates.dart';
 import '../../models/ride_model.dart';
 import '../../services/category_gateway_service.dart';
 import '../../services/localization_service.dart';
@@ -982,6 +983,31 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     }
   }
 
+  /// Resolves the pre-ride fare estimate for the currently-selected
+  /// vehicle type at [distanceKm].
+  ///
+  /// Bike uses FareRates (hardcoded day/night rates) resolved against
+  /// the CURRENT time — booking-time rate is correct for a display
+  /// estimate; the hero's final bill independently re-resolves the
+  /// rate at completion time in hero_ride_screen.dart, since a ride can
+  /// cross the day/night boundary. Every other vehicle type is
+  /// unchanged — still RideModel.calculateFare() against the
+  /// Firestore-backed _fares map.
+  double _estimateFareFor(double distanceKm) {
+    if (_selectedVehicleTypeKey == 'bike') {
+      final perKm = FareRates.resolveBikePerKm(DateTime.now());
+      return FareRates.calculateBikeFare(
+        distanceKm: distanceKm,
+        perKm: perKm,
+      );
+    }
+    return RideModel.calculateFare(
+      distanceKm,
+      _selectedVehicleTypeKey,
+      fares: _fares,
+    );
+  }
+
   // ── Nearby Captains ───────────────────────────────────────────
   void _listenToNearbyCaptains() {
     _nearbyCaptainsSub =
@@ -1364,11 +1390,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         if (route != null) {
           _routeDistanceKm = route.distanceMeters / 1000.0;
           _routeEtaMinutes = (route.durationSeconds / 60.0).round();
-          _estimatedFare = RideModel.calculateFare(
-            _routeDistanceKm!,
-            _selectedVehicleTypeKey,
-            fares: _fares,
-          );
+          _estimatedFare = _estimateFareFor(_routeDistanceKm!);
         } else {
           _routeDistanceKm = null;
           _routeEtaMinutes = null;
@@ -1666,13 +1688,59 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         initialVehicleType: _selectedVehicleTypeKey,
         onConfirm: (vehicleType, fare) {
           Navigator.of(ctx).pop();
-          _createRide(vehicleType, fare, dist);
+          unawaited(_confirmBookingWithOptionalParcelDetails(vehicleType, fare, dist));
         },
       ),
     );
   }
 
-  Future<void> _createRide(String vehicleType, double fare, double dist) async {
+  /// Parcel bookings additionally collect who's receiving the parcel
+  /// before creating the ride, so the hero has a contact at drop-off.
+  /// Every other category proceeds straight to _createRide(), unchanged.
+  Future<void> _confirmBookingWithOptionalParcelDetails(
+    String vehicleType,
+    double fare,
+    double dist,
+  ) async {
+    if (vehicleType != 'parcel') {
+      await _createRide(vehicleType, fare, dist);
+      return;
+    }
+    final details = await showModalBottomSheet<Map<String, String>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => const _ParcelRecipientSheet(),
+    );
+    if (!mounted) {
+      return;
+    }
+    if (details == null) {
+      // Customer backed out of the recipient-details step — do not
+      // create the ride. Matches the existing cancel-the-sheet behavior
+      // for every other category (tapping outside VehicleSelectionBottomSheet
+      // also aborts booking without creating a ride).
+      return;
+    }
+    await _createRide(
+      vehicleType,
+      fare,
+      dist,
+      recipientName: details['name'],
+      recipientPhone: details['phone'],
+    );
+  }
+
+  Future<void> _createRide(
+    String vehicleType,
+    double fare,
+    double dist, {
+    String? recipientName,
+    String? recipientPhone,
+  }) async {
     debugPrint('🔥 [RIDE CREATION] Entered _createRide() method!');
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -1684,6 +1752,15 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
           MaterialPageRoute<void>(
             builder: (_) => const LoginScreen(
               presetUserType: UserType.customer,
+              // Without lockUserType this still rendered the full
+              // Hero / Customer / Admin selector. A customer who taps
+              // "book a ride" is, unambiguously, a customer — offering
+              // them a Hero or Admin login is confusing at best and an
+              // invitation to sign in to the wrong role at worst.
+              lockUserType: true,
+              lockedUserLabel: 'Customer',
+              title: 'Sign in to book',
+              subtitle: 'One quick step and your ride is on the way',
             ),
           ),
         );
@@ -1778,6 +1855,50 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
          'heroModel': null,
          'heroRating': null,
          'heroEta': null,
+         // ── Bike fare-rates fields (bike only) ──────────────────
+         // baseFare/baseDistance are the FareRates constants at the
+         // moment of booking — these don't change over the trip.
+         // routeDistanceKm is the road-route distance already computed
+         // for this estimate (falls back to haversine only if routing
+         // failed — see the _distance getter). hero_ride_screen.dart's
+         // _completeTrip() reads all three: baseFare/baseDistance
+         // directly, and routeDistanceKm as the distance floor so GPS
+         // undercounting during the ride can't produce a bill lower
+         // than what this same estimate was based on. Per-km rate is
+         // deliberately NOT written here — it's resolved at completion
+         // time, not booking time, since a ride can cross the
+         // day/night boundary.
+         if (vehicleType == 'bike') 'baseFare': FareRates.bikeBaseFare,
+         if (vehicleType == 'bike')
+           'baseDistance': FareRates.bikeBaseDistanceKm,
+         if (vehicleType == 'bike') 'routeDistanceKm': normalizedDist,
+         // ── Non-bike fare fields (auto/cab/parcel/mini_truck/lorry/
+         // emergency_manpower) — CONFIRMED BUG FIX ────────────────
+         // Previously these fields were never written for non-bike
+         // categories at all, so hero_ride_screen.dart's else-branch
+         // always fell back to its hardcoded defaults (baseFare 25.0,
+         // farePerKm 6.0 — bike's rate, not this category's real rate)
+         // and had no distance floor, so GPS-undercounted trips could
+         // settle at a flat ₹25 regardless of vehicle type or true
+         // distance. Fixed by writing each category's REAL rate here
+         // (same lookup table used for the customer's own estimate:
+         // RideModel.defaultFares) plus routeDistanceKm, giving every
+         // non-bike category the same distance-floor protection bike
+         // already has.
+         if (vehicleType != 'bike')
+           'baseFare': (RideModel.defaultFares[vehicleType] ??
+                   RideModel.defaultFares['bike']!)['baseFare'],
+         if (vehicleType != 'bike')
+           'farePerKm': (RideModel.defaultFares[vehicleType] ??
+                   RideModel.defaultFares['bike']!)['perKm'],
+         if (vehicleType != 'bike') 'routeDistanceKm': normalizedDist,
+         // ── Parcel recipient details (parcel only) ───────────────
+         // Collected via _ParcelRecipientSheet before this write.
+         // Surfaced to the hero on hero_ride_screen.dart.
+         if (vehicleType == 'parcel' && recipientName != null)
+           'recipientName': recipientName,
+         if (vehicleType == 'parcel' && recipientPhone != null)
+           'recipientPhone': recipientPhone,
        }).then((_) {
          debugPrint('🔥 [RIDE CREATION] Firestore document created successfully! Doc ID: ${rideRef.id}');
        }).catchError((dynamic e) {
@@ -2547,11 +2668,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     setState(() {
       _selectedCategory = category;
       if (_routeDistanceKm != null && _routeDistanceKm! > 0) {
-        _estimatedFare = RideModel.calculateFare(
-          _routeDistanceKm!,
-          _selectedVehicleTypeKey,
-          fares: _fares,
-        );
+        _estimatedFare = _estimateFareFor(_routeDistanceKm!);
       }
     });
     _refreshHeroMarkers();
@@ -3344,6 +3461,139 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
             },
           ),
       ],
+    );
+  }
+}
+
+/// Small, self-contained bottom sheet that collects the parcel
+/// recipient's name and phone number before a parcel ride is created.
+/// Display-only in the sense that it has no Firestore/ride knowledge —
+/// it just returns a Map<String, String> (or null if cancelled) to
+/// whoever opened it via showModalBottomSheet.
+class _ParcelRecipientSheet extends StatefulWidget {
+  const _ParcelRecipientSheet();
+
+  @override
+  State<_ParcelRecipientSheet> createState() => _ParcelRecipientSheetState();
+}
+
+class _ParcelRecipientSheetState extends State<_ParcelRecipientSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    Navigator.of(context).pop(<String, String>{
+      'name': _nameController.text.trim(),
+      'phone': _phoneController.text.trim(),
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Text(
+              'Recipient Details',
+              style: GoogleFonts.outfit(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Who should the hero hand this parcel to?',
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _nameController,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                labelText: 'Recipient Name',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              validator: (value) {
+                if ((value ?? '').trim().isEmpty) {
+                  return 'Enter recipient name';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
+              maxLength: 10,
+              decoration: InputDecoration(
+                labelText: 'Recipient Phone',
+                counterText: '',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              validator: (value) {
+                final input = (value ?? '').trim();
+                if (input.length != 10 || !RegExp(r'^[0-9]{10}$').hasMatch(input)) {
+                  return 'Enter a valid 10-digit number';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _submit,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: const Text('Confirm & Book'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

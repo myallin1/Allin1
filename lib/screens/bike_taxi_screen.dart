@@ -17,6 +17,7 @@
 //   [6] CameraFit.bounds padding syntax corrected
 // ================================================================
 
+import 'dart:async';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -24,12 +25,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:geocoding/geocoding.dart';
-import 'package:geolocator/geolocator.dart';
+// geocoding + geolocator were imported for the old _getCurrentLocation();
+// LocationService/MapService handle both jobs now.
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/location_service.dart';
+import '../services/map_service.dart';
+import 'location_picker_screen.dart';
 import 'payment_screen.dart';
 
 // ── Theme (matches main.dart exactly) ───────────────────────────
@@ -167,6 +171,24 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
   final FocusNode _pickupFocus = FocusNode();
   final FocusNode _dropFocus = FocusNode();
 
+  // ── Location search ──────────────────────────────────────────────
+  // Same pipeline as hero_booking_screen: MapService.search() is
+  // Ola-first (its autocomplete actually knows Erode shops and
+  // streets), falling back to Nominatim only when Ola returns nothing.
+  //
+  // This screen previously had NO search at all. The only "suggestions"
+  // were four hardcoded _recentPlaces entries with invented addresses
+  // and coordinates, and anything the customer typed by hand never
+  // produced a coordinate — see the _onChanged fix below for why that
+  // mattered a great deal.
+  final _mapService = MapService();
+  Timer? _pickupDebounce;
+  Timer? _dropDebounce;
+  List<Map<String, dynamic>> _pickupSuggestions = [];
+  List<Map<String, dynamic>> _dropSuggestions = [];
+  bool _pickupFetching = false;
+  bool _dropFetching = false;
+
   // Pulse anim for LIVE badge & promo
   late AnimationController _pulseCtrl;
   late Animation<double> _pulseAnim;
@@ -204,18 +226,40 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
     _dropCtrl.dispose();
     _pickupFocus.dispose();
     _dropFocus.dispose();
+    _pickupDebounce?.cancel();
+    _dropDebounce?.cancel();
     super.dispose();
   }
 
+  // Coordinates behind the two fields. Null means "this field has text
+  // but we do not know where it actually is".
+  //
+  // This distinction was the screen's most serious bug. _pickupSet and
+  // _dropSet used to be set purely from "is the text box non-empty",
+  // while _pickupPos/_dropPos only ever changed via the four hardcoded
+  // _recentPlaces or the current-location button. So a customer who
+  // TYPED an address got _pickupSet = true with _pickupPos still
+  // sitting at kPickupDefault — and the fare, the distance, the map
+  // route and the booking itself were all computed from a default
+  // coordinate that had nothing to do with what they typed.
+  //
+  // Now a field only counts as "set" once we have a real coordinate for
+  // it, which happens when they pick a suggestion, use their current
+  // location, or drop a pin on the map.
+  LatLng? _pickupResolved;
+  LatLng? _dropResolved;
+
   void _onChanged() {
-    final p = _pickupCtrl.text.trim().isNotEmpty;
-    final d = _dropCtrl.text.trim().isNotEmpty;
+    final p = _pickupResolved != null && _pickupCtrl.text.trim().isNotEmpty;
+    final d = _dropResolved != null && _dropCtrl.text.trim().isNotEmpty;
     if (p == _pickupSet && d == _dropSet) {
       return;
     }
     setState(() {
       _pickupSet = p;
       _dropSet = d;
+      if (p) _pickupPos = _pickupResolved!;
+      if (d) _dropPos = _dropResolved!;
     });
     if (p && d) {
       _slideCtrl.forward();
@@ -318,66 +362,332 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
   void _fillPlace(_Place p) {
     if (!_pickupSet) {
       _pickupCtrl.text = p.address;
-      setState(() => _pickupPos = p.latlng);
+      _pickupResolved = p.latlng;
+      _pickupSuggestions = [];
+      _onChanged();
       FocusScope.of(context).requestFocus(_dropFocus);
     } else if (!_dropSet) {
       _dropCtrl.text = p.address;
-      setState(() => _dropPos = p.latlng);
+      _dropResolved = p.latlng;
+      _dropSuggestions = [];
+      _onChanged();
       _dropFocus.unfocus();
     }
   }
 
-  Future<void> _getCurrentLocation() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
+  // ── Live search ──────────────────────────────────────────────────
+  // Typing invalidates whatever coordinate was attached to the field:
+  // the text no longer describes that point. The customer has to pick
+  // a suggestion (or use the map / their location) to make it real
+  // again, which is exactly what stops a hand-typed address from being
+  // booked against a stale coordinate.
+  void _onPickupTyped(String query) {
+    _pickupResolved = null;
+    _pickupDebounce?.cancel();
+    _onChanged();
+    final q = query.trim();
+    if (q.length < 3) {
+      if (mounted) setState(() => _pickupSuggestions = []);
       return;
     }
+    setState(() => _pickupFetching = true);
+    _pickupDebounce = Timer(const Duration(milliseconds: 450), () async {
+      final results = await _mapService.search(q);
+      if (!mounted || _pickupCtrl.text.trim() != q) return;
+      setState(() {
+        _pickupSuggestions = results;
+        _pickupFetching = false;
+      });
+    });
+  }
 
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        return;
-      }
-    }
-
-    if (permission == LocationPermission.deniedForever) {
+  void _onDropTyped(String query) {
+    _dropResolved = null;
+    _dropDebounce?.cancel();
+    _onChanged();
+    final q = query.trim();
+    if (q.length < 3) {
+      if (mounted) setState(() => _dropSuggestions = []);
       return;
     }
+    setState(() => _dropFetching = true);
+    _dropDebounce = Timer(const Duration(milliseconds: 450), () async {
+      final results = await _mapService.search(q);
+      if (!mounted || _dropCtrl.text.trim() != q) return;
+      setState(() {
+        _dropSuggestions = results;
+        _dropFetching = false;
+      });
+    });
+  }
 
-    setState(() => _pickupCtrl.text = 'Fetching location...');
+  void _applySuggestion(Map<String, dynamic> s, {required bool isPickup}) {
+    final lat = (s['lat'] as num?)?.toDouble();
+    final lng = (s['lng'] as num?)?.toDouble();
+    if (lat == null || lng == null) return;
+    final label = (s['name'] as String?)?.trim().isNotEmpty ?? false
+        ? (s['name'] as String).trim()
+        : (s['full'] as String? ?? '').trim();
 
-    try {
-      final Position position = await Geolocator.getCurrentPosition();
-      final List<Placemark> placemarks =
-          await placemarkFromCoordinates(position.latitude, position.longitude);
-
-      if (placemarks.isNotEmpty) {
-        final Placemark p = placemarks[0];
-        final String addr = '${p.name}, ${p.subLocality}, ${p.locality}';
-        setState(() {
-          _pickupCtrl.text = addr;
-          _pickupPos = LatLng(position.latitude, position.longitude);
-        });
-        _onChanged();
-        _moveMap(_pickupPos, 14);
+    setState(() {
+      if (isPickup) {
+        _pickupCtrl.text = label;
+        _pickupResolved = LatLng(lat, lng);
+        _pickupSuggestions = [];
+      } else {
+        _dropCtrl.text = label;
+        _dropResolved = LatLng(lat, lng);
+        _dropSuggestions = [];
       }
-    } catch (e) {
-      setState(() => _pickupCtrl.text = '');
+    });
+    _onChanged();
+    if (isPickup) {
+      FocusScope.of(context).requestFocus(_dropFocus);
+    } else {
+      _dropFocus.unfocus();
     }
   }
+
+  /// Writes a resolved point into a field, looking up a readable
+  /// address for it first. Shared by the current-location and
+  /// map-picker paths.
+  Future<void> _applyPoint(
+    LatLng point, {
+    required bool isPickup,
+    String? fallbackLabel,
+  }) async {
+    String label = fallbackLabel?.trim() ?? '';
+    try {
+      final geo = await _mapService.reverseGeocode(point);
+      final resolved =
+          (geo?['full'] as String?) ?? (geo?['name'] as String?) ?? '';
+      if (resolved.trim().isNotEmpty) label = resolved.trim();
+    } catch (e) {
+      debugPrint('[BikeTaxi] reverse geocode failed: $e');
+    }
+    if (!mounted) return;
+
+    setState(() {
+      final text = label.isNotEmpty
+          ? label
+          : '${point.latitude.toStringAsFixed(5)}, '
+              '${point.longitude.toStringAsFixed(5)}';
+      if (isPickup) {
+        _pickupCtrl.text = text;
+        _pickupResolved = point;
+        _pickupSuggestions = [];
+      } else {
+        _dropCtrl.text = text;
+        _dropResolved = point;
+        _dropSuggestions = [];
+      }
+    });
+    _onChanged();
+    _moveMap(point, 15);
+  }
+
+  Future<void> _useCurrentLocationFor({required bool isPickup}) async {
+    setState(() {
+      if (isPickup) {
+        _pickupFetching = true;
+      } else {
+        _dropFetching = true;
+      }
+    });
+    try {
+      // LocationService is the app's one tuned current-location fetch
+      // (high accuracy, 15s limit, its own permission handling). This
+      // screen used to call Geolocator.getCurrentPosition() bare, with
+      // no accuracy settings, then geocode via the `geocoding` package
+      // — a different stack from the rest of the app that happily
+      // returns a low-effort cached fix. Same mistake, and same fix, as
+      // hero_booking_screen.
+      final position = await LocationService().getCurrentLocation();
+      if (position == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Could not get your location. Check that location permission is allowed.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      await _applyPoint(
+        LatLng(position.latitude, position.longitude),
+        isPickup: isPickup,
+      );
+    } catch (e) {
+      debugPrint('[BikeTaxi] current location failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          if (isPickup) {
+            _pickupFetching = false;
+          } else {
+            _dropFetching = false;
+          }
+        });
+      }
+    }
+  }
+
+  // ── Suggestion dropdown ──────────────────────────────────────────
+  Widget _buildSuggestions(
+    List<Map<String, dynamic>> suggestions, {
+    required bool isPickup,
+  }) {
+    if (suggestions.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 2, 14, 0),
+      constraints: const BoxConstraints(maxHeight: 190),
+      decoration: BoxDecoration(
+        color: kCard2,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: kBorder),
+      ),
+      child: ListView.separated(
+        shrinkWrap: true,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        itemCount: suggestions.length,
+        separatorBuilder: (_, __) => const Divider(height: 1, color: kBorder),
+        itemBuilder: (context, i) {
+          final s = suggestions[i];
+          final name = (s['name'] as String?) ?? '';
+          final full = (s['full'] as String?) ?? '';
+          return ListTile(
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            leading: const Icon(Icons.place_rounded, color: kPurple2, size: 18),
+            title: Text(
+              name.isEmpty ? full : name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13, color: kText),
+            ),
+            subtitle: (full.isNotEmpty && full != name)
+                ? Text(
+                    full,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 10.5, color: kMuted),
+                  )
+                : null,
+            onTap: () => _applySuggestion(s, isPickup: isPickup),
+          );
+        },
+      ),
+    );
+  }
+
+  // ── Location shortcuts under each field ──────────────────────────
+  Widget _buildLocationActions({required bool isPickup, required bool busy}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 2, 14, 0),
+      child: Wrap(
+        spacing: 16,
+        runSpacing: 2,
+        children: [
+          _locationAction(
+            icon: Icons.my_location_rounded,
+            label: 'Use current location',
+            busy: busy,
+            onTap: () =>
+                unawaited(_useCurrentLocationFor(isPickup: isPickup)),
+          ),
+          _locationAction(
+            icon: Icons.map_rounded,
+            label: 'Select on map',
+            onTap: () => unawaited(_selectOnMapFor(isPickup: isPickup)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _locationAction({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool busy = false,
+  }) {
+    return InkWell(
+      onTap: busy ? null : onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            busy
+                ? const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: kPurple2,
+                    ),
+                  )
+                : Icon(icon, color: kPurple2, size: 13),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: const TextStyle(
+                color: kPurple2,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _selectOnMapFor({required bool isPickup}) async {
+    final existing = isPickup ? _pickupResolved : _dropResolved;
+    final picked = await Navigator.of(context).push<PickedLocation>(
+      MaterialPageRoute<PickedLocation>(
+        builder: (_) => LocationPickerScreen(
+          title: isPickup ? 'Pickup location' : 'Drop location',
+          initialCenter: existing,
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    await _applyPoint(
+      LatLng(picked.lat, picked.lng),
+      isPickup: isPickup,
+      fallbackLabel: picked.name,
+    );
+  }
+
+  // _getCurrentLocation() used to live here: a bare
+  // Geolocator.getCurrentPosition() with no accuracy settings, plus
+  // address lookup through the `geocoding` package — a completely
+  // separate stack from the LocationService + MapService the rest of
+  // the app uses, and one that happily returns a low-effort cached fix.
+  // Replaced by _useCurrentLocationFor(), which both fields now share.
 
   void _swap() {
     final tTxt = _pickupCtrl.text;
     final tPos = _pickupPos;
+    // The resolved coordinates have to travel with the text. Swapping
+    // only the display strings and _pickupPos/_dropPos left
+    // _pickupResolved/_dropResolved pointing at the wrong field, so the
+    // next _onChanged() would put the old coordinates straight back.
+    final tResolved = _pickupResolved;
     setState(() {
       _pickupCtrl.text = _dropCtrl.text;
       _dropCtrl.text = tTxt;
       _pickupPos = _dropPos;
       _dropPos = tPos;
+      _pickupResolved = _dropResolved;
+      _dropResolved = tResolved;
+      _pickupSuggestions = [];
+      _dropSuggestions = [];
     });
     _onChanged();
   }
@@ -387,8 +697,8 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Pickup & Drop location கொடுங்கள்! 📍',
-            style: GoogleFonts.notoSansTamil(color: kText),
+            'Please enter pickup & drop locations 📍',
+            style: GoogleFonts.outfit(color: kText),
           ),
           backgroundColor: kCard2,
           behavior: SnackBarBehavior.floating,
@@ -791,42 +1101,44 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
                   child: TextField(
                     controller: _pickupCtrl,
                     focusNode: _pickupFocus,
-                    style: GoogleFonts.notoSansTamil(
+                    onChanged: _onPickupTyped,
+                    style: GoogleFonts.outfit(
                       fontSize: 14,
                       color: kText,
                       fontWeight: FontWeight.w500,
                     ),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       hintText: 'Pickup — Where are you?',
-                      hintStyle: const TextStyle(fontSize: 13, color: kMuted),
+                      hintStyle: TextStyle(fontSize: 13, color: kMuted),
                       border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.zero,
-                      suffixIcon: IconButton(
-                        icon: const Icon(
-                          Icons.my_location,
-                          size: 16,
-                          color: kPurple2,
-                        ),
-                        onPressed: _getCurrentLocation,
-                      ),
+                      // Was isDense + zero padding, which squashed the
+                      // text against the row and made a long address
+                      // unreadable. A little breathing room here is the
+                      // difference between "cramped" and "a field".
+                      isDense: false,
+                      contentPadding: EdgeInsets.symmetric(vertical: 10),
                     ),
                     textInputAction: TextInputAction.next,
                     onSubmitted: (_) =>
                         FocusScope.of(context).requestFocus(_dropFocus),
                   ),
                 ),
-                if (_pickupSet)
+                if (_pickupCtrl.text.trim().isNotEmpty)
                   GestureDetector(
                     onTap: () {
                       _pickupCtrl.clear();
-                      setState(() => _pickupSet = false);
+                      _pickupResolved = null;
+                      setState(() => _pickupSuggestions = []);
+                      _onChanged();
                     },
                     child: const Icon(Icons.close, size: 16, color: kMuted),
                   ),
               ],
             ),
           ),
+
+          _buildSuggestions(_pickupSuggestions, isPickup: true),
+          _buildLocationActions(isPickup: true, busy: _pickupFetching),
 
           // Swap divider
           Padding(
@@ -879,7 +1191,8 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
                   child: TextField(
                     controller: _dropCtrl,
                     focusNode: _dropFocus,
-                    style: GoogleFonts.notoSansTamil(
+                    onChanged: _onDropTyped,
+                    style: GoogleFonts.outfit(
                       fontSize: 14,
                       color: kText,
                       fontWeight: FontWeight.w500,
@@ -888,23 +1201,33 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
                       hintText: 'Drop — Where to go?',
                       hintStyle: TextStyle(fontSize: 13, color: kMuted),
                       border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.zero,
+                      isDense: false,
+                      contentPadding: EdgeInsets.symmetric(vertical: 10),
                     ),
                     textInputAction: TextInputAction.done,
                   ),
                 ),
-                if (_dropSet)
+                if (_dropCtrl.text.trim().isNotEmpty)
                   GestureDetector(
                     onTap: () {
                       _dropCtrl.clear();
-                      setState(() => _dropSet = false);
+                      _dropResolved = null;
+                      setState(() => _dropSuggestions = []);
+                      _onChanged();
                     },
                     child: const Icon(Icons.close, size: 16, color: kMuted),
                   ),
               ],
             ),
           ),
+
+          _buildSuggestions(_dropSuggestions, isPickup: false),
+          // The drop field previously had NO location actions at all —
+          // pickup got a "my location" button and drop got nothing, so
+          // the only way to set a destination was to type it (which,
+          // before this round, produced no coordinate at all).
+          _buildLocationActions(isPickup: false, busy: _dropFetching),
+          const SizedBox(height: 4),
         ],
       ),
     );
@@ -1325,8 +1648,8 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
                   const SizedBox(height: 6),
                   Text(
                     '₹500–₹1,000/day · Flexible timing\n'
-                    'உங்கள் bike → உங்கள் business!',
-                    style: GoogleFonts.notoSansTamil(
+                    'Your bike → your business!',
+                    style: GoogleFonts.outfit(
                       fontSize: 11,
                       color: kMuted,
                       height: 1.5,
@@ -1446,9 +1769,9 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
               const SizedBox(width: 10),
               Text(
                 ready
-                    ? '${r.label} Book பண்ணு →'
-                    : 'Location enter பண்ணுங்கள் 📍',
-                style: GoogleFonts.notoSansTamil(
+                    ? 'Book ${r.label} →'
+                    : 'Enter your locations 📍',
+                style: GoogleFonts.outfit(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                   color: ready ? const Color(0xFF1a1500) : kMuted,
@@ -1969,8 +2292,8 @@ class _BookSheetState extends State<_BookSheet> {
                       ),
                     )
                   : Text(
-                      'Confirm & Captain தேடு 🏍️',
-                      style: GoogleFonts.notoSansTamil(
+                      'Confirm & find a Captain 🏍️',
+                      style: GoogleFonts.outfit(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                       ),

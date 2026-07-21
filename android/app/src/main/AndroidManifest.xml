@@ -57,6 +57,19 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Makes Allin1 appear in Android's share sheet for plain
+                 text. A location shared from WhatsApp or Google Maps
+                 arrives here as a text/plain message containing a maps
+                 link; the app reads the coordinates straight out of it
+                 (see location_link_parser.dart) and asks the customer
+                 whether it's the pickup or the drop. The PWA gets the
+                 same behaviour through "share_target" in
+                 web/manifest.json. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
