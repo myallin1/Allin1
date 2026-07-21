@@ -79,6 +79,8 @@ class RideModel {
     'auto': {'baseFare': 30.0, 'perKm': 8.0, 'baseDistance': 1.0},
     'cab': {'baseFare': 50.0, 'perKm': 12.0, 'baseDistance': 1.0},
     'parcel': {'baseFare': 40.0, 'perKm': 8.0, 'baseDistance': 1.0},
+    'mini_truck': {'baseFare': 60.0, 'perKm': 14.0, 'baseDistance': 1.0},
+    'lorry': {'baseFare': 100.0, 'perKm': 20.0, 'baseDistance': 1.0},
   };
 
   /// Calculates the estimated fare for a ride based on distance and vehicle type.

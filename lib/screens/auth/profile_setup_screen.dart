@@ -259,6 +259,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                               child: Text('Cab / Mini'),
                             ),
                             DropdownMenuItem(
+                              value: 'mini_truck',
+                              child: Text('Mini Truck'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'lorry',
+                              child: Text('Lorry'),
+                            ),
+                            DropdownMenuItem(
                               value: 'emergency_manpower',
                               child: Text('Only Emergency Manpower'),
                             ),

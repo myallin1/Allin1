@@ -4,11 +4,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/localization_service.dart';
+import '../widgets/animated_meter_fare.dart';
 import '../widgets/rating_feedback_sheet.dart';
 import 'bike_taxi/bike_booking_screen.dart';
 
@@ -60,6 +62,33 @@ class _PaymentScreenState extends State<PaymentScreen>
   bool _payingWallet = false;
   bool _paid = false;
   bool _awaitingHeroConfirmation = false;
+
+  // ── PAYMENT-DISPUTE RECOVERY (customer side) ──────────────────
+  // Set when the hero reports "payment not received" for this ride
+  // (hero_ride_screen.dart writes paymentStatus:'dispute' +
+  // paymentDispute:true). Shows a banner with Allin1's UPI collection
+  // number and a manual "I've Paid — Check Now" recheck. Cleared either
+  // by the live listener (hero confirms while screen is open) or by a
+  // successful manual recheck. No polling — reads happen only on
+  // explicit user tap.
+  bool _paymentDisputed = false;
+  bool _recheckingPayment = false;
+
+  /// Allin1's UPI collection number shown to the customer for manual
+  /// payment when a dispute is raised. Admin-mediated recovery flow.
+  static const String _upiCollectionNumber = '9597879191';
+
+  /// paymentStatus values that mean the ride is fully paid/settled.
+  /// Mirrors the sets already used in _checkPaymentStatus() and
+  /// _bindRideStatus() — used by the dispute recheck below.
+  static const Set<String> _settledStatuses = {
+    'paid',
+    'paid_by_wallet',
+    'paid_offline_p2p',
+    'completed',
+    'settled',
+    'confirmed',
+  };
   String _summaryPaymentMethod = 'Payment';
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _rideSubscription;
 
@@ -145,7 +174,15 @@ class _PaymentScreenState extends State<PaymentScreen>
             return;
           }
 
+          // Confirmed-bug fix: 'finalFare' (fareBeforeTip + tipAmount,
+          // written by hero_ride_screen.dart's _completeTrip()) is the
+          // tip-INCLUSIVE total and must be preferred here. 'actualFare'
+          // is deliberately tip-EXCLUDED (just fareBeforeTip) — reading
+          // it first was silently overwriting the correct tip-inclusive
+          // amount this screen started with, dropping the tip from what
+          // the customer sees/pays entirely.
           final liveFare =
+              (data['finalFare'] as num?)?.toDouble() ??
               (data['actualFare'] as num?)?.toDouble() ??
               (data['amountPaid'] as num?)?.toDouble() ??
               (data['estimatedFare'] as num?)?.toDouble() ??
@@ -168,11 +205,27 @@ class _PaymentScreenState extends State<PaymentScreen>
             });
           }
 
+          // Dispute raised by the hero ("payment not received") — surface
+          // the recovery banner. paymentDispute is the explicit flag the
+          // hero-side flow writes; paymentStatus=='dispute' is checked too
+          // so either signal alone is enough.
+          final isDisputed = paymentStatus == 'dispute' ||
+              (data['paymentDispute'] as bool? ?? false);
+          if (isDisputed && !_paid && !_paymentDisputed) {
+            setState(() {
+              _paymentDisputed = true;
+              _awaitingHeroConfirmation = false;
+            });
+          }
+
           if (shouldUnlock && !_paid) {
             setState(() {
               _summaryPaymentMethod = paymentMethod.replaceAll('_', ' ');
               _paid = true;
               _awaitingHeroConfirmation = false;
+              // Live auto-clear: hero confirmed while the customer still
+              // has this screen open — dismiss the dispute banner.
+              _paymentDisputed = false;
             });
             _successCtrl
               ..reset()
@@ -381,6 +434,166 @@ class _PaymentScreenState extends State<PaymentScreen>
     );
   }
 
+  // ── PAYMENT-DISPUTE RECOVERY: actions ─────────────────────────
+
+  Future<void> _copyUpiNumber() async {
+    await Clipboard.setData(const ClipboardData(text: _upiCollectionNumber));
+    if (!mounted) return;
+    _snack('UPI number copied: $_upiCollectionNumber', _green);
+  }
+
+  /// One explicit Firestore read per tap — deliberately NOT a poller.
+  /// Checks whether the hero has marked the payment settled since the
+  /// dispute was raised.
+  Future<void> _recheckDisputedPayment() async {
+    final rideDocId = _rideDocId;
+    if (rideDocId == null || _recheckingPayment) return;
+    setState(() => _recheckingPayment = true);
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('rides')
+          .doc(rideDocId)
+          .get();
+      final data = snap.data();
+      final paymentStatus = (data?['paymentStatus'] as String? ?? '').trim();
+      if (!mounted) return;
+      if (_settledStatuses.contains(paymentStatus)) {
+        final paymentMethod =
+            (data?['paymentMethod'] as String? ?? 'Payment').trim();
+        setState(() {
+          _summaryPaymentMethod = paymentMethod.replaceAll('_', ' ');
+          _paid = true;
+          _paymentDisputed = false;
+          _awaitingHeroConfirmation = false;
+          _recheckingPayment = false;
+        });
+        _successCtrl
+          ..reset()
+          ..forward();
+        _snack('Payment confirmed! Thank you.', _green);
+      } else {
+        setState(() => _recheckingPayment = false);
+        _snack(
+          'Payment still not confirmed — please complete the UPI payment '
+          'and try again.',
+          _red,
+        );
+      }
+    } catch (e) {
+      debugPrint('[PaymentScreen] Dispute recheck failed: $e');
+      if (!mounted) return;
+      setState(() => _recheckingPayment = false);
+      _snack('Could not check payment status. Please try again.', _red);
+    }
+  }
+
+  // ── PAYMENT-DISPUTE RECOVERY: banner UI ───────────────────────
+
+  Widget _buildDisputeBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3F3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _red.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.error_outline_rounded, color: _red, size: 22),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Your last ride payment was not confirmed by the Hero.',
+                  style: GoogleFonts.outfit(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: _text,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Please pay via UPI to the Allin1 collection number below, '
+            'then tap "I\'ve Paid — Check Now".',
+            style: GoogleFonts.outfit(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: _muted,
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Tap-to-copy UPI number
+          InkWell(
+            onTap: _copyUpiNumber,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _border),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _upiCollectionNumber,
+                    style: GoogleFonts.outfit(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: _text,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Icon(Icons.copy_rounded, color: _gold, size: 18),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _recheckingPayment ? null : _recheckDisputedPayment,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _green,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: _recheckingPayment
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(
+                      "I've Paid — Check Now",
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -421,6 +634,10 @@ class _PaymentScreenState extends State<PaymentScreen>
                     const SizedBox(height: 16),
                     _buildFareCard(),
                     const SizedBox(height: 16),
+                    if (_paymentDisputed) ...[
+                      _buildDisputeBanner(),
+                      const SizedBox(height: 16),
+                    ],
                     if (_walletBal >= _fare) ...[
                       _buildWalletCard(),
                       const SizedBox(height: 12),
@@ -485,8 +702,9 @@ class _PaymentScreenState extends State<PaymentScreen>
               ],
             ),
           ),
-          Text(
-            '₹${_fare.toStringAsFixed(2)}',
+          AnimatedMeterFare(
+            value: _fare,
+            fractionDigits: 2,
             style: GoogleFonts.outfit(
               fontSize: 22,
               color: _gold,

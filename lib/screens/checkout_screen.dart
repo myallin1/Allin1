@@ -69,7 +69,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (requestedCoins <= 0) return true;
 
     final todayKey = 'redeemed_${DateTime.now().toIso8601String().substring(0, 10)}';
-    final redeemedToday = (HiveCache.get(todayKey) as int?) ?? 0;
+    final redeemedToday = (await HiveCache.get<int>(todayKey)) ?? 0;
 
     if (redeemedToday + requestedCoins > 20) {
       if (mounted) {
@@ -119,8 +119,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     // 5. Update daily coin usage counter
     final todayKey = 'redeemed_${DateTime.now().toIso8601String().substring(0, 10)}';
-    final redeemedToday = (HiveCache.get(todayKey) as int?) ?? 0;
-    HiveCache.put(todayKey, redeemedToday + _coinsToUse);
+    final redeemedToday = (await HiveCache.get<int>(todayKey)) ?? 0;
+    // Explicit 24h ttl is REQUIRED. HiveCache.put() defaults to 30 minutes,
+    // which would reset this daily cap every half hour and let a customer
+    // redeem far more than the intended 20 NJ Coins per day.
+    await HiveCache.put(
+      todayKey,
+      redeemedToday + _coinsToUse,
+      ttl: const Duration(hours: 24),
+    );
 
     // 6. Show success then navigate
     await Future<void>.delayed(const Duration(milliseconds: 150));

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../config/fare_rates.dart';
 import '../models/ride_model.dart';
 
 const Color _brandPink = Color(0xFFFF4FA3);
@@ -62,6 +63,29 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
     super.dispose();
   }
 
+  /// Resolves the estimated fare for [vehicleType] at [distanceKm].
+  ///
+  /// Bike uses FareRates (hardcoded day/night rates, resolved against
+  /// the CURRENT time — this is a pre-ride estimate, so booking-time
+  /// rate is correct here even though the final bill re-resolves at
+  /// completion time). Every other vehicle type is unchanged — still
+  /// RideModel.calculateFare() against the Firestore-backed
+  /// widget.fares map, exactly as before.
+  double _resolveFare(String vehicleType, double distanceKm) {
+    if (vehicleType == 'bike') {
+      final perKm = FareRates.resolveBikePerKm(DateTime.now());
+      return FareRates.calculateBikeFare(
+        distanceKm: distanceKm,
+        perKm: perKm,
+      );
+    }
+    return RideModel.calculateFare(
+      distanceKm,
+      vehicleType,
+      fares: widget.fares,
+    );
+  }
+
   // Enhanced vehicle configuration with modern details
   final List<Map<String, dynamic>> _vehicles = [
     {
@@ -119,6 +143,30 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
       'capacity': 1,
       'color': Color(0xFFFF5252),
       'bgColor': Color(0x1AFF5252),
+    },
+    // Cargo pair: mini_truck + lorry. Uses _isCargoRide-style status
+    // labels downstream (hero_ride_screen.dart) once a real ride exists.
+    {
+      'type': 'mini_truck',
+      'title': 'Mini Truck',
+      'subtitle': 'Small cargo & goods',
+      'description': 'For bulky local deliveries',
+      'icon': '🛻',
+      'eta': '6-10 mins',
+      'capacity': 1,
+      'color': _brandPink,
+      'bgColor': _brandPink.withValues(alpha: 0.1),
+    },
+    {
+      'type': 'lorry',
+      'title': 'Lorry',
+      'subtitle': 'Heavy cargo transport',
+      'description': 'For large-scale hauling',
+      'icon': '🚚',
+      'eta': '8-15 mins',
+      'capacity': 1,
+      'color': _brandPink,
+      'bgColor': _brandPink.withValues(alpha: 0.1),
     },
   ];
 
@@ -242,11 +290,8 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                   child: ElevatedButton(
                     onPressed: () {
                       debugPrint('🔥 [BUTTON CLICKED] Confirm Booking button was tapped!');
-                      final fare = RideModel.calculateFare(
-                        widget.distanceKm,
-                        _selectedVehicle,
-                        fares: widget.fares,
-                      );
+                      final fare =
+                          _resolveFare(_selectedVehicle, widget.distanceKm);
                       widget.onConfirm(_selectedVehicle, fare);
                     },
                     style: ElevatedButton.styleFrom(
@@ -296,11 +341,7 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
     final Color bgColor = vehicle['bgColor'] as Color;
 
     final bool isSelected = _selectedVehicle == type;
-    final double fare = RideModel.calculateFare(
-      widget.distanceKm,
-      type,
-      fares: widget.fares,
-    );
+    final double fare = _resolveFare(type, widget.distanceKm);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),

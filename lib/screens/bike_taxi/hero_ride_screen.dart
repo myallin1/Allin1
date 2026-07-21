@@ -16,6 +16,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../config/fare_rates.dart';
 import '../../models/ride_model.dart';
 import '../../services/map_service.dart';
 import '../../services/hero_ride_notification_service.dart';
@@ -61,6 +62,11 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
     return type == 'lorry' || type == 'mini_truck';
   }
 
+  bool get _isParcelRide {
+    final type = (widget.ride.vehicleType ?? '').trim().toLowerCase();
+    return type == 'parcel';
+  }
+
   // ── State ────────────────────────────────────────────────────
   String _rideStatus = '';
   bool _isLoading = true;
@@ -88,6 +94,11 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   String _pickupAddress = '---';
   String _dropAddress = '---';
   String _customerPhone = 'Contact available';
+  // Parcel-only: who the hero should hand the parcel to at drop-off.
+  // Empty strings mean the field wasn't collected (e.g. an older ride
+  // doc created before this field existed) — the UI hides the row.
+  String _recipientName = '';
+  String _recipientPhone = '';
   double _estimatedFare = 0;
   double _rideFareAmount = 0;
   double _tipAmount = 0;
@@ -501,6 +512,8 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
           _customerPhone = data['customerPhone'] as String? ??
               data['customerContact'] as String? ??
               _customerPhone;
+          _recipientName = data['recipientName'] as String? ?? _recipientName;
+          _recipientPhone = data['recipientPhone'] as String? ?? _recipientPhone;
           _estimatedFare = (data['estimatedFare'] as num?)?.toDouble() ??
               (data['fare'] as num?)?.toDouble() ??
               _estimatedFare;
@@ -625,17 +638,103 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         return;
       }
 
-      final baseFare = (rideData?['baseFare'] as num?)?.toDouble() ?? 25.0;
-      final farePerKm = (rideData?['farePerKm'] as num?)?.toDouble() ?? 6.0;
       final tipAmount = (rideData?['tipAmount'] as num?)?.toDouble() ?? 0.0;
-      // Use CEO-mandated formula: ₹25 base (covers 1st km) + ₹6/km after
-      const double baseDistance = 1;
-      final double extraKm = _actualDistanceKm > baseDistance
-          ? (_actualDistanceKm - baseDistance)
-          : 0.0;
-      final double fareBeforeTip = _actualDistanceKm <= baseDistance
-          ? baseFare
-          : (baseFare + (extraKm * farePerKm)).roundToDouble();
+      final vehicleType =
+          (widget.ride.vehicleType ?? '').trim().toLowerCase();
+      final bool isBike = vehicleType == 'bike';
+
+      final double fareBeforeTip;
+      final double billedDistanceKm;
+      final double? bikePerKmUsed;
+
+      if (isBike) {
+        // ── Bike: FareRates (day/night) + distance-floor fix ────────
+        // Rate is resolved at COMPLETION time, not booking time, per
+        // the design decision that a ride crossing the day/night
+        // boundary bills at whatever rate is in effect when it ends.
+        //
+        // Distance is the greater of the hero's GPS-tracked
+        // _actualDistanceKm and the road-route distance captured at
+        // booking time (bike_booking_screen.dart writes
+        // routeDistanceKm). This was the confirmed root cause of a
+        // real fare-mismatch report: sparse GPS sampling / a
+        // 15m distanceFilter / app backgrounding can undercount actual
+        // distance travelled well below the true route length, which
+        // previously produced an artificially low final bill on a trip
+        // that was genuinely longer. Flooring at the route distance
+        // makes that undercounting unable to produce a bill lower than
+        // what the customer's own pre-ride estimate was based on.
+        final routeDistanceKm =
+            (rideData?['routeDistanceKm'] as num?)?.toDouble() ?? 0.0;
+        billedDistanceKm = math.max(_actualDistanceKm, routeDistanceKm);
+        bikePerKmUsed = FareRates.resolveBikePerKm(DateTime.now());
+        fareBeforeTip = FareRates.calculateBikeFare(
+          distanceKm: billedDistanceKm,
+          perKm: bikePerKmUsed,
+        );
+        // TEMP DEBUG — remove once Bug 1 (₹25 flat-fare regression) is
+        // confirmed fixed on a live retest. Prints every input the bike
+        // fare formula uses so a real device console can confirm actual
+        // runtime values instead of static code-reading.
+        debugPrint(
+          '[FARE DEBUG][bike] actualDistanceKm=$_actualDistanceKm '
+          'routeDistanceKm=$routeDistanceKm billedDistanceKm=$billedDistanceKm '
+          'perKmUsed=$bikePerKmUsed baseFare=${FareRates.bikeBaseFare} '
+          'baseDistanceKm=${FareRates.bikeBaseDistanceKm} '
+          'fareBeforeTip=$fareBeforeTip tipAmount=$tipAmount',
+        );
+      } else {
+        // ── Every other category: auto / cab / parcel / mini_truck /
+        // lorry / emergency_manpower ──────────────────────────────
+        // CONFIRMED BUG FIX: baseFare/farePerKm are now written for
+        // every non-bike category at booking time (bike_booking_screen
+        // .dart's _createRide()), using each category's real rate from
+        // RideModel.defaultFares — previously these fields were never
+        // written for non-bike rides at all, so this always silently
+        // fell back to the hardcoded defaults below (25.0 / 6.0 — bike's
+        // rate, not this category's real rate). The ?? fallbacks stay
+        // in place only for pre-existing ride docs created before this
+        // fix shipped.
+        final baseFare = (rideData?['baseFare'] as num?)?.toDouble() ?? 25.0;
+        final farePerKm =
+            (rideData?['farePerKm'] as num?)?.toDouble() ?? 6.0;
+        const double legacyBaseDistance = 1;
+        // Same Option C distance-floor fix as the bike branch above,
+        // now extended to every other category: bill on whichever is
+        // larger, the hero's GPS-tracked distance or the road-route
+        // distance captured at booking time. Previously this branch had
+        // no floor at all, so GPS undercounting (sparse sampling, app
+        // backgrounding, a quick test ride) could collapse the bill to
+        // flat baseFare with zero distance charge regardless of the
+        // trip's real length.
+        final routeDistanceKm =
+            (rideData?['routeDistanceKm'] as num?)?.toDouble() ?? 0.0;
+        billedDistanceKm = math.max(_actualDistanceKm, routeDistanceKm);
+        bikePerKmUsed = null;
+        final double extraKm = billedDistanceKm > legacyBaseDistance
+            ? (billedDistanceKm - legacyBaseDistance)
+            : 0.0;
+        fareBeforeTip = billedDistanceKm <= legacyBaseDistance
+            ? baseFare
+            : (baseFare + (extraKm * farePerKm)).roundToDouble();
+        // TEMP DEBUG — remove once Bug 1 is confirmed fixed on a live
+        // retest. Prints every input the non-bike fare formula uses,
+        // including the raw rideData.baseFare/farePerKm/routeDistanceKm
+        // values, so Nizam's next console capture can confirm the fix
+        // (fields now populated, not null) with real numbers.
+        debugPrint(
+          '[FARE DEBUG][else:$vehicleType] actualDistanceKm=$_actualDistanceKm '
+          'rideData.baseFare=${rideData?['baseFare']} '
+          'rideData.farePerKm=${rideData?['farePerKm']} '
+          'rideData.routeDistanceKm=${rideData?['routeDistanceKm']} '
+          'resolvedBaseFare=$baseFare resolvedFarePerKm=$farePerKm '
+          'routeDistanceKm=$routeDistanceKm '
+          'legacyBaseDistance=$legacyBaseDistance extraKm=$extraKm '
+          'billedDistanceKm=$billedDistanceKm fareBeforeTip=$fareBeforeTip '
+          'tipAmount=$tipAmount',
+        );
+      }
+
       final double finalFare = fareBeforeTip + tipAmount;
 
       final fare = finalFare;
@@ -658,7 +757,14 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         'actualFare': fareBeforeTip,
         'finalFare': finalFare,
         'tipAmount': tipAmount,
+        // Unchanged meaning: the raw GPS-tracked distance, exactly as
+        // before — never overwritten with the billed/floored value.
         'actualDistanceKm': _actualDistanceKm,
+        // Audit trail for the bike distance-floor logic above: what
+        // distance the bill actually used, and (bike only) which
+        // day/night rate was applied. Both null-safe for non-bike rides.
+        'billedDistanceKm': billedDistanceKm,
+        if (bikePerKmUsed != null) 'bikePerKmApplied': bikePerKmUsed,
         'paymentStatus': 'pending_collection',
       });
       await _cleanupLiveLocationNode();
@@ -1393,6 +1499,56 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
               ],
             ),
           ),
+          if (_isParcelRide && _recipientName.trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
+            // Recipient Info (parcel only) — who to hand the parcel to
+            // at drop-off. Hidden entirely if the field wasn't collected
+            // (e.g. an older ride doc from before this feature shipped).
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _surface,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.inventory_2_outlined,
+                      color: _purple, size: 20,),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Deliver To',
+                          style: TextStyle(color: _muted, fontSize: 10),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _recipientName,
+                          style: const TextStyle(
+                            color: _text,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (_recipientPhone.trim().isNotEmpty)
+                          Text(
+                            _recipientPhone,
+                            style: const TextStyle(
+                              color: _muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
 
           // Fare Display

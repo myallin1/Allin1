@@ -232,13 +232,25 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
             const SizedBox(height: 6),
             Text(_requestSummary(requestType, details), style: const TextStyle(color: _muted, fontSize: 12)),
             const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: _pink),
-                onPressed: () => _showAssignSheet(context, doc.id, customerName),
-                child: const Text('Assign to Hero', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: _pink),
+                    onPressed: () => _showAssignSheet(context, doc.id, customerName),
+                    child: const Text('Assign to Hero', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: () => _confirmAndCancel(context, doc.id),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _red,
+                    side: const BorderSide(color: _red),
+                  ),
+                  child: const Text('Cancel'),
+                ),
+              ],
             ),
           ],
         ),
@@ -287,10 +299,70 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
             Text('Hero: $assignedHeroName', style: const TextStyle(color: _muted, fontSize: 11)),
             const SizedBox(height: 10),
             ServiceRequestManualStatusControl(requestId: doc.id, currentStatus: status),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => _confirmAndCancel(context, doc.id),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _red,
+                  side: const BorderSide(color: _red),
+                ),
+                child: const Text('Cancel Task'),
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  // Admin cancellation is allowed at any pre-'completed' stage (both
+  // card sections above only ever show admin_review/hero_assigned/
+  // in_progress/nearing_completion — never 'completed' — so no extra
+  // status gating is needed here beyond which cards show a Cancel
+  // button at all). Trusted as a human-mediated judgment call after
+  // the admin has already spoken to the customer by phone, unlike the
+  // stricter customer self-service eligibility rule.
+  Future<void> _confirmAndCancel(BuildContext context, String requestId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _card,
+        title: Text('Cancel this request?', style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800)),
+        content: const Text(
+          'This will permanently delete the request. This cannot be undone.',
+          style: TextStyle(color: _muted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: _red),
+            child: const Text('Cancel Request'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await ServiceRequestService().cancelServiceRequest(requestId);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Request cancelled.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not cancel: $e'), backgroundColor: _red),
+        );
+      }
+    }
   }
 
   void _showAssignSheet(BuildContext context, String requestId, String customerName) {
@@ -321,6 +393,11 @@ class _AssignHeroSheetState extends State<_AssignHeroSheet> {
   List<Map<String, dynamic>> _onlineHeroes = [];
   StreamSubscription<DatabaseEvent>? _heroesSub;
   bool _assigning = false;
+  // Optional — the hero's own "before Start" gate (hero_home_screen
+  // .dart's _ServiceRequestStatusCard) is the primary mechanism for
+  // setting this; this field just lets the admin pre-fill it if
+  // pricing already came up on the resolution phone call.
+  final _estimateCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -350,6 +427,7 @@ class _AssignHeroSheetState extends State<_AssignHeroSheet> {
   @override
   void dispose() {
     _heroesSub?.cancel();
+    _estimateCtrl.dispose();
     super.dispose();
   }
 
@@ -362,6 +440,19 @@ class _AssignHeroSheetState extends State<_AssignHeroSheet> {
         heroName: hero['name'] as String,
         heroPhone: hero['phone'] as String,
       );
+      // Optional pre-fill — if the admin typed an amount, save it.
+      // Non-blocking: assignment already succeeded above regardless
+      // of whether this parses; the hero's own gate still applies if
+      // this is left blank.
+      final typed = double.tryParse(_estimateCtrl.text.trim());
+      if (typed != null && typed > 0) {
+        try {
+          await ServiceRequestService()
+              .setEstimatedAmount(widget.requestId, typed);
+        } catch (e) {
+          debugPrint('[AssignHeroSheet] Optional estimate pre-fill failed: $e');
+        }
+      }
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
@@ -390,7 +481,21 @@ class _AssignHeroSheetState extends State<_AssignHeroSheet> {
           Text('Assign Hero for ${widget.customerName}', style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800, fontSize: 16)),
           const SizedBox(height: 4),
           const Text('Confirm with the hero by phone before assigning.', style: TextStyle(color: _muted, fontSize: 11)),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _estimateCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: false),
+            style: const TextStyle(color: _text),
+            decoration: const InputDecoration(
+              labelText: 'Estimated amount (optional)',
+              labelStyle: TextStyle(color: _muted, fontSize: 12),
+              prefixText: '₹ ',
+              border: OutlineInputBorder(),
+              helperText: 'If pricing already came up on the call — the hero can also set this later.',
+              helperStyle: TextStyle(color: _muted, fontSize: 10),
+            ),
+          ),
+          const SizedBox(height: 12),
           Flexible(
             child: _onlineHeroes.isEmpty
                 ? const Padding(

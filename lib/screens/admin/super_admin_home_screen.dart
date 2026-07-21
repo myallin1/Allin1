@@ -352,12 +352,14 @@ class SuperAdminHomeScreen extends StatelessWidget {
 
   List<Widget> _buildCards(BuildContext context) {
     return [
-      _ServiceCard(
-        title: 'Bike Taxi',
-        icon: Icons.electric_moped,
-        cardColor: _orange,
-        isActive: true,
-        onTap: () => Navigator.pushNamed(context, '/admin-home'),
+      _AdminReviewBadgeWrapper(
+        child: _ServiceCard(
+          title: 'Bike Taxi',
+          icon: Icons.electric_moped,
+          cardColor: _orange,
+          isActive: true,
+          onTap: () => Navigator.pushNamed(context, '/admin-home'),
+        ),
       ),
       _ServiceCard(
         title: 'Food Delivery',
@@ -560,5 +562,62 @@ class _ServiceCard extends StatelessWidget {
     properties.add(ColorProperty('cardColor', cardColor));
     properties.add(DiagnosticsProperty<bool>('isActive', isActive));
     properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+  }
+}
+
+// ── Admin-visibility gap fix: live count badge for escalated Hero
+// Booking (and other service_requests category) tasks awaiting admin
+// action. Placed on the Bike Taxi card since that's the first thing
+// an admin sees on this landing screen and the only path down to
+// AdminNewOrdersScreen — a bare "New Orders" tab 2 taps deep had no
+// visibility from here otherwise. Inline (uncached) StreamBuilder
+// matches this file's existing convention for _buildSosCallCenterBanner
+// above, which also creates its stream inline in a StatelessWidget.
+class _AdminReviewBadgeWrapper extends StatelessWidget {
+  final Widget child;
+  const _AdminReviewBadgeWrapper({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('service_requests')
+          .where('status', isEqualTo: 'admin_review')
+          .snapshots(),
+      builder: (context, snapshot) {
+        final count = snapshot.data?.docs.length ?? 0;
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            child,
+            if (count > 0)
+              Positioned(
+                top: -6,
+                right: -6,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF1744),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                        color: const Color(0xFF0A0A12), width: 2,),
+                  ),
+                  constraints:
+                      const BoxConstraints(minWidth: 22, minHeight: 22),
+                  child: Text(
+                    count > 9 ? '9+' : '$count',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
   }
 }

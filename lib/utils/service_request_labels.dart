@@ -70,6 +70,56 @@ String serviceRequestStatusLabel(String requestType, String status) {
   return labels[serviceRequestStatusIndex(status)];
 }
 
+/// Approximate stage-duration copy for Hero Booking tasks only. No
+/// backend timing/history data exists anywhere in the service_requests
+/// flow (see service_request_service.dart) to compute a real ETA, so
+/// these are fixed, deliberately-hedged estimates ("usually...").
+/// Always keep hedging language in this copy so customers never read
+/// it as a guarantee. Returns null for 'completed' (no estimate
+/// needed) and for any status not in this switch. Not used by the 3
+/// goods-type request categories — call sites should gate on
+/// `requestType == 'hero_booking'` before using this.
+String? heroBookingEtaLabel(String status) {
+  switch (status) {
+    case 'pending':
+      return 'Usually assigned within 2–5 minutes';
+    case 'admin_review':
+      return 'Our team is arranging a hero — usually within 10–15 minutes';
+    case 'hero_assigned':
+      return 'Hero usually starts within 5–10 minutes';
+    case 'in_progress':
+      return 'Usually wraps up within 20–40 minutes';
+    case 'nearing_completion':
+      return 'Almost done — usually within 10–15 minutes';
+    default:
+      return null;
+  }
+}
+
+/// Hero Booking task categories — single source of truth for both the
+/// booking form's category chips (hero_booking_screen.dart) and the
+/// detail tracking screen's task-details display
+/// (hero_booking_tracking_screen.dart). Purely a customer-facing
+/// classification today (stored in details.category) — does not yet
+/// drive dispatch/matching logic.
+const List<Map<String, String>> kHeroBookingCategories = [
+  {'key': 'pickup_delivery', 'label': 'Pickup & Delivery'},
+  {'key': 'errand', 'label': 'Errand / Shopping'},
+  {'key': 'paperwork', 'label': 'Paperwork / Documents'},
+  {'key': 'other', 'label': 'Other'},
+];
+
+/// Maps a category key to its display label. Returns null for null/
+/// empty/unrecognized keys so call sites can decide whether to show a
+/// fallback or hide the row entirely.
+String? heroBookingCategoryLabel(String? key) {
+  if (key == null || key.isEmpty) return null;
+  for (final category in kHeroBookingCategories) {
+    if (category['key'] == key) return category['label'];
+  }
+  return null;
+}
+
 /// Chip / accent colour for a status, used by the My Orders list.
 Color serviceRequestStatusColor(String status) {
   switch (status) {

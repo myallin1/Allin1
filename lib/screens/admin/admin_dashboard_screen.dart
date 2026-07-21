@@ -68,12 +68,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   // a Firestore listener on every unrelated setState() rebuild.
   late final Stream<QuerySnapshot> _pendingHeroApprovalsStream;
 
+  // Same caching reasoning as above — feeds the "New Orders" bottom-nav
+  // badge, which (like the AppBar) is always mounted regardless of
+  // which tab is selected (see _buildBottomNav()).
+  late final Stream<QuerySnapshot> _adminReviewCountStream;
+
   @override
   void initState() {
     super.initState();
     _pendingHeroApprovalsStream = FirebaseFirestore.instance
         .collection('heroes')
         .where('approvalStatus', isEqualTo: 'pending')
+        .snapshots();
+    _adminReviewCountStream = FirebaseFirestore.instance
+        .collection('service_requests')
+        .where('status', isEqualTo: 'admin_review')
         .snapshots();
     // Use unawaited if we don't want to block, or just call it since it handles its own state
     _computeWalletTotal();
@@ -729,6 +738,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
+  // "New Orders" is index 3 — the only tab that needs the escalated-
+  // task badge (see admin visibility gap: admin_review tasks need to
+  // be obvious the moment an admin lands here, not something they
+  // stumble on by tapping into the tab).
+  static const int _newOrdersTabIndex = 3;
+
   Widget _navItem(int idx, IconData icon, String label) {
     final active = _selectedTab == idx;
     return Expanded(
@@ -739,7 +754,43 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: active ? _gold : _muted, size: 22),
+              if (idx == _newOrdersTabIndex)
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(icon, color: active ? _gold : _muted, size: 22),
+                    Positioned(
+                      right: -6,
+                      top: -4,
+                      child: StreamBuilder<QuerySnapshot>(
+                        stream: _adminReviewCountStream,
+                        builder: (context, snap) {
+                          final count = snap.data?.docs.length ?? 0;
+                          if (count == 0) return const SizedBox.shrink();
+                          return Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: const BoxDecoration(
+                              color: _red,
+                              shape: BoxShape.circle,
+                            ),
+                            constraints: const BoxConstraints(
+                                minWidth: 14, minHeight: 14,),
+                            child: Text(
+                              count > 9 ? '9+' : '$count',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,),
+                              textAlign: TextAlign.center,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Icon(icon, color: active ? _gold : _muted, size: 22),
               const SizedBox(height: 4),
               Text(
                 label,

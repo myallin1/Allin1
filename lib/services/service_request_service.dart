@@ -10,6 +10,7 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart' as rtdb;
+import 'package:flutter/foundation.dart' show debugPrint;
 
 /// Canonical status enum — the single source of truth for lifecycle state.
 /// UI label sets (task-type vs goods-type) are presentation-only mappings
@@ -210,9 +211,41 @@ class ServiceRequestService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
+    // Winner's own ping is always removed (was already the case).
     await rtdb.FirebaseDatabase.instance
         .ref('hero_service_pings/$heroId/$requestId')
         .remove();
+
+    // Bug fix: previously only the WINNING hero's own ping node was
+    // ever removed — every other hero who was also broadcast this
+    // requestId kept their ping node (and, if their dialog was already
+    // open, kept showing "New Service Request" indefinitely) with
+    // nothing telling them it was already taken. Sweep-clear every
+    // other online hero's ping node for this requestId too, same
+    // hero pool _broadcastToEligibleHeroes() used to create them.
+    // Best-effort: a hero who went offline between broadcast and
+    // accept won't be in this snapshot, but their stale ping node
+    // self-expires via the client-side pingExpiresAt check in
+    // hero_home_screen.dart's _listenForServicePings() regardless.
+    try {
+      final onlineSnap =
+          await rtdb.FirebaseDatabase.instance.ref('online_heroes').get();
+      if (onlineSnap.exists && onlineSnap.value is Map) {
+        final heroes = Map<dynamic, dynamic>.from(onlineSnap.value as Map);
+        final sweepFutures = <Future<void>>[];
+        for (final otherHeroId in heroes.keys) {
+          if (otherHeroId == heroId) continue; // already removed above
+          sweepFutures.add(
+            rtdb.FirebaseDatabase.instance
+                .ref('hero_service_pings/$otherHeroId/$requestId')
+                .remove(),
+          );
+        }
+        await Future.wait(sweepFutures);
+      }
+    } catch (e) {
+      debugPrint('[ServiceRequestService] Ping sweep-clear failed: $e');
+    }
 
     return true;
   }
@@ -227,6 +260,134 @@ class ServiceRequestService {
         .doc(requestId)
         .update({
       'status': newStatus,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // ── Unified Hero Task System: money fields ──────────────────────
+  // Generic 'estimatedAmount'/'finalAmount' fields (not fare-specific
+  // names) since these apply across all 4 non-ride request types
+  // (hero_booking, custom_order, custom_food_order, grocery_order),
+  // none of which share a measurable basis (distance/weight/etc.) for
+  // automatic calculation the way ride fares do — manual entry only,
+  // by design (confirmed decision: a calculated-formula system is a
+  // possible future per-category enhancement, not in scope now).
+
+  /// Sets the estimated amount for a service request. Called by the
+  /// hero right before they advance to 'in_progress' (gates the
+  /// "Start" action — see _ServiceRequestStatusCard in
+  /// hero_home_screen.dart), or optionally pre-filled by an admin at
+  /// manual-assignment time. Does not itself change `status`.
+  Future<void> setEstimatedAmount(String requestId, double amount) async {
+    await FirebaseFirestore.instance
+        .collection('service_requests')
+        .doc(requestId)
+        .update({
+      'estimatedAmount': amount,
+      // Reset to null (not-yet-responded) on every write — covers both
+      // the hero's first entry and a re-entry after the customer
+      // rejects (see rejectEstimate()), so a revised estimate always
+      // needs a fresh approval rather than inheriting a stale decision.
+      'estimateApprovedByCustomer': null,
+      'estimateRespondedAt': null,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Customer-side: approves the hero's entered estimate. This is what
+  /// unblocks the hero's "Start" action — see
+  /// _ServiceRequestStatusCard._advanceTo() in hero_home_screen.dart,
+  /// which waits on `estimateApprovedByCustomer == true` before it will
+  /// call advanceStatus('in_progress').
+  Future<void> approveEstimate(String requestId) async {
+    await FirebaseFirestore.instance
+        .collection('service_requests')
+        .doc(requestId)
+        .update({
+      'estimateApprovedByCustomer': true,
+      'estimateRespondedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Customer-side: rejects the hero's entered estimate. Deliberately
+  /// does NOT touch `status` (no admin_review routing, no
+  /// cancellation) — clears `estimatedAmount` back to null so the
+  /// hero's UI drops back into "enter an estimate" mode and can submit
+  /// a revised number, which re-triggers the same approval wait via
+  /// setEstimatedAmount()'s reset above. A simple negotiate loop, no
+  /// cap on rejection count (can be added later if repeated rejection
+  /// turns out to be a real problem in practice).
+  Future<void> rejectEstimate(String requestId) async {
+    await FirebaseFirestore.instance
+        .collection('service_requests')
+        .doc(requestId)
+        .update({
+      'estimatedAmount': null,
+      'estimateApprovedByCustomer': null,
+      'estimateRespondedAt': null,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Completes a service request with a final bill amount in one
+  /// write — mirrors the ride flow's finalFare/actualFare pattern,
+  /// generalized to a single generic field since these categories
+  /// have no tip/base-fare split concept. Hero enters this at "Mark
+  /// Complete", pre-filled with the estimate but adjustable.
+  ///
+  /// Also sets paymentStatus: 'pending_collection' — mirrors the ride
+  /// flow's completed-but-unpaid state (rides collection's same
+  /// field/value), so the customer's payment screen and the hero's
+  /// "mark payment received" action both have a status to key off.
+  Future<void> completeWithFinalAmount(
+    String requestId,
+    double finalAmount,
+  ) async {
+    await FirebaseFirestore.instance
+        .collection('service_requests')
+        .doc(requestId)
+        .update({
+      'finalAmount': finalAmount,
+      'status': 'completed',
+      'paymentStatus': 'pending_collection',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Customer-side: marks a completed service request as paid. This is
+  /// intentionally NOT a real payment-gateway integration — same scope
+  /// boundary as the rest of the Unified Hero Task System v1 (manual
+  /// amount entry, no automatic calculation). Records which method the
+  /// customer selected for the hero's own records.
+  Future<void> markServiceRequestPaid(
+    String requestId, {
+    required String method,
+  }) async {
+    await FirebaseFirestore.instance
+        .collection('service_requests')
+        .doc(requestId)
+        .update({
+      'paymentStatus': 'paid',
+      'paymentMethod': method,
+      'paidAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Hero-side: the final "close the task" action — acknowledges the
+  /// hero has physically received payment (relevant for cash; for
+  /// markServiceRequestPaid's UPI/wallet path this is effectively
+  /// already true, but the hero still gets an explicit closing action
+  /// to parallel the ride flow's "Collect Payment" → ride-complete
+  /// step). Does not change `status` (already 'completed') — only
+  /// paymentStatus.
+  Future<void> markServiceRequestPaymentReceived(String requestId) async {
+    await FirebaseFirestore.instance
+        .collection('service_requests')
+        .doc(requestId)
+        .update({
+      'paymentStatus': 'paid',
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -262,6 +423,89 @@ class ServiceRequestService {
       'acceptedHeroId': heroId,
       'acceptedHeroName': heroName,
       'acceptedHeroPhone': heroPhone,
+    });
+  }
+
+  /// Cancels a service request — customer- or admin-initiated. Per
+  /// product decision, cancelled requests are FULLY DELETED from
+  /// Firestore (not soft-deleted with a 'cancelled' status) to
+  /// guarantee zero stale-data risk in hero/admin views. Eligibility
+  /// (which statuses may be cancelled, by whom) is enforced by the
+  /// CALLER — this method does not re-check status, since the
+  /// customer-side and admin-side allowed-stage sets differ.
+  ///
+  /// Before deleting, best-effort marks the RTDB
+  /// active_service_requests/{id} node's status as 'cancelled'. This
+  /// matters because acceptServiceRequest()'s transaction already has
+  /// a dormant guard — `if (status == 'accepted' || status ==
+  /// 'cancelled' || status == 'timeout') return Transaction.abort()`
+  /// — that aborts a hero's in-flight accept attempt when it sees
+  /// this status. Deleting that RTDB node instead (rather than
+  /// updating its status) would make the transaction's `currentData
+  /// == null` branch treat it as a fresh "optimistic success" write,
+  /// which could let a hero accidentally revive a task that was just
+  /// cancelled. Updating first closes that race; the delete below
+  /// only removes the Firestore source-of-truth document.
+  Future<void> cancelServiceRequest(String requestId) async {
+    try {
+      await rtdb.FirebaseDatabase.instance
+          .ref('active_service_requests/$requestId')
+          .update({'status': 'cancelled'});
+    } catch (e) {
+      // Best-effort — the RTDB node may already be gone (hero accepted
+      // and it was cleaned up, or it timed out) — proceed to delete
+      // the Firestore doc regardless.
+      debugPrint('[ServiceRequestService] RTDB cancel-mark failed (non-fatal): $e');
+    }
+
+    await FirebaseFirestore.instance
+        .collection('service_requests')
+        .doc(requestId)
+        .delete();
+  }
+
+  /// Hero-side "give this back" action for a task they accepted but no
+  /// longer want to do — deliberately NOT the same thing as
+  /// cancelServiceRequest() (which is customer/admin-initiated and
+  /// deletes the doc entirely). A released task still needs doing, so
+  /// it routes to 'admin_review' — the exact same status/query
+  /// markTimeoutIfStillPending() uses — so it surfaces on
+  /// admin_new_orders_screen.dart's "AWAITING ASSIGNMENT" section (and
+  /// the admin_review-count badges) for a human to re-assign or call
+  /// the customer, rather than silently re-entering the broadcast pool.
+  /// Only sensible before the hero has actually started (see the
+  /// 'Release Task' button's hero_assigned-only gating in
+  /// hero_home_screen.dart) — clears the assignment and any
+  /// not-yet-approved estimate so the request looks freshly
+  /// admin-manageable again.
+  Future<void> releaseServiceRequest(String requestId) async {
+    try {
+      // Same reasoning as cancelServiceRequest()'s RTDB update: mark
+      // rather than delete, reusing 'timeout' (already one of
+      // acceptServiceRequest()'s transaction abort-guard values) so a
+      // stray in-flight accept from the releasing hero's own old ping
+      // can't race back in and revive an assignment that's being
+      // handed back.
+      await rtdb.FirebaseDatabase.instance
+          .ref('active_service_requests/$requestId')
+          .update({'status': 'timeout'});
+    } catch (e) {
+      debugPrint('[ServiceRequestService] RTDB release-mark failed (non-fatal): $e');
+    }
+
+    await FirebaseFirestore.instance
+        .collection('service_requests')
+        .doc(requestId)
+        .update({
+      'status': 'admin_review',
+      'assignedHeroId': null,
+      'assignedHeroName': null,
+      'assignedHeroPhone': null,
+      'assignmentMethod': null,
+      'estimatedAmount': null,
+      'estimateApprovedByCustomer': null,
+      'estimateRespondedAt': null,
+      'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
