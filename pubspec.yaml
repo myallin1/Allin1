@@ -1,7 +1,7 @@
-name: erode_superapp
+﻿name: erode_superapp
 description: Erode All-in-One Super App - Multi-vendor Commerce MVP by NJ TECH
 publish_to: 'none'
-version: 1.0.1+5
+version: 1.0.1+8
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -47,6 +47,11 @@ dependencies:
   permission_handler: ^11.3.1
   pointycastle: ^3.9.1
   provider: ^6.1.2
+  # Reads the payload of an Android share (ACTION_SEND) so a location
+  # shared in from WhatsApp/Maps reaches the app. Android+iOS only; the
+  # PWA gets the same feature through manifest.json's "share_target",
+  # which needs no plugin. See shared_location_inbox.dart.
+  receive_sharing_intent: ^1.8.1
   lottie: ^3.1.0
   scratcher: ^2.5.0
   shorebird_code_push: ^2.0.5
@@ -85,6 +90,7 @@ flutter:
     - .env
     - assets/
     - assets/images/
+    - assets/videos/
     - shorebird.yaml
 
   # PWA / Web

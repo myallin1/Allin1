@@ -11,6 +11,7 @@ import 'package:scratcher/scratcher.dart';
 
 import '../widgets/promo_overlay.dart';
 import '../widgets/banner_slider.dart';
+import '../widgets/soundbox_easter_egg_overlay.dart';
 import 'guru_chat_screen.dart';
 
 const Color _paytmBlue = Color(0xFF00BAF2);
@@ -232,6 +233,11 @@ class _RewardsScreenState extends State<RewardsScreen>
           bottom: 20,
           child: _RewardsFloatingGiftBox(onTap: _openPaytmQuizScratchDialog),
         ),
+        // Bouncing Paytm soundbox. Previously mounted app-wide on
+        // MaterialApp's builder, which kept its per-frame Ticker running
+        // over every screen in the app. Now it lives here only, so it
+        // animates while the customer is on Rewards and nowhere else.
+        const RewardsSoundboxOverlay(),
       ],
     );
   }

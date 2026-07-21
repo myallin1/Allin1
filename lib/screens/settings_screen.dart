@@ -3,12 +3,15 @@
 // Allin1 Super App
 // ================================================================
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive/hive.dart';
 import 'package:provider/provider.dart';
 
 import '../services/ai_activation_service.dart';
+import '../services/localization_service.dart';
 import '../services/map_service.dart';
 import '../services/theme_service.dart';
 import 'ai_settings_screen.dart';
@@ -87,8 +90,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadSettings() async {
     try {
       final box = _settingsBox;
-      final langCode =
-          box.get('language_code', defaultValue: 'english') as String;
       final currency = box.get('currency', defaultValue: 'INR (₹)') as String;
       final notifications =
           box.get('notifications', defaultValue: true) as bool;
@@ -98,8 +99,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final biometric = box.get('biometric', defaultValue: false) as bool;
 
       if (!mounted) return;
+      // Language now reads from the real, app-wide LocalizationService
+      // (via Provider) instead of this screen's own local Hive key —
+      // that old 'language_code' key was never read by anything else,
+      // so picking a language here never actually changed any text.
+      // See localization_service.dart.
+      final languageCode = context.read<LocalizationService>().languageCode;
       setState(() {
-        _selectedLanguage = _getLanguageNameFromCode(langCode);
+        _selectedLanguage = _getLanguageNameFromCode(languageCode);
         _selectedCurrency = currency;
         _notificationsEnabled = notifications;
         _rideAlertsEnabled = rideAlerts;
@@ -114,10 +121,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String _getLanguageNameFromCode(String code) {
     const languages = [
-      {'code': 'english', 'name': 'English'},
-      {'code': 'tamil', 'name': 'Tamil'},
-      {'code': 'thanglish', 'name': 'Thanglish'},
-      {'code': 'tamil_tech', 'name': 'Tamil + Tech'},
+      {'code': 'en', 'name': 'English'},
+      {'code': 'ta', 'name': 'Tamil'},
+      {'code': 'tg', 'name': 'Thanglish'},
     ];
     for (final lang in languages) {
       if (lang['code'] == code) return lang['name']!;
@@ -795,30 +801,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // Codes match LocalizationService's translation-map keys directly
+  // (en/ta/tg) — see localization_service.dart. Only 3 languages are
+  // supported app-wide right now, so this list intentionally has no
+  // 4th option; adding one here would need a matching translation set
+  // added there first, or it'd be another dead-end button.
   static const List<Map<String, String>> _languages = [
     {
-      'code': 'english',
+      'code': 'en',
       'name': 'English',
       'emoji': 'EN',
       'desc': 'All text in English',
     },
     {
-      'code': 'tamil',
+      'code': 'ta',
       'name': 'Tamil',
       'emoji': 'TM',
       'desc': 'Muzukka Tamilil',
     },
     {
-      'code': 'thanglish',
+      'code': 'tg',
       'name': 'Thanglish',
       'emoji': 'TG',
       'desc': 'Tamil words in English letters',
-    },
-    {
-      'code': 'tamil_tech',
-      'name': 'Tamil + Tech',
-      'emoji': 'TT',
-      'desc': 'Mainly Tamil, technical = English',
     },
   ];
 
@@ -874,7 +879,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () {
                   if (!mounted) return;
                   setState(() => _selectedLanguage = lang['name']!);
-                  _saveSetting('language_code', lang['code'] ?? 'english');
+                  // Real switch — writes through the app-wide
+                  // LocalizationService (Provider), which is what
+                  // actually changes displayed text, instead of the
+                  // old Hive 'language_code' key nothing ever read.
+                  unawaited(
+                    context
+                        .read<LocalizationService>()
+                        .setLanguage(lang['code'] ?? 'en'),
+                  );
                   Future.delayed(const Duration(milliseconds: 250), () {
                     if (mounted) Navigator.of(ctx).pop();
                   });

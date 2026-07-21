@@ -26,7 +26,7 @@ class AuthenticatedRoot extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
             ),
             title: const Text(
-              'App மூட விரும்புகிறீர்களா?',
+              'Close the app?',
               style: TextStyle(
                 color: Color(0xFFEEEEF5),
                 fontSize: 16,
@@ -34,14 +34,14 @@ class AuthenticatedRoot extends StatelessWidget {
               ),
             ),
             content: const Text(
-              'Allin1-ல இருந்து வெளியேற விரும்புகிறீர்களா?',
+              'Are you sure you want to exit Allin1?',
               style: TextStyle(color: Color(0xFF7777A0), fontSize: 13),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
                 child: const Text(
-                  'இல்லை',
+                  'No',
                   style: TextStyle(color: Color(0xFF7777A0)),
                 ),
               ),
@@ -57,7 +57,7 @@ class AuthenticatedRoot extends StatelessWidget {
                   SystemNavigator.pop(); // Close app
                 },
                 child: const Text(
-                  'வெளியேறு',
+                  'Exit',
                   style: TextStyle(color: Colors.white),
                 ),
               ),

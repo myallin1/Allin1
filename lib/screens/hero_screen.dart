@@ -724,7 +724,7 @@ class _CaptainScreenState extends State<CaptainScreen>
             ),
             const SizedBox(height: 8),
             const Text(
-              'Ride accept பண்ண Online பண்ணுங்க!',
+              'Go Online to start accepting rides!',
               style: TextStyle(fontSize: 13, color: kMuted),
             ),
             const SizedBox(height: 24),

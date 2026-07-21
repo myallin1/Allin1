@@ -3,10 +3,14 @@
 // Allin1 Super App - Hero Configuration
 // ================================================================
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+ import '../../services/localization_service.dart';
  import '../../services/map_service.dart';
 
 class HeroSettingsScreen extends StatefulWidget {
@@ -26,13 +30,12 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
   bool _notificationsEnabled = true;
   bool _rideAlertsEnabled = true;
   String _selectedMapProvider = 'Ola Maps';
-  String _selectedLanguage = 'English';
-
-  static const List<Map<String, String>> _languageOptions = <Map<String, String>>[
-    {'code': 'english', 'name': 'English'},
-    {'code': 'tamil', 'name': 'Tamil'},
-    {'code': 'thanglish', 'name': 'Thanglish'},
-  ];
+  // Language selection now reads/writes through the app-wide
+  // LocalizationService (Provider) — see _buildLanguageSettings()
+  // below. The old 'hero_language_code' shared_preferences key and
+  // _selectedLanguage field were never actually read by anything that
+  // changed displayed text, so picking a language here used to be a
+  // dead-end button.
 
   static const List<Map<String, String>> _mapProviderOptions = <Map<String, String>>[
     {'code': 'ola', 'name': 'Ola Maps'},
@@ -53,9 +56,6 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
         _rideAlertsEnabled = prefs.getBool('hero_ride_alerts_enabled') ?? true;
         _selectedMapProvider = _getMapProviderNameFromCode(
           prefs.getString('hero_map_provider') ?? 'ola',
-        );
-        _selectedLanguage = _getLanguageNameFromCode(
-          prefs.getString('hero_language_code') ?? 'english',
         );
       });
     } catch (e) {
@@ -95,14 +95,6 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
       orElse: () => _mapProviderOptions[0],
     );
     return match['code']!;
-  }
-
-  String _getLanguageNameFromCode(String code) {
-    final match = _languageOptions.firstWhere(
-      (opt) => opt['code'] == code,
-      orElse: () => _languageOptions[0],
-    );
-    return match['name']!;
   }
 
 
@@ -354,6 +346,10 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
   }
 
   Widget _buildLanguageSettings() {
+    // Reactive: rebuilds automatically if the language is ever changed
+    // from elsewhere (e.g. another screen using the same
+    // LocalizationService instance).
+    final currentCode = context.watch<LocalizationService>().languageCode;
     return Container(
       decoration: BoxDecoration(
         color: _surface,
@@ -369,27 +365,26 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
       ),
       child: Column(
         children: [
-          _buildLanguageTile('English', 'English'),
+          _buildLanguageTile('en', 'English', currentCode),
           const Divider(height: 1, indent: 56, endIndent: 16),
-          _buildLanguageTile('Tamil', 'தமிழ்'),
+          _buildLanguageTile('ta', 'தமிழ்', currentCode),
           const Divider(height: 1, indent: 56, endIndent: 16),
-          _buildLanguageTile('Thanglish', 'Tanglish (Tamil + English)'),
+          _buildLanguageTile('tg', 'Tanglish (Tamil + English)', currentCode),
         ],
       ),
     );
   }
 
-  Widget _buildLanguageTile(String code, String displayName) {
-    final isSelected = _selectedLanguage == displayName;
+  Widget _buildLanguageTile(String code, String displayName, String currentCode) {
+    final isSelected = currentCode == code;
     return RadioListTile<String>(
-      value: displayName,
-      groupValue: _selectedLanguage,
-       onChanged: (String? val) {
-         if (val != null) {
-           setState(() => _selectedLanguage = val);
-           _saveStringSetting('hero_language_code', code);
-         }
-       },
+      value: code,
+      groupValue: currentCode,
+      onChanged: (String? val) {
+        if (val != null) {
+          unawaited(context.read<LocalizationService>().setLanguage(val));
+        }
+      },
       title: Text(
         displayName,
         style: GoogleFonts.outfit(

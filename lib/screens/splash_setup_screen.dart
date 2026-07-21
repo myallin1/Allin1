@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../config/api_config.dart';
 import '../services/map_service.dart';
+import '../widgets/branded_loading_screen.dart';
 
 class SplashSetupScreen extends StatefulWidget {
   final Widget nextScreen;
@@ -20,7 +21,10 @@ class _SplashSetupScreenState extends State<SplashSetupScreen> {
 
   Future<void> _initializeApp() async {
     try {
-      await dotenv.load();
+      // Idempotent + race-safe. Previously this was a bare dotenv.load(),
+      // which the unawaited MapService warm-up in main_hero/main_customer
+      // could beat to the punch.
+      await ApiConfig.ensureEnvLoaded();
       await MapService().initialize();
     } catch (e) {
       debugPrint('SplashSetupScreen init error: $e');
@@ -35,35 +39,11 @@ class _SplashSetupScreenState extends State<SplashSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color(0xFFFF4FA3), // NJ Tech Pink background
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'All in 1',
-              style: TextStyle(
-                fontSize: 48,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            SizedBox(height: 32),
-            CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-            ),
-            SizedBox(height: 24),
-            Text(
-              'Setting up for you...',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.white,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    // Same "made love with Erode" look used by _CustomerHomeGate's
+    // loading state (main_customer.dart) and _IntroGate's first-launch
+    // check — previously this screen had its own distinct pink design,
+    // so customers saw 2-3 different-looking loading screens flash by
+    // in sequence on a single cold start. Now it's one continuous look.
+    return const BrandedLoadingScreen(statusText: 'Setting up for you...');
   }
 }

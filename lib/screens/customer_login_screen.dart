@@ -110,15 +110,25 @@ class _CustomerLoginScreenState extends State<CustomerLoginScreen> {
               const Spacer(flex: 2),
 
               // ── Icon ──
-              // -- Official BAPX NJ Brand Logo --
-              ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: Image.asset(
-                  'assets/images/bapx_nj_logo.gif',
-                  width: 100,
-                  height: 100,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const Text(
+              // Was Image.asset('assets/images/bapx_nj_logo.gif') — a
+              // 2.4 MB animated GIF that had to be decoded before this
+              // screen could paint. Now the same pink brand mark drawn
+              // in code (matching BrandedLoadingScreen), costing nothing
+              // to load. This was the last screen still referencing the
+              // GIF, so the asset itself is gone from the bundle.
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF4FA3), Color(0xFFFF92C8)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Center(
+                  child: Text(
                     'NJ',
                     style: TextStyle(
                       color: Colors.white,

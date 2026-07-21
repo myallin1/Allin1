@@ -724,8 +724,8 @@ class _LoginScreenState extends State<LoginScreen>
             const Icon(Icons.person_outline, size: 18, color: kMuted),
             const SizedBox(width: 8),
             Text(
-              'Guest-ஆ பார்க்க (Demo)',
-              style: GoogleFonts.notoSansTamil(fontSize: 14, color: kMuted),
+              'Browse as guest (Demo)',
+              style: GoogleFonts.outfit(fontSize: 14, color: kMuted),
             ),
           ],
         ),

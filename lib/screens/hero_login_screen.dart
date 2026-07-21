@@ -442,18 +442,21 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
           child: Column(
             children: [
               const Spacer(flex: 2),
-              // Logo
-              ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: Image.asset(
-                  'assets/images/bapx_nj_logo.gif',
-                  width: 100,
-                  height: 100,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const Text(
-                    '🦸',
-                    style: TextStyle(fontSize: 60),
+              // Logo — was the 2.4 MB bapx_nj_logo.gif, now drawn in code.
+              // See the matching comment in customer_login_screen.dart.
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF4FA3), Color(0xFFFF92C8)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Center(
+                  child: Text('🦸', style: TextStyle(fontSize: 48)),
                 ),
               ),
               const SizedBox(height: 24),

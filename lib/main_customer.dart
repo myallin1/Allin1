@@ -12,9 +12,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_navigator.dart';
 import 'firebase_options.dart';
+import 'config/api_config.dart';
 import 'screens/ai_settings_screen.dart';
 import 'screens/auth/profile_setup_screen.dart';
 import 'screens/checkout_screen.dart';
@@ -23,8 +25,11 @@ import 'screens/customer_login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/guru_chat_screen.dart';
 import 'screens/guru_offer_screen.dart';
+import 'screens/hero_booking_screen.dart';
+import 'screens/intro_video_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/splash_setup_screen.dart';
+import 'screens/welcome_screen.dart';
 import 'services/ai_activation_service.dart';
 import 'services/analytics_service.dart';
 import 'services/api_service.dart';
@@ -34,9 +39,16 @@ import 'services/local_sync_service.dart';
 import 'services/localization_service.dart';
 import 'services/map_service.dart';
 import 'services/session_service.dart';
+// receive_sharing_intent is Android/iOS only and has no web
+// implementation, so importing it unconditionally broke `flutter build
+// web`. Switch the implementation at compile time instead: web gets the
+// no-op stub, mobile gets the real reader.
+import 'services/share_intent_platform_stub.dart'
+    if (dart.library.io) 'services/share_intent_platform_native.dart';
+import 'services/shared_location_inbox.dart';
 import 'services/soundbox_easter_egg_service.dart';
 import 'services/theme_service.dart';
-import 'widgets/soundbox_easter_egg_overlay.dart';
+import 'widgets/branded_loading_screen.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -103,36 +115,29 @@ void main() async {
   }
 
   await runZonedGuarded(() async {
-    try {
-      await AnalyticsService.instance.initialize();
-    } catch (e) {
-      debugPrint('Firebase/Analytics init error: $e');
-    }
-
+    // ── BOOT PHASE 1: only what the first screen genuinely needs ──
+    //
+    // Everything below used to run here, sequentially, before runApp():
+    //   Analytics init, Hive.initFlutter, LocalSync (4 boxes),
+    //   CacheService (5 boxes), ApiService (1 box + Dio), settings write.
+    //
+    // That's 10 Hive box opens one after another — each one a local
+    // storage round-trip (IndexedDB on web) — while the customer stares
+    // at a blank/splash screen. Hive caching makes the DATA free to
+    // read; it does not make OPENING the boxes free, and that cost was
+    // being paid serially on every single launch.
+    //
+    // Now: Hive core + the 3 boxes the home screen reads. Everything
+    // else moved to _warmCustomerServices() (phase 2, post-runApp).
     await Hive.initFlutter();
-    await LocalSyncService.instance.initialize();
-    await CacheService().init();
-    await ApiService.instance.initialize();
-    try {
-      debugPrint('[main_customer] Initializing MapService...');
-      await MapService().initialize();
-      debugPrint(
-        '[main_customer] MapService ready provider=${MapService().currentProvider.name} '
-        'fallback=${MapService().isUsingFallback}',
-      );
-    } catch (e) {
-      debugPrint('[main_customer] MapService init error: $e');
-    }
+    await CacheService().initCritical();
 
-    await CacheService().cacheSettings({
-      'bikeTaxiBaseFare': 25.0,
-      'bikeTaxiPerKm': 12.0,
-      'coinValue': 100,
-      'riderCommission': 15.0,
-      'sellerCommission': 18.0,
-      'platformFee': 2.0,
-      'upiZeroFee': true,
-    });
+    // If this launch came from Android's share sheet (customer shared a
+    // location out of WhatsApp/Maps into Allin1), the shared text is on
+    // the launch URL. Read it now, before any screen builds, so the
+    // hero booking screen finds it already waiting. Cheap, synchronous,
+    // and a no-op on an ordinary launch.
+    SharedLocationInbox.instance.captureFromLaunchUrl();
 
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
@@ -150,8 +155,123 @@ void main() async {
     }
   });
 
-  await _restoreActiveRideIfNeeded();
   runApp(const CustomerApp());
+
+  // Everything non-essential to the first frame runs here instead of
+  // blocking runApp(): analytics, the deferred Hive boxes, the API
+  // client, the Ola Maps availability ping, and the Firestore
+  // active-ride lookup. Same pattern as main_hero.dart's
+  // _warmHeroServices(). Worst case, an active-ride banner appears a
+  // moment after the home screen instead of before it.
+  //
+  // _restoreActiveRideIfNeeded() only touches Firestore when Hive
+  // already holds an active-ride marker — a customer with no ride in
+  // progress costs zero database reads on launch.
+  unawaited(_warmCustomerServices());
+  unawaited(_restoreActiveRideIfNeeded());
+  unawaited(_listenForSharedLocations());
+}
+
+// ── BOOT PHASE 2: everything that can wait for the first frame ──
+// Runs unawaited() after runApp(). Nothing in here is needed to paint
+// the home screen; the customer sees UI while this finishes in the
+// background. Each block is independently try/caught so one failure
+// can't take the rest of the warm-up down with it.
+Future<void> _warmCustomerServices() async {
+  // Independent of each other, so let them overlap instead of queueing.
+  await Future.wait([
+    _warmAnalytics(),
+    _warmDeferredCaches(),
+    _warmMapStack(),
+  ]);
+}
+
+Future<void> _warmAnalytics() async {
+  try {
+    await AnalyticsService.instance.initialize();
+  } catch (e) {
+    debugPrint('[main_customer] Analytics init error: $e');
+  }
+}
+
+Future<void> _warmDeferredCaches() async {
+  try {
+    // ads_cache + ride_fares_cache (CacheService), the four tb_* boxes
+    // (LocalSyncService) and api_cache (ApiService) — none of which the
+    // home screen reads on first paint.
+    //
+    // ApiService reads ApiConfig.primaryBaseUrl when it configures Dio,
+    // and LocalSyncService reads TRAILBASE_URL from dotenv, so make sure
+    // .env is loaded first. ensureEnvLoaded() is idempotent and
+    // race-safe, so calling it here as well as in _warmMapStack() is
+    // fine — whichever gets there first wins, the other no-ops.
+    await ApiConfig.ensureEnvLoaded();
+
+    await Future.wait([
+      CacheService().initDeferred(),
+      LocalSyncService.instance.initialize(),
+      ApiService.instance.initialize(),
+    ]);
+
+    await CacheService().cacheSettings({
+      'bikeTaxiBaseFare': 25.0,
+      'bikeTaxiPerKm': 12.0,
+      'coinValue': 100,
+      'riderCommission': 15.0,
+      'sellerCommission': 18.0,
+      'platformFee': 2.0,
+      'upiZeroFee': true,
+    });
+  } catch (e) {
+    debugPrint('[main_customer] Deferred cache warm-up error: $e');
+  }
+}
+
+// ── Native share-target receiver ─────────────────────────────────
+// Android side of "share a WhatsApp location into Allin1". The
+// ACTION_SEND intent-filter in AndroidManifest.xml is what puts the app
+// in the share sheet; this is what reads the text that comes with it.
+//
+// Two cases to cover, and missing either one makes the feature look
+// broken half the time:
+//   getInitialMedia() — the share COLD-STARTED the app. The intent is
+//     already waiting when Dart boots.
+//   getMediaStream()  — the app was already running. A fresh intent
+//     arrives while it's in memory.
+//
+// Web/PWA never reaches this: the plugin has no web implementation, and
+// SharedLocationInbox.captureFromLaunchUrl() has already handled the
+// equivalent job from the launch URL's query string.
+Future<void> _listenForSharedLocations() async {
+  await const ShareIntentPlatform().listen((text) {
+    final accepted = SharedLocationInbox.instance.deliver(text);
+    if (!accepted) return;
+
+    // If the customer is already somewhere else in the app, take them to
+    // the booking form — that's the only screen that can act on this,
+    // and it prompts "Pickup or Drop?" as soon as it builds.
+    final navigator = navigatorKey.currentState;
+    if (navigator == null) return;
+    unawaited(navigator.push<void>(
+      MaterialPageRoute<void>(builder: (_) => const HeroBookingScreen()),
+    ),);
+  });
+}
+
+Future<void> _warmMapStack() async {
+  try {
+    // MUST precede MapService() — see the matching comment in
+    // main_hero.dart and ApiConfig.ensureEnvLoaded().
+    await ApiConfig.ensureEnvLoaded();
+    debugPrint('[main_customer] Initializing MapService...');
+    await MapService().initialize();
+    debugPrint(
+      '[main_customer] MapService ready provider=${MapService().currentProvider.name} '
+      'fallback=${MapService().isUsingFallback}',
+    );
+  } catch (e) {
+    debugPrint('[main_customer] MapService init error: $e');
+  }
 }
 
 Future<void> _restoreActiveRideIfNeeded() async {
@@ -197,15 +317,29 @@ class CustomerApp extends StatelessWidget {
       ],
       child: Consumer2<LocalizationService, ThemeService>(
         builder: (context, localization, themeService, _) => MaterialApp(
-          key: ValueKey(
-            'customer_${localization.languageCode}_${themeService.themeKey}',
-          ),
+          // languageCode used to be part of this key. Changing the key
+          // makes Flutter throw the ENTIRE MaterialApp away and build a
+          // fresh one — which also destroys the Navigator and every
+          // screen on it. So picking a language on the welcome screen
+          // blew that screen away mid-tap and dumped the customer
+          // straight onto the home screen, skipping the sign-in choice
+          // completely.
+          //
+          // It was never needed: the Consumer2 wrapper below already
+          // rebuilds on notifyListeners(), so anything reading
+          // context.watch<LocalizationService>() re-renders in the new
+          // language without nuking navigation.
+          //
+          // themeKey is left in place for now — same concern applies to
+          // it, but theme switching mid-session isn't part of this fix
+          // and changing it here would be an unrelated behaviour change.
+          key: ValueKey('customer_${themeService.themeKey}'),
           navigatorKey: navigatorKey,
           title: localization.t('app_title'),
           debugShowCheckedModeBanner: false,
           theme: themeService.currentTheme,
           themeMode: ThemeMode.light,
-          home: const SplashSetupScreen(nextScreen: _CustomerHomeGate()),
+          home: const _IntroGate(),
           routes: {
             '/login': (_) => const CustomerLoginScreen(),
             '/dashboard': (_) => const DashboardScreen(),
@@ -220,14 +354,99 @@ class CustomerApp extends StatelessWidget {
           navigatorObservers: [
             AnalyticsService.instance.getObserver(),
           ],
-          builder: (context, child) {
-            return SoundboxEasterEggOverlayScope(
-              child: child ?? const SizedBox.shrink(),
-            );
-          },
+          // The bouncing Paytm soundbox used to be mounted HERE, at the
+          // MaterialApp builder — meaning it sat on top of every single
+          // screen in the app with a Ticker firing on every frame for
+          // the entire lifetime of the app, even on screens where it
+          // made no sense. It now lives only inside the Rewards screen
+          // (RewardsSoundboxOverlay), so the rest of the app pays
+          // nothing for it. Feature kept, scope narrowed.
         ),
       ),
     );
+  }
+}
+
+// ================================================================
+// First-launch intro video gate. Shows IntroVideoScreen exactly once
+// per customer (shared_preferences flag), then never again — every
+// launch after that goes straight to the normal splash → home flow.
+// The "still checking" placeholder (a very fast local read, not
+// network) uses the same BrandedLoadingScreen as everything else, so
+// there's no 4th different-looking flash on screen while it resolves.
+// ================================================================
+class _IntroGate extends StatefulWidget {
+  const _IntroGate();
+
+  @override
+  State<_IntroGate> createState() => _IntroGateState();
+}
+
+class _IntroGateState extends State<_IntroGate> {
+  static const String _seenIntroKey = 'has_seen_intro_video_v1';
+  static const String _seenWelcomeKey = 'has_seen_welcome_v1';
+
+  bool? _showIntro; // null while the shared_preferences check is in flight
+  bool _showWelcome = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_checkFirstLaunch());
+  }
+
+  Future<void> _checkFirstLaunch() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      final seenIntro = prefs.getBool(_seenIntroKey) ?? false;
+      if (!seenIntro) {
+        await prefs.setBool(_seenIntroKey, true);
+      }
+
+      // Tracked separately from the video. They were introduced at
+      // different times, so a customer who already has the intro flag
+      // set from an earlier version should still be offered the
+      // language/sign-in screen once.
+      final seenWelcome = prefs.getBool(_seenWelcomeKey) ?? false;
+      if (!seenWelcome) {
+        await prefs.setBool(_seenWelcomeKey, true);
+      }
+
+      if (mounted) {
+        setState(() {
+          _showIntro = !seenIntro;
+          _showWelcome = !seenWelcome;
+        });
+      }
+    } catch (e) {
+      debugPrint('[IntroGate] first-launch check failed: $e');
+      if (mounted) {
+        setState(() {
+          _showIntro = false;
+          _showWelcome = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_showIntro == null) {
+      return const BrandedLoadingScreen();
+    }
+
+    // First launch runs the whole sequence:
+    //   intro video -> welcome (language + sign-in) -> splash -> home
+    // Every launch after that goes straight to splash -> home.
+    const home = SplashSetupScreen(nextScreen: _CustomerHomeGate());
+    final afterIntro =
+        _showWelcome ? const WelcomeScreen(next: home) : home;
+
+    if (_showIntro == true) {
+      return IntroVideoScreen(next: afterIntro);
+    }
+    return afterIntro;
   }
 }
 
@@ -241,74 +460,11 @@ class _CustomerHomeGate extends StatefulWidget {
 class _CustomerHomeGateState extends State<_CustomerHomeGate> {
   String? _lastUid;
 
-  Widget _buildLoadingScaffold() {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 94,
-                  height: 94,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFFF4FA3), Color(0xFFFF92C8)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(28),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x24FF4FA3),
-                        blurRadius: 24,
-                        offset: Offset(0, 14),
-                      ),
-                    ],
-                  ),
-                  child: const Center(
-                    child: SizedBox(
-                      width: 34,
-                      height: 34,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3.2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  "That'll Bapx NJ Tech",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Color(0xFF4A1236),
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'made love ❤ with erode',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Color(0xFF8A4E72),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  // Same shared design SplashSetupScreen and _IntroGate use — see
+  // branded_loading_screen.dart. This screen's own copy of the design
+  // used to be the ONLY place with this exact look; now it's the
+  // single source of truth for it.
+  Widget _buildLoadingScaffold() => const BrandedLoadingScreen();
 
   @override
   Widget build(BuildContext context) {

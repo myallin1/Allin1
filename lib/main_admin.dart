@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:provider/provider.dart';
 
 import 'firebase_options.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
@@ -17,6 +18,7 @@ import 'screens/admin/fare_management_screen.dart';
 import 'screens/admin/super_admin_home_screen.dart';
 import 'screens/admin/task_approvals_screen.dart';
 import 'screens/login_screen.dart';
+import 'services/localization_service.dart';
 import 'services/session_service.dart';
 
 void main() {
@@ -94,7 +96,12 @@ class AdminApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    // LocalizationService (en/ta/tg) made available app-wide, same as
+    // customer/hero apps — admin had zero language infrastructure
+    // before this (see language-system audit).
+    return ChangeNotifierProvider(
+      create: (_) => LocalizationService(),
+      child: MaterialApp(
       title: 'Allin1 Admin',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
@@ -131,6 +138,7 @@ class AdminApp extends StatelessWidget {
         '/admin/tasks': (_) => const TaskApprovalsScreen(),
         '/admin/fares': (_) => const FareManagementScreen(),
       },
+      ),
     );
   }
 }

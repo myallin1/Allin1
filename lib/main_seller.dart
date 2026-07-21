@@ -3,6 +3,7 @@
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
@@ -10,6 +11,7 @@ import 'screens/seller_dashboard_screen.dart';
 import 'screens/seller_menu_setup_screen.dart';
 import 'screens/seller_onboarding_screen.dart';
 import 'screens/seller_screen.dart';
+import 'services/localization_service.dart';
 import 'services/session_service.dart';
 
 void main() async {
@@ -25,7 +27,12 @@ class SellerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    // LocalizationService (en/ta/tg) made available app-wide, same as
+    // customer/hero/admin apps — seller had zero language
+    // infrastructure before this (see language-system audit).
+    return ChangeNotifierProvider(
+      create: (_) => LocalizationService(),
+      child: MaterialApp(
       title: 'Allin1 Partner Dashboard',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
@@ -58,6 +65,7 @@ class SellerApp extends StatelessWidget {
         }
         return null;
       },
+      ),
     );
   }
 }

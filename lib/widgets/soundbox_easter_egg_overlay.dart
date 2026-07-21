@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -8,55 +7,37 @@ import 'package:provider/provider.dart';
 
 import '../services/soundbox_easter_egg_service.dart';
 
-class SoundboxEasterEggOverlayScope extends StatelessWidget {
-  const SoundboxEasterEggOverlayScope({
-    required this.child, super.key,
-  });
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        child,
-        const Positioned.fill(
-          child: IgnorePointer(
-            child: SizedBox.shrink(),
-          ),
-        ),
-        const _BouncingSoundboxOverlay(),
-      ],
-    );
-  }
-}
-
+/// The bouncing Paytm soundbox, scoped to the Rewards screen.
+///
+/// This used to be mounted app-wide via a `SoundboxEasterEggOverlayScope`
+/// wrapper on MaterialApp's `builder:`, which kept a per-frame Ticker
+/// alive on top of EVERY screen for the whole life of the app. It now
+/// mounts only where it belongs, so its animation cost is paid only
+/// while the customer is actually looking at Rewards.
+///
+/// Drop it as the last child of the Rewards screen's Stack.
 class RewardsSoundboxOverlay extends StatelessWidget {
   const RewardsSoundboxOverlay({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final hidden = context.watch<SoundboxEasterEggService>().isHiddenGlobally;
-    if (!hidden) {
-      return const SizedBox.shrink();
-    }
-    return const _BouncingSoundboxOverlay(forceVisible: true);
+    // The original easter egg is fully intact: tap it 33 times and it
+    // flies off and stays hidden. Only WHERE it lives changed, not what
+    // it does.
+    return const _BouncingSoundboxOverlay();
   }
 }
 
+// `forceVisible` used to live here, for a second copy of this overlay
+// that ignored the "tapped 33 times, fly away and stay gone" easter
+// egg. That variant no longer exists — the overlay is mounted in
+// exactly one place (the Rewards screen) and always honours the egg —
+// so the flag was dead weight that only ever took its default value.
 class _BouncingSoundboxOverlay extends StatefulWidget {
-  const _BouncingSoundboxOverlay({this.forceVisible = false});
-
-  final bool forceVisible;
+  const _BouncingSoundboxOverlay();
 
   @override
   State<_BouncingSoundboxOverlay> createState() => _BouncingSoundboxOverlayState();
-
-  @override
-  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
-    super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<bool>('forceVisible', forceVisible));
-  }
 }
 
 class _BouncingSoundboxOverlayState extends State<_BouncingSoundboxOverlay>
@@ -126,7 +107,7 @@ class _BouncingSoundboxOverlayState extends State<_BouncingSoundboxOverlay>
           );
         });
       }
-      if (_exitProgress >= 1 && !widget.forceVisible) {
+      if (_exitProgress >= 1) {
         context.read<SoundboxEasterEggService>().hideGlobally();
       }
       return;
@@ -171,7 +152,7 @@ class _BouncingSoundboxOverlayState extends State<_BouncingSoundboxOverlay>
       });
     });
 
-    if (!widget.forceVisible && service.tapCount >= 33 && !_isExiting) {
+    if (service.tapCount >= 33 && !_isExiting) {
       setState(() {
         _isExiting = true;
         _velocity = Offset(_velocity.dx * 1.8, -96);
@@ -182,13 +163,13 @@ class _BouncingSoundboxOverlayState extends State<_BouncingSoundboxOverlay>
   @override
   Widget build(BuildContext context) {
     final hidden = context.watch<SoundboxEasterEggService>().isHiddenGlobally;
-    final shouldShow = widget.forceVisible || !hidden || _isExiting;
+    final shouldShow = !hidden || _isExiting;
     if (!shouldShow) {
       return const SizedBox.shrink();
     }
 
-    final exitScale = widget.forceVisible ? 1.0 : (1 - (_exitProgress * 0.82)).clamp(0.18, 1.0);
-    final opacity = widget.forceVisible ? 0.94 : (1 - _exitProgress).clamp(0.0, 1.0);
+    final exitScale = (1 - (_exitProgress * 0.82)).clamp(0.18, 1.0);
+    final opacity = (1 - _exitProgress).clamp(0.0, 1.0);
 
     return Positioned(
       left: _position.dx,
@@ -215,7 +196,7 @@ class _BouncingSoundboxOverlayState extends State<_BouncingSoundboxOverlay>
                     boxShadow: [
                       BoxShadow(
                         color: const Color(0x38FF4FA3),
-                        blurRadius: widget.forceVisible ? 18 : 14,
+                        blurRadius: 14,
                         offset: const Offset(0, 8),
                       ),
                     ],

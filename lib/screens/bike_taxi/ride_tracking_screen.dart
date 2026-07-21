@@ -467,11 +467,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       return;
     }
     _hasNavigatedToPayment = true;
-    final tip = _tipAmount ?? 0;
-    final baseToCharge = _lockedFare ??
-        widget.ride.estimatedFare?.toDouble() ??
-        _calculateFareFromDistance(widget.ride.distanceKm ?? 0);
-    final amount = baseToCharge + tip;
+    final amount = _totalToCollect();
     try {
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
@@ -1115,10 +1111,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
 
   Widget _completedBanner() {
     final tip = _tipAmount ?? 0;
-    final baseToCharge = _lockedFare ??
-        widget.ride.estimatedFare?.toDouble() ??
-        _calculateFareFromDistance(widget.ride.distanceKm ?? 0);
-    final absoluteTotal = baseToCharge + tip;
+    final absoluteTotal = _totalToCollect();
     final fareBeforeTip = absoluteTotal - tip;
     return Container(
       width: double.infinity,
@@ -1241,10 +1234,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
 
   Widget _paymentSheet() {
     final tip = _tipAmount ?? 0;
-    final baseToCharge = _lockedFare ??
-        widget.ride.estimatedFare?.toDouble() ??
-        _calculateFareFromDistance(widget.ride.distanceKm ?? 0);
-    final absoluteTotal = baseToCharge + tip;
+    final absoluteTotal = _totalToCollect();
     final fareBeforeTip = absoluteTotal - tip;
     return Container(
       width: double.infinity,
@@ -1276,8 +1266,8 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
           ),
           const SizedBox(height: 6),
           Text(
-            'ரைடரின் Paytm Soundbox-ஐ ஸ்கேன் செய்து பணம் செலுத்தவும்.',
-            style: GoogleFonts.notoSansTamil(
+            "Scan the rider's Paytm Soundbox to pay.",
+            style: GoogleFonts.outfit(
               fontSize: 13,
               color: _muted,
             ),
@@ -1731,6 +1721,30 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     } catch (e) {
       debugPrint('Route error: $e');
     }
+  }
+
+  // ── Confirmed-bug fix: total-to-collect must prefer the hero's real,
+  // completion-time computed total (_finalFare = fareBeforeTip + tip,
+  // written by hero_ride_screen.dart's _completeTrip()) over the stale
+  // pre-ride estimate. Previously every caller below independently
+  // computed `(_lockedFare ?? estimatedFare ?? calculated) + tip` and
+  // NEVER looked at _finalFare at all — since 'lockedFare' is never
+  // actually written anywhere in this codebase, this always fell
+  // through to the stale pre-ride estimate, producing a different
+  // number than what the hero's Collect Payment screen shows (which
+  // correctly uses actualFare + tip). _finalFare already includes tip
+  // — do NOT add tip again on top of it once the ride is completed.
+  double _totalToCollect() {
+    final finalFare = _finalFare;
+    if (finalFare != null && finalFare > 0) {
+      return finalFare;
+    }
+    final tip = _tipAmount ?? 0;
+    final baseToCharge = _actualFare ??
+        _lockedFare ??
+        widget.ride.estimatedFare?.toDouble() ??
+        _calculateFareFromDistance(widget.ride.distanceKm ?? 0);
+    return baseToCharge + tip;
   }
 
   double _calculateFareFromDistance(double km) {

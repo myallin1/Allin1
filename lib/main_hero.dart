@@ -6,16 +6,19 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_navigator.dart';
 import 'firebase_options.dart';
+import 'config/api_config.dart';
 import 'screens/auth/profile_setup_screen.dart';
 import 'screens/bike_taxi/hero_dashboard_shell.dart';
 import 'screens/hero_login_screen.dart';
 import 'screens/splash_setup_screen.dart';
 import 'services/hero_ride_notification_service.dart';
 import 'services/hero_web_audio_service.dart';
+import 'services/localization_service.dart';
 import 'services/map_service.dart';
 import 'services/session_service.dart';
 import 'widgets/hero_premium_loader.dart';
@@ -222,6 +225,11 @@ void main() async {
 
 Future<void> _warmHeroServices() async {
   try {
+    // MUST precede MapService(): constructing the singleton reads the Ola
+    // API key from dotenv. This warm-up runs concurrently with runApp(),
+    // so without this it used to beat SplashSetupScreen's load() on web
+    // and cache an empty key for the whole session.
+    await ApiConfig.ensureEnvLoaded();
     debugPrint('[main_hero] Initializing MapService...');
     await MapService().initialize();
     debugPrint(
@@ -238,7 +246,12 @@ class HeroApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    // LocalizationService (en/ta/tg) is now available app-wide — see
+    // hero_settings_screen.dart's language picker, which used to save
+    // to a shared_preferences key nothing else ever read.
+    return ChangeNotifierProvider(
+      create: (_) => LocalizationService(),
+      child: GestureDetector(
       onTap: () {
         if (kIsWeb) HeroWebAudioService().unlock();
       },
@@ -263,6 +276,7 @@ class HeroApp extends StatelessWidget {
           '/hero-home': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
           '/hero-ride': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
         },
+      ),
       ),
     );
   }
