@@ -29,23 +29,42 @@ class OlaMapsProvider extends MapProvider {
     return apiKey.isNotEmpty && apiKey.length >= 16;
   }
 
+  // Default bias point, used only when no live centre is supplied.
+  static const double _defaultBiasLat = 11.3410;
+  static const double _defaultBiasLng = 77.7171;
+
   @override
-  Future<List<Map<String, dynamic>>> search(String query) async {
+  Future<List<Map<String, dynamic>>> search(String query) => searchNear(query);
+
+  /// Autocomplete biased around [center] — pass the customer's live
+  /// location so results follow whatever city they are actually in.
+  ///
+  /// This used to hardcode Erode twice: a '11.3410,77.7171' location
+  /// param AND a ', Erode, Tamil Nadu' suffix glued onto the query. The
+  /// suffix in particular actively hurt results — it turned a search for
+  /// a local shop into a search for that shop *in a text string that
+  /// already says Erode*, which Ola then had to disambiguate. The
+  /// location+radius bias alone does the same job properly, and works
+  /// unchanged when we open in a second city.
+  Future<List<Map<String, dynamic>>> searchNear(
+    String query, {
+    LatLng? center,
+  }) async {
     final trimmedQuery = query.trim();
     if (trimmedQuery.isEmpty) return [];
     if (apiKey.isEmpty) return [];
 
+    final biasLat = center?.latitude ?? _defaultBiasLat;
+    final biasLng = center?.longitude ?? _defaultBiasLng;
+
     try {
-      final erodeBiasedQuery = trimmedQuery.toLowerCase().contains('erode')
-          ? trimmedQuery
-          : '$trimmedQuery, Erode, Tamil Nadu';
       final autocompleteUri = Uri.https(
         _placesHost,
         '$_placesBasePath/autocomplete',
         <String, String>{
-          'input': erodeBiasedQuery,
+          'input': trimmedQuery,
           'api_key': apiKey,
-          'location': '11.3410,77.7171',
+          'location': '$biasLat,$biasLng',
           'radius': '40000',
         },
       );
@@ -58,27 +77,35 @@ class OlaMapsProvider extends MapProvider {
         final predictions = _extractPlaceList(data);
         final results = <Map<String, dynamic>>[];
 
+        // Predictions that already carry coordinates are free. Ones that
+        // don't need a follow-up geocode call — those used to run one
+        // after another inside this loop, up to 8 sequential HTTP
+        // round-trips at a 10s timeout each, on every keystroke batch.
+        // That alone could make autocomplete feel broken. Now they run
+        // together, and only for the few that actually need it.
+        final needsGeocode = <String>[];
         for (final item in predictions.take(8)) {
           final parsed = _parsePlaceResult(item);
           if (parsed != null) {
             results.add(parsed);
             continue;
           }
-
           final label = _extractDisplayText(item);
-          if (label == null || label.trim().isEmpty) continue;
+          if (label != null && label.trim().isNotEmpty) {
+            needsGeocode.add(label);
+          }
+        }
 
-          final geocoded = await _geocodeAddress(
-            label.toLowerCase().contains('erode')
-                ? label
-                : '$label, Erode, Tamil Nadu',
+        if (needsGeocode.isNotEmpty) {
+          final geocoded = await Future.wait(
+            needsGeocode.take(4).map(_geocodeAddress),
           );
-          if (geocoded != null) results.add(geocoded);
+          results.addAll(geocoded.whereType<Map<String, dynamic>>());
         }
 
         if (results.isNotEmpty) return _dedupeResults(results);
 
-        final geocoded = await _geocodeAddress(erodeBiasedQuery);
+        final geocoded = await _geocodeAddress(trimmedQuery);
         return geocoded == null ? [] : <Map<String, dynamic>>[geocoded];
       }
 

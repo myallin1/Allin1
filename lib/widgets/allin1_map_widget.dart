@@ -106,6 +106,11 @@ class Allin1MapWidget extends StatefulWidget {
   final MapController? mapController;
   final VoidCallback? onMapReady;
 
+  /// Fires as the map is panned/zoomed, with the new centre point.
+  /// Used by LocationPickerScreen to keep a fixed centre pin's address
+  /// in sync while the customer drags the map underneath it.
+  final void Function(LatLng center, bool gestureFinished)? onCenterChanged;
+
   const Allin1MapWidget({
     super.key,
     this.center = kErodeCenter,
@@ -117,6 +122,7 @@ class Allin1MapWidget extends StatefulWidget {
     this.mapController,
     this.onMapReady,
     this.onMarkerTap,
+    this.onCenterChanged,
   });
 
   @override
@@ -284,6 +290,9 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
                 minZoom: 10,
                 maxZoom: 18,
                 onMapReady: _handleMapReady,
+                onPositionChanged: (camera, hasGesture) {
+                  widget.onCenterChanged?.call(camera.center, !hasGesture);
+                },
                 interactionOptions: InteractionOptions(
                   flags: widget.interactive
                       ? InteractiveFlag.all

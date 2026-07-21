@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../config/api_config.dart';
 import 'map_provider.dart';
 import 'ola_maps_provider.dart';
 import 'osm_provider.dart';
@@ -17,10 +18,50 @@ class MapService extends ChangeNotifier {
   factory MapService() => _instance;
   MapService._internal();
 
-  late final MapProvider _olaProvider;
-  late final MapProvider _osmProvider;
+  // Lazily-constructed providers.
+  //
+  // These were previously `late final` and assigned only inside
+  // initialize(). Because initialize() early-returned on web, the fields
+  // were never assigned there and every call site threw
+  // LateInitializationError on the PWA build (the minified web build
+  // reports it as "Field '' has not been initialized").
+  //
+  // Backing them with nullable fields + self-initializing getters makes
+  // that failure mode structurally impossible on every platform: the
+  // provider is constructed on first read, no matter which code path
+  // gets there first. Both constructors are cheap and pure-Dart.
+  MapProvider? _olaProviderInstance;
+  MapProvider? _osmProviderInstance;
 
-  MapProvider _currentProvider = OlaMapsProvider();
+  MapProvider get _olaProvider => _olaProviderInstance ??= OlaMapsProvider();
+  MapProvider get _osmProvider => _osmProviderInstance ??= OSMProvider();
+
+  // ── Dynamic search-bias center ──────────────────────────────────
+  // Erode-only search was hardcoded, so the search box wouldn't just
+  // exclude other cities — it also over-restricted Erode itself and
+  // caused irrelevant/empty results for local place names.
+  // Screens can call setSearchCenter() with the customer's live
+  // location so search is biased to whatever city they're actually
+  // in. When unset (or the customer's location isn't available),
+  // OSMProvider falls back to its built-in Erode default, so nothing
+  // breaks for anyone who hasn't wired this up yet.
+  LatLng? _searchCenterOverride;
+
+  void setSearchCenter(LatLng? center) {
+    _searchCenterOverride = center;
+  }
+
+  // Backed lazily for the same reason as the providers above: this field
+  // initialiser used to run at singleton-construction time, constructing
+  // an OlaMapsProvider — and therefore reading dotenv — before
+  // ApiConfig.ensureEnvLoaded() had completed. Touching MapService() at
+  // all was enough to snapshot an empty API key.
+  MapProvider? _currentProviderInstance;
+  MapProvider get _currentProvider =>
+      _currentProviderInstance ??= _olaProvider;
+  set _currentProvider(MapProvider provider) =>
+      _currentProviderInstance = provider;
+
   MapProviderType _selectedProvider = MapProviderType.ola;
   bool _isInitialized = false;
   bool _isUsingFallback = false;
@@ -44,15 +85,26 @@ class MapService extends ChangeNotifier {
   Future<void> initialize() async {
     if (_isInitialized) return;
 
+    // Guarantee .env is loaded before ANY provider is constructed or any
+    // API key is read. Idempotent and race-safe, so it is correct no
+    // matter which entrypoint reaches initialize() first — this is what
+    // stops the empty-key state from being cached for the whole session.
+    await ApiConfig.ensureEnvLoaded();
+
+    // NOTE: There is deliberately no kIsWeb early-return here.
+    // Both OlaMapsProvider and OSMProvider are pure HTTP clients
+    // (package:http + dart:convert) with no native/platform-channel
+    // dependencies, so they construct and operate correctly on web.
+    // A previous early-return skipped the assignments below on web,
+    // leaving _olaProvider/_osmProvider unassigned and causing every
+    // search/reverseGeocode/getRoute call to throw
+    // LateInitializationError on the PWA build.
     if (kIsWeb) {
-      debugPrint('[MapService] Skipping native map init on Web');
-      return;
+      debugPrint('[MapService] Initializing map providers on Web');
     }
 
     try {
       debugPrint('[MapService] Starting initialization');
-      _olaProvider = OlaMapsProvider();
-      _osmProvider = OSMProvider();
       _currentProvider = _olaProvider;
       _selectedProvider = MapProviderType.ola;
       _isUsingFallback = false;
@@ -95,8 +147,6 @@ class MapService extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('❌ MapService init error: $e');
-      _olaProvider = OlaMapsProvider();
-      _osmProvider = OSMProvider();
       _currentProvider = _olaProvider;
       _selectedProvider = MapProviderType.ola;
       _isUsingFallback = false;
@@ -120,26 +170,29 @@ class MapService extends ChangeNotifier {
   Future<List<Map<String, dynamic>>> search(String query) async {
     await initialize();
 
-    // OSM Nominatim first — accurate for Erode local places.
-    // OLA Maps does not index Erode streets well, so Nominatim
-    // with bounded Erode viewbox is the primary search source.
+    // ── Ola FIRST, Nominatim as the fallback ──────────────────────
+    //
+    // This order used to be reversed, with a comment claiming "OLA Maps
+    // does not index Erode streets well". That turned out to be the
+    // wrong call: Ola's /places/v1/autocomplete is a proper Indian
+    // local-places index and knows Erode shops and streets by name.
+    // Nominatim does not.
+    //
+    // Worse, the old code returned OSM's results the moment they were
+    // non-empty — so a single loosely-matching Nominatim hit was enough
+    // to make sure Ola was never asked at all. Typing three letters of a
+    // local place gave a list of irrelevant suggestions (or nothing),
+    // while the provider that actually had the answer sat unused.
     try {
-      final osmResults = await searchNearErode(query);
-      if (osmResults.isNotEmpty) {
-        debugPrint('[MapService] Nominatim: ${osmResults.length} results for "$query"');
-        return osmResults;
-      }
-    } catch (e) {
-      debugPrint('[MapService] Nominatim error, trying Ola: $e');
-    }
-
-    // OLA fallback — only when Nominatim returns empty.
-    try {
-      final results = await _olaProvider.search(query).timeout(
-        const Duration(seconds: 5),
-        onTimeout: () => throw Exception('Search timeout'),
+      final ola = _olaProvider as OlaMapsProvider;
+      final results = await ola
+          .searchNear(query, center: _searchCenterOverride)
+          .timeout(
+        const Duration(seconds: 6),
+        onTimeout: () => <Map<String, dynamic>>[],
       );
       if (results.isNotEmpty) {
+        debugPrint('[MapService] Ola: ${results.length} results for "$query"');
         _currentProvider = _olaProvider;
         _selectedProvider = MapProviderType.ola;
         _isUsingFallback = false;
@@ -148,7 +201,21 @@ class MapService extends ChangeNotifier {
         return results;
       }
     } catch (e) {
-      debugPrint('❌ Ola search fallback error: $e');
+      debugPrint('[MapService] Ola search error, trying Nominatim: $e');
+    }
+
+    // Nominatim fallback — only when Ola returns nothing (no API key,
+    // network failure, or a genuinely unknown place).
+    try {
+      final osmResults = await searchNearErode(query);
+      if (osmResults.isNotEmpty) {
+        debugPrint(
+          '[MapService] Nominatim fallback: ${osmResults.length} results for "$query"',
+        );
+        return osmResults;
+      }
+    } catch (e) {
+      debugPrint('❌ Nominatim fallback error: $e');
     }
 
     return [];
@@ -159,7 +226,9 @@ class MapService extends ChangeNotifier {
 
     try {
       final osm = _osmProvider as OSMProvider;
-      return await osm.searchNearErode(query).timeout(
+      return await osm
+          .searchNearErode(query, center: _searchCenterOverride)
+          .timeout(
         const Duration(seconds: 6),
         onTimeout: () => <Map<String, dynamic>>[],
       );

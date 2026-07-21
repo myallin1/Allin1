@@ -161,6 +161,11 @@ class CategoryGatewayService {
   // ── Load Ride Fares (Cache-First Strategy) ───────────────────
   Future<Map<String, dynamic>> loadRideFares() async {
     try {
+      // ride_fares_cache now opens after runApp(). Without this await, a
+      // very early call would see an empty cache and go straight to
+      // Firestore — a database read we already paid for once. Idempotent
+      // and instant once the box is open.
+      await _cache.initDeferred();
       final cachedFares = _cache.getRideFares();
       if (cachedFares != null) {
         return cachedFares;
@@ -184,6 +189,9 @@ class CategoryGatewayService {
   // ── Load Local Ads (Cache-First Strategy) ───────────────────
   Future<List<Map<String, dynamic>>> loadLocalAds() async {
     try {
+      // Same reason as loadRideFares() — make sure ads_cache is open
+      // before deciding the cache is empty and hitting Firestore.
+      await _cache.initDeferred();
       final cachedAds = _cache.getAds();
       if (cachedAds != null && cachedAds.isNotEmpty) {
         return cachedAds;
@@ -280,6 +288,16 @@ class CategoryGatewayService {
       'parcel': {
         'baseFare': 40.0,
         'perKm': 10.0,
+        'baseDistance': 2.0,
+      },
+      'mini_truck': {
+        'baseFare': 60.0,
+        'perKm': 16.0,
+        'baseDistance': 2.0,
+      },
+      'lorry': {
+        'baseFare': 100.0,
+        'perKm': 22.0,
         'baseDistance': 2.0,
       },
     };
