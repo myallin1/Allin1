@@ -80,11 +80,20 @@ class LocalSyncService {
       Hive.registerAdapter(UserBalanceModelAdapter());
     }
 
-    // Open Hive boxes
-    _storesBox = await Hive.openBox<StoreModel>(_kStoresBox);
-    _rewardsBox = await Hive.openBox<RewardModel>(_kRewardsBox);
-    _balanceBox = await Hive.openBox<UserBalanceModel>(_kBalanceBox);
-    _metaBox = await Hive.openBox<dynamic>(_kMetaBox);
+    // Open Hive boxes IN PARALLEL. These used to be four sequential
+    // awaits — each Hive.openBox() is a local storage round-trip
+    // (IndexedDB on web), so waiting for one before starting the next
+    // paid the cost four times over for no reason.
+    final results = await Future.wait<Object>([
+      Hive.openBox<StoreModel>(_kStoresBox),
+      Hive.openBox<RewardModel>(_kRewardsBox),
+      Hive.openBox<UserBalanceModel>(_kBalanceBox),
+      Hive.openBox<dynamic>(_kMetaBox),
+    ]);
+    _storesBox = results[0] as Box<StoreModel>;
+    _rewardsBox = results[1] as Box<RewardModel>;
+    _balanceBox = results[2] as Box<UserBalanceModel>;
+    _metaBox = results[3] as Box<dynamic>;
 
     _initialized = true;
     debugPrint('[LocalSync] Initialized. '
@@ -99,7 +108,11 @@ class LocalSyncService {
     required String userId,
     required String city,
   }) async {
-    _assertInitialized();
+    // initialize() now runs AFTER runApp() (see main_customer.dart), so
+    // this can theoretically be reached before it finishes. It's
+    // idempotent and near-free once done, so just await it here rather
+    // than asserting and crashing.
+    await initialize();
     final results = await Future.wait([
       syncStores(city),
       syncRewards(userId),
@@ -262,7 +275,9 @@ class LocalSyncService {
 
   /// Returns all cached stores for a city. No network call.
   List<StoreModel> getStores(String city) {
-    _assertInitialized();
+    // Boxes now open after runApp(), so a very early caller gets an
+    // empty list (== "nothing cached yet") instead of an exception.
+    if (!_initialized) return const [];
     return _storesBox.values
         .where((s) => s.city.toLowerCase() == city.toLowerCase())
         .toList()
@@ -278,7 +293,7 @@ class LocalSyncService {
 
   /// Returns all cached rewards.
   List<RewardModel> getRewards() {
-    _assertInitialized();
+    if (!_initialized) return const [];
     return _rewardsBox.values.toList()
       ..sort((a, b) => b.coins.compareTo(a.coins));
   }
@@ -289,7 +304,7 @@ class LocalSyncService {
 
   /// Returns the cached balance for a user (or null if not yet synced).
   UserBalanceModel? getUserBalance(String userId) {
-    _assertInitialized();
+    if (!_initialized) return null;
     return _balanceBox.get(userId);
   }
 
@@ -314,7 +329,7 @@ class LocalSyncService {
 
   /// Wipe all local caches (useful on logout)
   Future<void> clearAll() async {
-    _assertInitialized();
+    await initialize();
     await Future.wait([
       _storesBox.clear(),
       _rewardsBox.clear(),
@@ -326,7 +341,7 @@ class LocalSyncService {
 
   /// Force a full re-sync on next call (bypasses cooldown)
   Future<void> invalidateAll() async {
-    _assertInitialized();
+    await initialize();
     await _metaBox.clear();
     debugPrint(
         '[LocalSync] Sync timestamps invalidated — full sync on next call.',);
@@ -380,6 +395,7 @@ class LocalSyncService {
       };
 
   DateTime? _getLastSync(String key) {
+    if (!_initialized) return null;
     final stored = _metaBox.get(key) as String?;
     if (stored == null) {
       return null;

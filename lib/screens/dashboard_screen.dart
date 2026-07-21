@@ -19,6 +19,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/pwa_cache_platform_stub.dart'
     if (dart.library.html) '../services/pwa_cache_platform_web.dart';
+import '../services/app_update_checker.dart';
+import '../services/web_version_checker.dart';
 
 import '../widgets/banner_slider.dart';
 import 'bike_taxi/bike_booking_screen.dart';
@@ -91,7 +93,13 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen>
+    with WidgetsBindingObserver {
+  // Number of entries in the IndexedStack / bottom nav below. Kept as a
+  // named constant so _restoreLastTab() can range-check a persisted
+  // index instead of trusting it blindly.
+  static const int _tabCount = 5;
+
   int _navIndex = 0;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   final _user = FirebaseAuth.instance.currentUser;
@@ -120,7 +128,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ),
   ];
 
-  bool _updateAvailable = true;
+  // Only shows once a real update signal fires — web via
+  // WebVersionChecker (version.json comparison), native via
+  // AppUpdateChecker's GitHub-release version check. It used to be
+  // hardcoded `true` on every platform, so the button showed regardless
+  // of whether an update actually existed.
+  bool _updateAvailable = false;
+  Timer? _pwaUpdatePollTimer;
 
   Future<void> _claimPromo(String offerId) async {
     setState(() {
@@ -139,15 +153,103 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_restoreLastTab());
     unawaited(_silentBackupIfNeeded());
     // Auto-show the daily Paytm Soundbox scratch card once per calendar day.
     // Runs after first frame so a bottom sheet can be shown safely.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      if (!_alreadyScratchedToday()) {
+      // _alreadyScratchedToday() is async because HiveCache.get() is.
+      // It previously read the Future without awaiting and cast it to
+      // String?, which threw a TypeError before this branch could run —
+      // so the scratch card never appeared at all.
+      if (!await _alreadyScratchedToday()) {
+        if (!mounted) return;
         _showScratchCardModal();
       }
     });
+
+    // Web: watch for a newer deployment.
+    //
+    // This used to read a flag set by service-worker update events. That
+    // is dead — Flutter's current service worker unregisters itself on
+    // activate, so it can never report anything, and the console showed
+    // "[PWA] update check failed: InvalidStateError" every time. It now
+    // compares /version.json against the build this tab loaded with,
+    // which needs no service worker at all.
+    if (kIsWeb) {
+      unawaited(WebVersionChecker.instance.start());
+      _pwaUpdatePollTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+        if (!mounted) return;
+        if (WebVersionChecker.instance.isUpdateAvailable &&
+            !_updateAvailable) {
+          setState(() => _updateAvailable = true);
+          _pwaUpdatePollTimer?.cancel();
+        }
+      });
+    } else {
+      // Native: one check per launch, same pattern as hero_home_screen's
+      // _checkForAppUpdate() — GitHub-release version check, only for
+      // the rare case Shorebird OTA can't patch on its own.
+      unawaited(_checkForNativeAppUpdate());
+    }
+  }
+
+  // _goTab() has always written the current tab to PrefsCache, but
+  // PrefsCache.loadLastTab() was never called anywhere — the save half of
+  // the feature was built and the restore half was missing. So every
+  // relaunch (and every PWA reload after Android discards the page on an
+  // app switch) dumped the customer back on tab 0, even though the app
+  // already knew where they were.
+  //
+  // Reading it is a local shared_preferences hit, so it resolves within
+  // the first frame or two; the customer sees Home briefly at worst,
+  // never a spinner.
+  Future<void> _restoreLastTab() async {
+    try {
+      final last = await PrefsCache.loadLastTab();
+      if (!mounted) return;
+      // Guard the range: the nav bar's tab count can change between
+      // releases, and a stale out-of-bounds index would throw inside
+      // IndexedStack.
+      if (last > 0 && last < _tabCount) {
+        setState(() => _navIndex = last);
+      }
+    } catch (e) {
+      debugPrint('[Dashboard] last-tab restore failed: $e');
+    }
+  }
+
+  Future<void> _checkForNativeAppUpdate() async {
+    try {
+      final hasUpdate = await AppUpdateChecker().isUpdateAvailable();
+      if (hasUpdate && mounted) {
+        setState(() => _updateAvailable = true);
+      }
+    } catch (e) {
+      debugPrint('[Dashboard] native app update check failed: $e');
+    }
+  }
+
+  // Coming back to the app is the moment a deploy is most likely to
+  // have happened while the customer was elsewhere — far more likely
+  // than any given tick of the background timer. Checking here is what
+  // lets the poll interval stay long (30 min) without the customer
+  // waiting half an hour to be told an update exists.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed && kIsWeb) {
+      unawaited(WebVersionChecker.instance.checkNow());
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pwaUpdatePollTimer?.cancel();
+    super.dispose();
   }
 
   // ── Daily scratch gate (local, calendar-day) ─────────────────
@@ -157,14 +259,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
         '${n.day.toString().padLeft(2, '0')}';
   }
 
-  bool _alreadyScratchedToday() =>
-      (HiveCache.get('last_scratch_date') as String?) == _todayKey();
+  /// TTL for cache keys that must survive a whole calendar day.
+  ///
+  /// HiveCache.put() defaults to a 30-MINUTE ttl. Every daily gate in this
+  /// file (scratch card, coins backup) and in checkout_screen.dart (daily
+  /// coin-redemption cap) relied on that default, which means that once
+  /// the missing-await bug below is fixed those gates would silently reset
+  /// every 30 minutes. These keys must therefore always be written with an
+  /// explicit ttl. Day-rollover correctness comes from comparing the
+  /// stored value against _todayKey(); this ttl only guarantees the entry
+  /// outlives the day it was written for.
+  static const Duration _dailyKeyTtl = Duration(hours: 24);
+
+  Future<bool> _alreadyScratchedToday() async =>
+      (await HiveCache.get<String>('last_scratch_date')) == _todayKey();
 
   Future<void> _silentBackupIfNeeded() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     try {
-      final lastBackupStr = HiveCache.get('lastCoinsBackupDate') as String?;
+      final lastBackupStr = await HiveCache.get<String>('lastCoinsBackupDate');
       final now = DateTime.now();
       bool shouldBackup = false;
 
@@ -178,7 +292,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
 
       if (!shouldBackup) return;
-      final currentCoins = (HiveCache.get(HiveCache.kWalletBalance) as num?)?.toDouble() ?? 0.0;
+      final currentCoins =
+          (await HiveCache.get<num>(HiveCache.kWalletBalance))?.toDouble() ??
+              0.0;
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -187,7 +303,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             'lastCoinsBackupAt': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
 
-      HiveCache.put('lastCoinsBackupDate', now.toIso8601String());
+      // Explicit ttl — see _dailyKeyTtl. Given a 48h ttl the `>= 24 hours`
+      // check above stays the single source of truth for backup cadence,
+      // instead of the cache silently expiring first.
+      await HiveCache.put(
+        'lastCoinsBackupDate',
+        now.toIso8601String(),
+        ttl: const Duration(hours: 48),
+      );
       debugPrint('[Dashboard] Silent backup completed: ${currentCoins.toStringAsFixed(0)} coins');
     } catch (e) {
       debugPrint('[Dashboard] Silent backup failed: $e');
@@ -209,7 +332,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _showScratchCardModal() {
     // Mark today as used so the card auto-shows at most once per calendar day,
     // whether or not the customer fully scratches it.
-    HiveCache.put('last_scratch_date', _todayKey());
+    // Explicit ttl is REQUIRED — HiveCache.put() defaults to 30 minutes,
+    // which would let the card re-appear ~48x/day. See _dailyKeyTtl.
+    unawaited(
+      HiveCache.put('last_scratch_date', _todayKey(), ttl: _dailyKeyTtl),
+    );
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -248,16 +375,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           context: context,
           builder: (_) => AlertDialog(
             backgroundColor: kBg,
-            title: Text('வெளியேறுவீர்களா?',
+            title: Text('Leave the app?',
                 style: GoogleFonts.outfit(
                     color: kText, fontWeight: FontWeight.w700)),
-            content: Text('App-ஐ மூடவா?',
+            content: Text('Close Allin1?',
                 style: GoogleFonts.outfit(color: kMuted)),
             actions: [
               TextButton(onPressed: () => Navigator.pop(context, false),
-                  child: const Text('இல்லை', style: TextStyle(color: kPink))),
+                  child: const Text('No', style: TextStyle(color: kPink))),
               TextButton(onPressed: () => Navigator.pop(context, true),
-                  child: const Text('ஆம்', style: TextStyle(color: kRed))),
+                  child: const Text('Yes', style: TextStyle(color: kRed))),
             ],
           ),
         );
@@ -348,7 +475,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _GlowingUpdateButton(
             onTap: () {
               setState(() => _updateAvailable = false);
-              _checkForUpdates(context);
+              if (kIsWeb) {
+                unawaited(_applyPwaUpdate(context));
+              } else {
+                unawaited(_applyNativeAppUpdate(context));
+              }
             }
           ),
         Container(
@@ -1405,12 +1536,16 @@ class _HomeTab extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('உங்கள் முதல் ride FREE!',
-                  style: GoogleFonts.notoSansTamil(
+              // Font switched from notoSansTamil to outfit along with the
+              // copy — notoSansTamil exists to render Tamil glyphs, and
+              // keeping it for English text just loads a font the app
+              // doesn't otherwise need here.
+              Text('Your first ride is FREE!',
+                  style: GoogleFonts.outfit(
                       color: kPink, fontSize: 13, fontWeight: FontWeight.w700)),
               const SizedBox(height: 2),
-              Text('Erode-ல Bike Taxi book பண்ணுங்க',
-                  style: GoogleFonts.notoSansTamil(
+              Text('Book a Bike Taxi anywhere in Erode',
+                  style: GoogleFonts.outfit(
                       color: Colors.white60, fontSize: 10)),
             ])),
             Container(
@@ -1510,11 +1645,16 @@ class _NJServiceMarqueeState extends State<_NJServiceMarquee> {
   }
 
   void _startMarquee() {
-    _timer = Timer.periodic(const Duration(milliseconds: 16), (_) {
+    // 32ms (~30fps) instead of the previous 16ms (~60fps) — half the
+    // timer fires for a scrolling marquee that doesn't need 60fps to
+    // look smooth, cutting a continuous background CPU cost that ran
+    // the whole time this screen was mounted. Per-tick distance is
+    // doubled (1.6 vs 0.8) so the scroll speed looks identical.
+    _timer = Timer.periodic(const Duration(milliseconds: 32), (_) {
       if (!mounted || !_sc.hasClients) return;
       final max = _sc.position.maxScrollExtent;
       if (max <= 0) return;
-      final next = _sc.offset + 0.8;
+      final next = _sc.offset + 1.6;
       if (next >= max) {
         _sc.jumpTo(0);
       } else {
@@ -1639,6 +1779,19 @@ class _ProfileDrawer extends StatelessWidget {
                   await launchUrl(url, mode: LaunchMode.externalApplication);
                 }
               }),
+
+              // Manual escape hatch for the automatic update flow.
+              // The pink UPDATE button only appears once
+              // WebVersionChecker has spotted a new build; this lets a
+              // customer force the same refresh on demand — useful if
+              // they've been told a fix is out, or if detection hasn't
+              // caught up yet.
+              if (kIsWeb)
+                _drawerItem(context, Icons.system_update_alt_rounded,
+                    'Check for update', () {
+                  Navigator.pop(context);
+                  unawaited(_runManualUpdateCheck(context));
+                }),
 
               const SizedBox(height: 20),
 
@@ -1802,6 +1955,179 @@ Future<void> _checkForUpdates(BuildContext context) async {
 
 Future<void> _clearPwaCacheAndReload() async {
   await PwaCachePlatform().clearAndReload();
+}
+
+// ================================================================
+// MANUAL "CHECK FOR UPDATE" (drawer)
+// ================================================================
+// The automatic path (WebVersionChecker -> pink UPDATE button) only
+// surfaces once a new build has actually been detected. This is the
+// on-demand version: the customer asks, we look, and either refresh or
+// tell them they're already current.
+//
+// Deliberately blunt about what it does — clearing the PWA cache and
+// reloading is exactly what the automatic UPDATE button does, so both
+// paths land the customer in the same place with the same code.
+Future<void> _runManualUpdateCheck(BuildContext context) async {
+  final navigator = Navigator.of(context, rootNavigator: true);
+
+  // Non-dismissible: the reload happens under this dialog, and letting
+  // it be tapped away mid-refresh just looks like the app froze.
+  showDialog<void>(
+    context: navigator.context,
+    barrierDismissible: false,
+    builder: (_) => AlertDialog(
+      backgroundColor: const Color(0xFF1A1A26),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      content: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2.4, color: kPink),
+          ),
+          SizedBox(width: 18),
+          Flexible(
+            child: Text(
+              'Checking for updates...',
+              style: TextStyle(color: Colors.white, fontSize: 14),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  await WebVersionChecker.instance.checkNow();
+
+  // A beat so the spinner reads as "it looked" rather than flashing
+  // past too fast to notice.
+  await Future<void>.delayed(const Duration(milliseconds: 900));
+
+  if (!WebVersionChecker.instance.isUpdateAvailable) {
+    navigator.pop();
+    ScaffoldMessenger.of(navigator.context).showSnackBar(
+      const SnackBar(
+        content: Text("You're already on the latest version"),
+        duration: Duration(seconds: 2),
+      ),
+    );
+    return;
+  }
+
+  // Found one. Swap the message, then clear caches and reload — the
+  // page goes away underneath us, so nothing after this needs to run.
+  navigator.pop();
+  showDialog<void>(
+    context: navigator.context,
+    barrierDismissible: false,
+    builder: (_) => AlertDialog(
+      backgroundColor: const Color(0xFF1A1A26),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      content: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2.4, color: kPink),
+          ),
+          SizedBox(width: 18),
+          Flexible(
+            child: Text(
+              'Updating the app...',
+              style: TextStyle(color: Colors.white, fontSize: 14),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  await Future<void>.delayed(const Duration(milliseconds: 600));
+
+  try {
+    await _clearPwaCacheAndReload();
+  } catch (e) {
+    debugPrint('[ManualUpdate] cache clear failed, reloading anyway: $e');
+    final uri = Uri.parse(Uri.base.toString());
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+}
+
+// ================================================================
+// APPLY REAL PWA UPDATE
+// ================================================================
+// Called only when WebVersionChecker already confirmed /version.json
+// reports a different build than the one this tab loaded with, so
+// there's nothing to "check" here — just apply.
+//
+// This used to message the waiting service worker and wait for it to
+// take over. That step is gone: Flutter's service worker unregisters
+// itself, so the message went nowhere and the flow always ended up
+// timing out into this same cache-clear-and-reload four seconds later.
+// Doing it directly is the same result without the dead wait.
+Future<void> _applyPwaUpdate(BuildContext context) async {
+  final navigator = Navigator.of(context, rootNavigator: true);
+
+  showDialog<void>(
+    context: navigator.context,
+    barrierDismissible: false,
+    builder: (_) => AlertDialog(
+      backgroundColor: const Color(0xFF1A1A26),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        const SizedBox(height: 8),
+        const SizedBox(
+          width: 48, height: 48,
+          child: CircularProgressIndicator(
+              strokeWidth: 3,
+              valueColor: AlwaysStoppedAnimation<Color>(kPink)),
+        ),
+        const SizedBox(height: 20),
+        Text('Please wait, app is updating...',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(
+                color: Colors.white, fontSize: 14,
+                fontWeight: FontWeight.w600)),
+      ]),
+    ),
+  );
+
+  try {
+    await _clearPwaCacheAndReload();
+  } catch (e) {
+    debugPrint('[PwaUpdate] cache clear failed, reloading anyway: $e');
+    final uri = Uri.parse(Uri.base.toString());
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+}
+
+// ================================================================
+// APPLY NATIVE APP UPDATE (customer APK)
+// ================================================================
+// Called only when _checkForNativeAppUpdate() already confirmed a
+// genuinely newer GitHub release exists — see AppUpdateChecker. Hands
+// the APK straight to Android's installer (OpenFilex) instead of the
+// old always-on button's "Up to Date / Shorebird OTA" placeholder
+// message, which never actually offered a real update.
+Future<void> _applyNativeAppUpdate(BuildContext context) async {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Downloading update...')),
+  );
+  try {
+    await AppUpdateChecker().downloadAndInstall(appVariant: 'customer');
+  } catch (e) {
+    debugPrint('[Dashboard] native update install failed: $e');
+    if (context.mounted) {
+      await _checkForUpdates(context);
+    }
+  }
 }
 
 // ================================================================
@@ -2381,11 +2707,14 @@ class _IconMarqueeState extends State<_IconMarquee> with SingleTickerProviderSta
     WidgetsBinding.instance.addPostFrameCallback((_) => _startMarquee());
   }
   void _startMarquee() {
-    _timer = Timer.periodic(const Duration(milliseconds: 30), (_) {
+    // 60ms instead of the previous 30ms — half the timer fires, same
+    // visual scroll speed (2.0px/60ms == 1.0px/30ms). See the matching
+    // comment on _NJServiceMarquee._startMarquee() above.
+    _timer = Timer.periodic(const Duration(milliseconds: 60), (_) {
       if (!mounted || !_controller.hasClients) return;
       final max = _controller.position.maxScrollExtent;
       if (max <= 0) return;
-      final next = _controller.offset + 1.0;
+      final next = _controller.offset + 2.0;
       if (next >= max) {
         _controller.jumpTo(0);
       } else {

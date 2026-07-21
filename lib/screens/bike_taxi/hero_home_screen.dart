@@ -22,6 +22,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app_navigator.dart';
 import '../../models/ride_model.dart';
+import '../../services/app_update_checker.dart';
 import '../../services/hero_ride_notification_service.dart';
 import '../../services/hero_web_audio_service.dart';
 import '../../services/location_service.dart';
@@ -123,6 +124,22 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   // GPS throttling for RTDB
   DateTime? _lastGpsUpdate;
   Position? _lastUploadedPosition;
+
+  /// Minimum movement, in metres, before the IDLE RADAR republishes the
+  /// hero's position to RTDB `online_heroes/{uid}`.
+  ///
+  /// This gates ONLY the idle "available heroes nearby" radar — the marker
+  /// customers see while browsing, before any ride exists. It deliberately
+  /// does NOT gate live tracking during an active ride: that writes to
+  /// `live_locations/{rideId}` via _sendLocationUpdate(), which keeps its
+  /// own much tighter 50m gate so the customer sees the hero actually
+  /// moving toward them in near-real-time.
+  ///
+  /// Trade-off at 200m: at ~20-30 km/h city speed a hero covers this in
+  /// roughly 25-35 seconds, so an idle hero's radar position can be up to
+  /// ~200m stale. Chosen as a middle ground between write cost and
+  /// dispatch-matching accuracy. See the report accompanying this change.
+  static const double _idleRadarMoveThresholdMeters = 200;
   Timer? _locationTimer;
   Position? _latestPosition;
   LatLng? _displayHeroLocation;
@@ -134,6 +151,36 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
   // Captain profile from Firebase Auth
   User? _user;
+
+  // ── Stable stream references (FIX A pattern, as in ride_history) ──
+  // These two queries were previously created inline inside build()
+  // (`.snapshots()` directly in the StreamBuilder). Every rebuild
+  // produced a brand-new stream object, so StreamBuilder tore down and
+  // re-attached the Firestore listener each time — and Firestore bills
+  // the query's full initial result set on every re-attach. On a screen
+  // that rebuilds on GPS marker movement, lifecycle resumes, etc., this
+  // silently multiplied idle reads. Created ONCE in initState instead;
+  // StreamBuilder then keeps a single persistent listener whose
+  // incremental updates are the only ongoing cost.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _activeServiceRequestsStream;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _activeSosAlertsStream;
+
+  // ── Service-request "busy" gate + live-tracking wiring ──────────
+  // A hero already working a Hero Booking (or other service_requests
+  // category) task should not receive new ride OR service pings until
+  // that task completes — mirrors the existing _activeRideId.isNotEmpty
+  // gate used throughout this file for rides. Driven by a plain
+  // .listen() on the same _activeServiceRequestsStream the UI's
+  // StreamBuilder already uses (Firestore snapshots() streams are
+  // broadcast streams, so a second listener is safe and cheap — no
+  // extra reads, just a second subscriber to the same stream).
+  bool _hasActiveServiceRequest = false;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+      _serviceRequestBusySub;
+  // Tracks which requestId live-location tracking is currently running
+  // for, so we only stop it when THAT task leaves 'in_progress' (not
+  // some unrelated snapshot event).
+  String? _trackedServiceRequestId;
   String get _captainName =>
       _user?.displayName ?? _user?.email?.split('@').first ?? 'Hero Rider';
   String get _avatarLetter =>
@@ -413,8 +460,26 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     _servicePingSub = null;
   }
 
+  // Best-effort automatic check — runs once per app launch. Fails
+  // silently on any error so a flaky network never bothers the hero
+  // mid-shift. See app_update_checker.dart for why this only ever
+  // fires for the rare case Shorebird OTA can't patch on its own —
+  // Shorebird already handles regular Dart-code updates silently in
+  // the background (shorebird.yaml, auto_update).
+  Future<void> _checkForAppUpdate() async {
+    try {
+      final hasUpdate = await AppUpdateChecker().isUpdateAvailable();
+      if (hasUpdate && mounted) {
+        await _showUpdateDialog();
+      }
+    } catch (e) {
+      debugPrint('[HeroHome] app update check failed: $e');
+    }
+  }
+
   Future<void> _showUpdateDialog() async {
-    final updateUrl = Uri.parse('https://my-allin1.web.app/hero-allin1.apk');
+    final fallbackUpdateUrl =
+        Uri.parse('https://my-allin1.web.app/hero-allin1.apk');
 
     await showDialog<void>(
       context: context,
@@ -471,18 +536,35 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             ElevatedButton(
               onPressed: () async {
                 Navigator.of(dialogContext).pop();
-                final launched = await launchUrl(
-                  updateUrl,
-                  mode: LaunchMode.externalApplication,
-                );
-                if (!launched && mounted) {
+                if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content:
-                          Text('Unable to open the update link right now.'),
-                      backgroundColor: Colors.redAccent,
-                    ),
+                    const SnackBar(content: Text('Downloading update...')),
                   );
+                }
+                try {
+                  // One-tap download + install — hands the APK straight
+                  // to Android's installer (see app_update_checker.dart),
+                  // instead of sending the hero to a browser download
+                  // they'd then have to find and open manually.
+                  await AppUpdateChecker().downloadAndInstall(
+                    appVariant: 'hero',
+                  );
+                } catch (e) {
+                  debugPrint('[HeroHome] in-app update install failed, '
+                      'falling back to browser download: $e');
+                  final launched = await launchUrl(
+                    fallbackUpdateUrl,
+                    mode: LaunchMode.externalApplication,
+                  );
+                  if (!launched && mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content:
+                            Text('Unable to open the update link right now.'),
+                        backgroundColor: Colors.redAccent,
+                      ),
+                    );
+                  }
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -526,7 +608,75 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   @override
   void initState() {
     super.initState();
+    unawaited(_checkForAppUpdate());
     _user = FirebaseAuth.instance.currentUser;
+    // Build the query streams exactly once — see the field comments.
+    final streamUid = _user?.uid;
+    if (streamUid != null) {
+      _activeServiceRequestsStream = FirebaseFirestore.instance
+          .collection('service_requests')
+          .where('assignedHeroId', isEqualTo: streamUid)
+          .where(
+            // 'completed' is included here (and NOT excluded) so a
+            // task that's done-but-unpaid still shows to the hero for
+            // the "Mark Payment Received (Cash)" close-out step —
+            // filtered out client-side below once paymentStatus:'paid'
+            // (see _buildActiveServiceRequests), avoiding a 3rd
+            // inequality-filter composite index just for this.
+            'status',
+            whereIn: [
+              'hero_assigned',
+              'in_progress',
+              'nearing_completion',
+              'completed',
+            ],
+          )
+          .snapshots();
+      _serviceRequestBusySub = _activeServiceRequestsStream!.listen((snap) {
+        // Busy = any non-completed doc assigned to this hero (hero_
+        // assigned/in_progress/nearing_completion). 'completed' docs
+        // stay in the query only for the payment-collection UI (see
+        // comment above) — they don't count as "busy" anymore.
+        final activeDocs = snap.docs.where(
+          (doc) => (doc.data()['status'] as String?) != 'completed',
+        );
+        final hasActive = activeDocs.isNotEmpty;
+        if (mounted && hasActive != _hasActiveServiceRequest) {
+          setState(() => _hasActiveServiceRequest = hasActive);
+        }
+
+        // Live GPS tracking: start once a task is actually in_progress
+        // (hero is traveling/working, not just waiting on customer
+        // estimate approval), stop once it's no longer in_progress for
+        // the requestId we were tracking. Mirrors rides' live_locations
+        // pattern exactly (_startLocationUpdates/_stopLocationUpdates),
+        // just keyed by requestId instead of rideId.
+        QueryDocumentSnapshot<Map<String, dynamic>>? inProgressDoc;
+        for (final doc in snap.docs) {
+          if (doc.data()['status'] == 'in_progress') {
+            inProgressDoc = doc;
+            break;
+          }
+        }
+        if (inProgressDoc != null) {
+          if (_trackedServiceRequestId != inProgressDoc.id) {
+            _trackedServiceRequestId = inProgressDoc.id;
+            _startLocationUpdates(inProgressDoc.id);
+          }
+        } else if (_trackedServiceRequestId != null) {
+          _trackedServiceRequestId = null;
+          // Only stop if a ride isn't also relying on the same shared
+          // location subscription right now.
+          if (_activeRideId.isEmpty) {
+            _stopLocationUpdates();
+          }
+        }
+      });
+    }
+    _activeSosAlertsStream = FirebaseFirestore.instance
+        .collection('sos_alerts')
+        .where('status', isEqualTo: 'active')
+        .snapshots();
     _pulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
@@ -720,6 +870,12 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     if (_user == null) {
       return;
     }
+    // A genuine offline↔online transition, as opposed to a re-confirmation
+    // of the state the hero is already in (which is what an app-lifecycle
+    // resume triggers). Only a real transition justifies bypassing the
+    // movement throttle on the RTDB radar write below.
+    final bool isStateTransition = _isOnline != online;
+
     // 3-minute gate: throttle Firestore status writes to prevent write spikes
     final now = DateTime.now();
     if (_lastFirestoreStatusWriteAt != null &&
@@ -761,23 +917,66 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         data['captainName'] = _captainName;
         data['vehicleType'] = _normalizeHeroVehicleType(_vehicleType);
 
-        // ── FORCE immediate RTDB write: bypass all throttles ──
-        _lastUploadedPosition = null;
-        _lastGpsUpdate = null;
+        // ── RTDB radar write ──
+        // On a genuine offline→online transition we force the write and
+        // bypass the movement throttle: the hero has just appeared and
+        // must show on customer radar immediately.
+        //
+        // On a mere re-confirmation (app-lifecycle resume, which fires on
+        // every browser tab-focus change in the PWA) the hero has not
+        // moved and is already published, so we apply the same movement
+        // gate the periodic radar timer uses instead of writing
+        // unconditionally. Without this, every tab switch cost a
+        // redundant RTDB write.
         if (currentPos != null) {
-          await FirebaseDatabase.instance.ref('online_heroes/${_user!.uid}').set({
-            'lat': currentPos.latitude,
-            'lng': currentPos.longitude,
-            'latitude': currentPos.latitude,
-            'longitude': currentPos.longitude,
-            'name': _captainName,
-            'vehicleType': _normalizeHeroVehicleType(_vehicleType),
-            'isAvailable': _activeRideId.isEmpty,
-            'category': _normalizeHeroVehicleType(_vehicleType).toLowerCase(),
-            'lastUpdated': ServerValue.timestamp,
-          });
-          _lastUploadedPosition = currentPos;
-          debugPrint('🔥 [ONLINE] Force-wrote hero position to RTDB online_heroes/${_user!.uid}');
+          bool shouldWriteRadar = isStateTransition;
+          if (!shouldWriteRadar) {
+            if (_lastUploadedPosition == null) {
+              // No published baseline — must write to appear on radar.
+              shouldWriteRadar = true;
+            } else {
+              final movedMeters = Geolocator.distanceBetween(
+                _lastUploadedPosition!.latitude,
+                _lastUploadedPosition!.longitude,
+                currentPos.latitude,
+                currentPos.longitude,
+              );
+              shouldWriteRadar =
+                  movedMeters >= _idleRadarMoveThresholdMeters;
+              if (!shouldWriteRadar) {
+                debugPrint(
+                  '[ONLINE] Skipped radar write — no state change, '
+                  'moved only ${movedMeters.toStringAsFixed(1)}m of '
+                  '${_idleRadarMoveThresholdMeters.toStringAsFixed(0)}m',
+                );
+              }
+            }
+          }
+
+          if (shouldWriteRadar) {
+            // Reset throttle baselines only when we are actually writing.
+            _lastUploadedPosition = null;
+            _lastGpsUpdate = null;
+            await FirebaseDatabase.instance
+                .ref('online_heroes/${_user!.uid}')
+                .set({
+              'lat': currentPos.latitude,
+              'lng': currentPos.longitude,
+              'latitude': currentPos.latitude,
+              'longitude': currentPos.longitude,
+              'name': _captainName,
+              'vehicleType': _normalizeHeroVehicleType(_vehicleType),
+              'isAvailable': _activeRideId.isEmpty,
+              'category': _normalizeHeroVehicleType(_vehicleType).toLowerCase(),
+              'lastUpdated': ServerValue.timestamp,
+            });
+            _lastUploadedPosition = currentPos;
+            debugPrint(
+              '🔥 [ONLINE] Wrote hero position to RTDB '
+              'online_heroes/${_user!.uid} '
+              '(transition=$isStateTransition)',
+            );
+          }
         }
       }
 
@@ -815,6 +1014,26 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
   // ── GLOBAL LOCATION TRACKING (Radar) ─────────────────────────
   void _startGlobalLocationTracking() {
+    // IDEMPOTENCE GUARD — fixes "hero vanishes from radar on tab switch".
+    //
+    // This method used to unconditionally call _stopGlobalLocationTracking()
+    // first, which does an RTDB remove() on online_heroes/{uid}. On an
+    // AppLifecycleState.resumed event (fired on every browser tab-focus
+    // change in the PWA) _loadHeroData() calls this method again, so the
+    // node that _syncOnlineStatus had just force-written was immediately
+    // deleted. For a stationary hero the 50m gate below then legitimately
+    // suppresses every subsequent write, so the hero could stay invisible
+    // to customer-side radar indefinitely.
+    //
+    // If tracking is already running there is nothing to restart: the
+    // location stream and timer are both still live.
+    if (_locationTimer != null && _locationTimer!.isActive) {
+      debugPrint(
+        '🛰️ Hero Live Tracking already active — skipping redundant restart',
+      );
+      return;
+    }
+
     _stopGlobalLocationTracking();
 
     // FIX BUG #1: Get initial position IMMEDIATELY so the 5s timer has data
@@ -848,7 +1067,11 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           return;
         }
 
-        // RTDB: For real-time nearby heroes radar — 50m gate to save writes
+        // RTDB idle radar — movement-gated to save writes.
+        // The timer only SAMPLES position every 10s; it never writes on
+        // elapsed time alone. A write happens strictly when the hero has
+        // moved at least _idleRadarMoveThresholdMeters since the last
+        // published position.
         if (_lastUploadedPosition != null) {
           final dist = Geolocator.distanceBetween(
             _lastUploadedPosition!.latitude,
@@ -856,8 +1079,12 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             pos.latitude,
             pos.longitude,
           );
-          if (dist < 50) {
-            debugPrint('[Location] Skipped RTDB update — moved only ${dist.toStringAsFixed(1)}m');
+          if (dist < _idleRadarMoveThresholdMeters) {
+            debugPrint(
+              '[Location] Skipped RTDB update — moved only '
+              '${dist.toStringAsFixed(1)}m of '
+              '${_idleRadarMoveThresholdMeters.toStringAsFixed(0)}m',
+            );
             return;
           }
         }
@@ -874,7 +1101,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           'lastUpdated': ServerValue.timestamp,
         });
 
-        // Firestore: SKIPPED in timer - status writes handled by _syncOnlineStatus with 3min gate\n} else if (_isOnline && _user != null && _latestPosition == null) {
+        // Firestore: SKIPPED in timer — status writes are handled by
+        // _syncOnlineStatus with its own 3-minute gate.
+      } else if (_isOnline && _user != null && _latestPosition == null) {
         debugPrint(
           '⚠️ RTDB skipped — _latestPosition still null, waiting for GPS',
         );
@@ -907,6 +1136,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     // ride alerts when the app is minimised or terminated.
     _foregroundMessageSub?.cancel();
     _messageOpenedSub?.cancel();
+    _serviceRequestBusySub?.cancel();
     // Cancel Firestore/RTDB popup streams — background FCM replaces them.
     _stopBroadcastRideStream();
     // Dispose UI-only animation controllers.
@@ -1085,7 +1315,10 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     String rideId, {
     bool showLocalNotification = false,
   }) async {
-    if (_user == null || !_isOnline || _activeRideId.isNotEmpty) {
+    if (_user == null ||
+        !_isOnline ||
+        _activeRideId.isNotEmpty ||
+        _hasActiveServiceRequest) {
       return;
     }
     try {
@@ -1212,7 +1445,15 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   void _listenForHeroPings() {
     final uid = _user?.uid;
     if (uid == null) return;
-    _heroPingSub?.cancel();
+    // Already subscribed — RTDB listeners survive app backgrounding, so a
+    // lifecycle resume must not tear this down and re-create it. Both
+    // _syncOnlineStatus() and _loadHeroData() call this on the same resume
+    // cycle, which previously re-attached the listener twice per tab switch
+    // (each re-attach costs a fresh initial-data sync). Every cancel path
+    // nulls the field, so non-null reliably means "currently attached".
+    if (_heroPingSub != null) {
+      return;
+    }
     debugPrint('🔥 [DEBUG] Hero is LISTENING to EXACT PATH: hero_pings/$uid');
 
     // Track when listener was attached — ignore pings older than this
@@ -1222,7 +1463,12 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         .ref('hero_pings/$uid')
         .onChildAdded
         .listen((event) async {
-      if (!mounted || !_isOnline || _activeRideId.isNotEmpty) return;
+      if (!mounted ||
+          !_isOnline ||
+          _activeRideId.isNotEmpty ||
+          _hasActiveServiceRequest) {
+        return;
+      }
       if (_isShowingRideDialog) return;
 
       final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
@@ -1302,7 +1548,11 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   void _listenForServicePings() {
     final uid = _user?.uid;
     if (uid == null) return;
-    _servicePingSub?.cancel();
+    // Already subscribed — see the matching guard in _listenForHeroPings().
+    // _stopServicePingListening() nulls the field on every cancel path.
+    if (_servicePingSub != null) {
+      return;
+    }
     debugPrint('🔥 [DEBUG] Hero is LISTENING to EXACT PATH: hero_service_pings/$uid');
 
     final listenerAttachedAt = DateTime.now().toUtc().millisecondsSinceEpoch;
@@ -1311,7 +1561,12 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         .ref('hero_service_pings/$uid')
         .onChildAdded
         .listen((event) async {
-      if (!mounted || !_isOnline || _activeRideId.isNotEmpty) return;
+      if (!mounted ||
+          !_isOnline ||
+          _activeRideId.isNotEmpty ||
+          _hasActiveServiceRequest) {
+        return;
+      }
       if (_isShowingServiceDialog) return;
 
       final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
@@ -1415,6 +1670,36 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       unawaited(HeroRideNotificationService.cancelRideNotification(requestId));
     }
 
+    // Safety net for the simultaneous-broadcast design: since every
+    // online hero gets pinged at once (unlike ride-hailing's sequential
+    // pinging, where only one candidate is ever shown a dialog at a
+    // time), this hero's dialog can already be open when someone else
+    // wins the race. acceptServiceRequest() now sweep-clears every
+    // other hero's ping node on accept (see service_request_service.dart),
+    // which stops the dialog from showing again on a fresh app open —
+    // but if it's already showing right now, only a live listener on
+    // the doc itself can catch it and auto-dismiss.
+    StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? staleSub;
+    staleSub = FirebaseFirestore.instance
+        .collection('service_requests')
+        .doc(requestId)
+        .snapshots()
+        .listen((doc) {
+      final liveStatus = doc.data()?['status'] as String?;
+      if (liveStatus != null && liveStatus != 'pending') {
+        staleSub?.cancel();
+        final popContext = navigatorKey.currentContext;
+        if (popContext != null && Navigator.of(popContext).canPop()) {
+          Navigator.of(popContext).pop();
+          ScaffoldMessenger.of(popContext).showSnackBar(
+            const SnackBar(
+                content: Text('This request was already taken by another hero.'),
+                backgroundColor: Colors.grey,),
+          );
+        }
+      }
+    });
+
     showDialog<void>(
       context: dialogContext,
       barrierDismissible: false,
@@ -1450,6 +1735,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         ],
       ),
     ).then((_) {
+      staleSub?.cancel();
       if (mounted) setState(() => _isShowingServiceDialog = false);
     });
   }
@@ -1658,6 +1944,21 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     if (_user == null) return;
     setState(() => _accepting = true);
     debugPrint('[HeroHomeScreen] Accepting ride via RTDB: $requestId');
+
+    // ── TEMPORARY INSTRUMENTATION — REMOVE AFTER MEASUREMENT ──────
+    // Measures each awaited step between the ACCEPT tap and
+    // Navigator.push, to identify what causes the reported ~7s delay.
+    // Search the console for [ACCEPT-TIMING] and report all lines.
+    final acceptStopwatch = Stopwatch()..start();
+    int lastElapsedMs = 0;
+    void mark(String step) {
+      final total = acceptStopwatch.elapsedMilliseconds;
+      final delta = total - lastElapsedMs;
+      lastElapsedMs = total;
+      debugPrint('[ACCEPT-TIMING] $step: +${delta}ms (total ${total}ms)');
+    }
+    // ── END TEMPORARY INSTRUMENTATION ─────────────────────────────
+
     try {
       final uid = _user!.uid;
 
@@ -1709,6 +2010,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
         return rtdb.Transaction.success(data);
       });
+      mark('STEP-1 RTDB runTransaction(active_ride_requests)');
 
       if (!transResult.committed) {
         // Another hero accepted first — abort silently
@@ -1724,15 +2026,18 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       await FirebaseDatabase.instance
           .ref('hero_pings/$uid/$requestId')
           .remove();
+      mark('STEP-2 RTDB remove(hero_pings)');
 
       await FirebaseFirestore.instance
           .collection('heroes')
           .doc(uid)
           .update({'isAvailable': false});
-          
+      mark('STEP-3 Firestore update(heroes/uid)  <-- prime suspect');
+
       await FirebaseDatabase.instance
           .ref('online_heroes/$uid')
           .update({'isAvailable': false});
+      mark('STEP-4 RTDB update(online_heroes)');
 
       if (mounted) {
         // Use the Firestore doc ID from the ping (not the RTDB push key).
@@ -1799,6 +2104,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           debugPrint('🔍 [DIALOG-POP-CHECK] branch=skipped (null or unmounted)');
         }
         debugPrint('🔍 [DIALOG-POP-CHECK] about to call Navigator.push for CaptainRideScreen');
+        mark('STEP-5 reached Navigator.push (UI transition starts here)');
         Navigator.push(
             context,
             MaterialPageRoute<void>(
@@ -1978,7 +2284,14 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         now.difference(_lastGpsUpdate!).inSeconds < 3) {
       return; // Throttle — skip update
     }
-    // 50m gate: skip if haven't moved enough since last upload
+    // 50m gate: skip if haven't moved enough since last upload.
+    //
+    // DELIBERATELY NOT _idleRadarMoveThresholdMeters (500m). This path
+    // writes live_locations/{rideId} — the moving hero marker the
+    // customer watches during an active ride. At 500m the hero would
+    // appear to teleport every ~60-90s instead of tracking smoothly, so
+    // this stays tight on purpose. Only the idle "heroes nearby" radar
+    // uses the larger threshold.
     if (_lastUploadedPosition != null) {
       final dist = Geolocator.distanceBetween(
         _lastUploadedPosition!.latitude,
@@ -2095,27 +2408,43 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   // manual assignment — both write the exact same fields) with a
   // simple 3-button status-advance control.
   Widget _buildActiveServiceRequestsBanner() {
-    final uid = _user?.uid;
-    if (uid == null) return const SizedBox.shrink();
+    // Stream is created once in initState (null only when there was no
+    // signed-in user at that point) — do NOT inline a .snapshots() call
+    // here, that re-attaches the listener on every rebuild.
+    final stream = _activeServiceRequestsStream;
+    if (stream == null) return const SizedBox.shrink();
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('service_requests')
-          .where('assignedHeroId', isEqualTo: uid)
-          .where('status', whereIn: ['hero_assigned', 'in_progress', 'nearing_completion'])
-          .snapshots(),
+      stream: stream,
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const SizedBox.shrink();
         }
+        // 'completed' docs are included in the query (see
+        // _activeServiceRequestsStream) so the cash-payment close-out UI
+        // is reachable, but a completed-AND-paid task is fully done and
+        // should stop showing here — filtered out client-side to avoid
+        // a 3rd inequality-filter composite index just for this.
+        final visibleDocs = snapshot.data!.docs.where((doc) {
+          final data = doc.data();
+          final status = data['status'] as String? ?? 'hero_assigned';
+          final paymentStatus = data['paymentStatus'] as String?;
+          return !(status == 'completed' && paymentStatus == 'paid');
+        }).toList();
+        if (visibleDocs.isEmpty) return const SizedBox.shrink();
         return Column(
-          children: snapshot.data!.docs.map((doc) {
+          children: visibleDocs.map((doc) {
             final data = doc.data();
             return _ServiceRequestStatusCard(
               requestId: doc.id,
               requestType: data['requestType'] as String? ?? 'hero_booking',
               status: data['status'] as String? ?? 'hero_assigned',
               customerName: data['customerName'] as String? ?? 'Customer',
+              estimatedAmount: (data['estimatedAmount'] as num?)?.toDouble(),
+              finalAmount: (data['finalAmount'] as num?)?.toDouble(),
+              paymentStatus: data['paymentStatus'] as String?,
+              estimateApprovedByCustomer:
+                  data['estimateApprovedByCustomer'] as bool?,
             );
           }).toList(),
         );
@@ -2130,11 +2459,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       return const SizedBox.shrink();
     }
 
+    // Stream created once in initState — see _activeSosAlertsStream.
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('sos_alerts')
-          .where('status', isEqualTo: 'active')
-          .snapshots(),
+      stream: _activeSosAlertsStream,
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const SizedBox.shrink();
@@ -3916,8 +4243,8 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             const Text('😴', style: TextStyle(fontSize: 64)),
             const SizedBox(height: 20),
             Text(
-              'நீங்கள் Offline-ல இருக்கீங்க',
-              style: GoogleFonts.notoSansTamil(
+              "You're Offline",
+              style: GoogleFonts.outfit(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
                 color: _text,
@@ -3925,8 +4252,8 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             ),
             const SizedBox(height: 8),
             Text(
-              'Ride accept பண்ண Online பண்ணுங்க!',
-              style: GoogleFonts.notoSansTamil(
+              'Go Online to start accepting rides!',
+              style: GoogleFonts.outfit(
                 fontSize: 13,
                 color: _muted,
               ),
@@ -3984,11 +4311,27 @@ class _ServiceRequestStatusCard extends StatefulWidget {
   final String requestType;
   final String status;
   final String customerName;
+  /// Manually-entered quote (see service_request_service.dart's
+  /// "Unified Hero Task System: money fields" section) — null until
+  /// the hero (or, optionally, an admin at assignment time) enters
+  /// one. Pre-fills the "Mark Complete" final-amount dialog below.
+  final double? estimatedAmount;
+  final double? finalAmount;
+  final String? paymentStatus;
+  /// null = customer hasn't responded yet, true = approved, false =
+  /// rejected (transient — rejectEstimate() clears estimatedAmount
+  /// back to null in the same write, so `false` is never actually
+  /// observed here in practice, only null/true).
+  final bool? estimateApprovedByCustomer;
   const _ServiceRequestStatusCard({
     required this.requestId,
     required this.requestType,
     required this.status,
     required this.customerName,
+    this.estimatedAmount,
+    this.finalAmount,
+    this.paymentStatus,
+    this.estimateApprovedByCustomer,
   });
 
   @override
@@ -3999,6 +4342,84 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
   bool _updating = false;
 
   Future<void> _advanceTo(String newStatus) async {
+    // Gate 1: before starting work, the hero must quote an estimate
+    // so the customer sees a number before the task begins (Unified
+    // Hero Task System requirement). Manual entry only — see
+    // service_request_service.dart for why no formula exists here.
+    if (newStatus == 'in_progress') {
+      // Gate 1b: customer approval. If an estimate is already sitting
+      // there awaiting a response, this button shouldn't even be
+      // reachable (build() swaps it for a "Waiting for customer..."
+      // state) — this check is defense-in-depth only.
+      if (widget.estimatedAmount != null &&
+          widget.estimateApprovedByCustomer != true) {
+        return;
+      }
+
+      // Already approved (customer said yes to a previously-entered
+      // estimate) — proceed straight to Start, no re-prompt.
+      if (widget.estimatedAmount != null &&
+          widget.estimateApprovedByCustomer == true) {
+        setState(() => _updating = true);
+        try {
+          await ServiceRequestService().advanceStatus(widget.requestId, newStatus);
+        } catch (e) {
+          debugPrint('[ServiceRequestStatusCard] advanceStatus error: $e');
+        } finally {
+          if (mounted) setState(() => _updating = false);
+        }
+        return;
+      }
+
+      // First time: prompt for the estimate, write it, then STOP and
+      // wait — the customer must explicitly approve before the hero
+      // can proceed (Unified Hero Task System customer-approval
+      // requirement). setEstimatedAmount() resets
+      // estimateApprovedByCustomer to null, which flips build() into
+      // the waiting state until Firestore reports true.
+      final amount = await _promptForAmount(
+        context,
+        title: 'Estimated amount',
+        message: 'Enter what you expect to charge for this task. '
+            'The customer needs to approve this before you can start.',
+        initialValue: widget.estimatedAmount,
+      );
+      if (amount == null) return; // cancelled — stay on current status
+      setState(() => _updating = true);
+      try {
+        await ServiceRequestService().setEstimatedAmount(widget.requestId, amount);
+      } catch (e) {
+        debugPrint('[ServiceRequestStatusCard] setEstimatedAmount error: $e');
+      } finally {
+        if (mounted) setState(() => _updating = false);
+      }
+      return;
+    }
+
+    // Gate 2: completing the task requires a final bill amount,
+    // pre-filled with the estimate but adjustable — mirrors the ride
+    // flow's completion→billing pattern.
+    if (newStatus == 'completed') {
+      final amount = await _promptForAmount(
+        context,
+        title: 'Final amount',
+        message: 'Confirm or adjust the final amount to bill the customer.',
+        initialValue: widget.estimatedAmount,
+      );
+      if (amount == null) return;
+      setState(() => _updating = true);
+      try {
+        await ServiceRequestService()
+            .completeWithFinalAmount(widget.requestId, amount);
+      } catch (e) {
+        debugPrint('[ServiceRequestStatusCard] completeWithFinalAmount error: $e');
+      } finally {
+        if (mounted) setState(() => _updating = false);
+      }
+      return;
+    }
+
+    // Middle step ('nearing_completion') — no amount gate, unchanged.
     setState(() => _updating = true);
     try {
       await ServiceRequestService().advanceStatus(widget.requestId, newStatus);
@@ -4061,7 +4482,32 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
               ),
             ],
           ),
-          if (nextStatus != null) ...[
+          if (widget.estimatedAmount != null && widget.status != 'completed') ...[
+            const SizedBox(height: 6),
+            Text(
+              'Estimated: ₹${widget.estimatedAmount!.toStringAsFixed(0)}',
+              style: const TextStyle(color: Colors.black54, fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+          ],
+          if (nextStatus == 'in_progress' &&
+              widget.estimatedAmount != null &&
+              widget.estimateApprovedByCustomer != true) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+              ),
+              child: const Text(
+                'Waiting for customer to approve estimate…',
+                style: TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.w700),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ] else if (nextStatus != null) ...[
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
@@ -4075,9 +4521,128 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
               ),
             ),
           ],
+          // "Release Task" — a hero who accepted but no longer wants to
+          // do this task can hand it back. Only offered pre-Start
+          // (hero_assigned) — once in_progress, backing out mid-task
+          // is a phone-call-to-admin situation, not a one-tap UI action.
+          // Routes to admin_review (see releaseServiceRequest()), which
+          // surfaces on admin_new_orders_screen.dart's "AWAITING
+          // ASSIGNMENT" section and the admin_review badges.
+          if (widget.status == 'hero_assigned') ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: 34,
+              child: OutlinedButton(
+                onPressed: _updating ? null : _releaseTask,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.black54,
+                  side: const BorderSide(color: Colors.black26),
+                ),
+                child: const Text('Release Task',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),),
+              ),
+            ),
+          ],
+          // Requirement 5: after "Mark Complete", the task isn't fully
+          // closed until payment is collected. The customer can pay
+          // via UPI (service_request_payment_screen.dart writes
+          // paymentStatus:'paid' directly), but for cash the hero needs
+          // their own explicit close action — mirrors the ride flow's
+          // "Collect Payment" step.
+          if (widget.status == 'completed') ...[
+            const SizedBox(height: 10),
+            if (widget.finalAmount != null)
+              Text(
+                'Final bill: ₹${widget.finalAmount!.toStringAsFixed(0)}',
+                style: const TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+            const SizedBox(height: 6),
+            if (widget.paymentStatus == 'paid')
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00C853).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Text('Payment Received ✓',
+                    style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.w800),),
+              )
+            else
+              SizedBox(
+                width: double.infinity,
+                height: 38,
+                child: OutlinedButton(
+                  onPressed: _updating ? null : _markPaymentReceived,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF00C853),
+                    side: const BorderSide(color: Color(0xFF00C853)),
+                  ),
+                  child: _updating
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00C853)))
+                      : const Text('Mark Payment Received (Cash)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11)),
+                ),
+              ),
+          ],
         ],
       ),
     );
+  }
+
+  Future<void> _markPaymentReceived() async {
+    setState(() => _updating = true);
+    try {
+      await ServiceRequestService()
+          .markServiceRequestPaymentReceived(widget.requestId);
+    } catch (e) {
+      debugPrint('[ServiceRequestStatusCard] markServiceRequestPaymentReceived error: $e');
+    } finally {
+      if (mounted) setState(() => _updating = false);
+    }
+  }
+
+  Future<void> _releaseTask() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Release this task?'),
+        content: const Text(
+          'This task will be handed back to our team for reassignment. '
+          'You will no longer be able to work on it.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep Task'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Release Task'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _updating = true);
+    try {
+      await ServiceRequestService().releaseServiceRequest(widget.requestId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Task released back to our team.')),
+        );
+      }
+    } catch (e) {
+      debugPrint('[ServiceRequestStatusCard] releaseServiceRequest error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not release task: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _updating = false);
+    }
   }
 
   String _buttonLabelFor(String nextStatus) {
@@ -4092,6 +4657,67 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
         return 'Advance';
     }
   }
+}
+
+/// Shared amount-entry dialog for the Unified Hero Task System's
+/// estimate ("before Start") and final-bill ("at Mark Complete")
+/// gates. Returns null if the hero cancels — callers must treat that
+/// as "stay on current status," never silently proceeding without an
+/// amount. Reused by both hero_home_screen.dart's status card and
+/// (optionally) admin_new_orders_screen.dart's assign sheet.
+Future<double?> _promptForAmount(
+  BuildContext context, {
+  required String title,
+  required String message,
+  double? initialValue,
+}) async {
+  final controller = TextEditingController(
+    text: initialValue != null ? initialValue.toStringAsFixed(0) : '',
+  );
+  final result = await showDialog<double>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(message, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: false),
+            decoration: const InputDecoration(
+              prefixText: '₹ ',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () {
+            final parsed = double.tryParse(controller.text.trim());
+            if (parsed == null || parsed <= 0) {
+              ScaffoldMessenger.of(ctx).showSnackBar(
+                const SnackBar(content: Text('Enter a valid amount')),
+              );
+              return;
+            }
+            Navigator.pop(ctx, parsed);
+          },
+          child: const Text('Confirm'),
+        ),
+      ],
+    ),
+  );
+  controller.dispose();
+  return result;
 }
 
 // ================================================================

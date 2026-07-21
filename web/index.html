@@ -118,7 +118,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: #0A0A12;
+      background: #FFFFFF;
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -135,14 +135,14 @@
     .splash-logo {
       width: 120px;
       height: 120px;
-      background: linear-gradient(135deg, #7B6FE0 0%, #E07C6F 100%);
-      border-radius: 26px;
+      background: linear-gradient(135deg, #FF4FA3 0%, #FF92C8 100%);
+      border-radius: 28px;
       display: flex;
       justify-content: center;
       align-items: center;
       font-size: 64px;
-      box-shadow: 0 20px 60px rgba(123, 111, 224, 0.5),
-        0 0 40px rgba(123, 111, 224, 0.3);
+      box-shadow: 0 20px 60px rgba(255, 79, 163, 0.4),
+        0 0 40px rgba(255, 79, 163, 0.25);
       animation: logoPulse 2.5s ease-in-out infinite;
       position: relative;
       overflow: hidden;
@@ -165,30 +165,25 @@
     .splash-title {
       margin-top: 28px;
       font-family: 'Noto Sans Tamil', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      font-size: 28px;
-      font-weight: 700;
-      background: linear-gradient(135deg, #9B8FF0 0%, #E07C6F 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      letter-spacing: 0.5px;
+      font-size: 26px;
+      font-weight: 800;
+      color: #4A1236;
+      letter-spacing: 0.3px;
       text-align: center;
     }
 
     .splash-subtitle {
       margin-top: 10px;
-      font-size: 12px;
-      color: #7777A0;
-      letter-spacing: 1.4px;
-      text-transform: uppercase;
-      font-weight: 500;
+      font-size: 14px;
+      color: #8A4E72;
+      font-weight: 600;
       text-align: center;
     }
 
     .splash-tagline {
       margin-top: 6px;
       font-size: 10px;
-      color: #7B6FE0;
+      color: #C77DA6;
       font-weight: 600;
       letter-spacing: 0.8px;
       text-align: center;
@@ -198,17 +193,17 @@
       margin-top: 40px;
       width: 48px;
       height: 48px;
-      border: 3px solid rgba(123, 111, 224, 0.15);
-      border-top-color: #7B6FE0;
+      border: 3px solid rgba(255, 79, 163, 0.15);
+      border-top-color: #FF4FA3;
       border-radius: 50%;
       animation: spin 1s linear infinite;
-      box-shadow: 0 0 20px rgba(123, 111, 224, 0.3);
+      box-shadow: 0 0 20px rgba(255, 79, 163, 0.25);
     }
 
     .splash-status {
       margin-top: 20px;
       font-size: 12px;
-      color: #7777A0;
+      color: #8A4E72;
       font-weight: 500;
       animation: fadeInOut 2s ease-in-out infinite;
     }
@@ -276,15 +271,17 @@
       }
     }
 
-    /* Dark mode support */
+    /* Splash is a fixed white/pink brand look regardless of system
+       light/dark preference — see BrandedLoadingScreen (Flutter side)
+       for the matching design this mirrors. */
     @media (prefers-color-scheme: light) {
       .splash-screen {
-        background: linear-gradient(135deg, #F5F5FA 0%, #FFFFFF 50%, #F5F5FA 100%);
+        background: #FFFFFF;
       }
 
       .splash-subtitle,
       .splash-status {
-        color: #666680;
+        color: #8A4E72;
       }
     }
   </style>
@@ -555,14 +552,15 @@
 
   <!-- Splash Screen -->
   <div class="splash-screen visible" id="splash-screen" role="progressbar" aria-label="Allin1 Super App loading">
-    <div class="splash-logo" aria-hidden="true" style="background:none;box-shadow:none;border-radius:20px;width:110px;height:110px;display:flex;align-items:center;justify-content:center;">
-      <img src="assets/assets/images/bapx_nj_logo.gif" width="100" height="100"
-        style="border-radius:20px;object-fit:contain;"
-        onerror="this.style.display='none'">
-    </div>
-    <div class="splash-title" style="background:linear-gradient(135deg,#FFD700,#FF6B35);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;">NJ BAPX</div>
-    <div class="splash-subtitle" style="color:#7777A0;font-size:13px;">my allin1 · Erode</div>
-    <div class="splash-tagline">Powered by NJ TECH</div>
+    <!-- This used to be an <img> pointing at bapx_nj_logo.gif — a 2.4 MB
+         animated GIF, on the very first screen, blocking the customer's
+         first paint on every single launch. Replaced with the same pink
+         gradient mark that BrandedLoadingScreen (Flutter side) already
+         draws, so the web splash and the Flutter splash now look
+         identical AND cost zero bytes to download. -->
+    <div class="splash-logo" aria-hidden="true"></div>
+    <div class="splash-title" style="color:#4A1236;font-weight:800;">That'll Bapx NJ Tech</div>
+    <div class="splash-subtitle" style="color:#8A4E72;font-size:14px;">made love ❤ with erode</div>
     <div class="splash-loader" aria-hidden="true"></div>
     <div class="splash-status">Loading...</div>
   </div>
@@ -616,28 +614,37 @@
       }
     });
 
+    // ── Update detection lives in Dart now ──────────────────────────
+    //
+    // This block used to watch service-worker update events and set
+    // window.allin1UpdateAvailable for the in-app UPDATE button to
+    // read. That approach is dead:
+    //
+    //   * Flutter's current service worker UNREGISTERS ITSELF on
+    //     activate (verified on the deployed file) and has no fetch
+    //     handler, so it can never report an update.
+    //   * `--pwa-strategy` is deprecated and being removed, so
+    //     service-worker caching is not something to build on.
+    //
+    // The console showed the consequence directly:
+    //   "[PWA] update check failed: InvalidStateError: Failed to
+    //    update a ServiceWorker ... The object is in an invalid state."
+    //
+    // web_version_checker.dart now compares /version.json against the
+    // build this tab loaded with. No service worker involved, nothing
+    // deprecated, identical behaviour on every Flutter version.
+    //
+    // Registration itself is kept below purely for PWA installability
+    // (Chrome wants a registered worker), with the no-cache fallback
+    // for deploys where Flutter's own worker is missing.
+
     if ('serviceWorker' in navigator) {
-      let refreshing = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (refreshing) return;
-        refreshing = true;
-        window.location.reload();
-      });
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/flutter_service_worker.js')
-          .then(reg => {
-            reg.addEventListener('updatefound', () => {
-              const newWorker = reg.installing;
-              if (newWorker) {
-                newWorker.addEventListener('statechange', () => {
-                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    if (confirm('🚀 New version available! Tap OK to update.')) {
-                      newWorker.postMessage({ action: 'skipWaiting' });
-                    }
-                  }
-                });
-              }
-            });
+          .catch(err => {
+            console.warn('[PWA] flutter_service_worker.js unavailable, using fallback:', err);
+            navigator.serviceWorker.register('/pwa_fallback_sw.js')
+              .catch(e2 => console.warn('[PWA] fallback service worker failed too:', e2));
           });
       });
     }
