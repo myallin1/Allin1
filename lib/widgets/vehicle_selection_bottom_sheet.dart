@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../config/fare_rates.dart';
+import '../config/ride_catalog.dart';
 import '../models/ride_model.dart';
 
 const Color _brandPink = Color(0xFFFF4FA3);
@@ -85,90 +86,6 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
       fares: widget.fares,
     );
   }
-
-  // Enhanced vehicle configuration with modern details
-  final List<Map<String, dynamic>> _vehicles = [
-    {
-      'type': 'bike',
-      'title': 'Bike Taxi',
-      'subtitle': 'Fast & economical',
-      'description': 'Perfect for short trips',
-      'icon': '🏍️',
-      'eta': '2-3 mins',
-      'capacity': 1,
-      'color': _brandPink,
-      'bgColor': _brandPink.withValues(alpha: 0.1),
-    },
-    {
-      'type': 'auto',
-      'title': 'Auto Rickshaw',
-      'subtitle': 'Comfortable & reliable',
-      'description': 'Great for small groups',
-      'icon': '🛺',
-      'eta': '3-5 mins',
-      'capacity': 3,
-      'color': _brandPink,
-      'bgColor': _brandPink.withValues(alpha: 0.1),
-    },
-    {
-      'type': 'cab',
-      'title': 'Mini Cab',
-      'subtitle': 'Premium & spacious',
-      'description': 'Luxury experience',
-      'icon': '🚘',
-      'eta': '4-6 mins',
-      'capacity': 4,
-      'color': _brandPink,
-      'bgColor': _brandPink.withValues(alpha: 0.1),
-    },
-    {
-      'type': 'parcel',
-      'title': 'Parcel Delivery',
-      'subtitle': 'Fast package drop',
-      'description': 'Perfect for local parcel trips',
-      'icon': '📦',
-      'eta': '3-5 mins',
-      'capacity': 1,
-      'color': _brandPink,
-      'bgColor': _brandPink.withValues(alpha: 0.1),
-    },
-    // T2: Emergency Manpower added to complete the 5-category pipeline
-    {
-      'type': 'emergency_manpower',
-      'title': 'Emergency Manpower',
-      'subtitle': 'SOS first responder',
-      'description': 'Urgent on-ground assistance',
-      'icon': '🚨',
-      'eta': '5-8 mins',
-      'capacity': 1,
-      'color': Color(0xFFFF5252),
-      'bgColor': Color(0x1AFF5252),
-    },
-    // Cargo pair: mini_truck + lorry. Uses _isCargoRide-style status
-    // labels downstream (hero_ride_screen.dart) once a real ride exists.
-    {
-      'type': 'mini_truck',
-      'title': 'Mini Truck',
-      'subtitle': 'Small cargo & goods',
-      'description': 'For bulky local deliveries',
-      'icon': '🛻',
-      'eta': '6-10 mins',
-      'capacity': 1,
-      'color': _brandPink,
-      'bgColor': _brandPink.withValues(alpha: 0.1),
-    },
-    {
-      'type': 'lorry',
-      'title': 'Lorry',
-      'subtitle': 'Heavy cargo transport',
-      'description': 'For large-scale hauling',
-      'icon': '🚚',
-      'eta': '8-15 mins',
-      'capacity': 1,
-      'color': _brandPink,
-      'bgColor': _brandPink.withValues(alpha: 0.1),
-    },
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -263,8 +180,8 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                 ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _vehicles.length,
-                  itemBuilder: (context, index) => _buildVehicleCard(_vehicles[index]),
+                  itemCount: kRideCatalog.length,
+                  itemBuilder: (context, index) => _buildVehicleCard(kRideCatalog[index]),
                 ),
 
                 const SizedBox(height: 32),
@@ -329,16 +246,16 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
     );
   }
 
-  Widget _buildVehicleCard(Map<String, dynamic> vehicle) {
-    final String type = vehicle['type'] as String;
-    final String icon = vehicle['icon'] as String;
-    final String title = vehicle['title'] as String;
-    final String eta = vehicle['eta'] as String;
-    final String subtitle = vehicle['subtitle'] as String;
-    final String description = vehicle['description'] as String;
-    final int capacity = vehicle['capacity'] as int;
-    final Color accentColor = vehicle['color'] as Color;
-    final Color bgColor = vehicle['bgColor'] as Color;
+  Widget _buildVehicleCard(RideCatalogEntry vehicle) {
+    final String type = vehicle.key;
+    final String icon = vehicle.emoji;
+    final String title = vehicle.sheetTitle;
+    final String eta = vehicle.eta;
+    final String subtitle = vehicle.subtitle;
+    final String description = vehicle.description;
+    final int capacity = vehicle.capacity;
+    final Color accentColor = vehicle.color;
+    final Color bgColor = vehicle.bgColor;
 
     final bool isSelected = _selectedVehicle == type;
     final double fare = _resolveFare(type, widget.distanceKm);

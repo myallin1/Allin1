@@ -13,11 +13,13 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../config/fare_rates.dart';
+import '../../config/ride_catalog.dart';
 import '../../models/ride_model.dart';
 import '../../services/category_gateway_service.dart';
 import '../../services/localization_service.dart';
 import '../../services/location_service.dart';
 import '../../services/map_service.dart';
+import '../../services/recent_places_service.dart';
 import '../../services/session_service.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../../widgets/vehicle_selection_bottom_sheet.dart';
@@ -25,13 +27,6 @@ import '../login_screen.dart';
 import '../payment_screen.dart';
 import 'ride_search_screen.dart';
 import 'ride_tracking_screen.dart';
-
-enum _ServiceCategory {
-  bike,
-  auto,
-  cab,
-  parcel,
-}
 
 // Approximate Erode road paths aligned to major corridors such as
 // Brough Road, EVN Road, and Perundurai Road for ambient traffic.
@@ -353,6 +348,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   bool _isSearching = false;
   bool _isResolvingPinAddress = false;
   List<Map<String, dynamic>> _searchSuggestions = [];
+  List<Map<String, dynamic>> _recentPlaces = <Map<String, dynamic>>[];
   String _activeSearchQuery = '';
   Timer? _debounceTimer;
   Timer? _searchMapIdleTimer;
@@ -375,7 +371,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   // ── Fare State ────────────────────────────────────────────────
   Map<String, dynamic>? _fares;
   double? _estimatedFare;
-  _ServiceCategory _selectedCategory = _ServiceCategory.bike;
+  String _selectedCategory = 'bike';
   bool _isInitializingLocation = true;
   bool _locationPermissionRequired = false;
   String _startupStatus = 'Loading map and checking GPS...';
@@ -390,6 +386,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     _listenToNearbyCaptains();
     _initLocationTracking();
     unawaited(_restoreActiveRideIfNeeded());
+    unawaited(_loadRecentPlaces());
     Timer(const Duration(seconds: 1), () {
       if (!mounted) return;
       _ensureDummyTrafficInitialized();
@@ -433,30 +430,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   /// This is the single source of truth for the pipeline:
   ///   Customer books 'cab' → rides/{id}.category = 'car'
   ///   Hero registered as 'car' → stream filter matches 'car'
-  String _normalizeCategoryKey(String vehicleType) {
-    switch (vehicleType.trim().toLowerCase()) {
-      case 'auto':
-        return 'auto';
-      case 'cab':
-      case 'car':
-      case 'mini':
-        return 'car';
-      case 'parcel':
-        return 'parcel';
-      case 'mini_truck':
-      case 'mini-truck':
-      case 'truck':
-        return 'mini_truck';
-      case 'lorry':
-        return 'lorry';
-      case 'emergency_manpower':
-      case 'manpower':
-        return 'emergency_manpower';
-      case 'bike':
-      default:
-        return 'bike';
-    }
-  }
+  String _normalizeCategoryKey(String vehicleType) =>
+      rideHeroCategory(vehicleType);
 
   DateTime? _rideTimestamp(Map<String, dynamic> data, List<String> keys) {
     for (final key in keys) {
@@ -1124,54 +1099,13 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     if (animateMap) _moveMainMap(position, 15.5);
   }
 
-  String get _selectedVehicleTypeKey {
-    switch (_selectedCategory) {
-      case _ServiceCategory.auto:
-        return 'auto';
-      case _ServiceCategory.cab:
-        return 'cab';
-      case _ServiceCategory.parcel:
-        return 'parcel';
-      case _ServiceCategory.bike:
-        return 'bike';
-    }
-  }
+  String get _selectedVehicleTypeKey => _selectedCategory;
 
-  String? _assetForVehicleType(String vehicleType) {
-    switch (vehicleType) {
-      case 'auto':
-        return 'assets/images/top_auto.png';
-      case 'car':
-      case 'cab':
-      case 'mini-truck':
-      case 'mini_truck':
-      case 'truck':
-        return 'assets/images/top_cab.png';
-      case 'parcel':
-        return 'assets/images/top_parcel.png';
-      case 'bike':
-      default:
-        return 'assets/images/top_bike.png';
-    }
-  }
+  String? _assetForVehicleType(String vehicleType) =>
+      rideAssetFor(vehicleType);
 
-  IconData _fallbackIconForVehicleType(String vehicleType) {
-    switch (vehicleType) {
-      case 'auto':
-        return Icons.electric_rickshaw_rounded;
-      case 'car':
-      case 'cab':
-      case 'mini-truck':
-      case 'mini_truck':
-      case 'truck':
-        return Icons.local_taxi_rounded;
-      case 'parcel':
-        return Icons.inventory_2_rounded;
-      case 'bike':
-      default:
-        return Icons.two_wheeler_rounded;
-    }
-  }
+  IconData _fallbackIconForVehicleType(String vehicleType) =>
+      rideFallbackIcon(vehicleType);
 
   double _baseLaneOffsetForVehicleType(String vehicleType) {
     return 0;
@@ -1485,11 +1419,55 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     });
   }
 
+  Future<void> _loadRecentPlaces() async {
+    final places = await RecentPlacesService().getRecentPlaces();
+    if (!mounted) return;
+    setState(() {
+      _recentPlaces = places;
+    });
+  }
+
+  Future<void> _recordRecentPlace(Map<String, dynamic> location) async {
+    await RecentPlacesService().recordPlace(location);
+    await _loadRecentPlaces();
+  }
+
   Future<void> _selectLocation(Map<String, dynamic> location) async {
     final selectedPoint = LatLng(
       (location['lat'] as num).toDouble(),
       (location['lng'] as num).toDouble(),
     );
+
+    // Guard against a silent zero-distance booking. The drop picker
+    // seeds its pin on the pickup coordinate (see _resolveSearchSeedPoint),
+    // so confirming without actually moving to a different spot used to
+    // overwrite a correct selection with a same-spot "destination" and
+    // _triggerBooking() would then bail out with dist <= 0 and no
+    // feedback at all -- reading to the customer as "my location changed
+    // to something wrong and booking won't start". Now we say so instead
+    // of going silent, and leave the previous selection untouched.
+    final otherLocation = _isFocusingDrop ? _pickupLocation : _dropLocation;
+    if (otherLocation != null) {
+      final otherPoint = LatLng(
+        (otherLocation['lat'] as num).toDouble(),
+        (otherLocation['lng'] as num).toDouble(),
+      );
+      final sameSpotKm = _haversineKm(
+        selectedPoint.latitude,
+        selectedPoint.longitude,
+        otherPoint.latitude,
+        otherPoint.longitude,
+      );
+      if (sameSpotKm < 0.02) {
+        _showError(
+          _isFocusingDrop
+              ? 'Destination looks the same as pickup. Please choose a different drop location.'
+              : 'Pickup looks the same as destination. Please choose a different pickup location.',
+        );
+        return;
+      }
+    }
+
     setState(() {
       if (_isFocusingDrop) {
         _dropLocation = location;
@@ -1501,6 +1479,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       _searchMapCenter = selectedPoint;
       _pinDropLocation = location;
     });
+    unawaited(_recordRecentPlace(location));
     _moveMainMap(selectedPoint, 15.5);
     
     if (_isFocusingDrop) {
@@ -1676,6 +1655,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   void _triggerBooking() {
     final dist = _distance;
     if (dist <= 0) {
+      _showError(
+        'Unable to calculate the trip distance. Please pick the pickup and destination again.',
+      );
       return;
     }
     showModalBottomSheet<void>(
@@ -2421,54 +2403,41 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
 
   Widget _buildPremiumVehicleScroller() {
     final localization = context.watch<LocalizationService>();
+    final chips = <Widget>[];
+    for (var i = 0; i < kRideCatalog.length; i++) {
+      if (i > 0) {
+        chips.add(const SizedBox(width: 12));
+      }
+      final entry = kRideCatalog[i];
+      chips.add(
+        _premiumCategoryChip(
+          categoryKey: entry.key,
+          assetPath: entry.assetPath,
+          fallbackIcon: entry.fallbackIcon,
+          label: localization.t(entry.l10nKey),
+        ),
+      );
+    }
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: [
-          _premiumCategoryChip(
-            category: _ServiceCategory.bike,
-            assetPath: 'assets/images/top_bike.png',
-            fallbackIcon: Icons.two_wheeler_rounded,
-            label: localization.t('bike_label'),
-          ),
-          const SizedBox(width: 12),
-          _premiumCategoryChip(
-            category: _ServiceCategory.auto,
-            assetPath: 'assets/images/top_auto.png',
-            fallbackIcon: Icons.electric_rickshaw_rounded,
-            label: localization.t('auto_label'),
-          ),
-          const SizedBox(width: 12),
-          _premiumCategoryChip(
-            category: _ServiceCategory.cab,
-            assetPath: 'assets/images/top_cab.png',
-            fallbackIcon: Icons.local_taxi_rounded,
-            label: localization.t('cab_label'),
-          ),
-          const SizedBox(width: 12),
-          _premiumCategoryChip(
-            category: _ServiceCategory.parcel,
-            assetPath: 'assets/images/top_parcel.png',
-            fallbackIcon: Icons.inventory_2_rounded,
-            label: localization.t('parcel_label'),
-          ),
-        ],
+        children: chips,
       ),
     );
   }
 
   Widget _premiumCategoryChip({
-    required _ServiceCategory category,
+    required String categoryKey,
     required String assetPath,
     required IconData fallbackIcon,
     required String label,
   }) {
-    final isSelected = _selectedCategory == category;
+    final isSelected = _selectedCategory == categoryKey;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => _selectCategory(category),
+        onTap: () => _selectCategory(categoryKey),
         borderRadius: BorderRadius.circular(24),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 220),
@@ -2660,13 +2629,13 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     );
   }
 
-  void _selectCategory(_ServiceCategory category) {
-    if (!mounted || _selectedCategory == category) {
+  void _selectCategory(String categoryKey) {
+    if (!mounted || _selectedCategory == categoryKey) {
       return;
     }
 
     setState(() {
-      _selectedCategory = category;
+      _selectedCategory = categoryKey;
       if (_routeDistanceKm != null && _routeDistanceKm! > 0) {
         _estimatedFare = _estimateFareFor(_routeDistanceKm!);
       }
@@ -3063,9 +3032,28 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   List<Map<String, dynamic>> get _visibleSearchSuggestions {
-    return _activeSearchQuery.isEmpty
-        ? _defaultSearchLocations
-        : _searchSuggestions;
+    if (_activeSearchQuery.isNotEmpty) {
+      return _searchSuggestions;
+    }
+    if (_recentPlaces.isEmpty) {
+      return _defaultSearchLocations;
+    }
+    // Customer's own recent picks first, then the static Erode
+    // landmarks -- deduped by name so a landmark the customer already
+    // picked recently doesn't show twice.
+    final seenNames = <String>{};
+    final merged = <Map<String, dynamic>>[];
+    for (final place in _recentPlaces) {
+      if (seenNames.add(place['name'] as String? ?? '')) {
+        merged.add(place);
+      }
+    }
+    for (final place in _defaultSearchLocations) {
+      if (seenNames.add(place['name'] as String? ?? '')) {
+        merged.add(place);
+      }
+    }
+    return merged;
   }
 
   Widget _buildSearchSuggestionPanel() {
@@ -3123,7 +3111,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
             child: Text(
-              'Favorites / Recent locations',
+              'Recent & popular in Erode',
               style: GoogleFonts.outfit(
                 color: _textPrimary,
                 fontSize: 13,
@@ -3183,6 +3171,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
             ),
             itemBuilder: (context, index) {
               final loc = suggestions[index];
+              final isRecent = loc['source'] == 'recent';
               final isFavorite = loc['provider'] == 'favorite';
               return ListTile(
                 contentPadding: const EdgeInsets.symmetric(
@@ -3197,9 +3186,11 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(
-                    isFavorite
-                        ? Icons.favorite_border_rounded
-                        : Icons.location_on_rounded,
+                    isRecent
+                        ? Icons.history_rounded
+                        : isFavorite
+                            ? Icons.favorite_border_rounded
+                            : Icons.location_on_rounded,
                     color: _accentOrange,
                   ),
                 ),
