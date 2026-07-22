@@ -108,39 +108,21 @@ const List<_RideType> _rides = [
 ];
 
 // ── Recent places ────────────────────────────────────────────────
-final List<_Place> _recentPlaces = [
-  const _Place(
-    Icons.home,
-    'Home',
-    '15, Gandhi Nagar, Erode',
-    LatLng(11.3350, 77.7100),
-  ),
-  const _Place(
-    Icons.work,
-    'NJ TECH',
-    'Periyar Nagar, Erode 638001',
-    LatLng(11.3430, 77.7200),
-  ),
-  const _Place(
-    Icons.store,
-    'Erode Market',
-    'Big Bazar Street, Erode',
-    LatLng(11.3480, 77.7260),
-  ),
-  const _Place(
-    Icons.local_hospital,
-    'GKNM Hospital',
-    'Nethaji Rd, Erode 638001',
-    LatLng(11.3390, 77.7320),
-  ),
-];
-
-class _Place {
-  final IconData icon;
-  final String label, address;
-  final LatLng latlng;
-  const _Place(this.icon, this.label, this.address, this.latlng);
-}
+// A "RECENT PLACES" list used to sit here: four hardcoded entries
+// labelled Home / NJ TECH / Erode Market / GKNM Hospital, each with an
+// invented address and invented coordinates.
+//
+// None of it was the customer's data. Tapping "Home" booked a ride to
+// "15, Gandhi Nagar, Erode" — an address the customer had never given
+// us and probably had never been to — and the hero was dispatched
+// there. Presented under a history icon, it read as something the app
+// remembered about them, which made it more trustworthy and therefore
+// more dangerous than an empty list.
+//
+// Removed rather than left in place: real place search now works, so
+// this had nothing to offer but a wrong destination. Genuine recent
+// places — the customer's own last few confirmed pickups and drops,
+// persisted locally — would be a real feature, and a separate one.
 
 // ================================================================
 // BikeTaxiScreen
@@ -184,6 +166,31 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
   final _mapService = MapService();
   Timer? _pickupDebounce;
   Timer? _dropDebounce;
+
+  // ── Real road route ──────────────────────────────────────────────
+  // Everything about distance on this screen used to be invented.
+  //
+  //   _distKm()     measured the straight line between the two points
+  //   _buildRoute() drew a decorative bezier curve with a fixed offset
+  //
+  // Neither had anything to do with roads. Roads in Erode are 20-40%
+  // longer than the crow flies, so every fare quoted here was short by
+  // that much, and the hero rode the difference for free on every
+  // single trip.
+  //
+  // MapService.getRoute() returns a properly routed path — Ola first,
+  // OSRM as fallback — with its real distance. That's what the fare
+  // uses now, and what the map draws.
+  List<LatLng> _routePoints = [];
+  double? _routeDistanceKm;
+  bool _routeLoading = false;
+
+  /// True when the distance came from a genuine route rather than the
+  /// straight-line fallback. Used to tell the customer the fare is an
+  /// estimate rather than quietly presenting a guess as a real number.
+  bool _routeIsReal = false;
+
+  int _routeRequestId = 0;
   List<Map<String, dynamic>> _pickupSuggestions = [];
   List<Map<String, dynamic>> _dropSuggestions = [];
   bool _pickupFetching = false;
@@ -249,26 +256,144 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
   LatLng? _pickupResolved;
   LatLng? _dropResolved;
 
+  /// The pickup/drop pair the current route was calculated for. Used to
+  /// tell "the customer swapped one end for a different place" apart
+  /// from "nothing meaningful changed".
+  LatLng? _routedPickup;
+  LatLng? _routedDrop;
+
   void _onChanged() {
     final p = _pickupResolved != null && _pickupCtrl.text.trim().isNotEmpty;
     final d = _dropResolved != null && _dropCtrl.text.trim().isNotEmpty;
-    if (p == _pickupSet && d == _dropSet) {
-      return;
-    }
+
+    final setnessChanged = p != _pickupSet || d != _dropSet;
+
+    // The old early-return here checked only whether the SET-NESS had
+    // flipped, so picking a different drop while both fields were
+    // already filled fell straight through: _dropPos was never updated
+    // and the route was never recalculated. The fare kept describing
+    // the previous destination.
     setState(() {
       _pickupSet = p;
       _dropSet = d;
       if (p) _pickupPos = _pickupResolved!;
       if (d) _dropPos = _dropResolved!;
     });
-    if (p && d) {
+
+    if (!p || !d) {
+      if (setnessChanged) {
+        _slideCtrl.reverse();
+      }
+      setState(() {
+        _showFare = false;
+        _routePoints = [];
+        _routeDistanceKm = null;
+        _routeIsReal = false;
+        _routedPickup = null;
+        _routedDrop = null;
+      });
+      return;
+    }
+
+    if (setnessChanged) {
       _slideCtrl.forward();
       setState(() => _showFare = true);
       Future<void>.delayed(const Duration(milliseconds: 300), _fitMap);
-    } else {
-      _slideCtrl.reverse();
-      setState(() => _showFare = false);
     }
+
+    // Refetch whenever either end is a different point than the one the
+    // current route was built from.
+    final needsRoute = _routedPickup != _pickupPos || _routedDrop != _dropPos;
+    if (needsRoute) {
+      unawaited(_fetchRoute());
+    }
+  }
+
+  /// Asks MapService for the real road route between the two points.
+  ///
+  /// The request id guards against a slow reply for an older pair of
+  /// locations landing after the customer has already changed one of
+  /// them — without it, the fare could end up describing a journey the
+  /// customer is no longer taking.
+  Future<void> _fetchRoute() async {
+    final pickup = _pickupResolved;
+    final drop = _dropResolved;
+    if (pickup == null || drop == null) return;
+
+    final requestId = ++_routeRequestId;
+
+    // Claim this pair immediately, before the await. _onChanged() runs
+    // both as a TextEditingController listener and as a direct call, so
+    // selecting a suggestion fires it twice; without claiming up front,
+    // both passes would see a stale pair and each start its own
+    // request. Cleared again on failure so a later change can retry.
+    _routedPickup = pickup;
+    _routedDrop = drop;
+
+    if (mounted) setState(() => _routeLoading = true);
+
+    try {
+      final route = await _mapService.getRoute(pickup, drop);
+      if (!mounted || requestId != _routeRequestId) return;
+
+      if (route == null) {
+        setState(() {
+          _routeLoading = false;
+          _routeIsReal = false;
+          // Release the claim so this pair can be retried.
+          _routedPickup = null;
+          _routedDrop = null;
+        });
+        return;
+      }
+
+      // MapService's own last-ditch fallback returns just the two end
+      // points and a Haversine distance. That is not a route, and
+      // pretending otherwise is how we got here — so only treat a path
+      // with real intermediate points as genuine.
+      final isReal = route.points.length > 2;
+
+      setState(() {
+        _routePoints = route.points;
+        _routeDistanceKm = route.distanceMeters / 1000.0;
+        _routeIsReal = isReal;
+        _routeLoading = false;
+        // Record what this route describes, so _onChanged() can tell
+        // when it has gone stale.
+        _routedPickup = pickup;
+        _routedDrop = drop;
+      });
+
+      debugPrint(
+        '[BikeTaxi] route: ${(route.distanceMeters / 1000).toStringAsFixed(2)} km '
+        'over ${route.points.length} points (real=$isReal), '
+        'straight line was ${_straightLineKm().toStringAsFixed(2)} km',
+      );
+
+      _fitMap();
+    } catch (e) {
+      debugPrint('[BikeTaxi] route fetch failed: $e');
+      if (mounted) {
+        setState(() {
+          _routeLoading = false;
+          _routeIsReal = false;
+          _routedPickup = null;
+          _routedDrop = null;
+        });
+      }
+    }
+  }
+
+  /// The distance the fare is actually charged on.
+  ///
+  /// Prefers the routed distance. Falls back to the straight line only
+  /// when routing genuinely failed — and _routeIsReal stays false in
+  /// that case so the UI can say the number is approximate.
+  double _chargeableKm() {
+    final routed = _routeDistanceKm;
+    if (routed != null && routed > 0) return routed;
+    if (!_pickupSet || !_dropSet) return 0;
+    return _straightLineKm();
   }
 
   void _fitMap() {
@@ -324,30 +449,29 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
     }
   }
 
-  // Build bezier-curve route (3-point quadratic)
+  /// The line drawn on the map between pickup and drop.
+  ///
+  /// This used to be a decorative bezier curve — the midpoint was
+  /// shifted by a fixed (+0.004, +0.003) and three points were smoothed
+  /// into an arc. It looked like a route and followed no road whatsoever.
+  ///
+  /// Now it's the actual routed path when we have one, and a plain
+  /// straight line while the route is still loading or if routing
+  /// failed. A straight line at least doesn't pretend to be something
+  /// it isn't.
   List<LatLng> _buildRoute() {
     if (!_pickupSet || !_dropSet) {
       return [];
     }
-    final mid = LatLng(
-      (_pickupPos.latitude + _dropPos.latitude) / 2 + 0.004,
-      (_pickupPos.longitude + _dropPos.longitude) / 2 + 0.003,
-    );
-    return List.generate(21, (i) {
-      final t = i / 20.0;
-      final t1 = 1 - t;
-      return LatLng(
-        t1 * t1 * _pickupPos.latitude +
-            2 * t1 * t * mid.latitude +
-            t * t * _dropPos.latitude,
-        t1 * t1 * _pickupPos.longitude +
-            2 * t1 * t * mid.longitude +
-            t * t * _dropPos.longitude,
-      );
-    });
+    if (_routePoints.length > 1) {
+      return _routePoints;
+    }
+    return [_pickupPos, _dropPos];
   }
 
-  double _distKm() {
+  /// Great-circle distance. Kept as the fallback for when routing is
+  /// unavailable — it is no longer what the fare is based on.
+  double _straightLineKm() {
     const r = 6371.0;
     final dLat = (_dropPos.latitude - _pickupPos.latitude) * (pi / 180);
     final dLon = (_dropPos.longitude - _pickupPos.longitude) * (pi / 180);
@@ -359,21 +483,9 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
     return r * 2 * atan2(sqrt(a), sqrt(1 - a));
   }
 
-  void _fillPlace(_Place p) {
-    if (!_pickupSet) {
-      _pickupCtrl.text = p.address;
-      _pickupResolved = p.latlng;
-      _pickupSuggestions = [];
-      _onChanged();
-      FocusScope.of(context).requestFocus(_dropFocus);
-    } else if (!_dropSet) {
-      _dropCtrl.text = p.address;
-      _dropResolved = p.latlng;
-      _dropSuggestions = [];
-      _onChanged();
-      _dropFocus.unfocus();
-    }
-  }
+  // _fillPlace() went with the "recent places" list — it was the tap
+  // handler that pushed one of those invented addresses into a field.
+  // _applySuggestion() below does the same job for a real search result.
 
   // ── Live search ──────────────────────────────────────────────────
   // Typing invalidates whatever coordinate was attached to the field:
@@ -720,7 +832,12 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
         ride: _rides[_rideIdx],
         pickup: _pickupCtrl.text,
         drop: _dropCtrl.text,
-        distKm: _pickupSet && _dropSet ? _distKm() : 4.5,
+        // Was `_distKm() : 4.5` — a straight-line measurement, or a
+        // hardcoded 4.5 km when the locations weren't both set. The
+        // booking button is gated on both being set, so the 4.5 was
+        // unreachable here, but leaving a fake number in a booking path
+        // is not something to keep around.
+        distKm: _chargeableKm(),
       ),
     );
   }
@@ -790,8 +907,6 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
                           _buildFareCard(),
                         ],
                         const SizedBox(height: 22),
-                        _buildRecent(),
-                        const SizedBox(height: 20),
                         _buildPromo(),
                         const SizedBox(height: 10),
                       ],
@@ -1362,7 +1477,7 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
   // ── FARE CARD ─────────────────────────────────────────────────
   Widget _buildFareCard() {
     final r = _rides[_rideIdx];
-    final dist = _pickupSet && _dropSet ? _distKm() : 4.5;
+    final dist = _chargeableKm();
     final fare = (dist * r.ratePerKm).round();
 
     return SlideTransition(
@@ -1434,8 +1549,17 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
                             color: r.color,
                           ),
                         ),
+                        // Says out loud where the number came from.
+                        // While the route is still being fetched the
+                        // distance on screen is the straight line, and
+                        // showing that as a settled figure would just
+                        // be the old problem wearing a new hat.
                         Text(
-                          '${dist.toStringAsFixed(1)} km · ${r.eta}',
+                          _routeLoading
+                              ? 'Finding the best route...'
+                              : _routeIsReal
+                                  ? '${dist.toStringAsFixed(1)} km · ${r.eta}'
+                                  : '~${dist.toStringAsFixed(1)} km · ${r.eta}',
                           style: const TextStyle(fontSize: 11, color: kMuted),
                         ),
                       ],
@@ -1491,81 +1615,10 @@ class _BikeTaxiScreenState extends State<BikeTaxiScreen>
         ],
       );
 
-  // ── RECENT PLACES ─────────────────────────────────────────────
-  Widget _buildRecent() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Row(
-          children: [
-            Icon(Icons.history, size: 14, color: kMuted),
-            SizedBox(width: 6),
-            Text(
-              'RECENT PLACES',
-              style: TextStyle(
-                fontSize: 10,
-                color: kMuted,
-                letterSpacing: 1.2,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        ..._recentPlaces.map(
-          (p) => GestureDetector(
-            onTap: () => _fillPlace(p),
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: kCard,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: kBorder),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: kCard2,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: kBorder),
-                    ),
-                    child:
-                        Center(child: Icon(p.icon, size: 20, color: kPurple2)),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          p.label,
-                          style: GoogleFonts.notoSansTamil(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: kText,
-                          ),
-                        ),
-                        Text(
-                          p.address,
-                          style: const TextStyle(fontSize: 10, color: kMuted),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.north_west, size: 14, color: kPurple2),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  // _buildRecent() lived here and rendered the four invented
+  // "recent places" described at the top of this file. Both the data
+  // and the widget that displayed it are gone; real place search
+  // covers the same need without sending anyone to a made-up address.
 
   // ── CAPTAIN PROMO CARD ────────────────────────────────────────
   Widget _buildPromo() {
