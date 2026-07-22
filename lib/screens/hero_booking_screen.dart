@@ -37,13 +37,21 @@ const Color _kMuted = Color(0xFF9999BB);
 const Color _kBorder = Color(0x33FF4FA3);
 
 class HeroBookingScreen extends StatefulWidget {
-  const HeroBookingScreen({super.key});
+  const HeroBookingScreen({super.key, this.initialCategory = 'pickup_delivery'});
+
+  /// Which kHeroBookingCategories key the form opens on. Defaults to
+  /// 'pickup_delivery' for the dashboard's own Hero Booking mega card;
+  /// the dashboard's "Call for Customise Order" entry point passes
+  /// 'other' so it lands where that promise ("describe anything, a
+  /// Hero will handle it") actually lives now.
+  final String initialCategory;
+
   @override
   State<HeroBookingScreen> createState() => _HeroBookingScreenState();
 }
 
 class _HeroBookingScreenState extends State<HeroBookingScreen> {
-  String _selectedCategory = 'pickup_delivery';
+  late String _selectedCategory;
   final _fromLocationCtrl = TextEditingController();
   final _locationCtrl = TextEditingController();
   final _taskDescCtrl = TextEditingController();
@@ -104,6 +112,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
   @override
   void initState() {
     super.initState();
+    _selectedCategory = widget.initialCategory;
     unawaited(_primeSearchBiasWithCustomerCity());
     // A location shared in from WhatsApp/Maps may already be waiting
     // (see shared_location_inbox.dart). Checked after the first frame
@@ -579,6 +588,18 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 20),
+
+            // ── What a Hero can do -- tappable idea slider ────────
+            // Concrete examples, not just the dry category labels
+            // below: this is what actually helps a customer realise
+            // the range of tasks a Hero covers. Tapping a card jumps
+            // straight to its matching category.
+            Text('What can a Hero do for you?', style: GoogleFonts.outfit(color: _kText, fontSize: 14, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 10),
+            _HeroTaskIdeasMarquee(
+              onSelect: (key) => setState(() => _selectedCategory = key),
             ),
             const SizedBox(height: 24),
 
@@ -1603,6 +1624,114 @@ class _ActiveHeroBookingCard extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+// ================================================================
+// HERO TASK IDEAS -- tappable auto-scrolling slider
+// ================================================================
+// Concrete examples of what a Hero can be booked for, shown as an
+// auto-scrolling strip above the category chips. Each card maps to one
+// of kHeroBookingCategories (service_request_labels.dart) so tapping a
+// card both shows the customer a real example AND pre-selects the
+// right category for them.
+const List<Map<String, String>> _kHeroTaskIdeas = [
+  {'icon': '\u{1F4E6}', 'label': 'Parcel Pickup & Delivery', 'category': 'pickup_delivery'},
+  {'icon': '\u{1F6D2}', 'label': 'Grocery Run & Medicine Pickup', 'category': 'errand'},
+  {'icon': '\u{1F4C4}', 'label': 'Bill Payment & Document Drop', 'category': 'paperwork'},
+  {'icon': '\u{1F475}', 'label': 'Help for Elders', 'category': 'other'},
+  {'icon': '\u{1F382}', 'label': 'Midnight Cake Delivery', 'category': 'custom_order'},
+  {'icon': '\u{1F4AA}', 'label': 'Hero as Bouncer', 'category': 'other'},
+];
+
+class _HeroTaskIdeasMarquee extends StatefulWidget {
+  final void Function(String categoryKey) onSelect;
+  const _HeroTaskIdeasMarquee({required this.onSelect});
+
+  @override
+  State<_HeroTaskIdeasMarquee> createState() => _HeroTaskIdeasMarqueeState();
+}
+
+class _HeroTaskIdeasMarqueeState extends State<_HeroTaskIdeasMarquee> {
+  late final ScrollController _sc;
+  Timer? _timer;
+  static const double _cardW = 132;
+
+  @override
+  void initState() {
+    super.initState();
+    _sc = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startMarquee());
+  }
+
+  // Same continuous-loop technique as dashboard_screen.dart's
+  // _NJServiceMarquee: the item list is doubled below so jumping back
+  // to 0 at the halfway point is invisible, and 32ms (~30fps) keeps the
+  // background CPU cost low for a strip that doesn't need 60fps.
+  void _startMarquee() {
+    _timer = Timer.periodic(const Duration(milliseconds: 32), (_) {
+      if (!mounted || !_sc.hasClients) return;
+      final max = _sc.position.maxScrollExtent;
+      if (max <= 0) return;
+      final next = _sc.offset + 1.2;
+      if (next >= max) {
+        _sc.jumpTo(0);
+      } else {
+        _sc.jumpTo(next);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _sc.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final doubled = [..._kHeroTaskIdeas, ..._kHeroTaskIdeas];
+    return SizedBox(
+      height: 92,
+      child: ListView.builder(
+        controller: _sc,
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: doubled.length,
+        itemBuilder: (context, i) {
+          final idea = doubled[i % _kHeroTaskIdeas.length];
+          return GestureDetector(
+            onTap: () => widget.onSelect(idea['category']!),
+            child: Container(
+              width: _cardW,
+              margin: const EdgeInsets.only(right: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+              decoration: BoxDecoration(
+                color: _kPinkBg,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _kBorder),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(idea['icon']!, style: const TextStyle(fontSize: 26)),
+                  const SizedBox(height: 6),
+                  Text(
+                    idea['label']!,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(
+                        color: _kText, fontSize: 11, fontWeight: FontWeight.w700),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }

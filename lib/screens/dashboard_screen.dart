@@ -29,7 +29,6 @@ import 'hero_booking_screen.dart';
 import 'car_wash_screen.dart';
 import 'coming_soon_screen.dart';
 import 'construction_screen.dart';
-import 'custom_order_screen.dart';
 import 'grocery_order_screen.dart';
 // import 'printing_service_screen.dart'; // TODO(printing): file missing, feature temporarily disabled
 import 'guru_chat_screen.dart';
@@ -355,7 +354,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       case 'carwash':     _navigate(const CarWashScreen()); break;
       case 'puncture':    _navigate(const ComingSoonScreen(role: 'Mobile Puncture')); break;
       case 'construction':_navigate(const ConstructionScreen()); break;
-      case 'custom':      _navigate(const CustomOrderScreen()); break;
+      case 'custom':      _navigate(const HeroBookingScreen(initialCategory: 'custom_order')); break;
       case 'mobile':      _navigate(const NjTechServiceScreen()); break;
       case 'spares':      _navigate(const NjTechServiceScreen()); break;
       case 'aibots':      _navigate(const GuruChatScreen()); break;
@@ -768,7 +767,7 @@ class _HomeTab extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         'Taxi & Transportation',
-                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
@@ -777,11 +776,6 @@ class _HomeTab extends StatelessWidget {
                     style: TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
-              ),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: kPink.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: const Icon(Icons.arrow_forward_ios_rounded, color: kPink, size: 12),
               ),
             ],
           ),
@@ -836,7 +830,7 @@ class _HomeTab extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         'Food Delivery',
-                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
@@ -845,11 +839,6 @@ class _HomeTab extends StatelessWidget {
                     style: TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
-              ),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: kGold.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: const Icon(Icons.arrow_forward_ios_rounded, color: kGold, size: 12),
               ),
             ],
           ),
@@ -864,9 +853,9 @@ class _HomeTab extends StatelessWidget {
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: kGold.withValues(alpha: 0.05),
+                color: kPink.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: kGold.withValues(alpha: 0.3), width: 1.5),
+                border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -904,7 +893,7 @@ class _HomeTab extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         'Grocery Order',
-                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
@@ -913,11 +902,6 @@ class _HomeTab extends StatelessWidget {
                     style: TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
-              ),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: kGreen.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: const Icon(Icons.arrow_forward_ios_rounded, color: kGreen, size: 12),
               ),
             ],
           ),
@@ -932,9 +916,9 @@ class _HomeTab extends StatelessWidget {
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: kGreen.withValues(alpha: 0.05),
+                color: kPink.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: kGreen.withValues(alpha: 0.3), width: 1.5),
+                border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -972,7 +956,7 @@ class _HomeTab extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         'Electronic Services',
-                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
@@ -981,11 +965,6 @@ class _HomeTab extends StatelessWidget {
                     style: TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
-              ),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: kBlue.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: const Icon(Icons.arrow_forward_ios_rounded, color: kBlue, size: 12),
               ),
             ],
           ),
@@ -1000,9 +979,9 @@ class _HomeTab extends StatelessWidget {
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: kBlue.withValues(alpha: 0.05),
+                color: kPink.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: kBlue.withValues(alpha: 0.2), width: 1.5),
+                border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1041,7 +1020,7 @@ class _HomeTab extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         'Car Service & Wash',
-                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
@@ -1050,11 +1029,6 @@ class _HomeTab extends StatelessWidget {
                     style: TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
-              ),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: kTeal.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: const Icon(Icons.arrow_forward_ios_rounded, color: kTeal, size: 12),
               ),
             ],
           ),
@@ -1069,9 +1043,9 @@ class _HomeTab extends StatelessWidget {
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: kTeal.withValues(alpha: 0.05),
+                color: kPink.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: kTeal.withValues(alpha: 0.2), width: 1.5),
+                border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1109,7 +1083,7 @@ class _HomeTab extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         'Constructions & Building',
-                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
@@ -1118,11 +1092,6 @@ class _HomeTab extends StatelessWidget {
                     style: TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
-              ),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: kPurple.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: const Icon(Icons.arrow_forward_ios_rounded, color: kPurple, size: 12),
               ),
             ],
           ),
@@ -1137,9 +1106,9 @@ class _HomeTab extends StatelessWidget {
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: kPurple.withValues(alpha: 0.05),
+                color: kPink.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: kPurple.withValues(alpha: 0.2), width: 1.5),
+                border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1178,7 +1147,7 @@ class _HomeTab extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         'Hero Booking',
-                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
@@ -1187,11 +1156,6 @@ class _HomeTab extends StatelessWidget {
                     style: TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
-              ),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: heroColor.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: const Icon(Icons.arrow_forward_ios_rounded, color: heroColor, size: 12),
               ),
             ],
           ),
@@ -1206,9 +1170,9 @@ class _HomeTab extends StatelessWidget {
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: heroColor.withValues(alpha: 0.05),
+                color: kPink.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: heroColor.withValues(alpha: 0.2), width: 1.5),
+                border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1247,7 +1211,7 @@ class _HomeTab extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         'Designing & Printing',
-                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
@@ -1256,11 +1220,6 @@ class _HomeTab extends StatelessWidget {
                     style: TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
-              ),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: printColor.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: const Icon(Icons.arrow_forward_ios_rounded, color: printColor, size: 12),
               ),
             ],
           ),
@@ -1279,9 +1238,9 @@ class _HomeTab extends StatelessWidget {
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: printColor.withValues(alpha: 0.05),
+                color: kPink.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: printColor.withValues(alpha: 0.2), width: 1.5),
+                border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1320,7 +1279,7 @@ class _HomeTab extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         'Other Services',
-                        style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800),
+                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
@@ -1330,11 +1289,6 @@ class _HomeTab extends StatelessWidget {
                   ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: serviceColor.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: const Icon(Icons.arrow_forward_ios_rounded, color: serviceColor, size: 12),
-              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -1342,9 +1296,9 @@ class _HomeTab extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
             decoration: BoxDecoration(
-              color: serviceColor.withValues(alpha: 0.05),
+              color: kPink.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: serviceColor.withValues(alpha: 0.2), width: 1.5),
+              border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -1408,56 +1362,7 @@ class _HomeTab extends StatelessWidget {
             onTap: onNJServiceTap,
           ),
         ),
-        GestureDetector(
-          onTap: () => Navigator.push<void>(context,
-              MaterialPageRoute<void>(
-                  builder: (_) => const CustomOrderScreen())),
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.12)),
-            ),
-            child: Row(children: [
-              Container(
-                width: 44, height: 44,
-                decoration: BoxDecoration(
-                  color: kPink.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(
-                  child: Image.network(
-                    'https://img.icons8.com/fluency/96/magic-parcel.png',
-                    width: 28, height: 28,
-                    errorBuilder: (_, __, ___) => const Text('🎁', style: TextStyle(fontSize: 22)),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Call for Customise Order',
-                    style: GoogleFonts.outfit(
-                        color: Colors.white, fontSize: 14,
-                        fontWeight: FontWeight.w800)),
-                const SizedBox(height: 2),
-                const Text('Place custom orders & get support — tap to start',
-                    style: TextStyle(
-                        color: Colors.white60, fontSize: 10)),
-              ])),
-              Container(
-                width: 32, height: 32,
-                decoration: BoxDecoration(
-                  color: kPink, borderRadius: BorderRadius.circular(10)),
-                child: const Icon(Icons.arrow_forward_rounded,
-                    color: Colors.white, size: 18),
-              ),
-            ]),
-          ),
-        ),
+        const SizedBox(height: 12),
       ]),
     );
   }
