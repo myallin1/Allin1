@@ -10,29 +10,29 @@ import 'dart:js_interop';
 import 'package:web/web.dart' as web;
 
 class PwaCachePlatform {
-  /// Unregisters all service workers and hard-reloads the page.
-  /// Safe to call only on web — stub does nothing on mobile.
+  /// Clears cached assets and hard-reloads to the newest deploy.
+  /// Safe to call only on web — the stub does nothing on mobile.
+  ///
+  /// The old version ALSO unregistered every service worker before
+  /// reloading. That caused a blank screen: Flutter's deployed service
+  /// worker unregisters ITSELF on activate and navigates its clients to
+  /// reload, so unregistering it from here at the same moment set off
+  /// two teardown-and-reload sequences racing each other, and the page
+  /// came back empty.
+  ///
+  /// Clearing Cache Storage is enough to guarantee fresh assets on the
+  /// next load; the service worker is left alone to manage its own
+  /// lifecycle. Then a plain reload picks up the new build.
   Future<void> clearAndReload() async {
     try {
-      // Step 1: Unregister all service worker registrations
-      final registrations = await web.window.navigator.serviceWorker
-          .getRegistrations()
-          .toDart;
-      for (final reg in registrations.toDart) {
-        await reg.unregister().toDart;
-      }
-
-      // Step 2: Clear all Cache Storage caches
-      final cacheKeys =
-          await web.window.caches.keys().toDart;
+      final cacheKeys = await web.window.caches.keys().toDart;
       for (final key in cacheKeys.toDart) {
         await web.window.caches.delete(key.toDart).toDart;
       }
     } catch (_) {
-      // Silently continue — reload even if cache clear fails
+      // Reload even if the cache clear fails.
     }
 
-    // Step 3: Hard reload
     web.window.location.reload();
   }
 }
