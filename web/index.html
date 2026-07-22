@@ -635,17 +635,27 @@
     // deprecated, identical behaviour on every Flutter version.
     //
     // Registration itself is kept below purely for PWA installability
-    // (Chrome wants a registered worker), with the no-cache fallback
-    // for deploys where Flutter's own worker is missing.
+    // (Chrome wants a registered worker) -- see the comment right
+    // before the registration call for why it's pwa_fallback_sw.js
+    // and not Flutter's own generated worker.
 
+    // flutter_service_worker.js is NOT registered here on purpose.
+    // It has no fetch handler (verified on the deployed file, see the
+    // block above) and self-unregisters on activate,
+    // and that self-unregister ALSO force-navigates/reloads every
+    // client it controls. Right after a fresh deploy, that reload
+    // fires mid-boot -- Flutter's engine is still initializing when
+    // the forced navigation interrupts it, which is the mobile
+    // blank-screen-after-update symptom. It buys nothing (no caching,
+    // no offline support) and actively causes that race, so it is
+    // never registered. pwa_fallback_sw.js satisfies the exact same
+    // Chrome installability requirement -- a registered worker with a
+    // fetch listener -- without caching anything or ever touching
+    // navigation/reload (see that file's own comments).
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/flutter_service_worker.js')
-          .catch(err => {
-            console.warn('[PWA] flutter_service_worker.js unavailable, using fallback:', err);
-            navigator.serviceWorker.register('/pwa_fallback_sw.js')
-              .catch(e2 => console.warn('[PWA] fallback service worker failed too:', e2));
-          });
+        navigator.serviceWorker.register('/pwa_fallback_sw.js')
+          .catch(err => console.warn('[PWA] fallback service worker registration failed:', err));
       });
     }
   </script>
