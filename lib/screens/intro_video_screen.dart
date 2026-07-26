@@ -40,12 +40,17 @@ class _IntroVideoScreenState extends State<IntroVideoScreen> {
   void initState() {
     super.initState();
 
-    // Absolute ceiling — the video is ~10s, this gives it a few extra
-    // seconds for network/decoder startup. Whatever happens with the
-    // video (plays fine, blocked by autoplay policy, fails to load),
-    // the customer is guaranteed to reach the real app within this
-    // window instead of being stuck indefinitely.
-    _safetyTimer = Timer(const Duration(seconds: 15), _goNext);
+    // Absolute ceiling — the video is ~10s, this gives it a little
+    // extra for network/decoder startup (the asset itself was also
+    // shrunk from ~2.7MB to ~1MB — see HANDOFF — specifically because
+    // a slow connection stalling the download read to the customer as
+    // "the app just hangs on a black screen"). Whatever happens with
+    // the video (plays fine, blocked by autoplay policy, fails to
+    // load, or is still buffering on a bad connection), the customer
+    // is guaranteed to reach the real app within this window instead
+    // of sitting on a frozen screen — kept short rather than a longer
+    // ceiling precisely because that wait is what reads as "paused".
+    _safetyTimer = Timer(const Duration(seconds: 11), _goNext);
 
     try {
       final controller = VideoPlayerController.asset(

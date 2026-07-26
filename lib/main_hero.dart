@@ -7,6 +7,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_navigator.dart';
@@ -211,16 +212,29 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  await _ensureFirebaseInitialized();
-  await HeroRideNotificationService.initialize();
+  // Sentry wraps the rest of main() as its appRunner — same pattern as
+  // main_customer.dart. Firebase init, the ping listener, runApp(), and
+  // the post-frame warm-up all run unchanged, just inside Sentry's zone.
+  await SentryFlutter.init(
+    (options) {
+      options.dsn =
+          'https://208217846f0b9708dc26f1d5d812eefc@o4511799785553920.ingest.us.sentry.io/4511799822843904';
+      options.tracesSampleRate = 1.0;
+    },
+    appRunner: () async {
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  // Start global RTDB ping listener reacting to Auth changes
-  _initGlobalHeroPingListener();
+      await _ensureFirebaseInitialized();
+      await HeroRideNotificationService.initialize();
 
-  runApp(const HeroApp());
-  unawaited(_warmHeroServices());
+      // Start global RTDB ping listener reacting to Auth changes
+      _initGlobalHeroPingListener();
+
+      runApp(const HeroApp());
+      unawaited(_warmHeroServices());
+    },
+  );
 }
 
 Future<void> _warmHeroServices() async {

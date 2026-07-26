@@ -4,6 +4,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
@@ -16,10 +17,20 @@ import 'services/session_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
+
+  await SentryFlutter.init(
+    (options) {
+      options.dsn =
+          'https://208217846f0b9708dc26f1d5d812eefc@o4511799785553920.ingest.us.sentry.io/4511799822843904';
+      options.tracesSampleRate = 1.0;
+    },
+    appRunner: () async {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      runApp(const SellerApp());
+    },
   );
-  runApp(const SellerApp());
 }
 
 class SellerApp extends StatelessWidget {

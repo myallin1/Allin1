@@ -561,6 +561,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   // ── App Bar ─────────────────────────────────────────────────
+  // Was an 11-icon row (Ads, Commission, Fare, Credentials, Task
+  // Approvals, Top-Up, Hero Approvals, Approved Heroes, Download App,
+  // Dispatch, Track Rides) plus Logout — the main source of "not
+  // organized, confusing" feedback on this screen. Kept the 2 actions
+  // an admin actually needs live/at-a-glance during normal use
+  // (Dispatch Heroes, Track Active Rides — both map/live-tracking
+  // tools used constantly, unlike the rest which are occasional
+  // settings/approval actions) plus Logout, and moved everything else
+  // into one grouped "More" bottom sheet (_buildMoreSheet) organized
+  // into Heroes / Money / Settings sections. Nothing removed — every
+  // one of the 11 original destinations is still one tap away.
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       backgroundColor: _surface,
@@ -580,66 +591,36 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       ),
       actions: [
         IconButton(
-          icon: const Icon(Icons.campaign_outlined, color: _muted, size: 20),
+          icon: const Icon(Icons.map_rounded, color: Color(0xFFFF4FA3), size: 22),
           onPressed: () => Navigator.push(
             context,
-            MaterialPageRoute<void>(
-              builder: (_) => const AdsManagementScreen(),
-            ),
+            MaterialPageRoute(builder: (_) => const AdminHeroDispatchScreen()),
           ),
-          tooltip: 'Manage Ads',
+          tooltip: 'Dispatch Heroes',
         ),
         IconButton(
-          icon: const Icon(Icons.settings_outlined, color: _muted, size: 20),
-          onPressed: () => _navigate(const CommissionSettingsScreen()),
-          tooltip: 'Commission Settings',
-        ),
-        IconButton(
-          icon: const Icon(Icons.price_check_outlined, color: _gold, size: 20),
-          onPressed: () => _navigate(const FareManagementScreen()),
-          tooltip: 'Fare Management',
-        ),
-        IconButton(
-          icon: const Icon(Icons.badge_outlined, color: _muted, size: 20),
-          onPressed: () => _navigate(const CredentialsAdminScreen()),
-          tooltip: 'Credentials',
-        ),
-        IconButton(
-          icon: const Icon(
-            Icons.task_alt,
-            color: Color(0xFF00C853),
+          icon: const Icon(Icons.timeline_rounded, color: Color(0xFFFF4FA3), size: 22),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminRideTrackingScreen()),
           ),
-          tooltip: 'Task Approvals',
-          onPressed: () => Navigator.pushNamed(context, '/admin/tasks'),
-        ),
-        IconButton(
-          icon: const Icon(
-            Icons.account_balance_wallet,
-            color: Color(0xFFFFBB00),
-          ),
-          tooltip: 'Top-Up Customer',
-          onPressed: () => _showTopUpDialog(context),
+          tooltip: 'Track Active Rides',
         ),
         Stack(
           clipBehavior: Clip.none,
           children: [
             IconButton(
-              icon: const Icon(
-                Icons.person_add_alt_1,
-                color: Color(0xFF00C853),
-                size: 20,
-              ),
-              tooltip: 'Hero Approvals',
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) => const HeroApprovalsScreen(),
-                ),
-              ),
+              icon: const Icon(Icons.more_vert_rounded, color: _muted, size: 22),
+              tooltip: 'More',
+              onPressed: () => _showMoreSheet(context),
             ),
+            // Badge sums BOTH counts that used to be shown separately
+            // on individual AppBar icons (pending hero approvals +
+            // admin_review requests) so nothing that needed attention
+            // becomes less visible just by moving behind this menu.
             Positioned(
-              right: 4,
-              top: 4,
+              right: 6,
+              top: 6,
               child: StreamBuilder<QuerySnapshot>(
                 stream: _pendingHeroApprovalsStream,
                 builder: (context, snap) {
@@ -669,43 +650,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ],
         ),
         IconButton(
-          icon: const Icon(
-            Icons.how_to_reg_outlined,
-            color: _gold,
-            size: 20,
-          ),
-          tooltip: 'Approved Heroes',
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute<void>(
-              builder: (_) => const ApprovedHeroesScreen(),
-            ),
-          ),
-        ),
-        // T2: Download latest admin APK from Firebase hosting
-        IconButton(
-          icon: const Icon(Icons.download_rounded,
-              color: Color(0xFFFF4FA3), size: 20),
-          onPressed: _downloadAdminApp,
-          tooltip: 'Download Latest App',
-        ),
-        IconButton(
-          icon: const Icon(Icons.map_rounded, color: Color(0xFFFF4FA3), size: 22),
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const AdminHeroDispatchScreen()),
-          ),
-          tooltip: 'Dispatch Heroes',
-        ),
-        IconButton(
-          icon: const Icon(Icons.timeline_rounded, color: Color(0xFFFF4FA3), size: 22),
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const AdminRideTrackingScreen()),
-          ),
-          tooltip: 'Track Active Rides',
-        ),
-        IconButton(
           icon: const Icon(Icons.logout, color: _red, size: 20),
           onPressed: _showLogoutDialog,
           tooltip: 'Logout',
@@ -714,6 +658,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
         child: Container(height: 1, color: _border),
+      ),
+    );
+  }
+
+  void _showMoreSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: _surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _MoreSheet(
+        pendingHeroApprovalsStream: _pendingHeroApprovalsStream,
+        onTopUp: () => _showTopUpDialog(context),
+        onDownloadApp: _downloadAdminApp,
       ),
     );
   }
@@ -1549,4 +1509,203 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ],
         ),
       );
+}
+
+// ================================================================
+// _MoreSheet — the 9 AppBar actions that used to be a single 11-icon
+// row (2 of the 11 — Dispatch Heroes, Track Active Rides — stayed
+// directly on the AppBar since those are used constantly). Grouped
+// into 3 clearly-labeled sections so it reads as organized rather
+// than a flat list: Heroes (approvals, approved roster), Money
+// (commission, fares, customer top-up), Settings (ads, credentials,
+// task approvals, app download).
+// ================================================================
+class _MoreSheet extends StatelessWidget {
+  final Stream<QuerySnapshot> pendingHeroApprovalsStream;
+  final VoidCallback onTopUp;
+  final VoidCallback onDownloadApp;
+
+  const _MoreSheet({
+    required this.pendingHeroApprovalsStream,
+    required this.onTopUp,
+    required this.onDownloadApp,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: _muted.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            _sheetSectionLabel('HEROES'),
+            _sheetTile(
+              context,
+              icon: Icons.person_add_alt_1,
+              iconColor: _green,
+              label: 'Hero Approvals',
+              trailing: StreamBuilder<QuerySnapshot>(
+                stream: pendingHeroApprovalsStream,
+                builder: (context, snap) {
+                  final count = snap.data?.docs.length ?? 0;
+                  if (count == 0) return const SizedBox.shrink();
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: _red,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(count > 9 ? '9+' : '$count',
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                  );
+                },
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const HeroApprovalsScreen()));
+              },
+            ),
+            _sheetTile(
+              context,
+              icon: Icons.how_to_reg_outlined,
+              iconColor: _gold,
+              label: 'Approved Heroes',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const ApprovedHeroesScreen()));
+              },
+            ),
+            const SizedBox(height: 16),
+            _sheetSectionLabel('MONEY'),
+            _sheetTile(
+              context,
+              icon: Icons.settings_outlined,
+              iconColor: _muted,
+              label: 'Commission Settings',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const CommissionSettingsScreen()));
+              },
+            ),
+            _sheetTile(
+              context,
+              icon: Icons.price_check_outlined,
+              iconColor: _gold,
+              label: 'Fare Management',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const FareManagementScreen()));
+              },
+            ),
+            _sheetTile(
+              context,
+              icon: Icons.account_balance_wallet,
+              iconColor: _gold,
+              label: 'Top-Up Customer',
+              onTap: () {
+                Navigator.pop(context);
+                onTopUp();
+              },
+            ),
+            const SizedBox(height: 16),
+            _sheetSectionLabel('SETTINGS'),
+            _sheetTile(
+              context,
+              icon: Icons.campaign_outlined,
+              iconColor: _muted,
+              label: 'Manage Ads',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const AdsManagementScreen()));
+              },
+            ),
+            _sheetTile(
+              context,
+              icon: Icons.badge_outlined,
+              iconColor: _muted,
+              label: 'Credentials',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const CredentialsAdminScreen()));
+              },
+            ),
+            _sheetTile(
+              context,
+              icon: Icons.task_alt,
+              iconColor: _green,
+              label: 'Task Approvals',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/admin/tasks');
+              },
+            ),
+            _sheetTile(
+              context,
+              icon: Icons.download_rounded,
+              iconColor: const Color(0xFFFF4FA3),
+              label: 'Download Latest App',
+              onTap: () {
+                Navigator.pop(context);
+                onDownloadApp();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sheetSectionLabel(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 8, left: 4),
+        child: Text(
+          text,
+          style: const TextStyle(
+            color: _muted,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.0,
+          ),
+        ),
+      );
+
+  Widget _sheetTile(
+    BuildContext context, {
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required VoidCallback onTap,
+    Widget? trailing,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        child: Row(
+          children: [
+            Icon(icon, color: iconColor, size: 20),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(label, style: const TextStyle(color: _text, fontSize: 14, fontWeight: FontWeight.w600)),
+            ),
+            if (trailing != null) ...[trailing, const SizedBox(width: 8)],
+            const Icon(Icons.chevron_right_rounded, color: _muted, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
 }

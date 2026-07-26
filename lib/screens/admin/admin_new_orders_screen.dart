@@ -26,7 +26,9 @@ const Color _red = Color(0xFFFF5252);
 const Color _pink = Color(0xFFFF4FA3);
 const Color _border = Color(0x1AFFFFFF);
 
-String _requestTypeLabel(String requestType) {
+// Public — also used by admin_service_requests_screen.dart's
+// type-filtered lists. Keep the two files sharing this single mapping.
+String requestTypeLabel(String requestType) {
   switch (requestType) {
     case 'hero_booking':
       return 'Hero Booking';
@@ -36,12 +38,15 @@ String _requestTypeLabel(String requestType) {
       return 'Food Order';
     case 'grocery_order':
       return 'Grocery Order';
+    case 'electronics_service':
+      return 'Electronics Service';
     default:
       return 'Service Request';
   }
 }
 
-String _requestSummary(String requestType, Map<String, dynamic> details) {
+// Public — also used by admin_service_requests_screen.dart.
+String requestSummary(String requestType, Map<String, dynamic> details) {
   switch (requestType) {
     case 'hero_booking':
       return (details['taskDescription'] as String?) ?? '';
@@ -55,6 +60,10 @@ String _requestSummary(String requestType, Map<String, dynamic> details) {
       final text = (details['listText'] as String?) ?? '';
       final hasImage = (details['listImageUrl'] as String?)?.isNotEmpty ?? false;
       return [if (text.isNotEmpty) text, if (hasImage) '📷 Photo list attached'].join(' — ');
+    case 'electronics_service':
+      final catLabel = (details['categoryLabel'] as String?) ?? '';
+      final issue = (details['issue'] as String?) ?? '';
+      return [if (catLabel.isNotEmpty) catLabel, if (issue.isNotEmpty) issue].join(' — ');
     default:
       return '';
   }
@@ -216,7 +225,7 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(color: _pink.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                  child: Text(_requestTypeLabel(requestType), style: const TextStyle(color: _pink, fontSize: 10, fontWeight: FontWeight.bold)),
+                  child: Text(requestTypeLabel(requestType), style: const TextStyle(color: _pink, fontSize: 10, fontWeight: FontWeight.bold)),
                 ),
                 const Spacer(),
                 IconButton(
@@ -230,7 +239,7 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
             if (customerPhone.isNotEmpty)
               Text(customerPhone, style: const TextStyle(color: _muted, fontSize: 11)),
             const SizedBox(height: 6),
-            Text(_requestSummary(requestType, details), style: const TextStyle(color: _muted, fontSize: 12)),
+            Text(requestSummary(requestType, details), style: const TextStyle(color: _muted, fontSize: 12)),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -280,7 +289,7 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(color: _pink.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                  child: Text(_requestTypeLabel(requestType), style: const TextStyle(color: _pink, fontSize: 10, fontWeight: FontWeight.bold)),
+                  child: Text(requestTypeLabel(requestType), style: const TextStyle(color: _pink, fontSize: 10, fontWeight: FontWeight.bold)),
                 ),
                 const Spacer(),
                 Container(
@@ -370,7 +379,7 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _AssignHeroSheet(requestId: requestId, customerName: customerName),
+      builder: (_) => AssignHeroSheet(requestId: requestId, customerName: customerName),
     );
   }
 }
@@ -380,16 +389,20 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
 // truth), but assigns directly instead of opening a dispatch dialog:
 // admin has already confirmed with the hero by phone, per the CEO's
 // workflow — no broadcast ping needed here.
-class _AssignHeroSheet extends StatefulWidget {
+class AssignHeroSheet extends StatefulWidget {
   final String requestId;
   final String customerName;
-  const _AssignHeroSheet({required this.requestId, required this.customerName});
+  const AssignHeroSheet({
+    required this.requestId,
+    required this.customerName,
+    super.key,
+  });
 
   @override
-  State<_AssignHeroSheet> createState() => _AssignHeroSheetState();
+  State<AssignHeroSheet> createState() => AssignHeroSheetState();
 }
 
-class _AssignHeroSheetState extends State<_AssignHeroSheet> {
+class AssignHeroSheetState extends State<AssignHeroSheet> {
   List<Map<String, dynamic>> _onlineHeroes = [];
   StreamSubscription<DatabaseEvent>? _heroesSub;
   bool _assigning = false;

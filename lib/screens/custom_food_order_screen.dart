@@ -2,11 +2,15 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Category;
 import 'package:google_fonts/google_fonts.dart';
 
+import '../config/food_categories.dart';
+import '../services/category_gateway_service.dart';
+import '../services/food_seller_service.dart';
 import '../services/service_request_service.dart';
 import '../utils/service_request_labels.dart';
+import 'category_screen.dart';
 import 'service_request_tracking_screen.dart';
 
 const Color kPink = Color(0xFFFF4FA3);
@@ -137,7 +141,52 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
         title: Text('Food Genie 🧞‍♂️', style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w800, fontSize: 18)),
         centerTitle: true,
       ),
-      body: SingleChildScrollView(
+      // Row(sidebar, form) — the form itself (everything below) is kept
+      // byte-for-byte as before, per instruction; only the sidebar and
+      // this wrapping Row are new.
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _FoodSidebar(onCategoryTap: _openSidebarCategory),
+          Expanded(child: _buildFormBody()),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openSidebarCategory(String subCategoryKey) async {
+    final cat = foodSubCategoryByKey(subCategoryKey);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: kPink),
+      ),
+    );
+    try {
+      final sellers = await FoodSellerService().getSellersBySubCategory(subCategoryKey);
+      if (!mounted) return;
+      Navigator.pop(context); // close loading dialog
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => CategoryScreen(
+            category: Category.food,
+            sellers: sellers.map((s) => s.toJson()).toList(),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load ${cat?.label ?? subCategoryKey}: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Widget _buildFormBody() {
+    return SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         physics: const BouncingScrollPhysics(),
         child: Column(
@@ -194,8 +243,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
             const SizedBox(height: 30),
           ],
         ),
-      ),
-    );
+      );
   }
 
   // ── My Orders — live status list for this customer ───────────────
@@ -317,6 +365,90 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
               child: Text(
                 statusLabel,
                 style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ================================================================
+// _FoodSidebar — full-height vertical icon rail on the left edge of
+// the food page (Swiggy/Zomato style, per Nizam's confirmed choice).
+// Reads its icon set from kFoodSidebarCategoryKeys in
+// lib/config/food_categories.dart, so adding a future category (e.g.
+// "Sweets") is a one-line change there — nothing here needs editing.
+// ================================================================
+class _FoodSidebar extends StatelessWidget {
+  final ValueChanged<String> onCategoryTap;
+
+  const _FoodSidebar({required this.onCategoryTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final items = kFoodSidebarCategoryKeys
+        .map(foodSubCategoryByKey)
+        .whereType<FoodSubCategory>()
+        .toList();
+
+    return Container(
+      width: 76,
+      color: kSurface,
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            children: items
+                .map((cat) => _SidebarIcon(
+                      category: cat,
+                      onTap: () => onCategoryTap(cat.key),
+                    ))
+                .toList(),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SidebarIcon extends StatelessWidget {
+  final FoodSubCategory category;
+  final VoidCallback onTap;
+
+  const _SidebarIcon({required this.category, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: kPink.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kPink.withValues(alpha: 0.25)),
+              ),
+              child: Center(
+                child: Text(category.emoji, style: const TextStyle(fontSize: 24)),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              category.label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.outfit(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: kText,
               ),
             ),
           ],

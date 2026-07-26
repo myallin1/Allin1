@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_navigator.dart';
@@ -94,82 +95,99 @@ Future<void> _ensureFirebaseInitialized() async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  FlutterError.onError = (details) {
-    debugPrint('Flutter error: ${details.exceptionAsString()}');
-    if (AnalyticsService.isInitialized) {
-      AnalyticsService.instance.recordError(
-        details.exceptionAsString(),
-        details.stack ?? StackTrace.current,
-        fatal: true,
-      );
-    }
-  };
+  // Sentry wraps the ENTIRE rest of main() as its appRunner — everything
+  // below (Firebase init, the zone-guarded boot phase, runApp, and the
+  // post-frame warm-up) runs exactly as it did before, just inside
+  // Sentry's zone so uncaught errors anywhere in that tree get reported.
+  // WidgetsFlutterBinding.ensureInitialized() stays OUTSIDE/before this
+  // call on purpose — SentryFlutter.init() expects the binding to already
+  // exist when it's called this way.
+  await SentryFlutter.init(
+    (options) {
+      options.dsn =
+          'https://208217846f0b9708dc26f1d5d812eefc@o4511799785553920.ingest.us.sentry.io/4511799822843904';
+      options.tracesSampleRate = 1.0;
+    },
+    appRunner: () async {
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  try {
-    await _ensureFirebaseInitialized();
-  } catch (e) {
-    debugPrint('[main_customer] Fatal: Firebase init failed: $e');
-    return;
-  }
+      FlutterError.onError = (details) {
+        debugPrint('Flutter error: ${details.exceptionAsString()}');
+        if (AnalyticsService.isInitialized) {
+          AnalyticsService.instance.recordError(
+            details.exceptionAsString(),
+            details.stack ?? StackTrace.current,
+            fatal: true,
+          );
+        }
+      };
 
-  await runZonedGuarded(() async {
-    // ── BOOT PHASE 1: only what the first screen genuinely needs ──
-    //
-    // Everything below used to run here, sequentially, before runApp():
-    //   Analytics init, Hive.initFlutter, LocalSync (4 boxes),
-    //   CacheService (5 boxes), ApiService (1 box + Dio), settings write.
-    //
-    // That's 10 Hive box opens one after another — each one a local
-    // storage round-trip (IndexedDB on web) — while the customer stares
-    // at a blank/splash screen. Hive caching makes the DATA free to
-    // read; it does not make OPENING the boxes free, and that cost was
-    // being paid serially on every single launch.
-    //
-    // Now: Hive core + the 3 boxes the home screen reads. Everything
-    // else moved to _warmCustomerServices() (phase 2, post-runApp).
-    await Hive.initFlutter();
-    await CacheService().initCritical();
+      try {
+        await _ensureFirebaseInitialized();
+      } catch (e) {
+        debugPrint('[main_customer] Fatal: Firebase init failed: $e');
+        return;
+      }
 
-    // If this launch came from Android's share sheet (customer shared a
-    // location out of WhatsApp/Maps into Allin1), the shared text is on
-    // the launch URL. Read it now, before any screen builds, so the
-    // hero booking screen finds it already waiting. Cheap, synchronous,
-    // and a no-op on an ordinary launch.
-    SharedLocationInbox.instance.captureFromLaunchUrl();
+      await runZonedGuarded(() async {
+        // ── BOOT PHASE 1: only what the first screen genuinely needs ──
+        //
+        // Everything below used to run here, sequentially, before runApp():
+        //   Analytics init, Hive.initFlutter, LocalSync (4 boxes),
+        //   CacheService (5 boxes), ApiService (1 box + Dio), settings write.
+        //
+        // That's 10 Hive box opens one after another — each one a local
+        // storage round-trip (IndexedDB on web) — while the customer stares
+        // at a blank/splash screen. Hive caching makes the DATA free to
+        // read; it does not make OPENING the boxes free, and that cost was
+        // being paid serially on every single launch.
+        //
+        // Now: Hive core + the 3 boxes the home screen reads. Everything
+        // else moved to _warmCustomerServices() (phase 2, post-runApp).
+        await Hive.initFlutter();
+        await CacheService().initCritical();
 
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-      ),
-    );
-  }, (error, stack) {
-    debugPrint('Zone error: $error\n$stack');
-    if (AnalyticsService.isInitialized) {
-      AnalyticsService.instance.recordError(
-        error,
-        stack,
-      );
-    }
-  });
+        // If this launch came from Android's share sheet (customer shared a
+        // location out of WhatsApp/Maps into Allin1), the shared text is on
+        // the launch URL. Read it now, before any screen builds, so the
+        // hero booking screen finds it already waiting. Cheap, synchronous,
+        // and a no-op on an ordinary launch.
+        SharedLocationInbox.instance.captureFromLaunchUrl();
 
-  runApp(const CustomerApp());
+        SystemChrome.setSystemUIOverlayStyle(
+          const SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.light,
+          ),
+        );
+      }, (error, stack) {
+        debugPrint('Zone error: $error\n$stack');
+        if (AnalyticsService.isInitialized) {
+          AnalyticsService.instance.recordError(
+            error,
+            stack,
+          );
+        }
+      });
 
-  // Everything non-essential to the first frame runs here instead of
-  // blocking runApp(): analytics, the deferred Hive boxes, the API
-  // client, the Ola Maps availability ping, and the Firestore
-  // active-ride lookup. Same pattern as main_hero.dart's
-  // _warmHeroServices(). Worst case, an active-ride banner appears a
-  // moment after the home screen instead of before it.
-  //
-  // _restoreActiveRideIfNeeded() only touches Firestore when Hive
-  // already holds an active-ride marker — a customer with no ride in
-  // progress costs zero database reads on launch.
-  unawaited(_warmCustomerServices());
-  unawaited(_restoreActiveRideIfNeeded());
-  unawaited(_listenForSharedLocations());
+      runApp(const CustomerApp());
+
+      // Everything non-essential to the first frame runs here instead of
+      // blocking runApp(): analytics, the deferred Hive boxes, the API
+      // client, the Ola Maps availability ping, and the Firestore
+      // active-ride lookup. Same pattern as main_hero.dart's
+      // _warmHeroServices(). Worst case, an active-ride banner appears a
+      // moment after the home screen instead of before it.
+      //
+      // _restoreActiveRideIfNeeded() only touches Firestore when Hive
+      // already holds an active-ride marker — a customer with no ride in
+      // progress costs zero database reads on launch.
+      unawaited(_warmCustomerServices());
+      unawaited(_restoreActiveRideIfNeeded());
+      unawaited(_listenForSharedLocations());
+    },
+  );
 }
 
 // ── BOOT PHASE 2: everything that can wait for the first frame ──

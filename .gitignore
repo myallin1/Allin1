@@ -1,3 +1,9 @@
+# Playwright (playwright-tests/) — automated testing setup
+playwright-tests/node_modules/
+playwright-tests/test-results/
+playwright-tests/playwright-report/
+playwright-tests/.cache/
+
 # Miscellaneous
 *.class
 *.log

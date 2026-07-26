@@ -69,6 +69,14 @@ class SellerModel {
     return {
       'id': id,
       'name': name,
+      // 'shopName' is a display-layer alias of 'name'. SellerCard,
+      // SellerDetailScreen, and the emoji/hours lookups below all read
+      // these card-display keys directly off the raw seller map (they
+      // don't go through SellerModel.fromJson) — without these aliases
+      // every registered seller showed as "Unknown Shop" with no
+      // emoji, since Firestore never had these keys written. Writing
+      // them here, once, fixes every reader at once.
+      'shopName': name,
       'category': category,
       'subCategory': subCategory,
       'hotelType': hotelType,
@@ -82,9 +90,40 @@ class SellerModel {
       'status': status,
       'imageUrl': imageUrl,
       'coverImageUrl': coverImageUrl,
+      // Emoji shown on the seller card — derived from the sub-category
+      // catalog so it always matches the icon used on the sidebar.
+      'emoji': _emojiForSubCategory(subCategory),
+      // SellerCard/_isOpen() reads 'hours' (open/close minute-of-day)
+      // to decide the Open/Closed badge; onboarding doesn't collect
+      // hours yet, so omit the key entirely — every reader already
+      // treats a missing 'hours' as "always open", which matches the
+      // 'isOpen' flag being seller-toggled elsewhere.
+      // SellerCard's metadata line ("⏱️ NN min prep") reads
+      // metadata.prepTimeMinutes — map it from estimatedPrepTimeMin so
+      // the prep-time the seller actually set is what's displayed.
+      'metadata': {'prepTimeMinutes': estimatedPrepTimeMin},
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
     };
+  }
+
+  static String _emojiForSubCategory(String subCategory) {
+    switch (subCategory) {
+      case 'biriyani':
+        return '🍛';
+      case 'home_made':
+        return '🍲';
+      case 'parotta':
+        return '🫓';
+      case 'south_indian':
+        return '🥘';
+      case 'fast_food':
+        return '🍟';
+      case 'multi_cuisine':
+        return '🍽️';
+      default:
+        return '🍽️';
+    }
   }
 
   SellerModel copyWith({
@@ -197,7 +236,14 @@ class MenuItemModel {
       'isAvailable': isAvailable,
       'tags': tags,
       'imageUrl': imageUrl,
+      // 'image'/'category' are display-layer aliases read directly by
+      // ProductCard and SellerDetailScreen's grouping/cart logic
+      // (they consume the raw menu_items map, not MenuItemModel).
+      // Without these the product grid showed the fallback icon for
+      // every item and grouped everything under "All Items".
+      'image': imageUrl,
       'categoryName': categoryName,
+      'category': categoryName,
       'variants': variants?.map((e) => e.toJson()).toList(),
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,

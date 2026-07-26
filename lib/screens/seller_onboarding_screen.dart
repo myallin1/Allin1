@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../config/food_categories.dart';
 import '../models/food_models.dart';
 import '../services/food_seller_service.dart';
 import 'seller_menu_setup_screen.dart';
@@ -44,13 +45,12 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
     ('non-veg', 'Non-Veg', 'Specialty non-veg', Icons.restaurant),
   ];
 
-  static const _subCategories = [
-    ('biriyani', 'Biriyani & Rice', '🍛'),
-    ('parotta', 'Parotta & Breads', '🫓'),
-    ('south_indian', 'South Indian Meals', '🥘'),
-    ('fast_food', 'Fast Food & Snacks', '🍟'),
-    ('multi_cuisine', 'Multi-Cuisine', '🍽️'),
-  ];
+  // Single source of truth: lib/config/food_categories.dart. Keeping
+  // this list in sync with the customer-facing sidebar (see
+  // custom_food_order_screen.dart) is what makes "seller picks
+  // Biriyani at registration -> shows under the Biriyani sidebar
+  // icon" actually work end to end.
+  static const _subCategories = kFoodSubCategories;
 
   @override
   void dispose() {
@@ -324,9 +324,9 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
             runSpacing: 10,
             children: _subCategories.map(
               (cat) {
-                final isSelected = _selectedSubCategory == cat.$1;
+                final isSelected = _selectedSubCategory == cat.key;
                 return GestureDetector(
-                  onTap: () => setState(() => _selectedSubCategory = cat.$1),
+                  onTap: () => setState(() => _selectedSubCategory = cat.key),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 10),
@@ -340,10 +340,10 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(cat.$3, style: const TextStyle(fontSize: 16)),
+                        Text(cat.emoji, style: const TextStyle(fontSize: 16)),
                         const SizedBox(width: 8),
                         Text(
-                          cat.$2,
+                          cat.label,
                           style: GoogleFonts.outfit(
                             color: isSelected ? Colors.white : _muted,
                             fontSize: 13,

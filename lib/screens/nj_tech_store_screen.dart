@@ -4,10 +4,19 @@
 // Premium Grid UI + Category Modal + WhatsApp Enquiry
 // ================================================================
 
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import '../services/service_request_cache_service.dart';
+import '../services/service_request_service.dart';
+import '../utils/service_request_labels.dart';
+import 'service_request_tracking_screen.dart';
 
 // ── Brand Colors (matches dashboard theme) ───────────────────────
 const Color _kPink     = Color(0xFFFF4FA3);
@@ -27,9 +36,10 @@ const Color _kTeal     = Color(0xFF00BFA5);
 const Color _kPurple   = Color(0xFF7B6FE0);
 const Color _kOrange   = Color(0xFFFF6B35);
 
-// NJ Tech WhatsApp number
-const String _kNJPhone    = '+919597879191';
-const String _kNJWhatsApp = '919597879191';
+// NJ Tech contact number (used for the direct "Call Now" actions —
+// the enquiry form itself now goes through the Broadcast Order System
+// instead of a WhatsApp deep link; see _submitRequest()).
+const String _kNJPhone = '+919597879191';
 
 // ── Service Category Model ────────────────────────────────────────
 class _ServiceCategory {
@@ -119,61 +129,164 @@ const _categories = [
 ];
 
 // ================================================================
-// MAIN SCREEN
+// MAIN SCREEN — now a Scaffold with its own bottom nav (Book /
+// Status), matching dashboard_screen.dart's _buildBottomNav style
+// exactly (Row of InkWell icon+label items, easy to extend with more
+// tabs later — same convention as the main app's 5-item bottom bar).
 // ================================================================
-class NJTechStoreScreen extends StatelessWidget {
+class NJTechStoreScreen extends StatefulWidget {
   const NJTechStoreScreen({super.key});
+
+  @override
+  State<NJTechStoreScreen> createState() => _NJTechStoreScreenState();
+}
+
+class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
+  int _tabIndex = 0;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _kBg,
-      body: CustomScrollView(
+      body: IndexedStack(
+        index: _tabIndex,
+        children: [
+          _buildBookTab(context),
+          _buildStatusTab(context),
+        ],
+      ),
+      bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  // ── Bottom Nav — 2 items today (Book / Status), same visual
+  // convention as dashboard_screen.dart's _buildBottomNav so this page
+  // reads as part of the same app. The `items` list is written so
+  // adding a 3rd tab later (e.g. "Warranty") is a one-line addition.
+  Widget _buildBottomNav() {
+    const items = [
+      {'icon': Icons.grid_view_rounded, 'label': 'Book'},
+      {'icon': Icons.timeline_rounded, 'label': 'Status'},
+    ];
+    return Container(
+      decoration: BoxDecoration(
+        color: _kBg,
+        border: const Border(top: BorderSide(color: _kBorder, width: 1)),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 16,
+              offset: const Offset(0, -4)),
+        ],
+      ),
+      child: SafeArea(
+        child: Row(
+          children: List.generate(items.length, (i) {
+            final active = _tabIndex == i;
+            final icon = items[i]['icon'] as IconData;
+            final label = items[i]['label'] as String;
+            return Expanded(
+              child: InkWell(
+                onTap: () => setState(() => _tabIndex = i),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(icon, color: active ? _kPink : _kMuted, size: 24),
+                    const SizedBox(height: 3),
+                    Text(label,
+                        style: TextStyle(
+                            fontSize: 9.5,
+                            color: active ? _kPink : _kMuted,
+                            fontWeight:
+                                active ? FontWeight.w700 : FontWeight.w400)),
+                  ]),
+                ),
+              ),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+
+  // ── Book tab — the original category grid + banners, unchanged
+  // content, just moved into its own tab body.
+  Widget _buildBookTab(BuildContext context) {
+    return CustomScrollView(
+      physics: const BouncingScrollPhysics(),
+      slivers: [
+        _buildSliverAppBar(context),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+          sliver: SliverToBoxAdapter(child: _buildTopBanner()),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          sliver: SliverToBoxAdapter(
+            child: Text(
+              'What do you need?',
+              style: GoogleFonts.outfit(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: _kText,
+              ),
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          sliver: SliverGrid(
+            delegate: SliverChildBuilderDelegate(
+              (context, i) => _CategoryTile(
+                category: _categories[i],
+                onTap: () => _showCategoryModal(context, _categories[i]),
+              ),
+              childCount: _categories.length,
+            ),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: MediaQuery.of(context).size.width > 600 ? 4 : 3,
+              childAspectRatio: 1.1,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+          sliver: SliverToBoxAdapter(child: _buildWhyNJCard()),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          sliver: SliverToBoxAdapter(child: _buildCallBanner(context)),
+        ),
+      ],
+    );
+  }
+
+  // ── Status tab — full-page version of "My Enquiries": every
+  // request this customer sent, newest first. Completed requests read
+  // straight from ServiceRequestCacheService's local Hive cache with
+  // NO Firestore listener attached (see _StatusEnquiryCard below) —
+  // only requests still in progress stay on a live snapshot listener,
+  // since only those can still change.
+  Widget _buildStatusTab(BuildContext context) {
+    return SafeArea(
+      child: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          _buildSliverAppBar(context),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-            sliver: SliverToBoxAdapter(child: _buildTopBanner()),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
             sliver: SliverToBoxAdapter(
-              child: Text(
-                'What do you need?',
-                style: GoogleFonts.outfit(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: _kText,
-                ),
-              ),
+              child: Text('Service Status',
+                  style: GoogleFonts.outfit(
+                      color: _kText,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900)),
             ),
           ),
           SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            sliver: SliverGrid(
-              delegate: SliverChildBuilderDelegate(
-                (context, i) => _CategoryTile(
-                  category: _categories[i],
-                  onTap: () => _showCategoryModal(context, _categories[i]),
-                ),
-                childCount: _categories.length,
-              ),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: MediaQuery.of(context).size.width > 600 ? 4 : 3,
-                childAspectRatio: 1.1,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-              ),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-            sliver: SliverToBoxAdapter(child: _buildWhyNJCard()),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-            sliver: SliverToBoxAdapter(child: _buildCallBanner(context)),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+            sliver: SliverToBoxAdapter(child: _buildMyEnquiries(context)),
           ),
         ],
       ),
@@ -267,6 +380,33 @@ class NJTechStoreScreen extends StatelessWidget {
     );
   }
 
+  // ── My Enquiries ───────────────────────────────────────────────
+  // Database-efficient by design:
+  //  - COMPLETED requests: once this device has seen a request reach
+  //    'completed', it's written to ServiceRequestCacheService's local
+  //    Hive box (see _StatusEnquiryLive below) and every later render
+  //    reads that cached copy — no Firestore listener stays attached
+  //    to a request whose data will never change again.
+  //  - IN-PROGRESS requests (pending/hero_assigned/in_progress/
+  //    nearing_completion/admin_review): kept on a live Firestore
+  //    listener, since only these can still change.
+  // The two sources are combined into one list, newest first.
+  Widget _buildMyEnquiries(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('My Enquiries',
+            style: GoogleFonts.outfit(
+                color: _kText, fontSize: 16, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 12),
+        _EnquiriesList(customerId: user.uid),
+      ],
+    );
+  }
+
   // ── Top Banner ────────────────────────────────────────────────
   Widget _buildTopBanner() {
     return Container(
@@ -301,7 +441,7 @@ class NJTechStoreScreen extends StatelessWidget {
                   color: _kText, fontSize: 13,
                   fontWeight: FontWeight.w800)),
           const SizedBox(height: 2),
-          Text('Tap any category to book or enquire via WhatsApp',
+          Text('Tap any category to book or send an enquiry',
               style: GoogleFonts.outfit(
                   color: _kMuted, fontSize: 11)),
         ])),
@@ -554,49 +694,73 @@ class _CategoryModalState extends State<_CategoryModal> {
     super.dispose();
   }
 
-  Future<void> _sendWhatsApp() async {
+  // Submits the enquiry as a real service_requests doc (same Broadcast
+  // Order System used by Hero Booking / Food / Grocery — see
+  // service_request_service.dart) instead of launching a visible
+  // wa.me link. The category the customer tapped (widget.category) is
+  // carried straight into `details.category` — the customer never has
+  // to re-select it. After creation, this pushes into
+  // ServiceRequestTrackingScreen, the SAME graphical step tracker
+  // Hero Booking and Food Genie already use, requestType:
+  // 'electronics_service'.
+  //
+  // NOTE: sending an admin-side WhatsApp/push alert for this request
+  // type is a separate, not-yet-built piece (needs either a WhatsApp
+  // Business API/Twilio account, or an admin FCM push — neither exists
+  // in this codebase yet). For now the request simply appears in the
+  // admin dashboard's live service_requests list like every other
+  // Broadcast Order System request.
+  Future<void> _submitRequest() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please sign in to send an enquiry.'),
+            backgroundColor: _kRed,
+          ),
+        );
+      }
+      return;
+    }
 
     setState(() => _sending = true);
 
-    final name    = _nameCtrl.text.trim();
-    final phone   = _phoneCtrl.text.trim();
-    final issue   = _issueCtrl.text.trim();
-    final service = widget.category.title;
-
-    final message = '''🚨 *New NJ Tech Enquiry*
-
-*Customer Name:* $name
-*Phone:* $phone
-*Device/Service:* $service
-*Issue:* $issue
-
-_Please contact me regarding this service._''';
-
-    final encoded = Uri.encodeComponent(message);
-    final uri = Uri.parse('https://wa.me/$_kNJWhatsApp?text=$encoded');
+    final name  = _nameCtrl.text.trim();
+    final phone = _phoneCtrl.text.trim();
+    final issue = _issueCtrl.text.trim();
 
     try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('WhatsApp not installed. Trying browser...'),
-              backgroundColor: _kGold,
-            ),
-          );
-          final webUri = Uri.parse(
-              'https://api.whatsapp.com/send?phone=$_kNJWhatsApp&text=$encoded');
-          await launchUrl(webUri, mode: LaunchMode.externalApplication);
-        }
-      }
+      final requestId = await ServiceRequestService().createServiceRequest(
+        requestType: 'electronics_service',
+        customerId: user.uid,
+        customerName: name.isNotEmpty ? name : (user.displayName ?? 'Customer'),
+        customerPhone: phone.isNotEmpty ? phone : (user.phoneNumber ?? ''),
+        details: {
+          'category': widget.category.id,
+          'categoryLabel': widget.category.title,
+          'issue': issue,
+        },
+      );
+
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => ServiceRequestTrackingScreen(
+            requestId: requestId,
+            requestType: 'electronics_service',
+          ),
+        ),
+      );
+      if (mounted) Navigator.pop(context); // close this bottom sheet
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Unable to open WhatsApp: $e'),
+            content: Text('Failed to send enquiry: $e'),
             backgroundColor: _kRed,
           ),
         );
@@ -735,7 +899,7 @@ _Please contact me regarding this service._''';
                   const Expanded(child: Divider(color: _kBorder)),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('or send enquiry via WhatsApp',
+                    child: Text('or send an enquiry',
                         style: GoogleFonts.outfit(
                             color: _kMuted, fontSize: 11)),
                   ),
@@ -851,9 +1015,9 @@ _Please contact me regarding this service._''';
 
                     const SizedBox(height: 16),
 
-                    // WhatsApp Submit Button
+                    // Submit Button — creates a trackable service request
                     GestureDetector(
-                      onTap: _sending ? null : _sendWhatsApp,
+                      onTap: _sending ? null : _submitRequest,
                       child: Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(vertical: 15),
@@ -861,14 +1025,12 @@ _Please contact me regarding this service._''';
                           gradient: LinearGradient(
                             colors: _sending
                                 ? [_kMuted, _kMuted]
-                                : [const Color(0xFF25D366),
-                                   const Color(0xFF128C7E)],
+                                : [_kPink, _kPinkDark],
                           ),
                           borderRadius: BorderRadius.circular(14),
                           boxShadow: _sending ? [] : [
                             BoxShadow(
-                              color: const Color(0xFF25D366)
-                                  .withValues(alpha: 0.4),
+                              color: _kPink.withValues(alpha: 0.4),
                               blurRadius: 14,
                               offset: const Offset(0, 5),
                             ),
@@ -887,7 +1049,7 @@ _Please contact me regarding this service._''';
                             const Icon(Icons.send_rounded,
                                 color: Colors.white, size: 20),
                             const SizedBox(width: 10),
-                            Text('Send Enquiry on WhatsApp',
+                            Text('Send Enquiry',
                                 style: GoogleFonts.outfit(
                                     color: Colors.white, fontSize: 14,
                                     fontWeight: FontWeight.w800)),
@@ -898,7 +1060,7 @@ _Please contact me regarding this service._''';
 
                     const SizedBox(height: 8),
                     Text(
-                      'Your enquiry will be sent to NJ Tech via WhatsApp',
+                      'Track your request\'s progress right after submitting',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.outfit(
                           color: _kMuted, fontSize: 10),
@@ -965,4 +1127,299 @@ class _FormField extends StatelessWidget {
       validator: validator,
     );
   }
+}
+
+// ================================================================
+// _EnquiriesList — merges cached-completed + live in-progress
+// requests. Terminal statuses ('completed') never listen on
+// Firestore beyond confirming the terminal state once; everything
+// else stays live. See ServiceRequestCacheService for the local
+// storage layer this reads/writes.
+// ================================================================
+class _EnquiriesList extends StatefulWidget {
+  final String customerId;
+  const _EnquiriesList({required this.customerId});
+
+  @override
+  State<_EnquiriesList> createState() => _EnquiriesListState();
+}
+
+class _EnquiriesListState extends State<_EnquiriesList> {
+  // One-time discovery query (not a live listener) — finds every
+  // electronics_service request id this customer has ever sent, plus
+  // that request's status as of right now. Requests already known
+  // completed (in the Hive cache) skip straight to the cached render
+  // path below and never get a live listener attached; requests NOT
+  // yet completed get one via _LiveEnquiryCard.
+  late Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _discoverFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _discoverFuture = _discover();
+  }
+
+  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _discover() async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('service_requests')
+        .where('customerId', isEqualTo: widget.customerId)
+        .where('requestType', isEqualTo: 'electronics_service')
+        .orderBy('createdAt', descending: true)
+        .get();
+    return snapshot.docs;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
+      future: _discoverFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Center(
+                child: CircularProgressIndicator(color: _kPink, strokeWidth: 2)),
+          );
+        }
+        if (snapshot.hasError) {
+          return const Text('Could not load your enquiries.',
+              style: TextStyle(color: _kMuted, fontSize: 12));
+        }
+        final docs = snapshot.data ?? [];
+        if (docs.isEmpty) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _kSurface,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Text(
+              'No enquiries yet. Tap any category above to send one! 🔧',
+              style: TextStyle(color: _kMuted, fontSize: 13),
+            ),
+          );
+        }
+        return ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: docs.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (context, i) => _EnquiryCardRouter(doc: docs[i]),
+        );
+      },
+    );
+  }
+}
+
+// Decides, per request, whether to render from the permanent local
+// cache (completed — zero Firestore reads) or attach a live listener
+// (still in progress — status can still change).
+class _EnquiryCardRouter extends StatefulWidget {
+  final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+  const _EnquiryCardRouter({required this.doc});
+
+  @override
+  State<_EnquiryCardRouter> createState() => _EnquiryCardRouterState();
+}
+
+class _EnquiryCardRouterState extends State<_EnquiryCardRouter> {
+  late Future<Map<String, dynamic>?> _cachedFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _cachedFuture =
+        ServiceRequestCacheService().getCachedRequest(widget.doc.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final initialData = widget.doc.data();
+    final initialStatus = initialData['status'] as String? ?? 'pending';
+
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: _cachedFuture,
+      builder: (context, snapshot) {
+        final cached = snapshot.data;
+        if (cached != null) {
+          // Already cached as completed on this device — render
+          // straight from Hive, no Firestore listener at all.
+          return _EnquiryCardView(
+            requestId: widget.doc.id,
+            data: cached,
+            fromCache: true,
+          );
+        }
+        if (initialStatus == 'completed') {
+          // Completed (seen via the discovery query) but not cached
+          // yet on this device (e.g. completed on another device, or
+          // the cache write below hasn't finished) — cache it now so
+          // future opens skip Firestore entirely for this request.
+          unawaited(ServiceRequestCacheService()
+              .cacheCompletedRequest(widget.doc.id, _withMillis(initialData)));
+          return _EnquiryCardView(
+            requestId: widget.doc.id,
+            data: initialData,
+            fromCache: false,
+          );
+        }
+        // Still in progress — live listener, since status can change.
+        return _LiveEnquiryCard(requestId: widget.doc.id, initialData: initialData);
+      },
+    );
+  }
+}
+
+// Live Firestore listener — used ONLY while a request has not yet
+// reached 'completed'. The instant it does, this widget performs the
+// single write into ServiceRequestCacheService (the "same time as
+// completion" write Nizam asked for) and from then on this specific
+// request never needs another Firestore read.
+class _LiveEnquiryCard extends StatefulWidget {
+  final String requestId;
+  final Map<String, dynamic> initialData;
+  const _LiveEnquiryCard({required this.requestId, required this.initialData});
+
+  @override
+  State<_LiveEnquiryCard> createState() => _LiveEnquiryCardState();
+}
+
+class _LiveEnquiryCardState extends State<_LiveEnquiryCard> {
+  bool _cachedOnce = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('service_requests')
+          .doc(widget.requestId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final data = snapshot.data?.data() ?? widget.initialData;
+        final status = data['status'] as String? ?? 'pending';
+
+        if (status == 'completed' && !_cachedOnce) {
+          _cachedOnce = true;
+          // Fires exactly once, right as this device first observes
+          // completion — the same moment triggers both the UI update
+          // (this StreamBuilder rebuild) and the local Hive write.
+          unawaited(ServiceRequestCacheService()
+              .cacheCompletedRequest(widget.requestId, _withMillis(data)));
+        }
+
+        return _EnquiryCardView(
+          requestId: widget.requestId,
+          data: data,
+          fromCache: false,
+        );
+      },
+    );
+  }
+}
+
+// Pure rendering widget — identical look whether the data came from
+// Firestore or the local cache.
+class _EnquiryCardView extends StatelessWidget {
+  final String requestId;
+  final Map<String, dynamic> data;
+  final bool fromCache;
+  const _EnquiryCardView({
+    required this.requestId,
+    required this.data,
+    required this.fromCache,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final details = (data['details'] as Map)
+        .map((k, v) => MapEntry(k.toString(), v));
+    final categoryLabel = (details['categoryLabel'] as String?)?.trim();
+    final issue = (details['issue'] as String?)?.trim();
+    final status = (data['status'] as String?) ?? 'pending';
+    final statusColor = serviceRequestStatusColor(status);
+    final statusLabel = serviceRequestStatusLabel('electronics_service', status);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => ServiceRequestTrackingScreen(
+            requestId: requestId,
+            requestType: 'electronics_service',
+          ),
+        ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _kSurface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _kBorder),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    (categoryLabel != null && categoryLabel.isNotEmpty)
+                        ? categoryLabel
+                        : 'Electronics enquiry',
+                    style: GoogleFonts.outfit(
+                        color: _kText, fontSize: 14, fontWeight: FontWeight.w700),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (issue != null && issue.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      issue,
+                      style: const TextStyle(color: _kMuted, fontSize: 12),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                statusLabel,
+                style: TextStyle(
+                    color: statusColor, fontSize: 11, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Converts Firestore Timestamp fields to plain epoch-millis ints
+/// before handing the map to ServiceRequestCacheService, which stores
+/// it in Hive (Timestamps don't survive Hive's binary serialization).
+Map<String, dynamic> _withMillis(Map<String, dynamic> data) {
+  final result = Map<String, dynamic>.from(data);
+  for (final key in ['createdAt', 'updatedAt']) {
+    final value = result[key];
+    if (value is Timestamp) {
+      result['${key}Ms'] = value.millisecondsSinceEpoch;
+      result.remove(key);
+    }
+  }
+  if (result['createdAtMs'] == null) {
+    result['createdAtMs'] = DateTime.now().millisecondsSinceEpoch;
+  }
+  return result;
 }

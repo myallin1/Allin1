@@ -2,13 +2,12 @@
 // Allin1 — ADMIN Panel Entry Point
 // HIDDEN — Not for public!
 
-import 'dart:async';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'firebase_options.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
@@ -26,44 +25,56 @@ void main() {
     debugPrint('[main_admin] Flutter error: ${details.exceptionAsString()}');
   };
 
-  runZonedGuarded(() async {
-    // WidgetsFlutterBinding must be created inside the same zone that
-    // runApp() executes in — creating it before runZonedGuarded() puts
-    // the binding in the root zone while runApp() runs in a child zone,
-    // which triggers a "Zone mismatch" framework assertion on cold start.
-    WidgetsFlutterBinding.ensureInitialized();
+  // NOTE for whoever reads this next: this used to be a manual
+  // runZonedGuarded(...) here, with WidgetsFlutterBinding.ensureInitialized()
+  // as its first line — see the comment that used to sit there: binding
+  // and runApp() must run in the SAME zone or cold start throws a "Zone
+  // mismatch" assertion. SentryFlutter.init()'s appRunner ALSO creates its
+  // own zone internally, so nesting the old runZonedGuarded inside it (or
+  // vice versa) would split binding/runApp() back into two different
+  // zones — the exact bug that comment was warning about. Fix: Sentry's
+  // appRunner zone now IS the one zone; the old runZonedGuarded is gone
+  // and WidgetsFlutterBinding.ensureInitialized() moved to be appRunner's
+  // first line instead, preserving the same "same zone" invariant.
+  SentryFlutter.init(
+    (options) {
+      options.dsn =
+          'https://208217846f0b9708dc26f1d5d812eefc@o4511799785553920.ingest.us.sentry.io/4511799822843904';
+      options.tracesSampleRate = 1.0;
+    },
+    appRunner: () async {
+      WidgetsFlutterBinding.ensureInitialized();
 
-    // SessionService.saveSession() opens a Hive box directly (not via
-    // HiveCache's guarded wrapper), which throws "You need to
-    // initialize Hive..." if nothing primed it first. main_customer.dart
-    // calls this eagerly at startup; admin never did, so Google
-    // Sign-In's post-auth saveSession() call was crashing here.
-    await Hive.initFlutter();
+      // SessionService.saveSession() opens a Hive box directly (not via
+      // HiveCache's guarded wrapper), which throws "You need to
+      // initialize Hive..." if nothing primed it first. main_customer.dart
+      // calls this eagerly at startup; admin never did, so Google
+      // Sign-In's post-auth saveSession() call was crashing here.
+      await Hive.initFlutter();
 
-    try {
-      if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        );
-      }
-      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
-    } on FirebaseException catch (e, stack) {
-      if (e.code == 'duplicate-app') {
-        debugPrint('[main_admin] Firebase already initialized, continuing.');
-      } else {
+      try {
+        if (Firebase.apps.isEmpty) {
+          await Firebase.initializeApp(
+            options: DefaultFirebaseOptions.currentPlatform,
+          );
+        }
+        await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+      } on FirebaseException catch (e, stack) {
+        if (e.code == 'duplicate-app') {
+          debugPrint('[main_admin] Firebase already initialized, continuing.');
+        } else {
+          debugPrint('[main_admin] Firebase init failed: $e\n$stack');
+          runApp(_InitErrorApp('Firebase initialization failed:\n$e'));
+          return;
+        }
+      } catch (e, stack) {
         debugPrint('[main_admin] Firebase init failed: $e\n$stack');
         runApp(_InitErrorApp('Firebase initialization failed:\n$e'));
         return;
       }
-    } catch (e, stack) {
-      debugPrint('[main_admin] Firebase init failed: $e\n$stack');
-      runApp(_InitErrorApp('Firebase initialization failed:\n$e'));
-      return;
-    }
-    runApp(const AdminApp());
-  }, (error, stack) {
-    debugPrint('[main_admin] Unhandled zone error: $error\n$stack');
-  });
+      runApp(const AdminApp());
+    },
+  );
 }
 
 class _InitErrorApp extends StatelessWidget {

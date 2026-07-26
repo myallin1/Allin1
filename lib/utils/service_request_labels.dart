@@ -35,7 +35,9 @@ const List<String> kGoodsLabels = [
 
 /// Request types that use the task-style label set. Everything else
 /// (custom_order, custom_food_order, grocery_order) uses goods labels.
-const Set<String> kTaskTypeRequests = {'hero_booking'};
+/// 'electronics_service' (NJ Tech Store enquiries — repair/install
+/// bookings, not a goods delivery) is task-style like hero_booking.
+const Set<String> kTaskTypeRequests = {'hero_booking', 'electronics_service'};
 
 /// Maps a canonical status string to the 0–4 stepper index. `pending`
 /// and `admin_review` both map to 0 (still waiting for a hero).

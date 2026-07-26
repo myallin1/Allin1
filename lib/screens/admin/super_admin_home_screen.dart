@@ -1,16 +1,27 @@
 import 'dart:async';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:colorful_iconify_flutter/icons/fluent_emoji_flat.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
+import 'admin_dashboard_screen.dart';
+import 'admin_service_requests_screen.dart';
 import 'commission_settings_screen.dart';
 
-class SuperAdminHomeScreen extends StatelessWidget {
+class SuperAdminHomeScreen extends StatefulWidget {
   const SuperAdminHomeScreen({super.key});
 
+  @override
+  State<SuperAdminHomeScreen> createState() => _SuperAdminHomeScreenState();
+}
+
+class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
   static const Color _bg = Color(0xFF0A0A12);
   static const Color _surface = Color(0xFF12121E);
   static const Color _purple = Color(0xFF6C63FF);
@@ -18,6 +29,71 @@ class SuperAdminHomeScreen extends StatelessWidget {
   static const Color _green = Color(0xFF00C853);
   static const Color _gold = Color(0xFFFFBB00);
   static const Color _text = Color(0xFFEEEEF5);
+
+  // ── New-request sound/vibration alert ────────────────────────
+  // Admin app-open-only alert (no Blaze plan → no background Cloud
+  // Function / push, per Nizam's decision). Watches BOTH Hero
+  // Booking and Electronics Service requests still waiting for a
+  // hero (pending/admin_review — the same set the bottom buttons'
+  // badges count) and plays the existing ride_alert.mp3 sound +
+  // a vibration the moment a NEW request id appears that wasn't in
+  // the previous snapshot. First snapshot on load never alerts (would
+  // otherwise fire for every already-waiting request on every app
+  // open) — only subsequent *new* arrivals do.
+  final AudioPlayer _alertPlayer = AudioPlayer();
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _alertSub;
+  Set<String> _knownWaitingIds = {};
+  bool _alertPrimed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _alertSub = FirebaseFirestore.instance
+        .collection('service_requests')
+        .where('requestType', whereIn: ['hero_booking', 'electronics_service'])
+        .where('status', whereIn: ['pending', 'admin_review'])
+        .snapshots()
+        .listen(_onWaitingRequestsChanged, onError: (Object e) {
+      debugPrint('[SuperAdminHome] Alert listener error: $e');
+    });
+  }
+
+  @override
+  void dispose() {
+    _alertSub?.cancel();
+    _alertPlayer.dispose();
+    super.dispose();
+  }
+
+  void _onWaitingRequestsChanged(QuerySnapshot<Map<String, dynamic>> snapshot) {
+    final currentIds = snapshot.docs.map((d) => d.id).toSet();
+    if (!_alertPrimed) {
+      // First snapshot after this screen opened — just record the
+      // baseline, don't alert for requests that were already waiting.
+      _alertPrimed = true;
+      _knownWaitingIds = currentIds;
+      return;
+    }
+    final newIds = currentIds.difference(_knownWaitingIds);
+    _knownWaitingIds = currentIds;
+    if (newIds.isNotEmpty) {
+      _playNewRequestAlert();
+    }
+  }
+
+  Future<void> _playNewRequestAlert() async {
+    try {
+      HapticFeedback.vibrate();
+    } catch (e) {
+      debugPrint('[SuperAdminHome] Haptic feedback failed (non-fatal): $e');
+    }
+    try {
+      await _alertPlayer.stop();
+      await _alertPlayer.play(AssetSource('sounds/ride_alert.mp3'));
+    } catch (e) {
+      debugPrint('[SuperAdminHome] Alert sound failed (non-fatal): $e');
+    }
+  }
 
   String _todayStart() {
     final now = DateTime.now();
@@ -47,30 +123,134 @@ class SuperAdminHomeScreen extends StatelessWidget {
     }
   }
 
+  // ── Bottom nav — same real IndexedStack pattern as the CUSTOMER
+  // app's dashboard_screen.dart bottom nav (Row of InkWell tabs,
+  // tapping one swaps the whole body instead of scrolling to a
+  // section). 3 tabs: Overview (stats/SOS/Taxi entry/settings/
+  // logout), Hero (every Hero Booking request), Electronics (every
+  // electronics enquiry). "Taxi & Transportation" is NOT one of these
+  // tabs — it opens AdminDashboardScreen, which already has its OWN
+  // full AppBar + bottom nav (Overview/Rides/Customers/New Orders), so
+  // nesting it as a 4th IndexedStack tab here would stack two bottom
+  // navs on screen at once. Instead it's a push (via the Taxi tile on
+  // the Overview tab) — tap in, back button returns here, exactly
+  // like tapping into any other detail screen.
+  int _tabIndex = 0;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(child: _buildHeader(context)),
-            SliverToBoxAdapter(child: _buildSosCallCenterBanner(context)),
-            SliverToBoxAdapter(child: _buildStatsRow()),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 14,
-                  mainAxisSpacing: 14,
-                  childAspectRatio: 0.92,
-                ),
-                delegate: SliverChildListDelegate(_buildCards(context)),
-              ),
+        child: IndexedStack(
+          index: _tabIndex,
+          children: [
+            _buildOverviewTab(context),
+            AdminServiceRequestsScreen(
+              key: const ValueKey('hero_tab'),
+              requestType: 'hero_booking',
+              title: 'Hero Booking Status',
             ),
-            SliverToBoxAdapter(child: _buildFooter(context)),
+            AdminServiceRequestsScreen(
+              key: const ValueKey('electronics_tab'),
+              requestType: 'electronics_service',
+              title: 'Electronics Booking',
+            ),
           ],
+        ),
+      ),
+      bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  Widget _buildOverviewTab(BuildContext context) {
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(child: _buildHeader(context)),
+        SliverToBoxAdapter(child: _buildSosCallCenterBanner(context)),
+        SliverToBoxAdapter(child: _buildStatsRow()),
+        // Single "Manage" section — every category an admin manages
+        // (taxi/transportation, app settings) lives here, clearly
+        // labeled. Hero/Electronics moved to their own bottom-nav tabs
+        // above — Taxi and Settings stay here since Taxi pushes its
+        // own full screen and Settings is a lightweight one-off.
+        SliverToBoxAdapter(child: _buildManageSection(context)),
+        SliverToBoxAdapter(child: _buildFooter(context)),
+      ],
+    );
+  }
+
+  // Same visual convention as dashboard_screen.dart's _buildBottomNav:
+  // Row of InkWell icon+label items, active one highlighted.
+  Widget _buildBottomNav() {
+    final List<({String icon, String label, String? requestType})> items = [
+      (icon: FluentEmojiFlat.bar_chart, label: 'Overview', requestType: null),
+      (
+        icon: FluentEmojiFlat.man_superhero,
+        label: 'Hero',
+        requestType: 'hero_booking'
+      ),
+      (
+        icon: FluentEmojiFlat.mobile_phone,
+        label: 'Electronics',
+        requestType: 'electronics_service'
+      ),
+    ];
+    return Container(
+      decoration: BoxDecoration(
+        color: _surface,
+        border: Border(top: BorderSide(color: _purple.withOpacity(0.15))),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 16,
+              offset: const Offset(0, -4)),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: List.generate(items.length, (i) {
+            final active = _tabIndex == i;
+            final item = items[i];
+            return Expanded(
+              child: InkWell(
+                onTap: () => setState(() => _tabIndex = i),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: Opacity(
+                            opacity: active ? 1.0 : 0.55,
+                            child: SvgPicture.string(item.icon),
+                          ),
+                        ),
+                        if (item.requestType != null)
+                          Positioned(
+                            top: -4,
+                            right: -8,
+                            child: _NavWaitingDot(
+                                requestType: item.requestType!),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(item.label,
+                        style: TextStyle(
+                            fontSize: 9.5,
+                            color: active ? _gold : _text.withOpacity(0.55),
+                            fontWeight:
+                                active ? FontWeight.w700 : FontWeight.w400)),
+                  ]),
+                ),
+              ),
+            );
+          }),
         ),
       ),
     );
@@ -350,44 +530,70 @@ class SuperAdminHomeScreen extends StatelessWidget {
   Widget _divider() =>
       Container(height: 36, width: 1, color: _text.withOpacity(0.08));
 
-  List<Widget> _buildCards(BuildContext context) {
-    return [
-      _AdminReviewBadgeWrapper(
-        child: _ServiceCard(
-          title: 'Bike Taxi',
-          icon: Icons.electric_moped,
-          cardColor: _orange,
-          isActive: true,
-          onTap: () => Navigator.pushNamed(context, '/admin-home'),
-        ),
-      ),
-      _ServiceCard(
-        title: 'Food Delivery',
-        icon: Icons.fastfood,
-        cardColor: const Color(0xFFFF5252),
-        isActive: false,
-        onTap: () => _showSnack(context, '🍔 Food Delivery launching soon!'),
-      ),
-      _ServiceCard(
-        title: 'Electronics\nShop',
-        icon: Icons.devices,
-        cardColor: _purple,
-        isActive: false,
-        onTap: () => _showSnack(context, '📱 Electronics Shop coming soon!'),
-      ),
-      _ServiceCard(
-        title: 'App Settings',
-        icon: Icons.admin_panel_settings,
-        cardColor: _gold,
-        isActive: true,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute<void>(
-            builder: (_) => const CommissionSettingsScreen(),
+  // ── Manage section — single source of truth for every admin
+  // category, all in one clearly-labeled place. Replaces the old
+  // 2x2 card grid (2 of its 4 cards were permanently-disabled "coming
+  // soon" placeholders for Food Delivery / Electronics Shop — the
+  // real Electronics management already exists via the button below,
+  // so that duplicate placeholder card is gone) plus a visually
+  // separate row of buttons underneath — now one strip.
+  //
+  // Icons use the same colorful_iconify_flutter (FluentEmojiFlat) set
+  // the customer app's dashboard uses, replacing the old flat Material
+  // icons (Icons.electric_moped, Icons.devices, etc.) for a consistent,
+  // modern look across apps.
+  Widget _buildManageSection(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'MANAGE',
+            style: TextStyle(
+              color: _text.withOpacity(0.5),
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
+            ),
           ),
-        ),
+          const SizedBox(height: 10),
+          _AdminReviewBadgeWrapper(
+            child: _ManageTile(
+              label: 'Taxi & Transportation',
+              subtitle: 'Rides, customers, escalated orders',
+              iconSvg: FluentEmojiFlat.oncoming_taxi,
+              color: _orange,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => const AdminDashboardScreen(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Hero Booking Status and Electronics Booking used to be tiles
+          // here too — they're now their own bottom-nav tabs (Hero /
+          // Electronics) so admins reach them with one tap instead of
+          // Overview -> tile -> pushed screen. Taxi stays a tile because
+          // AdminDashboardScreen owns its own full Scaffold/bottom-nav
+          // and is reached by push, not by swapping this screen's body.
+          _ManageTile(
+            label: 'App Settings',
+            subtitle: 'Commission, fares, ads, credentials',
+            iconSvg: FluentEmojiFlat.gear,
+            color: _gold,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => const CommissionSettingsScreen(),
+              ),
+            ),
+          ),
+        ],
       ),
-    ];
+    );
   }
 
   Widget _buildFooter(BuildContext context) {
@@ -474,94 +680,174 @@ class SuperAdminHomeScreen extends StatelessWidget {
   }
 }
 
-class _ServiceCard extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final Color cardColor;
-  final bool isActive;
+// ── _ManageTile — single, consistent row-style tile for every entry
+// in the Manage section. Replaces both the old grid-card _ServiceCard
+// (Material icons, "LIVE/Coming Soon" badge) and the old
+// _ServiceRequestButton (full-width row) with one widget, so every
+// category reads the same way: icon, label, one-line description of
+// what it does (this is the "clear label" fix for the 3 overlapping
+// admin_review entry points — each tile's subtitle says exactly what
+// it shows), and — when [requestType] is given — a live "waiting for
+// a hero" count badge.
+class _ManageTile extends StatelessWidget {
+  final String label;
+  final String subtitle;
+  final String iconSvg;
+  final Color color;
   final VoidCallback onTap;
+  final String? requestType;
 
-  const _ServiceCard({
-    required this.title,
-    required this.icon,
-    required this.cardColor,
-    required this.isActive,
+  const _ManageTile({
+    required this.label,
+    required this.subtitle,
+    required this.iconSvg,
+    required this.color,
     required this.onTap,
+    this.requestType,
   });
 
   static const Color _text = Color(0xFFEEEEF5);
-  static const Color _green = Color(0xFF00C853);
+  static const Color _muted = Color(0xFF9999BB);
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A2A),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: cardColor.withOpacity(0.3)),
-          boxShadow: [
-            BoxShadow(
-              color: cardColor.withOpacity(0.1),
-              blurRadius: 8,
-              spreadRadius: 1,
+    final content = Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A2A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.1),
+            blurRadius: 8,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.15),
+              shape: BoxShape.circle,
             ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: cardColor.withOpacity(0.15),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: cardColor, size: 36),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: _text,
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? _green.withOpacity(0.2)
-                    : Colors.grey.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                isActive ? '● LIVE' : 'Coming Soon',
-                style: TextStyle(
-                  color: isActive ? _green : Colors.grey,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
+            child: SvgPicture.string(iconSvg),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: _text,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(color: _muted, fontSize: 11),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          if (requestType != null) _WaitingBadge(requestType: requestType!),
+          const SizedBox(width: 8),
+          Icon(Icons.arrow_forward_ios_rounded,
+              color: color.withOpacity(0.6), size: 16),
+        ],
       ),
     );
+
+    return GestureDetector(onTap: onTap, child: content);
   }
+}
+
+// Small red dot for the bottom-nav Hero/Electronics tabs — same
+// waiting-count query as _WaitingBadge, but rendered as a compact dot
+// (no room for "N waiting" text at nav-bar icon size).
+class _NavWaitingDot extends StatelessWidget {
+  final String requestType;
+  const _NavWaitingDot({required this.requestType});
 
   @override
-  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
-    super.debugFillProperties(properties);
-    properties.add(StringProperty('title', title));
-    properties.add(DiagnosticsProperty<IconData>('icon', icon));
-    properties.add(ColorProperty('cardColor', cardColor));
-    properties.add(DiagnosticsProperty<bool>('isActive', isActive));
-    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('service_requests')
+          .where('requestType', isEqualTo: requestType)
+          .where('status', whereIn: ['pending', 'admin_review'])
+          .snapshots(),
+      builder: (context, snapshot) {
+        final count = snapshot.data?.docs.length ?? 0;
+        if (count == 0) return const SizedBox.shrink();
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+          constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFF1744),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: const Color(0xFF12121E), width: 1.5),
+          ),
+          child: Text(
+            count > 9 ? '9+' : '$count',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// Live "waiting for a hero" count for one requestType — pending +
+// admin_review (no hero has picked it up yet). Split out from
+// _ManageTile so the taxi/settings tiles (no requestType) don't pay
+// for a Firestore listener they don't need.
+class _WaitingBadge extends StatelessWidget {
+  final String requestType;
+  const _WaitingBadge({required this.requestType});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('service_requests')
+          .where('requestType', isEqualTo: requestType)
+          .where('status', whereIn: ['pending', 'admin_review'])
+          .snapshots(),
+      builder: (context, snapshot) {
+        final waitingCount = snapshot.data?.docs.length ?? 0;
+        if (waitingCount == 0) return const SizedBox.shrink();
+        return Container(
+          margin: const EdgeInsets.only(left: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFF1744),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            waitingCount > 9 ? '9+ waiting' : '$waitingCount waiting',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 

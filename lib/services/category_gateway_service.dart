@@ -108,10 +108,15 @@ class CategoryGatewayService {
         return cachedProducts;
       }
 
+      // Standardized on 'menu_items' — that's the subcollection name
+      // FoodSellerService actually writes to (see addMenuItem /
+      // batchUpsertMenuItems in food_seller_service.dart). This used
+      // to read 'products' instead, so a seller's menu always loaded
+      // empty even after they'd added items.
       final snapshot = await _firestore
           .collection('sellers')
           .doc(sellerId)
-          .collection('products')
+          .collection('menu_items')
           .where('isAvailable', isEqualTo: true)
           .orderBy('name')
           .limit(100)

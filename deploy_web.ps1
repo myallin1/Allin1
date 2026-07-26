@@ -31,8 +31,7 @@
 # hosting target (--only hosting:X). They are never derived or guessed.
 #
 # Usage:
-#   .\deploy_web.ps1                 # hero + customer (the two we ship)
-#   .\deploy_web.ps1 -Only all       # all four apps
+#   .\deploy_web.ps1                 # all four apps (hero, customer, seller, admin)
 #   .\deploy_web.ps1 -Only admin     # one app
 #   .\deploy_web.ps1 -NoDeploy       # build only, don't publish
 # ================================================================
@@ -40,7 +39,7 @@
 param(
     [switch]$NoDeploy,
     [ValidateSet('default', 'all', 'hero', 'customer', 'admin', 'seller')]
-    [string]$Only = 'default'
+    [string]$Only = 'all'
 )
 
 # The single source of truth for entry-point <-> hosting-target pairing.
@@ -127,6 +126,21 @@ function Build-And-Deploy {
         return $false
     }
 
+    # All four apps build from the SAME web/ folder, so Flutter always
+    # writes the one shared web/manifest.json into build/web/ — every
+    # installed PWA showed the identical "NJ BAPX / Allin1" name/icon
+    # label, with no way to tell customer/hero/seller/admin apart on a
+    # phone's home screen. Fix: swap in this app's own manifest (see
+    # web/manifests/manifest_<target>.json) right after the build,
+    # overwriting the generic one before anything gets deployed.
+    $manifestSource = "web\manifests\manifest_$Target.json"
+    if (Test-Path $manifestSource) {
+        Copy-Item -Path $manifestSource -Destination 'build\web\manifest.json' -Force
+        Write-Host "  Applied $Target's own PWA manifest (distinct app name/icon)." -ForegroundColor DarkCyan
+    } else {
+        Write-Host "  No web\manifests\manifest_$Target.json found - using the shared manifest.json." -ForegroundColor Yellow
+    }
+
     # These three are the ones that have actually gone missing before.
     # assets\.env matters most: flutter_dotenv fetches it over HTTP at
     # runtime, and without it the Ola Maps key reads as empty and place
@@ -157,7 +171,12 @@ function Build-And-Deploy {
     firebase deploy --only "hosting:$Target"
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  $Name DEPLOY FAILED." -ForegroundColor Red
+        Write-Host ""
+        Write-Host "  ================================================" -ForegroundColor Red
+        Write-Host "  $Name DEPLOY FAILED - scroll up for the real error" -ForegroundColor Red
+        Write-Host "  (it's printed directly above this line, from the" -ForegroundColor Red
+        Write-Host "  'firebase deploy' command itself)." -ForegroundColor Red
+        Write-Host "  ================================================" -ForegroundColor Red
         return $false
     }
 
@@ -169,7 +188,7 @@ function Build-And-Deploy {
 # so it is obvious up front exactly which source builds to which URL and
 # nothing is being mixed up.
 $selected = switch ($Only) {
-    'default'  { $apps | Where-Object { $_.Target -in @('hero', 'customer') } }
+    'default'  { $apps }
     'all'      { $apps }
     default    { $apps | Where-Object { $_.Target -eq $Only } }
 }

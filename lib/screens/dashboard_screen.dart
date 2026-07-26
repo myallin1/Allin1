@@ -64,15 +64,6 @@ const Color kBorder   = Color(0xFFEEEEF5);
 const Color kRed      = Color(0xFFFF5252);
 
 // ── NJ Tech Quick-Service Icons ──────────────────────────────────
-const _njServices = [
-  {'icon': FluentEmojiFlat.mobile_phone, 'label': 'Mobile\nService',  'id': 'mobile'},
-  {'icon': FluentEmojiFlat.wrench, 'label': 'Spare\nParts',     'id': 'spares'},
-  {'icon': 'assets/images/assistant.gif', 'label': 'AI Bots', 'id': 'aibots'},
-  {'icon': FluentEmojiFlat.antenna_bars, 'label': 'Broadband',         'id': 'broadband'},
-  {'icon': FluentEmojiFlat.hammer_and_wrench, 'label': 'Repairs',          'id': 'repairs'},
-  {'icon': FluentEmojiFlat.delivery_truck, 'label': 'Delivery',          'id': 'delivery'},
-];
-
 // ── Banner Items ──────────────────────────────────────────────────
 const _bannerItems = [
   {'title': 'BIKE TAXI', 'emoji': '🏍️', 'color': kTeal},
@@ -328,6 +319,13 @@ class _DashboardScreenState extends State<DashboardScreen>
     _navigate(const NjTechBroadbandWebView());
   }
 
+  Future<void> _callPuncture() async {
+    final uri = Uri.parse('tel:+919843269091');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   void _showScratchCardModal() {
     // Mark today as used so the card auto-shows at most once per calendar day,
     // whether or not the customer fully scratches it.
@@ -352,7 +350,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       case 'grocery':     _navigate(const GroceryOrderScreen()); break;
       case 'njtech':      _navigate(const NJTechStoreScreen()); break;
       case 'carwash':     _navigate(const CarWashScreen()); break;
-      case 'puncture':    _navigate(const ComingSoonScreen(role: 'Mobile Puncture')); break;
+      case 'puncture':    _callPuncture(); break;
       case 'construction':_navigate(const ConstructionScreen()); break;
       case 'custom':      _navigate(const HeroBookingScreen(initialCategory: 'custom_order')); break;
       case 'mobile':      _navigate(const NjTechServiceScreen()); break;
@@ -402,7 +400,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                 KeepAliveTab(
                   child: _HomeTab(
                     onTileTap: _tap,
-                    onNJServiceTap: _tap,
                     user: _user,
                     userStream: const Stream.empty(),
                   ),
@@ -682,13 +679,11 @@ class _FloatingGiftBoxState extends State<_FloatingGiftBox>
 // ================================================================
 class _HomeTab extends StatelessWidget {
   final void Function(String) onTileTap;
-  final void Function(String) onNJServiceTap;
   final User? user;
   final Stream<DocumentSnapshot> userStream;
 
   const _HomeTab({
     required this.onTileTap,
-    required this.onNJServiceTap,
     required this.user,
     required this.userStream,
   });
@@ -700,8 +695,6 @@ class _HomeTab extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const SizedBox(height: 12),
         const _CategorySlidingBanner(),
-        const SizedBox(height: 12),
-        _buildNJTechBanner(context),
         const SizedBox(height: 20),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1129,7 +1122,6 @@ class _HomeTab extends StatelessWidget {
 
   // ── HERO BOOKING MEGA CARD ───────────────────────────────────────
   Widget _buildHeroBookingMegaCard(BuildContext context) {
-    const Color heroColor = Color(0xFFFF5252); // Red
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -1193,7 +1185,6 @@ class _HomeTab extends StatelessWidget {
 
   // ── PRINTING MEGA CARD ─────────────────────────────────────────
   Widget _buildPrintingMegaCard(BuildContext context) {
-    const Color printColor = Color(0xFF673AB7); // Deep Purple
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -1261,7 +1252,6 @@ class _HomeTab extends StatelessWidget {
 
   // ── OTHER SERVICES MEGA CARD ────────────────────────────────────
   Widget _buildOtherServicesMegaCard(BuildContext context) {
-    const Color serviceColor = Color(0xFF607D8B); // Blue Grey
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -1304,7 +1294,7 @@ class _HomeTab extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildSmallActionTile(context, FluentEmojiFlat.antenna_bars, 'Internet', () => onTileTap('broadband')),
-                _buildSmallActionTile(context, FluentEmojiFlat.motorcycle, 'Puncture', () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ComingSoonScreen(role: 'Mobile Puncture')))),
+                _buildSmallActionTile(context, FluentEmojiFlat.motorcycle, 'Puncture', () => onTileTap('puncture')),
                 _buildSmallActionTile(context, FluentEmojiFlat.broom, 'Cleaning', () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ComingSoonScreen(role: 'Home Cleaning')))),
                 _buildSmallActionTile(context, FluentEmojiFlat.high_voltage, 'Electrician', () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ComingSoonScreen(role: 'Electrician')))),
               ],
@@ -1340,30 +1330,6 @@ class _HomeTab extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-
-  // ── NJ Tech Dark Banner ────────────────────────────────────────
-  Widget _buildNJTechBanner(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [kNJDark, kNJDark2],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(children: [
-        SizedBox(
-          height: 78,
-          child: _NJServiceMarquee(
-            services: _njServices,
-            onTap: onNJServiceTap,
-          ),
-        ),
-        const SizedBox(height: 12),
-      ]),
     );
   }
 
@@ -1522,91 +1488,6 @@ class _HomeTab extends StatelessWidget {
         ),
       ),
     ]);
-  }
-}
-
-// ================================================================
-// T1b: NJ SERVICE MARQUEE — auto-scrolling icon strip
-// ================================================================
-class _NJServiceMarquee extends StatefulWidget {
-  final List<Map<String, String>> services;
-  final void Function(String) onTap;
-  const _NJServiceMarquee({required this.services, required this.onTap});
-
-  @override
-  State<_NJServiceMarquee> createState() => _NJServiceMarqueeState();
-}
-
-class _NJServiceMarqueeState extends State<_NJServiceMarquee> {
-  late final ScrollController _sc;
-  Timer? _timer;
-  static const double _itemW = 64;
-
-  @override
-  void initState() {
-    super.initState();
-    _sc = ScrollController();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _startMarquee());
-  }
-
-  void _startMarquee() {
-    // 32ms (~30fps) instead of the previous 16ms (~60fps) — half the
-    // timer fires for a scrolling marquee that doesn't need 60fps to
-    // look smooth, cutting a continuous background CPU cost that ran
-    // the whole time this screen was mounted. Per-tick distance is
-    // doubled (1.6 vs 0.8) so the scroll speed looks identical.
-    _timer = Timer.periodic(const Duration(milliseconds: 32), (_) {
-      if (!mounted || !_sc.hasClients) return;
-      final max = _sc.position.maxScrollExtent;
-      if (max <= 0) return;
-      final next = _sc.offset + 1.6;
-      if (next >= max) {
-        _sc.jumpTo(0);
-      } else {
-        _sc.jumpTo(next);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    _sc.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final doubled = [...widget.services, ...widget.services];
-    return ListView.builder(
-      controller: _sc,
-      scrollDirection: Axis.horizontal,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      itemCount: doubled.length,
-      itemBuilder: (_, i) {
-        final s = doubled[i % widget.services.length];
-        return GestureDetector(
-          onTap: () => widget.onTap(s['id']!),
-          child: SizedBox(
-            width: _itemW,
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              s['icon']!.startsWith('assets/')
-                  ? Image.asset(s['icon']!, width: 26, height: 26, fit: BoxFit.contain)
-                  : s['icon']!.startsWith('<svg')
-                      ? SvgPicture.string(s['icon']!, width: 26, height: 26)
-                      : Text(s['icon']!, style: const TextStyle(fontSize: 22)),
-              const SizedBox(height: 3),
-              Text(s['label']!, textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      color: Colors.white70, fontSize: 9,
-                      fontWeight: FontWeight.w500),
-                  maxLines: 2, overflow: TextOverflow.ellipsis),
-            ]),
-          ),
-        );
-      },
-    );
   }
 }
 
@@ -2613,8 +2494,7 @@ class _IconMarqueeState extends State<_IconMarquee> with SingleTickerProviderSta
   }
   void _startMarquee() {
     // 60ms instead of the previous 30ms — half the timer fires, same
-    // visual scroll speed (2.0px/60ms == 1.0px/30ms). See the matching
-    // comment on _NJServiceMarquee._startMarquee() above.
+    // visual scroll speed (2.0px/60ms == 1.0px/30ms).
     _timer = Timer.periodic(const Duration(milliseconds: 60), (_) {
       if (!mounted || !_controller.hasClients) return;
       final max = _controller.position.maxScrollExtent;

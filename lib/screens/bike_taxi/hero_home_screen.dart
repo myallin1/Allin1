@@ -4584,9 +4584,74 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
                 ),
               ),
           ],
+          // "Delete Task" — hard-deletes the request doc entirely
+          // (ServiceRequestService.cancelServiceRequest, same full-
+          // delete path the admin's Cancel uses). Added because test
+          // tasks were piling up with no hero-side way to clear them
+          // — completed-but-unpaid cards especially stayed on screen
+          // forever. Offered at every status, but always behind an
+          // explicit confirm dialog since this also removes the
+          // customer's tracking view of the request.
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            height: 34,
+            child: TextButton.icon(
+              onPressed: _updating ? null : _deleteTask,
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              icon: const Icon(Icons.delete_outline_rounded, size: 16),
+              label: const Text('Delete Task',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _deleteTask() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete this task?'),
+        content: const Text(
+          'This permanently deletes the request for everyone — the '
+          'customer will no longer see it in their tracking either. '
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep Task'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _updating = true);
+    try {
+      await ServiceRequestService().cancelServiceRequest(widget.requestId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Task deleted.')),
+        );
+      }
+    } catch (e) {
+      debugPrint('[ServiceRequestStatusCard] cancelServiceRequest error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not delete task: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _updating = false);
+    }
   }
 
   Future<void> _markPaymentReceived() async {
