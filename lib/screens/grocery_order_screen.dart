@@ -2,19 +2,21 @@
 // grocery_order_screen.dart — Broadcast Order System: Grocery Order
 // Net-new screen (confirmed no prior version existed — only
 // decorative category-banner icons). Text list and/or photo of a
-// handwritten list; at least one is required. Image upload reuses
-// the exact Firebase Storage pattern from hero_document_screen.dart.
+// handwritten list; at least one is required. Image upload uses
+// Cloudinary (not Firebase Storage — Storage now requires the Blaze
+// plan to create a bucket at all, and Allin1 is staying on Spark).
 // ================================================================
 import 'dart:async';
-import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../services/cloudinary_upload_service.dart';
 import '../services/service_request_service.dart';
+import '../widgets/location_capture_field.dart';
+import 'grocery_order_status_screen.dart';
 import 'service_request_tracking_screen.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
@@ -33,21 +35,31 @@ class GroceryOrderScreen extends StatefulWidget {
 
 class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
   final _listCtrl = TextEditingController();
+  // NEW (per Nizam's request — every service request needs a real
+  // navigable delivery point for the hero): this form used to collect
+  // zero location data at all, not even a text address.
+  final _deliveryAddressCtrl = TextEditingController();
+  double? _deliveryLat;
+  double? _deliveryLng;
   PlatformFile? _pickedFile;
   bool _submitting = false;
 
   @override
   void dispose() {
     _listCtrl.dispose();
+    _deliveryAddressCtrl.dispose();
     super.dispose();
   }
 
   bool get _canSubmit =>
-      !_submitting && (_listCtrl.text.trim().isNotEmpty || _pickedFile != null);
+      !_submitting &&
+      (_listCtrl.text.trim().isNotEmpty || _pickedFile != null) &&
+      _deliveryAddressCtrl.text.trim().isNotEmpty;
 
   Future<void> _pickImage() async {
     try {
-      final result = await FilePicker.platform.pickFiles(type: FileType.image);
+      final result = await FilePicker.platform
+          .pickFiles(type: FileType.image, withData: true);
       if (result != null && result.files.isNotEmpty) {
         setState(() => _pickedFile = result.files.first);
       }
@@ -72,13 +84,12 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
       final requestId = service.reserveRequestId();
 
       String? listImageUrl;
-      if (_pickedFile != null && _pickedFile!.path != null) {
-        final storageRef = FirebaseStorage.instance.ref(
-          'service_request_images/${user.uid}/$requestId/${_pickedFile!.name}',
+      if (_pickedFile != null && _pickedFile!.bytes != null) {
+        listImageUrl = await CloudinaryUploadService().uploadImageBytes(
+          _pickedFile!.bytes!,
+          fileName: _pickedFile!.name,
+          folder: 'service_request_images/${user.uid}/$requestId',
         );
-        final uploadTask = storageRef.putFile(File(_pickedFile!.path!));
-        final snapshot = await uploadTask;
-        listImageUrl = await snapshot.ref.getDownloadURL();
       }
 
       await service.createServiceRequest(
@@ -90,6 +101,9 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
         details: {
           'listText': _listCtrl.text.trim(),
           'listImageUrl': listImageUrl,
+          'deliveryAddress': _deliveryAddressCtrl.text.trim(),
+          if (_deliveryLat != null) 'locationLat': _deliveryLat,
+          if (_deliveryLng != null) 'locationLng': _deliveryLng,
         },
       );
 
@@ -217,23 +231,84 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _kPink,
-                  elevation: 4,
-                  shadowColor: _kPink.withValues(alpha: 0.4),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                onPressed: _canSubmit ? _submit : null,
-                child: _submitting
-                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : Text('Send Order', style: GoogleFonts.outfit(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            Text('Delivery location', style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _deliveryAddressCtrl,
+              style: const TextStyle(fontSize: 14),
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'Where should the Hero deliver your groceries?',
+                hintStyle: TextStyle(color: _kMuted.withValues(alpha: 0.6), fontSize: 13),
+                filled: true,
+                fillColor: _kSurface,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.all(16),
               ),
             ),
+            const SizedBox(height: 10),
+            LocationCaptureField(
+              addressController: _deliveryAddressCtrl,
+              pickerTitle: 'Delivery location',
+              accentColor: _kGreen,
+              onLocationPicked: (lat, lng) {
+                setState(() {
+                  _deliveryLat = lat;
+                  _deliveryLng = lng;
+                });
+              },
+            ),
           ],
+        ),
+      ),
+      // FIX (per Nizam's correction): consistent bottom page-split UI
+      // across all service request types — a Book/Send button and a
+      // "Booking Status" button opening a full task-history list,
+      // matching the pink/white pattern from custom_food_order_screen.
+      // dart and hero_booking_screen.dart. Grocery had neither before.
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 54,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _kPink,
+                      elevation: 4,
+                      shadowColor: _kPink.withValues(alpha: 0.4),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onPressed: _canSubmit ? _submit : null,
+                    icon: _submitting
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Icon(Icons.shopping_cart_checkout_rounded, color: Colors.white, size: 18),
+                    label: Text('Send Order', style: GoogleFonts.outfit(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SizedBox(
+                  height: 54,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: _kPink, width: 1.4),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const GroceryOrderStatusScreen()),
+                    ),
+                    icon: const Icon(Icons.receipt_long_rounded, color: _kPink, size: 18),
+                    label: Text('Order Status', style: GoogleFonts.outfit(color: _kPink, fontSize: 14, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -33,11 +33,29 @@ const List<FoodSubCategory> kFoodSubCategories = [
 ];
 
 // Sub-categories shown as quick-browse icons on the customer-facing
-// food page's left sidebar. A subset of kFoodSubCategories — kept as
-// a separate list (rather than a bool flag on FoodSubCategory) so the
-// sidebar's icon set/order can be curated independently of the full
-// registration list, without needing to touch both call sites.
-const List<String> kFoodSidebarCategoryKeys = ['biriyani', 'home_made'];
+// food page's left sidebar.
+//
+// FIX (root cause of "seller shop is open, has a menu item, but
+// customer app shows the hotel nowhere"): this used to hard-code only
+// ['biriyani', 'home_made'] — 2 of the 6 categories a seller can
+// actually pick at registration (seller_onboarding_screen.dart offers
+// all of kFoodSubCategories). A seller who registered under 'parotta',
+// 'south_indian', 'fast_food', or 'multi_cuisine' had NO sidebar icon
+// a customer could ever tap to reach them — permanently invisible
+// regardless of isOpen/menu state, since _FoodSidebar only renders
+// whatever keys are listed here. Now mirrors kFoodSubCategories in
+// full, restoring the "single source of truth" promise in the comment
+// above: every registration category is guaranteed a matching browse
+// icon, so this class of gap can't recur when a 7th category is added
+// later either.
+const List<String> kFoodSidebarCategoryKeys = [
+  'biriyani',
+  'home_made',
+  'parotta',
+  'south_indian',
+  'fast_food',
+  'multi_cuisine',
+];
 
 FoodSubCategory? foodSubCategoryByKey(String key) {
   for (final c in kFoodSubCategories) {

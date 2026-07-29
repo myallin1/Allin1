@@ -113,12 +113,24 @@ class CategoryGatewayService {
       // batchUpsertMenuItems in food_seller_service.dart). This used
       // to read 'products' instead, so a seller's menu always loaded
       // empty even after they'd added items.
+      //
+      // FIX (root cause of "seller shows only their name, no menu
+      // items" for already-onboarded sellers): this combined an
+      // equality filter (isAvailable) with .orderBy() on a DIFFERENT
+      // field (name) — the exact same composite-index requirement
+      // already root-caused and fixed once this session in
+      // usage_billing_service.dart. Without that index deployed, this
+      // query threw `failed-precondition: requires an index`, and the
+      // catch (e) { return []; } below silently swallowed it — every
+      // seller's menu resolved to an empty list even when menu_items
+      // had real, correctly-written documents in it. Removed the
+      // orderBy and sort client-side instead (menu lists are small —
+      // capped at 100 here, effectively far fewer per seller).
       final snapshot = await _firestore
           .collection('sellers')
           .doc(sellerId)
           .collection('menu_items')
           .where('isAvailable', isEqualTo: true)
-          .orderBy('name')
           .limit(100)
           .get();
 
@@ -129,13 +141,24 @@ class CategoryGatewayService {
               ...doc.data(),
             },
           )
-          .toList();
+          .toList()
+        ..sort((a, b) => ((a['name'] as String?) ?? '').compareTo((b['name'] as String?) ?? ''));
 
       await _cache.cacheProducts(sellerId, products);
 
       return products;
     } catch (e) {
-      return [];
+      // FIX: this used to swallow every failure and return [] here,
+      // which made a genuinely-empty menu (0 docs, no error) and a
+      // crashed query (permission-denied, missing index, offline,
+      // etc.) render as the EXACT same "No products available" screen
+      // to the customer — impossible to tell apart without direct
+      // Firestore Console access. seller_detail_screen.dart's caller
+      // already has a proper try/catch that shows a real "Failed to
+      // load products" + Retry state when this rethrows, so real
+      // errors are no longer silently indistinguishable from a seller
+      // who simply hasn't added a dish yet.
+      rethrow;
     }
   }
 

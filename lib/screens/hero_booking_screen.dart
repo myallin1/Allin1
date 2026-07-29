@@ -24,6 +24,7 @@ import '../services/shared_location_inbox.dart';
 import '../services/service_request_service.dart';
 import '../utils/location_link_parser.dart';
 import '../utils/service_request_labels.dart';
+import 'hero_booking_status_screen.dart';
 import 'hero_booking_tracking_screen.dart';
 import 'location_picker_screen.dart';
 
@@ -722,24 +723,59 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
             ],
             const SizedBox(height: 24),
 
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _kPink,
-                  elevation: 4,
-                  shadowColor: _kPink.withValues(alpha: 0.4),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                onPressed: _submitting ? null : _submit,
-                child: _submitting
-                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : Text('Find Me a Hero', style: GoogleFonts.outfit(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-              ),
-            ),
-            const _ActiveHeroBookingCard(),
           ],
+        ),
+      ),
+      // FIX (per Nizam's correction): every service request type must
+      // share the SAME bottom page-split UI already proven for Food
+      // Genie and NJ Tech — a Book button + a "Booking Status" button
+      // that opens a full list of past+current tasks, instead of an
+      // inline active-booking card buried at the bottom of the form or
+      // (the earlier, rejected attempt) auto-jumping the tile tap
+      // straight into tracking.
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 54,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _kPink,
+                      elevation: 4,
+                      shadowColor: _kPink.withValues(alpha: 0.4),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onPressed: _submitting ? null : _submit,
+                    icon: _submitting
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Icon(Icons.bolt_rounded, color: Colors.white, size: 18),
+                    label: Text('Find Me a Hero', style: GoogleFonts.outfit(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SizedBox(
+                  height: 54,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: _kPink, width: 1.4),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const HeroBookingStatusScreen()),
+                    ),
+                    icon: const Icon(Icons.receipt_long_rounded, color: _kPink, size: 18),
+                    label: Text('Booking Status', style: GoogleFonts.outfit(color: _kPink, fontSize: 14, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1415,218 +1451,6 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
   }
 }
 
-// ================================================================
-// ACTIVE HERO BOOKING STATUS — compact status widget, shown on this
-// Hero Booking page itself (below the task-booking form), NOT on the
-// main customer dashboard. Shows the customer's most recent,
-// not-yet-completed hero_booking service_requests doc (current stage
-// + an approximate ETA hint). Renders nothing when there's no active
-// request. Tapping opens the full stage-tracker detail screen
-// (hero_booking_tracking_screen.dart).
-// ================================================================
-class _ActiveHeroBookingCard extends StatelessWidget {
-  const _ActiveHeroBookingCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId == null || userId.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    // Same 2-equality + orderBy(createdAt) shape already proven in
-    // production by custom_food_order_screen.dart's _buildMyOrders()
-    // — reuses that existing composite index on service_requests, no
-    // new index required. Limit 5 + client-side filter for "not
-    // completed" avoids needing a 3rd inequality-filter composite
-    // index just for this widget.
-    final stream = FirebaseFirestore.instance
-        .collection('service_requests')
-        .where('customerId', isEqualTo: userId)
-        .where('requestType', isEqualTo: 'hero_booking')
-        .orderBy('createdAt', descending: true)
-        // Was 5. A customer can book several tasks in a row, and
-        // anything past the cap never appeared at all.
-        .limit(20)
-        .snapshots();
-
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: stream,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const SizedBox.shrink();
-        }
-        final docs = snapshot.data!.docs;
-
-        // Collect EVERY live booking, not just the newest.
-        //
-        // This loop used to assign the first not-finished doc to a
-        // single `active` variable and `break`. So a customer who
-        // booked ten tasks saw exactly one of them — the other nine
-        // existed in Firestore, were being worked on by heroes, and
-        // were completely invisible in the app. Now each one gets its
-        // own card.
-        final active = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-        for (final doc in docs) {
-          final docData = doc.data();
-          final status = docData['status'] as String? ?? 'pending';
-          final paymentStatus = docData['paymentStatus'] as String?;
-          final customerRating = docData['customerRating'];
-          // A completed-but-unpaid task must still surface here so the
-          // customer notices a bill is waiting, and a paid-but-unrated
-          // task must also still surface (cash-close path never routes
-          // the customer through a payment screen, so this card — and
-          // its tap-through to the tracking screen — is what leads them
-          // to the rating prompt).
-          final fullyDone = status == 'completed' &&
-              paymentStatus == 'paid' &&
-              customerRating != null;
-          if (!fullyDone) {
-            active.add(doc);
-          }
-        }
-        if (active.isEmpty) {
-          return const SizedBox.shrink();
-        }
-
-        return Padding(
-          padding: const EdgeInsets.only(top: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    active.length == 1
-                        ? 'Your active booking'
-                        : 'Your active bookings',
-                    style: GoogleFonts.outfit(
-                      color: _kText,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  if (active.length > 1) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 7, vertical: 2,),
-                      decoration: BoxDecoration(
-                        color: _kPink,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        '${active.length}',
-                        style: GoogleFonts.outfit(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 10),
-              ...active.map(_buildBookingCard),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildBookingCard(
-    QueryDocumentSnapshot<Map<String, dynamic>> doc,
-  ) {
-    return Builder(
-      builder: (context) {
-        final data = doc.data();
-        final status = data['status'] as String? ?? 'pending';
-        final statusLabel = serviceRequestStatusLabel('hero_booking', status);
-        final etaLabel = heroBookingEtaLabel(status);
-        final details = (data['details'] as Map<String, dynamic>?) ?? const {};
-        final taskDescription =
-            (details['taskDescription'] as String?)?.trim();
-
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(18),
-            onTap: () => Navigator.push<void>(
-              context,
-              MaterialPageRoute<void>(
-                // Pass the specific id — without it the detail screen
-                // resolves "most recent active" on its own and every
-                // card in the list would open the same booking.
-                builder: (_) => HeroBookingTrackingScreen(requestId: doc.id),
-              ),
-            ),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: _kPinkBg,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: _kPink.withValues(alpha: 0.2)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: _kPink.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Center(
-                      child: Text('🦸', style: TextStyle(fontSize: 22)),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          (taskDescription != null && taskDescription.isNotEmpty)
-                              ? taskDescription
-                              : 'Your Hero Booking',
-                          style: GoogleFonts.outfit(
-                              color: _kText,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          statusLabel,
-                          style: GoogleFonts.outfit(
-                              color: _kPinkDark,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,),
-                        ),
-                        if (etaLabel != null) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            etaLabel,
-                            style: const TextStyle(color: _kMuted, fontSize: 11),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right_rounded, color: _kMuted),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
 
 // ================================================================
 // HERO TASK IDEAS -- tappable auto-scrolling slider

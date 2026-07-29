@@ -1,16 +1,23 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:colorful_iconify_flutter/icons/fluent_emoji_flat.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart' hide Category;
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../config/food_categories.dart';
 import '../services/category_gateway_service.dart';
 import '../services/food_seller_service.dart';
+import '../services/location_service.dart';
+import '../services/map_service.dart';
 import '../services/service_request_service.dart';
 import '../utils/service_request_labels.dart';
 import 'category_screen.dart';
+import 'food_order_status_screen.dart';
+import 'location_picker_screen.dart';
 import 'service_request_tracking_screen.dart';
 
 const Color kPink = Color(0xFFFF4FA3);
@@ -33,13 +40,116 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
   final _addressCtrl = TextEditingController();
   bool _isLoading = false;
 
+  // ── Hotel-name autocomplete ("erode hotels touch aguramari" — same
+  // suggestion mechanism as the bike-taxi From/To fields, via the
+  // existing MapService (Ola Maps first, OSM fallback), just applied
+  // to this free-text shop field instead of a pickup/drop field. ──
+  Timer? _shopDebounce;
+  List<Map<String, dynamic>> _shopSuggestions = [];
+  bool _shopSearching = false;
+  Map<String, dynamic>? _selectedShop;
+
+  // ── Delivery location (Use my location / Select on map) ──────────
+  double? _deliveryLat;
+  double? _deliveryLng;
+  bool _locatingMe = false;
+
   @override
   void dispose() {
+    _shopDebounce?.cancel();
     _shopCtrl.dispose();
     _itemsCtrl.dispose();
     _nameCtrl.dispose();
     _addressCtrl.dispose();
     super.dispose();
+  }
+
+  void _onShopQueryChanged(String query) {
+    _selectedShop = null;
+    _shopDebounce?.cancel();
+    if (query.trim().length < 2) {
+      setState(() => _shopSuggestions = []);
+      return;
+    }
+    _shopDebounce = Timer(const Duration(milliseconds: 450), () async {
+      if (!mounted) return;
+      setState(() => _shopSearching = true);
+      try {
+        final results = await MapService().search(query.trim());
+        if (!mounted) return;
+        setState(() {
+          _shopSuggestions = results;
+          _shopSearching = false;
+        });
+      } catch (_) {
+        if (mounted) setState(() => _shopSearching = false);
+      }
+    });
+  }
+
+  void _pickShopSuggestion(Map<String, dynamic> suggestion) {
+    _selectedShop = suggestion;
+    _shopCtrl.text = (suggestion['name'] as String?)?.trim() ?? _shopCtrl.text;
+    setState(() => _shopSuggestions = []);
+    FocusScope.of(context).unfocus();
+  }
+
+  Future<void> _useMyLocation() async {
+    setState(() => _locatingMe = true);
+    try {
+      final position = await LocationService().getCurrentLocation();
+      if (position == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not get your location. Check location permission.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+      final point = LatLng(position.latitude, position.longitude);
+      final reverse = await MapService().reverseGeocode(point);
+      final address = (reverse?['name'] as String?)?.trim().isNotEmpty == true
+          ? reverse!['name'] as String
+          : (reverse?['address'] as String?) ?? 'Current location';
+      if (!mounted) return;
+      setState(() {
+        _addressCtrl.text = address;
+        _deliveryLat = position.latitude;
+        _deliveryLng = position.longitude;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not fetch location: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _locatingMe = false);
+    }
+  }
+
+  Future<void> _selectOnMap() async {
+    final initialCenter = (_deliveryLat != null && _deliveryLng != null)
+        ? LatLng(_deliveryLat!, _deliveryLng!)
+        : null;
+    final picked = await Navigator.push<PickedLocation>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          initialCenter: initialCenter,
+          title: 'Delivery location',
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _addressCtrl.text = picked.name;
+      _deliveryLat = picked.lat;
+      _deliveryLng = picked.lng;
+    });
   }
 
   Future<void> _placeOrder() async {
@@ -64,6 +174,11 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
           'items': _itemsCtrl.text.trim(),
           'restaurantOrPreference': _shopCtrl.text.trim(),
           'deliveryAddress': _addressCtrl.text.trim(),
+          if (_selectedShop != null) 'shopAddress': _selectedShop!['address'],
+          if (_selectedShop?['lat'] != null) 'shopLat': _selectedShop!['lat'],
+          if (_selectedShop?['lng'] != null) 'shopLng': _selectedShop!['lng'],
+          if (_deliveryLat != null) 'deliveryLatitude': _deliveryLat,
+          if (_deliveryLng != null) 'deliveryLongitude': _deliveryLng,
         },
       );
 
@@ -78,6 +193,9 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
       _shopCtrl.clear();
       _itemsCtrl.clear();
       _addressCtrl.clear();
+      _selectedShop = null;
+      _deliveryLat = null;
+      _deliveryLng = null;
       // `push` (not `pushReplacement`) so pressing back returns to this
       // Food Genie page and the live "My Orders" list below.
       await Navigator.push(
@@ -151,6 +269,56 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
           Expanded(child: _buildFormBody()),
         ],
       ),
+      // FIX (per Nizam's request): page bottom split into two — left
+      // "Order Food" (the old full-width submit button, just relocated
+      // here so it's always visible without scrolling) and right
+      // "Order Status" (jumps straight to this customer's food-order
+      // tracker instead of making them scroll down to "My Orders").
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 54,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kPink,
+                      elevation: 4,
+                      shadowColor: kPink.withValues(alpha: 0.4),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onPressed: _isLoading ? null : _placeOrder,
+                    icon: _isLoading
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Icon(Icons.restaurant_rounded, color: Colors.white, size: 18),
+                    label: Text('Order Food', style: GoogleFonts.outfit(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SizedBox(
+                  height: 54,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: kPink, width: 1.4),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const FoodOrderStatusScreen()),
+                    ),
+                    icon: const Icon(Icons.receipt_long_rounded, color: kPink, size: 18),
+                    label: Text('Order Status', style: GoogleFonts.outfit(color: kPink, fontSize: 14, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -217,33 +385,139 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            _buildField(label: 'Restaurant / Shop Name', hint: 'e.g., Erode Amman Mess, 16th Road', ctrl: _shopCtrl, icon: Icons.storefront_rounded),
+            _buildShopField(),
             _buildField(label: 'What do you want to eat?', hint: 'e.g., 2 Chicken Biryani, 1 Coke...', ctrl: _itemsCtrl, lines: 3),
             _buildField(label: 'Your Name', hint: 'Enter your name', ctrl: _nameCtrl, icon: Icons.person_outline_rounded),
             _buildField(label: 'Delivery Location', hint: 'Enter your full address & landmark', ctrl: _addressCtrl, lines: 2, icon: Icons.location_on_outlined),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: kPink,
-                  elevation: 4,
-                  shadowColor: kPink.withValues(alpha: 0.4),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                onPressed: _isLoading ? null : _placeOrder,
-                child: _isLoading
-                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : Text('Place Order', style: GoogleFonts.outfit(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-              ),
-            ),
+            _buildLocationButtons(),
             const SizedBox(height: 32),
             _buildMyOrders(),
-            const SizedBox(height: 30),
+            const SizedBox(height: 100),
           ],
         ),
       );
+  }
+
+  // ── Restaurant / Shop Name field with tap-to-select suggestions —
+  // same debounced MapService().search() mechanism the bike-taxi
+  // From/To fields use, so typing a few letters of a real Erode hotel
+  // shows matching places to tap instead of free-typing the name. ──
+  Widget _buildShopField() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Restaurant / Shop Name', style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _shopCtrl,
+            onChanged: _onShopQueryChanged,
+            style: const TextStyle(fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'e.g., Erode Amman Mess, 16th Road',
+              hintStyle: TextStyle(color: kMuted.withValues(alpha: 0.6), fontSize: 13),
+              prefixIcon: const Icon(Icons.storefront_rounded, color: kPink, size: 20),
+              suffixIcon: _shopSearching
+                  ? const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: kPink)),
+                    )
+                  : null,
+              filled: true,
+              fillColor: kSurface,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
+          ),
+          if (_shopSuggestions.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(top: 6),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: kPink.withValues(alpha: 0.15)),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 10, offset: const Offset(0, 4))],
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                itemCount: _shopSuggestions.length,
+                separatorBuilder: (_, __) => const Divider(height: 1, color: kSurface),
+                itemBuilder: (context, i) {
+                  final s = _shopSuggestions[i];
+                  final name = (s['name'] as String?) ?? '';
+                  final address = (s['address'] as String?) ?? '';
+                  return InkWell(
+                    onTap: () => _pickShopSuggestion(s),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined, color: kPink, size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(name, style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w700)),
+                                if (address.isNotEmpty)
+                                  Text(address, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(color: kMuted, fontSize: 11)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ── Use my location / Select on map — sits right under the
+  // Delivery Location field, same pairing the user asked for ("type
+  // pandra place-ku keela use my location, pakkathula select on map").
+  Widget _buildLocationButtons() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, top: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _locatingMe ? null : _useMyLocation,
+              icon: _locatingMe
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: kPink))
+                  : const Icon(Icons.my_location_rounded, size: 16, color: kPink),
+              label: Text('Use my location', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w700, color: kPink)),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: kPink.withValues(alpha: 0.4)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _selectOnMap,
+              icon: const Icon(Icons.map_outlined, size: 16, color: kPink),
+              label: Text('Select on map', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w700, color: kPink)),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: kPink.withValues(alpha: 0.4)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ── My Orders — live status list for this customer ───────────────
@@ -413,14 +687,44 @@ class _FoodSidebar extends StatelessWidget {
   }
 }
 
+// Per-category accent colour + (where a confirmed-valid Fluent Emoji
+// Flat SVG identifier exists — reusing exact identifiers already
+// proven to compile on dashboard_screen.dart, since colorful_iconify_
+// flutter's icon set is huge and unverifiable offline here) a richer
+// SVG icon. Everything else keeps the plain-text emoji from
+// food_categories.dart but in the new, larger, gradient-backed pill —
+// still an upgrade even without a matching SVG asset.
+const Map<String, Color> _kSidebarAccent = {
+  'biriyani': Color(0xFFFF8A3D),
+  'home_made': Color(0xFFFF4FA3),
+  'parotta': Color(0xFFFFC24B),
+  'south_indian': Color(0xFF3DBA6F),
+  'fast_food': Color(0xFFFF5252),
+  'multi_cuisine': Color(0xFF7B6FE0),
+};
+
 class _SidebarIcon extends StatelessWidget {
   final FoodSubCategory category;
   final VoidCallback onTap;
 
   const _SidebarIcon({required this.category, required this.onTap});
 
+  Widget? _svgIcon() {
+    switch (category.key) {
+      case 'fast_food':
+        return SvgPicture.string(FluentEmojiFlat.french_fries, width: 30, height: 30);
+      case 'multi_cuisine':
+        return SvgPicture.string(FluentEmojiFlat.pizza, width: 30, height: 30);
+      default:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final accent = _kSidebarAccent[category.key] ?? kPink;
+    final svg = _svgIcon();
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       child: GestureDetector(
@@ -428,15 +732,30 @@ class _SidebarIcon extends StatelessWidget {
         child: Column(
           children: [
             Container(
-              width: 52,
-              height: 52,
+              width: 58,
+              height: 58,
               decoration: BoxDecoration(
-                color: kPink.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: kPink.withValues(alpha: 0.25)),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    accent.withValues(alpha: 0.20),
+                    accent.withValues(alpha: 0.08),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: accent.withValues(alpha: 0.35), width: 1.4),
+                boxShadow: [
+                  BoxShadow(
+                    color: accent.withValues(alpha: 0.18),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: Center(
-                child: Text(category.emoji, style: const TextStyle(fontSize: 24)),
+                child: svg ??
+                    Text(category.emoji, style: const TextStyle(fontSize: 28)),
               ),
             ),
             const SizedBox(height: 6),
