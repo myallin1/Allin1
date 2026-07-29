@@ -7,7 +7,6 @@
 // to all online + available heroes, then hands off to the shared
 // tracking screen.
 // ================================================================
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard;
