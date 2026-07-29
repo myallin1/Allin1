@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Admin (admin allin1) launcher icon — new adaptive icon (admin flavor
+  previously had no icon override at all and fell back to the generic
+  default mipmap, which is part of why icons looked inconsistent across
+  the 3 native apps). Shield glyph represents the admin/control app.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Rounded-square tile, deep indigo (distinct from customer pink / hero purple) -->
+    <path
+        android:pathData="M32,18 H76 A14,14 0 0 1 90,32 V76 A14,14 0 0 1 76,90 H32 A14,14 0 0 1 18,76 V32 A14,14 0 0 1 32,18 Z"
+        android:fillColor="#2D3142" />
+
+    <!-- Shield outline -->
+    <path
+        android:pathData="M54,32 L74,40 L74,60 C74,72.7 65.6,81.6 54,86 C42.4,81.6 34,72.7 34,60 L34,40 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+
+    <!-- Checkmark -->
+    <path
+        android:pathData="M45,58 L51,64 L64,49"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
