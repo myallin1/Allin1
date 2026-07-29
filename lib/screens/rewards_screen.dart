@@ -9,10 +9,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 import 'package:scratcher/scratcher.dart';
 
+import '../services/db_usage_tracker.dart';
 import '../widgets/promo_overlay.dart';
 import '../widgets/banner_slider.dart';
 import '../widgets/soundbox_easter_egg_overlay.dart';
 import 'guru_chat_screen.dart';
+import 'erode_offers_section.dart';
 
 const Color _paytmBlue = Color(0xFF00BAF2);
 const Color _paytmDarkBlue = Color(0xFF002970);
@@ -50,6 +52,7 @@ class _RewardsScreenState extends State<RewardsScreen>
   bool _checkingQuizLock = true;
   bool _quizLockedForToday = false;
   String? _activeCouponCode;
+  int _topTab = 0; // 0 = Rewards, 1 = Erode Offers
 
   @override
   void initState() {
@@ -77,6 +80,7 @@ class _RewardsScreenState extends State<RewardsScreen>
           .collection('users')
           .doc(user.uid)
           .get();
+      DbUsageTracker.instance.recordRead(1);
       final data = snap.data() ?? <String, dynamic>{};
       final lastQuizWonAt = data['lastQuizWonAt'];
       final activeCoupon = data['activeCoupon'];
@@ -153,43 +157,11 @@ class _RewardsScreenState extends State<RewardsScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildHeader(),
+                  const SizedBox(height: 18),
+                  _buildTopTabBar(),
                   const SizedBox(height: 22),
-                  _GlowingPaytmQuizCard(
-                    animation: _glowController,
-                    onTap: _openPaytmQuizScratchDialog,
-                    disabled: _checkingQuizLock || _quizLockedForToday,
-                    lockedMessage: _quizLockedForToday
-                        ? 'Come back tomorrow for your next reward!'
-                        : 'Checking reward status...',
-                    couponCode: _activeCouponCode,
-                  ),
-                  const SizedBox(height: 26),
-                  Text(
-                    'More launch rewards',
-                    style: GoogleFonts.outfit(
-                      color: _rewardInk,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ...widget.promoOffers.map(
-                    (offer) => Padding(
-                      padding: const EdgeInsets.only(bottom: 14),
-                      child: _RewardOfferTile(
-                        offer: offer,
-                        onClaim: () => widget.onClaimPromo?.call(offer.id),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  const BannerAdsSlider(
-                    height: 240,
-                    imageUrls: [
-                      'https://images.unsplash.com/photo-1555664424-778a1e5e1b48?w=800&q=80',
-                      'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=800&q=80',
-                    ],
-                  ),
+                  if (_topTab == 0) ..._buildRewardsTabContent()
+                  else const ErodeOffersSection(),
                   const SizedBox(height: 40),
                 ],
               ),
@@ -285,6 +257,96 @@ class _RewardsScreenState extends State<RewardsScreen>
         ],
       ),
     );
+  }
+
+  Widget _buildTopTabBar() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _paytmBlue.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: _tabButton(label: 'Rewards', icon: Icons.card_giftcard_rounded, index: 0)),
+          Expanded(child: _tabButton(label: 'Erode Offers', icon: Icons.local_offer_rounded, index: 1)),
+        ],
+      ),
+    );
+  }
+
+  Widget _tabButton({required String label, required IconData icon, required int index}) {
+    final selected = _topTab == index;
+    return GestureDetector(
+      onTap: () => setState(() => _topTab = index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          gradient: selected
+              ? const LinearGradient(colors: [_paytmDarkBlue, _paytmBlue])
+              : null,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 18, color: selected ? Colors.white : _rewardInk.withValues(alpha: 0.55)),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.outfit(
+                color: selected ? Colors.white : _rewardInk.withValues(alpha: 0.55),
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildRewardsTabContent() {
+    return [
+      _GlowingPaytmQuizCard(
+        animation: _glowController,
+        onTap: _openPaytmQuizScratchDialog,
+        disabled: _checkingQuizLock || _quizLockedForToday,
+        lockedMessage: _quizLockedForToday
+            ? 'Come back tomorrow for your next reward!'
+            : 'Checking reward status...',
+        couponCode: _activeCouponCode,
+      ),
+      const SizedBox(height: 26),
+      Text(
+        'More launch rewards',
+        style: GoogleFonts.outfit(
+          color: _rewardInk,
+          fontSize: 20,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+      const SizedBox(height: 12),
+      ...widget.promoOffers.map(
+        (offer) => Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: _RewardOfferTile(
+            offer: offer,
+            onClaim: () => widget.onClaimPromo?.call(offer.id),
+          ),
+        ),
+      ),
+      const SizedBox(height: 24),
+      const BannerAdsSlider(
+        height: 240,
+        imageUrls: [
+          'https://images.unsplash.com/photo-1555664424-778a1e5e1b48?w=800&q=80',
+          'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=800&q=80',
+        ],
+      ),
+    ];
   }
 }
 
