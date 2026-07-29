@@ -3,8 +3,10 @@
 // Product card with Add to Cart button
 // ================================================================
 
+import 'package:colorful_iconify_flutter/icons/fluent_emoji_flat.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class ProductCard extends StatelessWidget {
@@ -55,20 +57,25 @@ class ProductCard extends StatelessWidget {
                         child: Image.network(
                           image,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Center(
-                            child: Icon(
-                              Icons.restaurant,
-                              color: Color(0xFF7777A0),
-                              size: 32,
+                          errorBuilder: (_, __, ___) => Center(
+                            child: SvgPicture.string(
+                              FluentEmojiFlat.hamburger,
+                              width: 40,
+                              height: 40,
                             ),
                           ),
                         ),
                       )
-                    : const Center(
-                        child: Icon(
-                          Icons.restaurant,
-                          color: Color(0xFF7777A0),
-                          size: 32,
+                    : Center(
+                        // No photo saved for this dish (e.g. a Hotel
+                        // seller's preset-catalog item — see
+                        // seller_menu_setup_screen.dart, which never
+                        // sets imageUrl). A colourful placeholder reads
+                        // much better than the old flat grey icon.
+                        child: SvgPicture.string(
+                          FluentEmojiFlat.hamburger,
+                          width: 40,
+                          height: 40,
                         ),
                       ),
               ),

@@ -76,8 +76,23 @@ class MapService extends ChangeNotifier {
 
   void markFailure() {
     if (_selectedProvider == MapProviderType.ola) {
-      debugPrint('❌ Ola tile loading failed.');
-      _uiErrorMessage = 'Map Error: Ola Maps tile loading failed';
+      // FIX: this used to only set _uiErrorMessage and leave
+      // _currentProvider pinned to Ola — Allin1MapWidget shows a
+      // permanent translucent "Allin1 map loading..." overlay for as
+      // long as hasUiError is true, and nothing on a plain marker-map
+      // screen (Dispatch Heroes, live ride tracking, etc.) ever calls
+      // search()/reverseGeocode()/getRoute() — the only 3 places that
+      // used to clear _uiErrorMessage. Net effect: one failed tile
+      // request permanently hid the map behind a "loading" overlay for
+      // the rest of the screen's life. Actually switching to OSM here
+      // (like search/route already do) is the real fallback the class
+      // doc-comment promises, and self-heals instead of parking a
+      // forever-error.
+      debugPrint('❌ Ola tile loading failed — falling back to OSM tiles.');
+      _currentProvider = _osmProvider;
+      _selectedProvider = MapProviderType.osm;
+      _isUsingFallback = true;
+      _uiErrorMessage = null;
       notifyListeners();
     }
   }
@@ -128,30 +143,47 @@ class MapService extends ChangeNotifier {
         debugPrint('⚠️ Ola Maps error during initialization: $e');
       }
 
-      debugPrint('[MapService] Ola availability check result=$olaAvailable');
+      debugPrint('[MapService] Ola availability result=$olaAvailable');
       if (!olaAvailable || _olaProvider.apiKey.isEmpty || _olaProvider.apiKey.length < 16) {
         final failureReason = (_olaProvider.apiKey.isEmpty || _olaProvider.apiKey.length < 16)
             ? 'Ola API key missing or invalid'
             : 'Ola Maps availability check failed (HTTP error or outdated endpoint)';
-        debugPrint('ℹ️ MapService Ola failure reason: $failureReason');
+        debugPrint('ℹ️ MapService Ola unavailable ($failureReason) — using OSM tiles/search instead.');
         if (kIsWeb) {
           debugPrint(
             'ℹ️ Web Diagnostic: Ola Maps verification failed. '
             'Check domain allow-listing and endpoint compatibility in the Ola portal.',
           );
         }
-        _uiErrorMessage = 'Map Error: $failureReason';
+        // FIX: this used to only record _uiErrorMessage while leaving
+        // _currentProvider pinned to Ola — Allin1MapWidget renders a
+        // permanent translucent "Allin1 map loading..." overlay for as
+        // long as hasUiError is true, and that flag was never cleared on
+        // screens (Dispatch Heroes, live tracking, etc.) that never call
+        // search()/reverseGeocode()/getRoute() — the only 3 places that
+        // used to reset it. Net effect: an admin/hero without a working
+        // Ola key saw a map that never finished "loading," forever,
+        // even though OSM's tiles/search (which need no key at all)
+        // were available the whole time. Actually switching providers
+        // here — same pattern search()/getRoute() already use — is the
+        // real "automatic Ola<->OSM fallback" this class's own doc
+        // comment promises, and it self-heals instead of parking a
+        // forever-error over the map.
+        _currentProvider = _osmProvider;
+        _selectedProvider = MapProviderType.osm;
+        _isUsingFallback = true;
+        _uiErrorMessage = null;
       }
 
       _isInitialized = true;
       notifyListeners();
     } catch (e) {
-      debugPrint('❌ MapService init error: $e');
-      _currentProvider = _olaProvider;
-      _selectedProvider = MapProviderType.ola;
-      _isUsingFallback = false;
+      debugPrint('❌ MapService init error: $e — falling back to OSM.');
+      _currentProvider = _osmProvider;
+      _selectedProvider = MapProviderType.osm;
+      _isUsingFallback = true;
       _isInitialized = true;
-      _uiErrorMessage = 'Map Error: Ola Maps failed to initialize';
+      _uiErrorMessage = null;
       notifyListeners();
     }
   }

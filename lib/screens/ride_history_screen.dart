@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../services/db_usage_tracker.dart';
 import '../services/hive_cache.dart';
 
 // Theme Constants
@@ -118,6 +119,7 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
 
     try {
       final snap = await _rideHistoryQuery.get();
+      DbUsageTracker.instance.recordRead(snap.docs.length);
       final rides = snap.docs.map((d) => d.data()).toList();
       if (mounted) {
         setState(() {

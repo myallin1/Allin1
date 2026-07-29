@@ -3,13 +3,24 @@
 // Seller details with product menu and cart integration
 // ================================================================
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/cart_service.dart';
 import '../services/category_gateway_service.dart';
+import '../services/service_request_service.dart';
 import '../widgets/product_card.dart';
+import 'service_request_tracking_screen.dart';
+
+/// Reusing service_requests (rather than a separate food_orders
+/// hero-assignment pipeline) — see the decision in the seller
+/// home-kitchen / catalog-checkout work: same proven broadcast-to-all-
+/// eligible-heroes mechanism as hero_booking / grocery_order /
+/// custom_food_order, no separate admin dispatch or tracking screen
+/// needed to build.
+const String kCatalogFoodOrderRequestType = 'catalog_food_order';
 
 class SellerDetailScreen extends StatefulWidget {
   final Map<String, dynamic> seller;
@@ -527,13 +538,92 @@ class _CategoryConfig {
 }
 
 // ── Cart Bottom Sheet ─────────────────────────────────────────
-class _CartBottomSheet extends StatelessWidget {
+class _CartBottomSheet extends StatefulWidget {
   final CartService cart;
 
   const _CartBottomSheet({required this.cart});
 
   @override
+  State<_CartBottomSheet> createState() => _CartBottomSheetState();
+}
+
+class _CartBottomSheetState extends State<_CartBottomSheet> {
+  bool _isPlacingOrder = false;
+
+  Future<void> _checkout() async {
+    final cart = widget.cart;
+    if (cart.isEmpty || _isPlacingOrder) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please sign in to place an order'),
+            backgroundColor: Color(0xFFFF5252),
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() => _isPlacingOrder = true);
+    try {
+      final sellerId = cart.currentSellerId ?? '';
+      final sellerName = cart.currentSellerName ?? 'Seller';
+      final itemsDetail = cart.items
+          .map((item) => {
+                'itemId': item.id,
+                'name': item.name,
+                'price': item.price,
+                'quantity': item.quantity,
+                'total': item.total,
+              })
+          .toList();
+
+      final requestId = await ServiceRequestService().createServiceRequest(
+        requestType: kCatalogFoodOrderRequestType,
+        customerId: user.uid,
+        customerName: user.displayName ?? 'Customer',
+        customerPhone: user.phoneNumber ?? '',
+        details: {
+          'sellerId': sellerId,
+          'sellerName': sellerName,
+          'items': itemsDetail,
+          'subtotal': cart.subtotal,
+        },
+      );
+
+      cart.clear();
+
+      if (!mounted) return;
+      Navigator.pop(context); // close the cart bottom sheet
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => ServiceRequestTrackingScreen(
+            requestId: requestId,
+            requestType: kCatalogFoodOrderRequestType,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to place order: $e'),
+            backgroundColor: const Color(0xFFFF5252),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isPlacingOrder = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final cart = widget.cart;
     return StreamBuilder<List<CartItem>>(
       stream: cart.cartStream,
       initialData: cart.items,
@@ -622,31 +712,30 @@ class _CartBottomSheet extends StatelessWidget {
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: () {
-                      // TODO: Navigate to checkout
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('🚧 Checkout coming soon!'),
-                            backgroundColor: Color(0xFFFFBB00),
-                          ),
-                        );
-                      }
-                    },
+                    onPressed: _isPlacingOrder ? null : _checkout,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFFBB00),
+                      disabledBackgroundColor:
+                          const Color(0xFFFFBB00).withValues(alpha: 0.4),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text(
-                      'Proceed to Checkout',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    child: _isPlacingOrder
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2.5, color: Colors.black),
+                          )
+                        : const Text(
+                            'Proceed to Checkout',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                   ),
                 ),
               ],
@@ -660,7 +749,7 @@ class _CartBottomSheet extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<CartService>('cart', cart));
+    properties.add(DiagnosticsProperty<CartService>('cart', widget.cart));
   }
 }
 

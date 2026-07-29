@@ -5,7 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../config/food_categories.dart';
 import '../models/food_models.dart';
 import '../services/food_seller_service.dart';
-import 'seller_menu_setup_screen.dart';
+import 'seller_home_kitchen_menu_screen.dart';
 
 const Color _bg = Color(0xFF08080F);
 const Color _surface = Color(0xFF0D0D18);
@@ -91,10 +91,19 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
 
       if (!mounted) return;
 
+      // FIX (per Nizam's request): every seller now lands on the
+      // custom dish-authoring screen (own photo/name/price) right
+      // after onboarding instead of SellerMenuSetupScreen's fixed
+      // preset catalog — a brand-new seller had no way to put their
+      // own actual food in front of customers otherwise.
       Navigator.pushReplacement(
         context,
         MaterialPageRoute<void>(
-          builder: (_) => SellerMenuSetupScreen(sellerId: uid),
+          builder: (_) => SellerHomeKitchenMenuScreen(
+            sellerId: uid,
+            title: 'My Menu',
+            categoryName: _selectedSubCategory == 'home_made' ? 'Home Kitchen' : 'Menu',
+          ),
         ),
       );
     } catch (e) {

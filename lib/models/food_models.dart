@@ -19,6 +19,17 @@ class SellerModel {
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
+  /// Which seller product line this account belongs to: 'hotel',
+  /// 'grocery', or 'electronics'. Distinct from [category] on purpose —
+  /// [category] has been hardcoded to 'food' for every seller since this
+  /// model was created (seller_onboarding_screen.dart never let a seller
+  /// pick anything else), so it can't be reused as the vertical switch
+  /// without breaking every existing reader that assumes category=='food'
+  /// means "this is the hotel/food pipeline." Defaults to 'hotel' so
+  /// every seller doc written before this field existed reads back
+  /// exactly as it always has — none of them silently become "grocery."
+  final String businessVertical;
+
   SellerModel({
     required this.id,
     required this.name,
@@ -37,6 +48,7 @@ class SellerModel {
     this.coverImageUrl,
     this.createdAt,
     this.updatedAt,
+    this.businessVertical = 'hotel',
   });
 
   factory SellerModel.fromJson(Map<String, dynamic> json) {
@@ -62,6 +74,7 @@ class SellerModel {
       updatedAt: json['updatedAt'] != null
           ? (json['updatedAt'] as Timestamp).toDate()
           : null,
+      businessVertical: (json['businessVertical'] as String?) ?? 'hotel',
     );
   }
 
@@ -104,6 +117,7 @@ class SellerModel {
       'metadata': {'prepTimeMinutes': estimatedPrepTimeMin},
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
+      'businessVertical': businessVertical,
     };
   }
 
@@ -144,6 +158,7 @@ class SellerModel {
     String? coverImageUrl,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? businessVertical,
   }) {
     return SellerModel(
       id: id ?? this.id,
@@ -163,6 +178,7 @@ class SellerModel {
       coverImageUrl: coverImageUrl ?? this.coverImageUrl,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      businessVertical: businessVertical ?? this.businessVertical,
     );
   }
 }
