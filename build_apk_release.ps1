@@ -1,5 +1,5 @@
 # ================================================================
-# build_apk_release.ps1 — build + package native APKs for the
+# build_apk_release.ps1 - build + package native APKs for the
 # in-app update pipeline (AppUpdateChecker / update_service.dart)
 #
 # WHY THIS EXISTS
@@ -9,21 +9,21 @@
 # downloads whichever asset is named allin1-<flavor>.apk. If either the
 # tag isn't ABOVE the installed version, or the asset isn't named
 # exactly that, the update banner either never appears or 404s when
-# tapped — this already happened once (see the "fix(critical): native
+# tapped - this already happened once (see the "fix(critical): native
 # APK update pipeline downloads 404" commit) and is easy to repeat by
 # hand, so this script does the two error-prone steps for you:
 #
 #   1. Bumps the X.Y.Z part of pubspec.yaml's version (not just the
-#      +build number deploy_web.ps1 bumps) — AppUpdateChecker only
+#      +build number deploy_web.ps1 bumps) - AppUpdateChecker only
 #      compares X.Y.Z against the release tag, so if this number never
 #      moves, no release will ever look "newer" to an already-installed
 #      app.
-#   2. Builds each Gradle product flavor (customer/hero/admin — see
+#   2. Builds each Gradle product flavor (customer/hero/admin - see
 #      android/app/build.gradle.kts productFlavors) as a signed release
 #      APK, then copies each into release_apks/ under the EXACT
 #      filename update_service.dart expects: allin1-<flavor>.apk.
 #
-# This script does NOT push to GitHub for you — it prints the exact
+# This script does NOT push to GitHub for you - it prints the exact
 # `gh release create` command (or manual upload steps if `gh` isn't
 # installed) using the version it just bumped to, so the tag can never
 # drift out of sync with the APKs sitting next to it.
@@ -51,7 +51,7 @@ $flavors = @(
 $selected = if ($Only -eq 'all') { $flavors } else { $flavors | Where-Object { $_.Name -eq $Only } }
 
 function Step-SemverPatch {
-    # Bumps the X.Y.Z part of "version: X.Y.Z+N" — this is the number
+    # Bumps the X.Y.Z part of "version: X.Y.Z+N" - this is the number
     # AppUpdateChecker actually compares against the release tag (it
     # strips the +N build suffix via PackageInfo.version). Returns the
     # new "X.Y.Z" string so the release tag can be derived from it.
@@ -73,7 +73,7 @@ function Step-SemverPatch {
     }
 
     if (-not $newSemver) {
-        throw "Could not find a 'version: x.y.z+N' line in pubspec.yaml — refusing to guess a release tag."
+        throw "Could not find a 'version: x.y.z+N' line in pubspec.yaml - refusing to guess a release tag."
     }
 
     Set-Content -Path $path -Value $lines -Encoding UTF8
@@ -88,12 +88,12 @@ function Read-CurrentSemver {
 
 Write-Host ""
 Write-Host "==================================================" -ForegroundColor Cyan
-Write-Host " ALLIN1 — NATIVE APK RELEASE BUILD" -ForegroundColor Cyan
+Write-Host " ALLIN1 - NATIVE APK RELEASE BUILD" -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Cyan
 
 if ($NoVersionBump) {
     $semver = Read-CurrentSemver
-    Write-Host "  Version bump skipped — building at $semver as-is." -ForegroundColor Yellow
+    Write-Host "  Version bump skipped - building at $semver as-is." -ForegroundColor Yellow
 } else {
     $semver = Step-SemverPatch
 }
@@ -118,7 +118,7 @@ foreach ($flavor in $selected) {
     flutter build apk --release --flavor $name -t $flavor.Entry
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  $name BUILD FAILED — see the Flutter/Gradle error above." -ForegroundColor Red
+        Write-Host "  $name BUILD FAILED - see the Flutter/Gradle error above." -ForegroundColor Red
         $results[$name] = $false
         continue
     }
@@ -126,7 +126,7 @@ foreach ($flavor in $selected) {
     # Gradle flavor output naming convention: app-<flavor>-release.apk
     $builtApk = "build\app\outputs\flutter-apk\app-$name-release.apk"
     if (-not (Test-Path $builtApk)) {
-        Write-Host "  $name build reported success but $builtApk is missing — not packaging it." -ForegroundColor Red
+        Write-Host "  $name build reported success but $builtApk is missing - not packaging it." -ForegroundColor Red
         $results[$name] = $false
         continue
     }
@@ -152,7 +152,7 @@ foreach ($key in $results.Keys) {
 
 if ($results.Values -contains $false) {
     Write-Host ""
-    Write-Host "  At least one flavor failed — fix the error above before releasing." -ForegroundColor Red
+    Write-Host "  At least one flavor failed - fix the error above before releasing." -ForegroundColor Red
     exit 1
 }
 
@@ -161,14 +161,14 @@ $apkPaths = (Get-ChildItem $releaseDir -Filter "*.apk" | ForEach-Object { "`"$($
 
 Write-Host ""
 Write-Host "==================================================" -ForegroundColor Cyan
-Write-Host " NEXT STEP — publish the release" -ForegroundColor Cyan
+Write-Host " NEXT STEP - publish the release" -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Cyan
 Write-Host "  Tag MUST be above every already-installed app's version," -ForegroundColor Yellow
 Write-Host "  or the update banner will never appear. This build used $tag." -ForegroundColor Yellow
 Write-Host ""
 
 if (Get-Command gh -ErrorAction SilentlyContinue) {
-    Write-Host "  GitHub CLI found — run this to publish:" -ForegroundColor Cyan
+    Write-Host "  GitHub CLI found - run this to publish:" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "      gh release create $tag $apkPaths ``" -ForegroundColor White
     Write-Host "        --repo myallin1/Allin1-update-release ``" -ForegroundColor White
@@ -179,7 +179,7 @@ if (Get-Command gh -ErrorAction SilentlyContinue) {
     Write-Host "  GitHub CLI (gh) not found. Publish manually:" -ForegroundColor Yellow
     Write-Host "    1. Go to https://github.com/myallin1/Allin1-update-release/releases/new" -ForegroundColor White
     Write-Host "    2. Tag: $tag  (must match or exceed pubspec version above)" -ForegroundColor White
-    Write-Host "    3. Upload all 3 files from .\$releaseDir\ WITHOUT renaming them —" -ForegroundColor White
+    Write-Host "    3. Upload all 3 files from .\$releaseDir\ WITHOUT renaming them -" -ForegroundColor White
     Write-Host "       allin1-customer.apk / allin1-hero.apk / allin1-admin.apk" -ForegroundColor White
     Write-Host "       are the exact names update_service.dart looks for." -ForegroundColor White
     Write-Host "    4. Publish release." -ForegroundColor White
