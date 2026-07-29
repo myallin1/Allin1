@@ -36,9 +36,18 @@ subprojects {
 // the standard workaround for this exact class of error across the
 // Flutter plugin ecosystem while individual plugins catch up to
 // newer Kotlin Gradle Plugin versions.
+// FIX v2: setting the extension-level default (above approach) was not
+// enough -- sentry_flutter's own build.gradle sets languageVersion="1.6"
+// directly on its KotlinCompile TASK, and task-level config always wins
+// over the project's extension default. That's exactly why the error
+// showed apiVersion=1.9 (nothing overrode our extension default) but
+// languageVersion stuck at 1.6 (task-level override survived). Fix: force
+// every KotlinCompile task's compilerOptions directly, in afterEvaluate
+// so this runs AFTER the plugin's own build.gradle has already set its
+// task-level values -- our forced values are applied last and win.
 subprojects {
-    plugins.withId("org.jetbrains.kotlin.android") {
-        extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension> {
+    afterEvaluate {
+        tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
             compilerOptions {
                 languageVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_1_9)
                 apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_1_9)
