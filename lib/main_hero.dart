@@ -370,8 +370,55 @@ class HeroApp extends StatelessWidget {
   }
 }
 
-class _HeroSetupGate extends StatelessWidget {
+class _HeroSetupGate extends StatefulWidget {
   const _HeroSetupGate();
+
+  @override
+  State<_HeroSetupGate> createState() => _HeroSetupGateState();
+}
+
+class _HeroSetupGateState extends State<_HeroSetupGate> {
+  // FIX (root cause of "hero silently goes offline after visiting
+  // Profile/Earnings and coming back"): these two .get() calls used to
+  // be created INLINE inside build() (as `future: FirebaseFirestore...
+  // .get()`), so every time this StatelessWidget rebuilt — which
+  // happens on every authStateChanges() emission, and Firebase Auth's
+  // web SDK re-emits that stream on things like tab/window focus
+  // changes and ID token refresh, not just real login/logout — brand
+  // new Futures were handed to FutureBuilder. FutureBuilder resets to
+  // ConnectionState.waiting for a new Future instance, which made
+  // _buildFadingChild render the 'hero-approval-check-loading' key
+  // instead of 'hero-dashboard'. Because AnimatedSwitcher tears down
+  // and rebuilds its child whenever the KeyedSubtree's key changes,
+  // this fully UNMOUNTED the live HeroDashboardShell (resetting its
+  // bottom-nav tab back to Home) and disposed HeroHomeScreen's State —
+  // whose dispose() removes the hero's `online_heroes/{uid}` RTDB
+  // radar entry. The hero then saw a fresh HeroHomeScreen that starts
+  // `_isOnline = false` until its own async reload catches up, exactly
+  // matching the reported "toggle Online, visit Profile/Earnings, come
+  // back to Home and it's Offline again."
+  //
+  // Caching the Futures per-uid (only recreated on an ACTUAL uid
+  // change, i.e. a real login/logout) means repeat authStateChanges
+  // emissions for the same signed-in hero reuse an already-completed
+  // Future, so FutureBuilder stays at ConnectionState.done and
+  // _buildFadingChild keeps rendering the SAME 'hero-dashboard' key —
+  // AnimatedSwitcher then treats it as an unchanged child and never
+  // tears down HeroDashboardShell.
+  String? _cachedUid;
+  Future<DocumentSnapshot<Map<String, dynamic>>>? _usersDocFuture;
+  Future<DocumentSnapshot<Map<String, dynamic>>>? _heroDocFuture;
+
+  void _ensureFuturesFor(String uid) {
+    if (_cachedUid == uid && _usersDocFuture != null && _heroDocFuture != null) {
+      return;
+    }
+    _cachedUid = uid;
+    _usersDocFuture =
+        FirebaseFirestore.instance.collection('users').doc(uid).get();
+    _heroDocFuture =
+        FirebaseFirestore.instance.collection('heroes').doc(uid).get();
+  }
 
   Widget _buildLoadingScaffold(String title, String subtitle) {
     return HeroPremiumLoader(
@@ -413,8 +460,13 @@ class _HeroSetupGate extends StatelessWidget {
 
         final user = snapshot.data;
         if (user == null) {
+          _cachedUid = null;
+          _usersDocFuture = null;
+          _heroDocFuture = null;
           return _buildFadingChild('hero-login', const HeroLoginScreen());
         }
+
+        _ensureFuturesFor(user.uid);
 
         return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           // FIX (approved-hero stuck on pending, root cause): this used to
@@ -430,10 +482,7 @@ class _HeroSetupGate extends StatelessWidget {
           // the SDK's built-in behavior), but prefers a fresh server read
           // whenever one is reachable — which is what an approval-status
           // gate actually needs to be correct.
-          future: FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .get(),
+          future: _usersDocFuture,
           builder: (context, userSnapshot) {
             // Show loader only on true cold start when cache is empty
             if (userSnapshot.connectionState == ConnectionState.waiting &&
@@ -490,10 +539,7 @@ class _HeroSetupGate extends StatelessWidget {
               // Source.cache read always "succeeded" with the old value
               // and catchError never fired. Plain get() fixes this the
               // same way.
-              future: FirebaseFirestore.instance
-                  .collection('heroes')
-                  .doc(user.uid)
-                  .get(),
+              future: _heroDocFuture,
               builder: (context, heroSnapshot) {
                 if (heroSnapshot.connectionState == ConnectionState.waiting &&
                     !heroSnapshot.hasData) {
