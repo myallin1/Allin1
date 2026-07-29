@@ -17,17 +17,28 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'bike_taxi/hero_dashboard_shell.dart';
 import 'hero_login_screen.dart';
 
-const Color kBg = Color(0xFF0A0A1A);
-const Color kSurface = Color(0xFF0D0D18);
-const Color kCard = Color(0xFF141420);
-const Color kPurple = Color(0xFF7B6FE0);
-const Color kPurple2 = Color(0xFF9B8FF0);
+// THEME FIX (merge duplicate registration/status flows): this screen used
+// to be dark theme and only showed a generic hourglass card. It's now the
+// single post-registration status screen (hero_register_screen.dart routes
+// straight here after submit, replacing the old one-shot, non-live
+// HeroVerificationPendingScreen), repainted light pink/white to match the
+// registration form, and showing a 3-step tracker per Nizam's request:
+// Step 1 Onboarding (complete on submit), Step 2 Verify KYC + Step 3
+// Waiting for HR Approval (both flip together the moment admin approves —
+// there's only one approvalStatus field in Firestore, so 2 and 3 always
+// change state as a pair). All the real-time listener / notification /
+// auto-redirect logic below is unchanged.
+const Color kBg = Color(0xFFFFF6FA);
+const Color kSurface = Color(0xFFFFFFFF);
+const Color kCard = Color(0xFFFFEAF3);
+const Color kPurple = Color(0xFFFF4FA3);
+const Color kPurple2 = Color(0xFFBE2A7A);
 const Color kOrange = Color(0xFFE07C6F);
-const Color kGreen = Color(0xFF3DBA6F);
-const Color kGold = Color(0xFFF5C542);
-const Color kRed = Color(0xFFE05555);
-const Color kText = Color(0xFFEEEEF5);
-const Color kMuted = Color(0xFF7777A0);
+const Color kGreen = Color(0xFF00A84A);
+const Color kGold = Color(0xFFB8860B);
+const Color kRed = Color(0xFFE0245E);
+const Color kText = Color(0xFF201A22);
+const Color kMuted = Color(0xFF8C7A88);
 
 class HeroPendingScreen extends StatefulWidget {
   const HeroPendingScreen({super.key});
@@ -40,6 +51,9 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _statusSubscription;
   StreamSubscription<rtdb.DatabaseEvent>? _statusUpdateSub;
   bool _isNavigating = false;
+  // Drives the 3-step tracker in build() — updated from the live
+  // Firestore listener below, not fetched separately.
+  String _approvalStatus = 'pending';
 
   // ── In-app approval/rejection notification ──────────────────────
   // Mirrors the hero_pings notification architecture (RTDB + local
@@ -182,6 +196,10 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
       final data = snapshot.data();
       final approvalStatus = data?['approvalStatus']?.toString().trim().toLowerCase();
 
+      if (mounted && approvalStatus != null && approvalStatus != _approvalStatus) {
+        setState(() => _approvalStatus = approvalStatus);
+      }
+
       if (approvalStatus == 'approved') {
         _triggerNavigation(() {
           if (mounted) {
@@ -235,13 +253,100 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
     super.dispose();
   }
 
+  // Step 2 (Verify KYC) and Step 3 (Waiting HR Approval) are driven by the
+  // SAME approvalStatus field — Firestore has no separate KYC-verified
+  // state — so per Nizam's instruction they visually complete together
+  // the instant admin approves. Only 'pending' vs 'approved' matters here;
+  // 'rejected'/'blocked' are handled separately by the listener above
+  // (sign-out + redirect), so this screen never needs to render them.
+  bool get _isApproved => _approvalStatus == 'approved';
+
+  Widget _stepRow({
+    required int number,
+    required String title,
+    required String subtitle,
+    required bool complete,
+    required bool active,
+  }) {
+    final circleColor = complete
+        ? kGreen
+        : (active ? kPurple : kMuted.withValues(alpha: 0.3));
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: circleColor,
+          ),
+          alignment: Alignment.center,
+          child: complete
+              ? const Icon(Icons.check_rounded, color: Colors.white, size: 18)
+              : Text(
+                  '$number',
+                  style: GoogleFonts.outfit(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.outfit(
+                    color: kText,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  complete
+                      ? 'Done'
+                      : (active ? subtitle : 'Waiting'),
+                  style: GoogleFonts.outfit(
+                    color: complete
+                        ? kGreen
+                        : (active ? kPurple2 : kMuted),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _stepConnector(bool complete) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 15),
+      child: Container(
+        width: 2,
+        height: 28,
+        color: complete ? kGreen : kMuted.withValues(alpha: 0.25),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kBg,
       body: SafeArea(
         child: Center(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -250,29 +355,43 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
                   width: 80,
                   height: 80,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [kGold, Color(0xFFD4961A)],
+                    gradient: LinearGradient(
+                      colors: _isApproved
+                          ? const [kGreen, Color(0xFF00873C)]
+                          : const [kPurple, kPurple2],
                     ),
                     borderRadius: BorderRadius.circular(40),
+                    boxShadow: [
+                      BoxShadow(
+                        color: (_isApproved ? kGreen : kPurple)
+                            .withValues(alpha: 0.28),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
                   ),
-                  child: const Icon(
-                    Icons.hourglass_empty,
+                  child: Icon(
+                    _isApproved
+                        ? Icons.verified_rounded
+                        : Icons.hourglass_top_rounded,
                     size: 40,
                     color: Colors.white,
                   ),
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'Approval Pending',
+                  _isApproved ? 'Approved! Taking you in…' : 'Almost There',
                   style: GoogleFonts.outfit(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                     color: kText,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Text(
-                  'Your account is under review by our admin team.\nPlease wait for approval.',
+                  _isApproved
+                      ? 'Your Hero account is approved. Opening your dashboard…'
+                      : 'Your registration is submitted. Track your onboarding below.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.outfit(
                     fontSize: 14,
@@ -281,46 +400,79 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
+
+                // ── 3-step onboarding tracker ──────────────────────
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: kSurface,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: kCard, width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: kPurple.withValues(alpha: 0.08),
+                        blurRadius: 24,
+                        offset: const Offset(0, 12),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _stepRow(
+                        number: 1,
+                        title: 'Onboarding',
+                        subtitle: 'Details submitted',
+                        complete: true,
+                        active: false,
+                      ),
+                      _stepConnector(true),
+                      _stepRow(
+                        number: 2,
+                        title: 'Verify KYC',
+                        subtitle: 'Admin is checking your documents',
+                        complete: _isApproved,
+                        active: !_isApproved,
+                      ),
+                      _stepConnector(_isApproved),
+                      _stepRow(
+                        number: 3,
+                        title: 'Waiting for HR Approval',
+                        subtitle: 'Final review before you go live',
+                        complete: _isApproved,
+                        active: !_isApproved,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: kCard,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0x337B6FE0)),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: kPurple.withValues(alpha: 0.25)),
                   ),
-                  child: Column(
+                  child: Row(
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.info_outline, size: 20, color: kPurple2),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Real-time Status Active',
-                              style: GoogleFonts.outfit(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: kText,
-                              ),
-                            ),
+                      Icon(Icons.info_outline, color: kPurple2, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          "You'll be taken to your dashboard automatically the moment admin approves — no need to reopen the app.",
+                          style: GoogleFonts.outfit(
+                            color: kMuted,
+                            fontSize: 12,
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'You will be automatically redirected once your account is approved.',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          color: kMuted,
                         ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
-                const CircularProgressIndicator(
-                  color: kGold,
+                CircularProgressIndicator(
+                  color: _isApproved ? kGreen : kPurple,
                   strokeWidth: 2,
                 ),
               ],

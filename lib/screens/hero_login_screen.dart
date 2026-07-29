@@ -13,12 +13,20 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'hero_pending_screen.dart';
 import 'hero_register_screen.dart';
 
-const Color _bg = Color(0xFF0A0A12);
-const Color _card = Color(0xFF1A1A2A);
+// THEME FIX: was a dark theme, inconsistent with the customer app's
+// language/sign-in page (welcome_screen.dart), which Nizam pointed to as
+// the reference look. Palette below is lifted straight from that file so
+// the hero and customer apps' opening screens read as one family — white
+// background, pink brand accent, the same ink/muted text colors.
+const Color _bg = Colors.white;
+const Color _card = Color(0xFFFFF3F9);
 const Color _green = Color(0xFF00C853);
 const Color _gold = Color(0xFFFFBB00);
-const Color _text = Color(0xFFEEEEF5);
-const Color _muted = Color(0xFF7777A0);
+const Color _text = Color(0xFF4A1236);
+const Color _muted = Color(0xFF8A4E72);
+const Color _pink = Color(0xFFFF4FA3);
+const Color _pinkLight = Color(0xFFFF92C8);
+const Color _border = Color(0xFFF0DCE8);
 
 class HeroLoginScreen extends StatefulWidget {
   const HeroLoginScreen({super.key});
@@ -437,11 +445,18 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(
-        child: Padding(
+        // FIX: was a fixed-height Column with Spacer()s, which only works
+        // when content is short enough to fit one screen. Nizam wants the
+        // "How to be an Allin1 Hero?" guidance visible on THIS page (above
+        // the login/register options, not inside the registration form or
+        // a separate page) — that's real height, so this needs to scroll
+        // on smaller phones instead of overflowing. Spacers replaced with
+        // fixed gaps accordingly.
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             children: [
-              const Spacer(flex: 2),
+              const SizedBox(height: 32),
               // Logo — was the 2.4 MB bapx_nj_logo.gif, now drawn in code.
               // See the matching comment in customer_login_screen.dart.
               Container(
@@ -476,20 +491,29 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
                   fontSize: 14,
                 ),
               ),
-              const Spacer(),
-              // Sign in with Google Button
+              const SizedBox(height: 28),
+              // FIX: guidance card, per Nizam's explicit instruction — shown
+              // here on the opening page, ABOVE the Google sign-in /
+              // Register as Hero options below, with a graphic icon per
+              // step (not just a number) so it reads at a glance.
+              const _HowToBecomeHeroCard(),
+              const SizedBox(height: 28),
+              // THEME FIX: was a transparent-outline/white-text button
+              // designed for a dark background — now a solid pink button
+              // matching welcome_screen.dart's "Continue with Google" on
+              // the customer app, for the same light theme.
               SizedBox(
                 width: double.infinity,
-                child: OutlinedButton(
+                height: 52,
+                child: ElevatedButton(
                   onPressed: _isLoading ? null : _loginWithGoogle,
-                  style: OutlinedButton.styleFrom(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _pink,
                     foregroundColor: Colors.white,
-                    side: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.6),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    disabledBackgroundColor: _pink.withValues(alpha: 0.5),
+                    elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(15),
                     ),
                   ),
                   child: _isLoading
@@ -504,14 +528,7 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
                       : const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(
-                              'G',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
+                            Icon(Icons.login_rounded, size: 19, color: Colors.white),
                             SizedBox(width: 8),
                             Text(
                               'Sign in with Google',
@@ -552,11 +569,141 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
                   ),
                 ),
               ),
-              const Spacer(flex: 2),
+              const SizedBox(height: 32),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+// ── "How to be an Allin1 Hero?" guidance card ──────────────────────
+// Shown on THIS opening/login page, above the Google sign-in / Register
+// as Hero options — per Nizam's explicit instruction. Each step gets its
+// own icon badge (not just a number) so it reads as a graphical
+// instruction at a glance, not a wall of text. Same 3 stages
+// HeroPendingScreen tracks live after a hero actually submits the form.
+class _HowToBecomeHeroCard extends StatelessWidget {
+  const _HowToBecomeHeroCard();
+
+  static const List<_HowToStep> _steps = [
+    _HowToStep(
+      icon: Icons.badge_rounded,
+      title: 'Fill Your Details & Upload Proof',
+      subtitle: 'Personal info + License, Aadhaar, PAN photos',
+    ),
+    _HowToStep(
+      icon: Icons.fact_check_rounded,
+      title: 'KYC Verification',
+      subtitle: 'Admin checks your documents and calls to confirm',
+    ),
+    _HowToStep(
+      icon: Icons.emoji_events_rounded,
+      title: 'Onboarding Complete',
+      subtitle: "You're approved — go online and start earning",
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFF4FA3), Color(0xFFBE2A7A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFF4FA3).withValues(alpha: 0.28),
+            blurRadius: 22,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'How to be an Allin1 Hero?',
+            style: GoogleFonts.outfit(
+              color: Colors.white,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 16),
+          for (var i = 0; i < _steps.length; i++) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.22),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(_steps[i].icon, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _steps[i].title,
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _steps[i].subtitle,
+                          style: GoogleFonts.outfit(
+                            color: Colors.white.withValues(alpha: 0.82),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (i != _steps.length - 1)
+              Padding(
+                padding: const EdgeInsets.only(left: 19),
+                child: Container(
+                  width: 2,
+                  height: 20,
+                  color: Colors.white.withValues(alpha: 0.3),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HowToStep {
+  const _HowToStep({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
 }

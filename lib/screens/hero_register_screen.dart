@@ -4,22 +4,37 @@
 // ================================================================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-// ROUTING FIX: import added — was missing, causing "undefined class" compile error
-import 'hero_verification_pending.dart';
+import '../services/cloudinary_upload_service.dart';
+// ROUTING FIX (merge duplicate registration/status flows): this screen is
+// now reached DIRECTLY, before any sign-in step, so a fresh hero may have
+// no Firebase Auth session at all when they hit Submit — Google Sign-In is
+// now triggered inline from _submitRegistration() below when needed. Post-
+// submit routing now goes to HeroPendingScreen (the same live-listening
+// tracker used everywhere else), not the old one-shot, non-live
+// HeroVerificationPendingScreen — see hero_pending_screen.dart.
+import 'hero_pending_screen.dart';
 
-const Color _bg    = Color(0xFF0A0A12);
-const Color _card  = Color(0xFF1A1A2A);
-const Color _green = Color(0xFF00C853);
-const Color _gold  = Color(0xFFFFBB00);
+// THEME FIX (merge duplicate registration forms): this screen used to be
+// a dark theme, separate from the light pink/white ProfileSetupScreen
+// that Google-login heroes saw first. Nizam asked for a single merged
+// form using the light theme he liked — repainted the palette below,
+// widget structure/logic unchanged.
+const Color _bg    = Color(0xFFFFF6FA);
+const Color _card  = Color(0xFFFFEAF3);
+const Color _green = Color(0xFF00A84A);
+const Color _gold  = Color(0xFFB8860B);
 const Color _njPink = Color(0xFFFF4FA3); // NJ TECH brand pink
-const Color _text  = Color(0xFFEEEEF5);
-const Color _muted = Color(0xFF7777A0);
-const Color _red   = Color(0xFFFF5252);
+const Color _text  = Color(0xFF201A22);
+const Color _muted = Color(0xFF8C7A88);
+const Color _red   = Color(0xFFE0245E);
 
 class _HeroCategory {
   const _HeroCategory({
@@ -66,6 +81,27 @@ const List<_HeroCategory> _heroCategories = <_HeroCategory>[
     icon: Icons.local_shipping_rounded,
     dbLabel: 'Parcel Delivery',
   ),
+  // FIX: the customer-facing Taxi page (ride_search_screen.dart's
+  // _normalizeCategoryKey / kFoodSidebarCategoryKeys-style canonical
+  // list) supports 6 real vehicle types — bike, auto, cab, parcel,
+  // mini_truck, lorry — but this registration form only ever offered
+  // 4 of them (+ the non-vehicle emergency_manpower option). A hero
+  // who actually drives a mini-truck or lorry had no correct category
+  // to pick. Added both.
+  _HeroCategory(
+    key: 'mini_truck',
+    title: 'Mini Truck',
+    subtitle: 'Small goods carrier',
+    icon: Icons.airport_shuttle_rounded,
+    dbLabel: 'Mini Truck',
+  ),
+  _HeroCategory(
+    key: 'lorry',
+    title: 'Lorry',
+    subtitle: 'Heavy goods carrier',
+    icon: Icons.fire_truck_rounded,
+    dbLabel: 'Lorry',
+  ),
   _HeroCategory(
     key: 'emergency_manpower',
     title: 'Only Emergency Manpower',
@@ -91,8 +127,37 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
   final _licenseNumberController = TextEditingController();
   final _aadhaarController     = TextEditingController(); // T1: Aadhaar No
   final _panController         = TextEditingController(); // T1: PAN No
+  // FIX: Nizam wants heroes to state which Erode-area locality they want
+  // to work in, using free-text keywords (e.g. "Perundurai, Bhavani Road")
+  // so admin can see where hero coverage clusters vs. where customer
+  // demand actually is (see location_search_logs / admin location-demand
+  // screen). Stored as preferredWorkLocation on the heroes doc, shown in
+  // HeroApprovalsScreen's detail dialog.
+  final _preferredLocationController = TextEditingController();
   String? _selectedVehicleType;
   bool _agreedEmergencyResponder = false;
+
+  // FIX: form used to collect only the license/aadhaar/pan NUMBERS,
+  // with a comment saying docs come via WhatsApp only — admin had no
+  // photo to actually verify a number against. Each field now has its
+  // own document photo uploaded right here (via Cloudinary — see
+  // cloudinary_upload_service.dart), shown to admin in
+  // HeroApprovalsScreen. Per Nizam's explicit instruction, these are now
+  // MANDATORY — _submitRegistration() blocks submission until all 3 are
+  // picked. WhatsApp/Call remain available as a manual backup verification
+  // channel (Step 2 card below) if a hero has trouble uploading here, but
+  // the form itself can no longer be submitted without photos.
+  PlatformFile? _licensePhoto;
+  PlatformFile? _aadhaarPhoto;
+  PlatformFile? _panPhoto;
+  // FIX: was only true during the doc-upload step, with a silent gap
+  // during Google sign-in and the duplicate-phone Firestore check right
+  // before it — the button looked idle/clickable again during that gap,
+  // which Nizam reported as the app looking "hung" after tapping Submit.
+  // Now covers the ENTIRE submit flow (sign-in through final Firestore
+  // writes) via a single try/finally in _submitRegistration(), and drives
+  // a full-screen overlay (see build()) in addition to the button spinner.
+  bool _isSubmitting = false;
 
   // T2: CEO WhatsApp placeholder — replace 91XXXXXXXXXX with real number
   static const String _adminWhatsApp = '91XXXXXXXXXX';
@@ -107,21 +172,21 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     _licenseNumberController.dispose();
     _aadhaarController.dispose();
     _panController.dispose();
+    _preferredLocationController.dispose();
     super.dispose();
   }
 
+  // FIX: this used to substring-match ('truck' -> 'car', anything else
+  // unmatched -> 'bike'), which silently mis-categorized 'parcel' and
+  // 'lorry' selections as 'bike', and would have mapped the new
+  // 'mini_truck' category to 'car' too. [selectedVehicleType] is
+  // already one of _heroCategories' own keys (that's what the category
+  // picker sets it to), so just pass it through if it's a real key —
+  // no substring guessing needed.
   String _normalizeVehicleType(String value) {
-    final normalized = value.trim().toLowerCase();
-    if (normalized.contains('auto')) return 'auto';
-    if (normalized.contains('emergency') || normalized.contains('manpower')) {
-      return 'emergency_manpower';
-    }
-    if (normalized.contains('car') ||
-        normalized.contains('cab') ||
-        normalized.contains('truck')) {
-      return 'car';
-    }
-    return 'bike';
+    final key = value.trim().toLowerCase();
+    final isKnownKey = _heroCategories.any((c) => c.key == key);
+    return isKnownKey ? key : 'bike';
   }
 
   String _vehicleCategoryLabel(String key) {
@@ -164,6 +229,100 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     }
   }
 
+  // FIX (merge duplicate registration/status flows): this screen is now
+  // reachable directly (no forced sign-in step first), so a brand-new
+  // hero may have no Firebase Auth session yet when they tap Submit.
+  // Nizam's instruction: run Google Sign-In "in the background" of the
+  // same Submit button rather than sending them to a separate sign-in
+  // screen first. If a session already exists (e.g. they arrived here
+  // via the phone-OTP hero login flow), this is a no-op and that
+  // existing user is used as-is.
+  static const String _googleWebClientId =
+      '357526153693-02b0behmsf3k720jujg3e8j82frj04q7.apps.googleusercontent.com';
+
+  Future<User?> _ensureSignedIn() async {
+    final existing = FirebaseAuth.instance.currentUser;
+    if (existing != null) return existing;
+
+    final googleSignIn = GoogleSignIn(
+      clientId: kIsWeb ? _googleWebClientId : null,
+      serverClientId: kIsWeb ? null : _googleWebClientId,
+      scopes: const ['email', 'profile'],
+    );
+    final googleUser = await googleSignIn.signIn();
+    if (googleUser == null) return null; // user cancelled the picker
+    final googleAuth = await googleUser.authentication;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+    final userCredential =
+        await FirebaseAuth.instance.signInWithCredential(credential);
+    return userCredential.user;
+  }
+
+  Future<void> _pickDocPhoto(String docType) async {
+    try {
+      final result = await FilePicker.platform
+          .pickFiles(type: FileType.image, withData: true);
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.first;
+      if (!mounted) return;
+      setState(() {
+        switch (docType) {
+          case 'license':
+            _licensePhoto = file;
+            break;
+          case 'aadhaar':
+            _aadhaarPhoto = file;
+            break;
+          case 'pan':
+            _panPhoto = file;
+            break;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not pick photo: $e'), backgroundColor: _red),
+      );
+    }
+  }
+
+  /// Uploads the 3 mandatory doc photos (all 3 are guaranteed non-null
+  /// by the time this runs — _submitRegistration validates that before
+  /// calling this), returning a map of the ones that uploaded
+  /// successfully. If a single upload fails (network blip etc.) it's
+  /// logged and skipped rather than blocking the whole registration —
+  /// the hero can still fall back to WhatsApp/Call for that one doc.
+  Future<Map<String, String>> _uploadPickedDocPhotos(String uid) async {
+    final urls = <String, String>{};
+    final jobs = <String, PlatformFile?>{
+      'licenseDocUrl': _licensePhoto,
+      'aadhaarDocUrl': _aadhaarPhoto,
+      'panDocUrl': _panPhoto,
+    };
+    for (final entry in jobs.entries) {
+      final file = entry.value;
+      if (file == null || file.bytes == null) continue;
+      try {
+        final url = await CloudinaryUploadService().uploadImageBytes(
+          file.bytes!,
+          fileName: '${entry.key}_${file.name}',
+          folder: 'hero_documents/$uid',
+          // Higher than the 100KB default — these are ID/license
+          // documents admin must actually read to verify a hero, so a
+          // bit more room keeps printed text legible.
+          targetBytes: 200 * 1024,
+        );
+        urls[entry.key] = url;
+      } catch (e) {
+        debugPrint('[HeroRegister] ${entry.key} upload failed: $e');
+      }
+    }
+    return urls;
+  }
+
   Future<void> _submitRegistration() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -190,11 +349,72 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       return;
     }
 
+    // FIX: doc photos are now mandatory — block submission if any of the
+    // 3 are missing instead of silently allowing an all-numbers-no-proof
+    // registration through (which left admin nothing to visually verify).
+    final missingDocs = <String>[
+      if (_licensePhoto == null) 'License photo',
+      if (_aadhaarPhoto == null) 'Aadhaar photo',
+      if (_panPhoto == null) 'PAN photo',
+    ];
+    if (missingDocs.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please upload: ${missingDocs.join(', ')}'),
+          backgroundColor: _red,
+        ),
+      );
+      return;
+    }
+
+    if (mounted) setState(() => _isSubmitting = true);
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('User not logged in');
+      final user = await _ensureSignedIn();
+      if (user == null) {
+        // Google picker was cancelled — not a real error, just stop here
+        // silently so the hero can retry without a scary red banner.
+        return;
+      }
       final vehicleType = _normalizeVehicleType(selectedVehicleType);
       final vehicleCategoryLabel = _vehicleCategoryLabel(vehicleType);
+
+      // FIX (duplicate-hero prevention, P4): heroes/{uid} is keyed by
+      // Firebase Auth uid, so the same person signing in via 2 different
+      // methods (e.g. phone OTP once, Google once) — or just entering a
+      // different phone number the second time — gets 2 separate hero
+      // docs with no link between them. Block registration if this exact
+      // phone number is already registered under a DIFFERENT uid, rather
+      // than silently creating a duplicate. Existing duplicates from
+      // before this fix are not touched here — that needs Nizam's
+      // decision on cleanup, tracked separately.
+      final enteredPhone =
+          (user.phoneNumber ?? _phoneController.text.trim()).trim();
+      if (enteredPhone.isNotEmpty) {
+        final existing = await FirebaseFirestore.instance
+            .collection('heroes')
+            .where('phone', isEqualTo: enteredPhone)
+            .limit(1)
+            .get();
+        final duplicate = existing.docs
+            .any((doc) => doc.id != user.uid);
+        if (duplicate) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'This phone number is already registered as a Hero. '
+                  'Please log in with your existing account instead.',
+                ),
+                backgroundColor: _red,
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+       // Upload the 3 mandatory doc photos (already validated present above).
+       final docUrls = await _uploadPickedDocPhotos(user.uid);
 
        // Save to heroes collection
        await FirebaseFirestore.instance.collection('heroes').doc(user.uid).set({
@@ -208,18 +428,44 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
          'address': _addressController.text.trim(),
          'aadhaarNumber': _aadhaarController.text.trim(),
          'panNumber': _panController.text.trim(),
+         'preferredWorkLocation': _preferredLocationController.text.trim(),
          'vehicleType': vehicleType,
          'heroCategory': vehicleType,
          'vehicleCategoryLabel': vehicleCategoryLabel,
          'isEmergencyHelper': true,
          'sosNetworkAcceptedAt': FieldValue.serverTimestamp(),
          'licenseNumber': _licenseNumberController.text.trim(),
-         // T1: No document URLs — hero sends physical docs via WhatsApp
+         // FIX: doc photo URLs, uploaded above — was previously always
+         // absent ("no document URLs — hero sends physical docs via
+         // WhatsApp"). WhatsApp is still available as a fallback (see
+         // the Step 2 WhatsApp card below), but now admin can also see
+         // an actual photo here to cross-check against the typed
+         // numbers before approving.
+         ...docUrls,
          'approvalStatus': 'pending',
          'status': 'offline',
-         'onboardingMethod': 'manual_whatsapp',
+         'onboardingMethod': docUrls.isEmpty ? 'manual_whatsapp' : 'in_app_upload',
          'createdAt': FieldValue.serverTimestamp(),
        });
+
+       // FIX: main_hero.dart's _HeroSetupGate decides whether to show this
+       // registration form again by reading users/{uid}.isSetupComplete —
+       // this write was missing, so a hero who submitted here would be
+       // sent right back to an empty registration form on their next app
+       // open (before admin even had a chance to approve them), instead
+       // of the pending-status tracker. Mirrors what
+       // AuthService.completeProfileSetup does for the customer/Google
+       // path.
+       await FirebaseFirestore.instance.collection('users').doc(user.uid).set(
+         {
+           'phone': user.phoneNumber ?? _phoneController.text.trim(),
+           'phoneNumber': user.phoneNumber ?? _phoneController.text.trim(),
+           'role': 'hero',
+           'isSetupComplete': true,
+           'setupCompletedAt': FieldValue.serverTimestamp(),
+         },
+         SetOptions(merge: true),
+       );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -232,12 +478,14 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
         );
 
         // ROUTING FIX: Do NOT sign the user out.
-        // Navigate directly to the verification pending screen so the
-        // hero can see their status and contact admin immediately.
+        // Navigate to the live-updating pending tracker — same screen
+        // used everywhere else in the app for pending heroes — so the
+        // hero sees the 3-step status immediately and is auto-redirected
+        // into the dashboard the moment admin approves, no re-open needed.
         Navigator.pushReplacement(
           context,
           MaterialPageRoute<void>(
-            builder: (_) => HeroVerificationPendingScreen(heroId: user.uid),
+            builder: (_) => const HeroPendingScreen(),
           ),
         );
       }
@@ -283,7 +531,62 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
           ),
         );
       }
+    } finally {
+      // FIX: single point that turns the loading overlay off, covering
+      // every exit path (success navigation, cancelled sign-in, and all
+      // 3 error branches above) — no more window where the screen looks
+      // idle/hung while a network call is actually still in flight.
+      if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  Widget _docPhotoTile({
+    required String label,
+    required PlatformFile? photo,
+    required VoidCallback onTap,
+    required VoidCallback onClear,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: photo != null ? _green.withValues(alpha: 0.5) : _muted.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(
+          children: [
+            if (photo != null && photo.bytes != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.memory(photo.bytes!, width: 36, height: 36, fit: BoxFit.cover),
+              )
+            else
+              Icon(Icons.add_a_photo_outlined, color: _muted, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                photo?.name ?? label,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.outfit(
+                  color: photo != null ? _text : _muted,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            if (photo != null)
+              IconButton(
+                icon: const Icon(Icons.close, size: 16, color: _muted),
+                onPressed: onClear,
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildHeroCategorySelector() {
@@ -332,6 +635,73 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // FIX: Submit used to only show a spinner INSIDE the button — during
+    // the parts of the flow that aren't instant (Google sign-in round
+    // trip, duplicate-phone check, 3 photo uploads, 2 Firestore writes),
+    // the rest of the screen looked completely idle, and Nizam reported
+    // it looking "hung." Stack a full-screen dimmed overlay with its own
+    // spinner + status text on top whenever _isSubmitting is true — it's
+    // now unmistakable that something is happening, not stuck.
+    return Stack(
+      children: [
+        _buildForm(context),
+        if (_isSubmitting)
+          Positioned.fill(
+            child: AbsorbPointer(
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.45),
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 28, vertical: 24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 24,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(
+                          strokeWidth: 3,
+                          color: _njPink,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Setting up your Hero account…',
+                          style: GoogleFonts.outfit(
+                            color: _text,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Signing in, uploading documents — please wait',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.outfit(
+                            color: _muted,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildForm(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
@@ -351,8 +721,14 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 8),
+              // FIX: the "How to be an Allin1 Hero?" guidance now lives on
+              // its own screen BEFORE this form (see hero_intro_screen.dart)
+              // instead of inline here — Nizam wants it as a proper
+              // graphical intro page a hero sees first, not squeezed above
+              // the form fields.
               Text(
-                'Fill in all details accurately. Documents are verified via WhatsApp.',
+                'Fill in all details accurately and upload clear document photos. '
+                'Admin will call you to verify before approving.',
                 style: GoogleFonts.outfit(color: _muted, fontSize: 12),
               ),
               const SizedBox(height: 20),
@@ -394,6 +770,25 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                 validator: (v) =>
                     v!.trim().isEmpty ? 'Address is required' : null,
               ),
+              const SizedBox(height: 12),
+              // FIX: work-area interest field, per Nizam's request — lets
+              // a hero say where in Erode they want to work (keywords,
+              // e.g. "Perundurai, Bhavani Road, Erode Town"), shown to
+              // admin alongside customer search-demand data so coverage
+              // gaps are visible. Free text, not mandatory (a hero may
+              // genuinely be open to all areas).
+              _field(
+                controller: _preferredLocationController,
+                label: 'Preferred Work Area (e.g. Perundurai, Bhavani Road)',
+                icon: Icons.location_on_rounded,
+                textCapitalization: TextCapitalization.words,
+                validator: (_) => null,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Optional — helps admin match you to nearby work first.',
+                style: GoogleFonts.outfit(color: _muted, fontSize: 11),
+              ),
               const SizedBox(height: 20),
 
               // ── Document Numbers ──────────────────────────────
@@ -407,6 +802,13 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                 validator: (v) =>
                     v!.trim().isEmpty ? 'License number is required' : null,
               ),
+              const SizedBox(height: 8),
+              _docPhotoTile(
+                label: 'License photo (required)',
+                photo: _licensePhoto,
+                onTap: () => _pickDocPhoto('license'),
+                onClear: () => setState(() => _licensePhoto = null),
+              ),
               const SizedBox(height: 12),
               _field(
                 controller: _aadhaarController,
@@ -416,6 +818,13 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                 validator: (v) =>
                     v!.trim().length != 12 ? 'Enter valid 12-digit Aadhaar' : null,
               ),
+              const SizedBox(height: 8),
+              _docPhotoTile(
+                label: 'Aadhaar photo (required)',
+                photo: _aadhaarPhoto,
+                onTap: () => _pickDocPhoto('aadhaar'),
+                onClear: () => setState(() => _aadhaarPhoto = null),
+              ),
               const SizedBox(height: 12),
               _field(
                 controller: _panController,
@@ -424,6 +833,20 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                 textCapitalization: TextCapitalization.characters,
                 validator: (v) =>
                     v!.trim().length < 10 ? 'Enter valid PAN number' : null,
+              ),
+              const SizedBox(height: 8),
+              _docPhotoTile(
+                label: 'PAN photo (required)',
+                photo: _panPhoto,
+                onTap: () => _pickDocPhoto('pan'),
+                onClear: () => setState(() => _panPhoto = null),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'All 3 photos are required so admin can verify you and '
+                'call to confirm before approving. Having trouble? Use '
+                'WhatsApp / Call below as a backup.',
+                style: GoogleFonts.outfit(color: _muted, fontSize: 11),
               ),
               const SizedBox(height: 20),
 
@@ -477,7 +900,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Step 2: Document Verification',
+                            'Trouble uploading? Contact Admin',
                             style: GoogleFonts.outfit(
                               color: const Color(0xFF25D366),
                               fontSize: 15,
@@ -491,7 +914,12 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                     Text(
                       'Send photos of your Driving License, PAN Card, and Aadhaar Card to our official WhatsApp for profile activation.',
                       style: GoogleFonts.outfit(
-                        color: _text,
+                        // NOTE: this card keeps a dark green WhatsApp-brand
+                        // background regardless of the surrounding light
+                        // theme, so its text stays an explicit light color
+                        // (not the theme's _text, which is now dark) for
+                        // contrast.
+                        color: const Color(0xFFEFEFEF),
                         fontSize: 13,
                         height: 1.55,
                       ),
@@ -551,7 +979,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _submitRegistration,
+                  onPressed: _isSubmitting ? null : _submitRegistration,
                   style: ElevatedButton.styleFrom(
                     // T3: was _green — now NJ Pink per brand fix
                     backgroundColor: _njPink,
@@ -563,14 +991,21 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                     elevation: 6,
                     shadowColor: _njPink.withValues(alpha: 0.4),
                   ),
-                  child: Text(
-                    'Submit Registration →',
-                    style: GoogleFonts.outfit(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2.5, color: Colors.white),
+                        )
+                      : Text(
+                          'Submit Registration →',
+                          style: GoogleFonts.outfit(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -719,22 +1154,23 @@ class _HeroCategoryCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
+          // THEME FIX: unselected cards used to be dark-navy — repainted
+          // white/soft-pink so the whole picker matches the light theme.
           gradient: LinearGradient(
             colors: _selected
-                // T3: was [_gold, Color(0xFFFF6B35)] — orange eradicated
                 ? const [Color(0xFFFF4FA3), Color(0xFFBE2A7A)]
-                : const [Color(0xFF24243A), Color(0xFF151524)],
+                : const [Colors.white, Color(0xFFFFF0F7)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           border: Border.all(
-            color: _selected ? _njPink : Colors.white.withValues(alpha: 0.08),
+            color: _selected ? _njPink : _njPink.withValues(alpha: 0.18),
             width: _selected ? 1.6 : 1,
           ),
           boxShadow: [
             BoxShadow(
               color: (_selected ? _njPink : Colors.black)
-                  .withValues(alpha: 0.28),
+                  .withValues(alpha: _selected ? 0.28 : 0.06),
               blurRadius: _selected ? 22 : 12,
               offset: const Offset(0, 10),
             ),
@@ -748,11 +1184,13 @@ class _HeroCategoryCard extends StatelessWidget {
               height: 46,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: _selected ? 0.22 : 0.08),
+                color: _selected
+                    ? Colors.white.withValues(alpha: 0.22)
+                    : _njPink.withValues(alpha: 0.1),
               ),
               child: Icon(
                 _category.icon,
-                color: Colors.white,
+                color: _selected ? Colors.white : _njPink,
                 size: 26,
               ),
             ),
@@ -763,7 +1201,7 @@ class _HeroCategoryCard extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.outfit(
-                color: Colors.white,
+                color: _selected ? Colors.white : _text,
                 fontSize: 13,
                 fontWeight: FontWeight.w800,
               ),
@@ -775,7 +1213,9 @@ class _HeroCategoryCard extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.outfit(
-                color: Colors.white.withValues(alpha: 0.78),
+                color: _selected
+                    ? Colors.white.withValues(alpha: 0.78)
+                    : _muted,
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
               ),
@@ -786,3 +1226,4 @@ class _HeroCategoryCard extends StatelessWidget {
     );
   }
 }
+
