@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>myallin1 — ஈரோடின் சொந்த சூப்பர் ஆப்</title>
+<meta name="description" content="பைக் டாக்சி, உணவு, மளிகை, SOS உதவி — எல்லாம் ஒரே ஆப்பில், ஈரோடிற்காகவே உருவாக்கப்பட்டது.">
+<style>
+  :root {
+    --pink: #FF4FA3;
+    --pink-dark: #E63D8F;
+    --bg: #0A0A1A;
+    --card: #12121E;
+    --card2: #1A1A2E;
+    --muted: #9999BB;
+    --text: #EEEEF5;
+    --green: #00C853;
+    --gold: #FFBB00;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Noto Sans Tamil", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+
+  header { padding: 28px 0 16px; display: flex; align-items: center; justify-content: space-between; }
+  .brand { font-weight: 800; font-size: 20px; letter-spacing: -0.5px; }
+  .brand span { color: var(--pink); }
+
+  .hero { text-align: center; padding: 48px 0 36px; }
+  .badge { display: inline-block; background: rgba(255,79,163,0.12); color: var(--pink); border: 1px solid rgba(255,79,163,0.3); border-radius: 20px; padding: 6px 16px; font-size: 13px; font-weight: 700; margin-bottom: 20px; }
+  .hero h1 { font-size: 34px; font-weight: 800; line-height: 1.3; margin: 0 0 16px; }
+  .hero h1 span { color: var(--pink); }
+  .hero p { color: var(--muted); font-size: 17px; max-width: 560px; margin: 0 auto 32px; line-height: 1.7; }
+
+  .cta-main {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: linear-gradient(135deg, var(--pink), var(--pink-dark));
+    color: #fff; text-decoration: none; font-weight: 800; font-size: 18px;
+    padding: 18px 40px; border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(255,79,163,0.35);
+  }
+  .cta-sub { color: var(--muted); font-size: 13px; margin-top: 14px; }
+
+  .section-title { font-size: 24px; font-weight: 800; text-align: center; margin: 56px 0 8px; }
+  .section-sub { text-align: center; color: var(--muted); font-size: 15px; margin-bottom: 32px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+  .card { background: var(--card); border: 1px solid #202032; border-radius: 16px; padding: 22px; }
+  .card .emoji { font-size: 32px; margin-bottom: 12px; display: block; }
+  .card h3 { margin: 0 0 6px; font-size: 16px; font-weight: 700; }
+  .card p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.6; }
+
+  .how { background: var(--card2); border-radius: 20px; padding: 32px; margin: 56px 0; text-align: center; }
+  .how h2 { margin: 0 0 8px; font-size: 20px; }
+  .how p { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+  .steps { display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; }
+  .step { max-width: 200px; }
+  .step .num { width: 36px; height: 36px; border-radius: 50%; background: var(--pink); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; margin: 0 auto 10px; }
+  .step p { color: var(--text); font-size: 13.5px; margin: 0; }
+
+  footer { text-align: center; padding: 40px 0 32px; color: var(--muted); font-size: 13px; border-top: 1px solid #1c1c2e; margin-top: 40px; }
+  footer a { color: var(--pink); text-decoration: none; }
+
+  @media (max-width: 600px) {
+    .hero h1 { font-size: 26px; }
+    .cta-main { font-size: 16px; padding: 16px 28px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="brand">my<span>allin1</span></div>
+  </header>
+
+  <section class="hero">
+    <div class="badge">📍 ஈரோடிற்காகவே உருவாக்கப்பட்டது</div>
+    <h1>ரைடு, உணவு, மளிகை, உதவி —<br>எல்லாம் <span>ஒரே ஆப்பில்</span></h1>
+    <p>பைக் டாக்சி புக் பண்ணுங்க, உங்க பிடித்த ஹோட்டல்/கடையிலிருந்து உணவு &amp; மளிகை ஆர்டர் பண்ணுங்க, எலக்ட்ரானிக்ஸ் வாங்குங்க, SOS emergency உதவி பெறுங்க — எல்லாம் உங்க ஊருக்கே சொந்தமான ஒரே ஆப்பில்.</p>
+
+    <a class="cta-main" href="https://my-allin1.web.app" target="_blank" rel="noopener">
+      🚀 My Allin1-ஐ திற
+    </a>
+    <p class="cta-sub">உங்க போன் Browser-லேயே திறக்கும் — Install ஆகவும் தேவையில்லை, App போல் use பண்ணலாம்.</p>
+  </section>
+
+  <div>
+    <div class="section-title">ஈரோட்டுக்கு தேவையான எல்லாமே ஒரே இடத்தில்</div>
+    <div class="section-sub">5 வேற வேற ஆப் தேவையில்லை — myallin1 மட்டும் போதும்.</div>
+    <div class="grid">
+      <div class="card"><span class="emoji">🏍️</span><h3>பைக் / கார் டாக்சி</h3><p>ஈரோடு முழுக்க வேகமா, குறைந்த கட்டணத்தில் ரைடு, லைவ் டிராக்கிங்கோட.</p></div>
+      <div class="card"><span class="emoji">🍔</span><h3>Food Genie</h3><p>உங்க ஊர் ஹோட்டல்/ரெஸ்டாரண்ட்ல இருந்து உணவு ஆர்டர், வீட்டு வாசல் வரை.</p></div>
+      <div class="card"><span class="emoji">🛒</span><h3>மளிகை Delivery</h3><p>உங்க கிராசரி லிஸ்ட் அனுப்புங்க, அருகில் இருக்கும் கடையில் இருந்து டெலிவரி.</p></div>
+      <div class="card"><span class="emoji">💻</span><h3>NJ Tech Store</h3><p>Trusted local sellers கிட்ட இருந்து எலக்ட்ரானிக்ஸ் &amp; gadgets வாங்குங்க.</p></div>
+      <div class="card"><span class="emoji">🆘</span><h3>SOS Emergency உதவி</h3><p>ஒரே tap-ல emergency உதவி, verified identity-ஓட உண்மையான பாதுகாப்பு.</p></div>
+      <div class="card"><span class="emoji">🎁</span><h3>Rewards &amp; Erode Offers</h3><p>Coins சம்பாதிங்க, local deals திறக்கலாம், exclusive ஈரோடு offers அனுபவிங்க.</p></div>
+      <div class="card"><span class="emoji">🏪</span><h3>Allin1-ல Sell பண்ணுங்க</h3><p>உங்க கடையை list பண்ணி ஈரோடு முழுக்க customers-ஐ அடையுங்க.</p></div>
+      <div class="card"><span class="emoji">🎮</span><h3>Game Zone</h3><p>காத்திருக்கும் போது 2048, Memory Match, Whack-a-Mole போன்ற game விளையாடுங்க.</p></div>
+    </div>
+  </div>
+
+  <div class="how">
+    <h2>எப்படி ஆரம்பிக்கலாம்?</h2>
+    <p>Install பண்ண வேண்டாம் — Browser-லேயே ஆப் போல் use பண்ணலாம்.</p>
+    <div class="steps">
+      <div class="step"><div class="num">1</div><p>மேலே "My Allin1-ஐ திற" பட்டனை tap பண்ணுங்க</p></div>
+      <div class="step"><div class="num">2</div><p>உங்க போன் நம்பர் வச்சு ஒரு நிமிடத்தில் Sign up பண்ணுங்க</p></div>
+      <div class="step"><div class="num">3</div><p>ரைடு, உணவு, மளிகை — எதுவேணும்னாலும் Order பண்ணுங்க!</p></div>
+    </div>
+  </div>
+
+  <footer>
+    <p>myallin1 by NJ Tech — ஈரோடிற்காக பெருமையுடன் உருவாக்கப்பட்டது.</p>
+    <p><a href="https://my-allin1.web.app/privacy.html">Privacy Policy</a> &nbsp;·&nbsp; <a href="https://my-allin1.web.app/terms.html">Terms of Service</a> &nbsp;·&nbsp; <a href="mailto:support@myallin1.com">support@myallin1.com</a></p>
+  </footer>
+</div>
+
+</body>
+</html>

@@ -20,6 +20,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/pwa_cache_platform_stub.dart'
     if (dart.library.html) '../services/pwa_cache_platform_web.dart';
 import '../services/app_update_checker.dart';
+import '../services/update_service.dart';
 import '../services/web_version_checker.dart';
 
 import '../widgets/banner_slider.dart';
@@ -1967,16 +1968,22 @@ void _showApkSheet(BuildContext context) {
                 color: Colors.white, fontSize: 15,
                 fontWeight: FontWeight.w800)),
         const SizedBox(height: 20),
+        // FIX: these used to point at customer_app.apk / hero_app.apk
+        // (v1.0.0-pinned) — neither filename was ever actually uploaded
+        // to the release (the real assets are allin1-customer.apk /
+        // allin1-hero.apk), so every tap 404'd. Reuses UpdateService's
+        // single source of truth for these URLs instead of a third
+        // hardcoded copy.
         _apkBtn(
           label: '🛒  Download Customer App',
           gradient: [kPink, kPinkDark],
-          url: 'https://github.com/myallin1/Allin1-update-release/releases/latest/download/customer_app.apk',
+          url: UpdateService().fallbackApkUrl('customer'),
         ),
         const SizedBox(height: 10),
         _apkBtn(
           label: '🏍️  Download Hero App',
           gradient: [kPurple, const Color(0xFF5A50C8)],
-          url: 'https://github.com/myallin1/Allin1-update-release/releases/download/v1.0.0/hero_app.apk',
+          url: UpdateService().fallbackApkUrl('hero'),
         ),
         const SizedBox(height: 16),
         GestureDetector(

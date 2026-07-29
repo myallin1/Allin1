@@ -16,6 +16,9 @@
         ],
         "admin": [
           "hq-allin1"
+        ],
+        "landing": [
+          "erode-super-app"
         ]
       }
     }
