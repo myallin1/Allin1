@@ -253,8 +253,13 @@ class TaskService {
           .map((doc) => TaskCompletionModel.fromFirestore(doc.data(), doc.id))
           .toList();
     } catch (e) {
+      // FIX: this query needs a composite index (userId + coinStatus
+      // equality, orderBy submittedAt) — if the index is missing or
+      // rebuilding, Firestore throws failed-precondition, which this
+      // used to swallow into an empty list indistinguishable from
+      // "no pending coins". Rethrow so the UI can show a real error.
       debugPrint('Get pending completions error: $e');
-      return [];
+      rethrow;
     }
   }
 
@@ -276,8 +281,11 @@ class TaskService {
           .map((doc) => TaskCompletionModel.fromFirestore(doc.data(), doc.id))
           .toList();
     } catch (e) {
+      // FIX: same composite-index risk as getPendingCompletions() above
+      // (userId + coinStatus equality, orderBy creditedAt) — rethrow
+      // instead of silently returning an empty list on real failures.
       debugPrint('Get verified completions error: $e');
-      return [];
+      rethrow;
     }
   }
 }

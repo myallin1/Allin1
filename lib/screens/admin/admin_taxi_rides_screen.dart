@@ -29,6 +29,21 @@ const Color _purple = Color(0xFF6C63FF);
 const Color _text = Color(0xFFEEEEF5);
 const Color _muted = Color(0xFF7777A0);
 
+// paymentStatus values that mean the ride is fully paid/settled. Kept
+// in sync with payment_screen.dart's _settledStatuses and the same
+// const added to admin_dashboard_screen.dart — this screen used to
+// only recognize 'confirmed', so a ride paid via wallet, UPI-offline,
+// or auto-settled would still show a red "PENDING" badge here even
+// though the customer had already paid in full.
+const Set<String> _settledPaymentStatuses = {
+  'paid',
+  'paid_by_wallet',
+  'paid_offline_p2p',
+  'completed',
+  'settled',
+  'confirmed',
+};
+
 class AdminTaxiRidesScreen extends StatelessWidget {
   const AdminTaxiRidesScreen({super.key});
 
@@ -198,12 +213,12 @@ class AdminTaxiRidesScreen extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                         decoration: BoxDecoration(
-                          color: (d['paymentStatus'] as String? ?? 'pending') == 'confirmed'
+                          color: _settledPaymentStatuses.contains(d['paymentStatus'] as String? ?? 'pending')
                               ? _green.withValues(alpha: 0.12)
                               : _red.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(7),
                           border: Border.all(
-                            color: (d['paymentStatus'] as String? ?? 'pending') == 'confirmed'
+                            color: _settledPaymentStatuses.contains(d['paymentStatus'] as String? ?? 'pending')
                                 ? _green.withValues(alpha: 0.3)
                                 : _red.withValues(alpha: 0.3),
                           ),
@@ -212,12 +227,12 @@ class AdminTaxiRidesScreen extends StatelessWidget {
                           '💳 ${(d['paymentStatus'] as String? ?? 'pending').toUpperCase()}',
                           style: TextStyle(
                             fontSize: 9,
-                            color: (d['paymentStatus'] as String? ?? 'pending') == 'confirmed' ? _green : _red,
+                            color: _settledPaymentStatuses.contains(d['paymentStatus'] as String? ?? 'pending') ? _green : _red,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
-                      if ((d['paymentStatus'] as String? ?? 'pending') == 'pending')
+                      if (!_settledPaymentStatuses.contains(d['paymentStatus'] as String? ?? 'pending'))
                         Padding(
                           padding: const EdgeInsets.only(left: 4),
                           child: TextButton(
