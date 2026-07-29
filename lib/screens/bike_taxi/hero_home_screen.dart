@@ -1944,6 +1944,37 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       unawaited(HeroRideNotificationService.cancelRideNotification(rideId));
     }
 
+    // FIX (per Nizam's request): if another hero wins this ride while
+    // THIS hero already has the accept dialog open, the ping-sweep in
+    // _acceptRide() (which clears other heroes' hero_pings nodes) can't
+    // help — the dialog is already showing, it's not waiting on that
+    // node anymore. Watch the request's own status directly so an
+    // already-open dialog auto-closes the moment someone else wins,
+    // instead of only failing silently if this hero taps Accept a
+    // beat too late.
+    final uidForWatch = _user?.uid;
+    StreamSubscription<DatabaseEvent>? takenSub;
+    if (uidForWatch != null) {
+      takenSub = FirebaseDatabase.instance
+          .ref('active_ride_requests/$rideId/status')
+          .onValue
+          .listen((event) {
+        final status = event.snapshot.value as String?;
+        if ((status == 'accepted' || status == 'cancelled' || status == 'timeout') &&
+            _isShowingRideDialog) {
+          debugPrint('[HeroHomeScreen] Ride $rideId taken/closed elsewhere ($status) — auto-dismissing open dialog');
+          if (Navigator.of(dialogContext).canPop()) {
+            Navigator.of(dialogContext).pop();
+          }
+          if (mounted) {
+            ScaffoldMessenger.of(dialogContext).showSnackBar(
+              const SnackBar(content: Text('This ride was already accepted by another hero.')),
+            );
+          }
+        }
+      });
+    }
+
     showDialog<void>(
       context: dialogContext,
       barrierDismissible: false,
@@ -1952,6 +1983,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         return _buildPingDialog(rideId.toString(), rideData);
       },
     ).then((_) {
+      unawaited(takenSub?.cancel());
       if (!kIsWeb) {
         unawaited(HeroRideNotificationService.stopWakeAlertRingtone());
       }
@@ -2073,6 +2105,41 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           .ref('hero_pings/$uid/$requestId')
           .remove();
       mark('STEP-2 RTDB remove(hero_pings)');
+
+      // FIX (per Nizam's request, mirrors the equivalent fix already
+      // shipped in service_request_service.dart's acceptServiceRequest()):
+      // previously only the WINNING hero's own ping node was ever
+      // removed. Every OTHER online hero who was also broadcast this
+      // requestId kept their `hero_pings/{otherUid}/{requestId}` node —
+      // if their Accept dialog was already open, it stayed open showing
+      // a ride that was already taken, only erroring out silently if
+      // they actually tapped Accept. Sweep-clear every other online
+      // hero's ping node for this requestId too, same hero pool the
+      // broadcast used. Best-effort: a hero who went offline between
+      // broadcast and accept won't be in this snapshot, but their stale
+      // ping node self-expires via the client-side pingExpiresAt check
+      // in _listenForHeroPings() regardless.
+      unawaited(() async {
+        try {
+          final onlineSnap =
+              await FirebaseDatabase.instance.ref('online_heroes').get();
+          if (onlineSnap.exists && onlineSnap.value is Map) {
+            final heroes = Map<dynamic, dynamic>.from(onlineSnap.value as Map);
+            final sweepFutures = <Future<void>>[];
+            for (final otherHeroId in heroes.keys) {
+              if (otherHeroId == uid) continue; // already removed above
+              sweepFutures.add(
+                FirebaseDatabase.instance
+                    .ref('hero_pings/$otherHeroId/$requestId')
+                    .remove(),
+              );
+            }
+            await Future.wait(sweepFutures);
+          }
+        } catch (e) {
+          debugPrint('[HeroHomeScreen] Ride ping sweep-clear failed: $e');
+        }
+      }());
 
       await FirebaseFirestore.instance
           .collection('heroes')
