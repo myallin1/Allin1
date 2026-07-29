@@ -16,8 +16,17 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+// Ride statuses that mean "no hero has accepted yet" -- these are the
+// only ones that show the "Assign Hero Manually (VIP Booking)" action.
+// Feeds the VIP Booking fallback: when a customer's sequential hero-ping
+// queue times out (ride_search_screen.dart), the customer is shown a
+// Call Now / WhatsApp Now panel; when they call, admin looks the ride up
+// here and manually assigns an available hero.
+const Set<String> _kNeedsHeroAssignment = {'pending', 'searching', 'timeout'};
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -263,6 +272,25 @@ class AdminTaxiRidesScreen extends StatelessWidget {
                         ),
                     ],
                   ),
+                  if (_kNeedsHeroAssignment.contains(status)) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _assignHero(context, doc.id),
+                        icon: const Icon(Icons.person_add_alt_1_rounded, size: 14, color: _gold),
+                        label: const Text(
+                          'Assign Hero Manually (VIP Booking)',
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: _gold),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: _gold.withValues(alpha: 0.4)),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          minimumSize: Size.zero,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             );
@@ -270,6 +298,122 @@ class AdminTaxiRidesScreen extends StatelessWidget {
         );
       },
     );
+  }
+
+  // ── VIP Booking manual hero assignment ──────────────────────────
+  // Customer calls/WhatsApps the call center after their sequential
+  // hero-ping queue times out with no acceptance (see the "Heroes are
+  // busy now!" VIP Booking panel in ride_search_screen.dart). Admin
+  // picks an available online hero here and this writes the EXACT
+  // same fields hero_home_screen.dart's _acceptRide() writes to
+  // active_ride_requests/$rideId, so the customer's ride_search_screen
+  // -- if still open -- picks it up automatically via its existing
+  // _listenForAcceptance RTDB listener, transitioning to the normal
+  // "hero found" flow with no customer-side code changes needed. The
+  // rides/$rideId Firestore doc is also finalized directly here (not
+  // left to the customer's _finalizeRideToFirestore) so the ride is
+  // correctly marked accepted even if the customer isn't currently on
+  // that screen.
+  Future<void> _assignHero(BuildContext context, String rideId) async {
+    final snapshot = await FirebaseDatabase.instance.ref('online_heroes').get();
+    if (!snapshot.exists || snapshot.value == null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No heroes online right now.'), backgroundColor: _red),
+        );
+      }
+      return;
+    }
+
+    final raw = snapshot.value as Map<dynamic, dynamic>;
+    final heroes = <Map<String, String>>[];
+    raw.forEach((key, value) {
+      if (value is Map && value['isAvailable'] != false) {
+        heroes.add({
+          'id': key.toString(),
+          'name': value['name']?.toString() ?? 'Hero',
+          'phone': value['phone']?.toString() ?? '',
+          'vehicleType': value['vehicleType']?.toString() ?? value['vehicleNumber']?.toString() ?? '—',
+        });
+      }
+    });
+
+    if (heroes.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No available heroes online right now.'), backgroundColor: _red),
+        );
+      }
+      return;
+    }
+
+    if (!context.mounted) return;
+    final selected = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2A),
+        title: const Text('Assign Hero', style: TextStyle(color: _gold, fontWeight: FontWeight.bold)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: heroes.length,
+            itemBuilder: (c, i) {
+              final h = heroes[i];
+              return ListTile(
+                title: Text(h['name']!, style: const TextStyle(color: _text)),
+                subtitle: Text('${h['vehicleType']}  •  ${h['phone']}', style: const TextStyle(color: _muted, fontSize: 11)),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: _muted),
+                onTap: () => Navigator.pop(ctx, h),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(color: _muted))),
+        ],
+      ),
+    );
+    if (selected == null) return;
+
+    final heroId = selected['id']!;
+    final heroName = selected['name']!;
+    final heroPhone = selected['phone']!;
+    final heroVehicle = selected['vehicleType']!;
+
+    try {
+      await FirebaseDatabase.instance.ref('active_ride_requests/$rideId').update({
+        'status': 'accepted',
+        'acceptedHeroId': heroId,
+        'acceptedHeroName': heroName,
+        'acceptedHeroPhone': heroPhone,
+        'acceptedHeroVehicle': heroVehicle,
+      });
+      await FirebaseDatabase.instance.ref('online_heroes/$heroId').update({'isAvailable': false});
+      await FirebaseFirestore.instance.collection('heroes').doc(heroId).update({'isAvailable': false});
+      await FirebaseFirestore.instance.collection('rides').doc(rideId).update({
+        'status': 'accepted',
+        'heroId': heroId,
+        'heroName': heroName,
+        'heroPhone': heroPhone,
+        'heroVehicleNumber': heroVehicle,
+        'paymentStatus': 'pending',
+        'acceptedAt': FieldValue.serverTimestamp(),
+        'assignedByAdmin': true,
+        'assignedByAdminUid': FirebaseAuth.instance.currentUser?.uid ?? 'admin',
+      });
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('✅ $heroName assigned to this ride!'), backgroundColor: _green),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Assign failed: $e'), backgroundColor: _red),
+        );
+      }
+    }
   }
 
   // ── UTR verification dialog — copied as-is from AdminDashboardScreen's

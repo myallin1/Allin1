@@ -190,12 +190,12 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
                   curve: Curves.easeOutCubic,
-                  height: 56,
+                  height: 50,
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [_brandPink, _brandPurple],
                     ),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(18),
                     boxShadow: [
                       BoxShadow(
                         color: _brandPink.withValues(alpha: 0.26),
@@ -216,20 +216,20 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                       foregroundColor: Colors.white,
                       shadowColor: Colors.transparent,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(18),
                       ),
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.check_circle_rounded, size: 20),
-                        const SizedBox(width: 12),
+                        const Icon(Icons.check_circle_rounded, size: 18),
+                        const SizedBox(width: 10),
                         Text(
                           'Confirm Ride',
                           style: GoogleFonts.outfit(
-                            fontSize: 16,
+                            fontSize: 15,
                             fontWeight: FontWeight.w700,
                             letterSpacing: -0.3,
                           ),

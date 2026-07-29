@@ -935,24 +935,87 @@ class _RideSearchScreenState extends State<RideSearchScreen>
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Text(_searchTimedOut ? 'No Heroes Available' : 'Finding Nearby Hero', style: TextStyle(fontSize: 18, color: _text, fontWeight: FontWeight.w700)),
+                  Text(_searchTimedOut ? 'Heroes are busy now!' : 'Finding Nearby Hero', style: TextStyle(fontSize: 18, color: _text, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 6),
                   Text(
                     _searchTimedOut
-                        ? 'We could not find a Hero within 90 seconds.'
+                        ? 'No Hero available right now. Try VIP Booking for immediate help.'
                         : 'Looking near Erode... (${_searchSeconds}s)',
                     style: const TextStyle(fontSize: 12, color: _muted),
+                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 14),
-                  if (_searchTimedOut)
-                    ElevatedButton(
+                  if (_searchTimedOut) ...[
+                    // ── VIP Booking fallback ──
+                    // No hero accepted after the sequential-ping queue was
+                    // exhausted. Instead of a dead end, give the customer a
+                    // direct line to the call center so admin can manually
+                    // assign a hero (see admin_taxi_rides_screen.dart's
+                    // "Assign Hero" action). _rtdbRequestSub is still alive
+                    // at this point (only cancelled on accept/dispose), so
+                    // when admin assigns a hero it flips
+                    // active_ride_requests/$_requestId to accepted and this
+                    // screen picks it up automatically via
+                    // _listenForAcceptance -- same as a normal hero accept.
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: _accent.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: _accent.withValues(alpha: 0.25)),
+                      ),
+                      child: Column(
+                        children: [
+                          Text('⭐ VIP Booking', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _accent)),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Call center will assign a Hero for you right away.',
+                            style: TextStyle(fontSize: 11.5, color: _muted),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () => launchUrl(Uri(scheme: 'tel', path: '8681869091')),
+                                  icon: const Icon(Icons.call_rounded, size: 16),
+                                  label: const Text('Call Now', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _accent, foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () => launchUrl(
+                                    Uri.parse('https://wa.me/918681869091'),
+                                    mode: LaunchMode.externalApplication,
+                                  ),
+                                  icon: const Icon(Icons.chat_rounded, size: 16, color: Color(0xFF25D366)),
+                                  label: const Text('WhatsApp', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF25D366))),
+                                  style: OutlinedButton.styleFrom(
+                                    side: const BorderSide(color: Color(0xFF25D366), width: 1.5),
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton(
                       onPressed: _tryAgainSearch,
-                      style: ElevatedButton.styleFrom(backgroundColor: _accent, foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                       child: const Text('Try Again', style: TextStyle(fontWeight: FontWeight.w700)),
-                    )
-                  else
+                    ),
+                  ] else
                     _tipIncentiveSection(),
                   if (_requestId.isNotEmpty) ...[
                     const SizedBox(height: 8),

@@ -2135,23 +2135,23 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                         Expanded(
                           child: _glassPanel(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 14,),
+                                horizontal: 14, vertical: 10,),
                             child: Row(
                               children: [
                                 Container(
-                                  width: 10,
-                                  height: 10,
+                                  width: 8,
+                                  height: 8,
                                   decoration: const BoxDecoration(
                                       color: _successGreen,
                                       shape: BoxShape.circle,),
                                 ),
-                                const SizedBox(width: 10),
+                                const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     'Erode Taxi',
                                     style: GoogleFonts.outfit(
                                         color: _textPrimary,
-                                        fontSize: 17,
+                                        fontSize: 14,
                                         fontWeight: FontWeight.w700,),
                                   ),
                                 ),
@@ -2161,7 +2161,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                                       : 'Live',
                                   style: GoogleFonts.outfit(
                                       color: _textSecondary,
-                                      fontSize: 12,
+                                      fontSize: 10.5,
                                       fontWeight: FontWeight.w600,),
                                 ),
                               ],
@@ -3462,9 +3462,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         Icon(
           isDrop ? Icons.location_on_rounded : Icons.my_location_rounded,
           color: iconColor,
-          size: 17,
+          size: 15,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         Expanded(
           child: TextField(
             controller: controller,
@@ -3478,7 +3478,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
             onChanged: _onSearchChanged,
             style: GoogleFonts.outfit(
               color: _textPrimary,
-              fontSize: 16,
+              fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
             decoration: InputDecoration(
@@ -3494,7 +3494,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
             icon: const Icon(
               Icons.close_rounded,
               color: _textSecondary,
-              size: 18,
+              size: 16,
             ),
             onPressed: () {
               setState(() {
