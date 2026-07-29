@@ -19,7 +19,12 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.njtech.allin1"
-    compileSdk = 36
+    // FIX (build failure): receive_sharing_intent compiles against
+    // Android SDK 37 -- Flutter refuses to build unless our own
+    // compileSdk is at least as high as every plugin's (compileSdk is
+    // backward compatible, so bumping it doesn't raise the app's real
+    // minSdk/targetSdk requirements for end users).
+    compileSdk = 37
     ndkVersion = "28.2.13676358"
     flavorDimensions += "app"
 
