@@ -42,17 +42,33 @@ subprojects {
 // over the project's extension default. That's exactly why the error
 // showed apiVersion=1.9 (nothing overrode our extension default) but
 // languageVersion stuck at 1.6 (task-level override survived). Fix: force
-// every KotlinCompile task's compilerOptions directly, in afterEvaluate
-// so this runs AFTER the plugin's own build.gradle has already set its
-// task-level values -- our forced values are applied last and win.
+// every KotlinCompile task's compilerOptions directly.
+// FIX v3: v2 wrapped this in "afterEvaluate {}", which crashed with
+// "Cannot run Project.afterEvaluate(Action) when the project is already
+// evaluated" -- because the "evaluationDependsOn(:app)" line above forces
+// :app to evaluate early (during some other subproject's evaluation), so
+// by the time this block's own loop reached :app, it was already
+// evaluated, and Gradle refuses to schedule a NEW afterEvaluate callback
+// on a project that already finished evaluating.
+// We still need afterEvaluate semantics (run AFTER the plugin's own
+// build.gradle sets its task-level languageVersion=1.6, so our override
+// applies last and wins) -- so check project.state.executed first: if
+// the project already evaluated, run the config directly right now
+// (safe, since "already evaluated" means the plugin's own settings are
+// already in place); otherwise register the normal afterEvaluate.
 subprojects {
-    afterEvaluate {
+    val applyKotlinVersionFix: Project.() -> Unit = {
         tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
             compilerOptions {
                 languageVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_1_9)
                 apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_1_9)
             }
         }
+    }
+    if (state.executed) {
+        applyKotlinVersionFix()
+    } else {
+        afterEvaluate { applyKotlinVersionFix() }
     }
 }
 
