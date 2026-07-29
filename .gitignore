@@ -1,4 +1,5 @@
 # Playwright (playwright-tests/) — automated testing setup
+/node_modules/
 playwright-tests/node_modules/
 playwright-tests/test-results/
 playwright-tests/playwright-report/

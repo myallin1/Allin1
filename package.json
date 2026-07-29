@@ -1,0 +1,13 @@
+{
+  "name": "allin1-smoke-tests",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Playwright smoke tests for the 4 deployed Allin1 web apps (customer/hero/seller/admin). Does NOT replace flutter test — this only catches runtime JS errors and blank/broken page loads on the LIVE deployed sites, complementing Sentry (which catches errors from real user sessions) with a scheduled synthetic check.",
+  "scripts": {
+    "test:smoke": "playwright test",
+    "test:smoke:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0"
+  }
+}
