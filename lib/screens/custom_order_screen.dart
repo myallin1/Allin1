@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/service_request_service.dart';
+import '../widgets/location_capture_field.dart';
 import 'service_request_tracking_screen.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
@@ -29,11 +30,22 @@ class CustomOrderScreen extends StatefulWidget {
 
 class _CustomOrderScreenState extends State<CustomOrderScreen> {
   final _orderCtrl = TextEditingController();
+  // NEW (per Nizam's request — "yella service request kum intha
+  // location and navigation system than irukanum"): this form used to
+  // collect zero location data, so a hero assigned here had no address
+  // or coordinates to go to at all. Optional (not blocking submit) since
+  // some custom orders are pure "buy and deliver to my usual address"
+  // asks where the customer may prefer to just describe it in text —
+  // but filling it in gives the hero a real, tappable navigation target.
+  final _deliveryAddressCtrl = TextEditingController();
+  double? _deliveryLat;
+  double? _deliveryLng;
   bool _submitting = false;
 
   @override
   void dispose() {
     _orderCtrl.dispose();
+    _deliveryAddressCtrl.dispose();
     super.dispose();
   }
 
@@ -55,7 +67,13 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
         customerId: user.uid,
         customerName: user.displayName ?? 'Customer',
         customerPhone: user.phoneNumber ?? '',
-        details: {'orderDescription': _orderCtrl.text.trim()},
+        details: {
+          'orderDescription': _orderCtrl.text.trim(),
+          if (_deliveryAddressCtrl.text.trim().isNotEmpty)
+            'deliveryAddress': _deliveryAddressCtrl.text.trim(),
+          if (_deliveryLat != null) 'locationLat': _deliveryLat,
+          if (_deliveryLng != null) 'locationLng': _deliveryLng,
+        },
       );
 
       unawaited(Future.delayed(
@@ -143,6 +161,34 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                 contentPadding: const EdgeInsets.all(16),
               ),
+            ),
+            const SizedBox(height: 20),
+            Text('Delivery location (optional but recommended)',
+                style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _deliveryAddressCtrl,
+              style: const TextStyle(fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Where should the Hero deliver this?',
+                hintStyle: TextStyle(color: _kMuted.withValues(alpha: 0.6), fontSize: 13),
+                filled: true,
+                fillColor: _kSurface,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.all(16),
+              ),
+            ),
+            const SizedBox(height: 10),
+            LocationCaptureField(
+              addressController: _deliveryAddressCtrl,
+              pickerTitle: 'Delivery location',
+              accentColor: _kPink,
+              onLocationPicked: (lat, lng) {
+                setState(() {
+                  _deliveryLat = lat;
+                  _deliveryLng = lng;
+                });
+              },
             ),
             const SizedBox(height: 20),
             SizedBox(

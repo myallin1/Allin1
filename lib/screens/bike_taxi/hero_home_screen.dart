@@ -23,6 +23,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app_navigator.dart';
 import '../../models/ride_model.dart';
 import '../../services/app_update_checker.dart';
+import '../../services/db_usage_tracker.dart';
 import '../../services/hero_ride_notification_service.dart';
 import '../../services/hero_web_audio_service.dart';
 import '../../services/location_service.dart';
@@ -632,6 +633,12 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             ],
           )
           .snapshots();
+      // DB usage monitor — side-channel .listen() on this already-hoisted,
+      // broadcast .snapshots() stream to count docs per snapshot; the
+      // stream already has _serviceRequestBusySub as a listener below, so
+      // this adds no extra Firestore reads. See db_usage_tracker.dart.
+      _activeServiceRequestsStream!
+          .listen((s) => DbUsageTracker.instance.recordRead(s.docs.length));
       _serviceRequestBusySub = _activeServiceRequestsStream!.listen((snap) {
         // Busy = any non-completed doc assigned to this hero (hero_
         // assigned/in_progress/nearing_completion). 'completed' docs
@@ -753,6 +760,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           .collection('heroes')
           .doc(_user!.uid)
           .get();
+      DbUsageTracker.instance.recordRead(1);
       final data = doc.data() ?? {};
       String vehicleType =
           (data['vehicleType'] as String?)?.trim().isNotEmpty ?? false
@@ -763,6 +771,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             .collection('users')
             .doc(_user!.uid)
             .get();
+        DbUsageTracker.instance.recordRead(1);
         final userVehicle = userDoc.data()?['vehicleType'] as String?;
         if (userVehicle != null && userVehicle.trim().isNotEmpty) {
           vehicleType = userVehicle.trim();
@@ -817,6 +826,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               .where('captainId', isEqualTo: _user!.uid)
               .where('status', isEqualTo: 'completed')
               .get();
+          DbUsageTracker.instance.recordRead(ridesSnap.docs.length);
           double earn = 0;
           for (final d in ridesSnap.docs) {
             earn += ((d.data())['fare'] as num? ?? 0).toDouble();
@@ -842,6 +852,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           {'last_login_date': FieldValue.serverTimestamp()},
           SetOptions(merge: true),
         );
+        DbUsageTracker.instance.recordWrite(1);
       }
     } catch (e) {
       debugPrint('Hero data load error: $e');
@@ -957,9 +968,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             // Reset throttle baselines only when we are actually writing.
             _lastUploadedPosition = null;
             _lastGpsUpdate = null;
-            await FirebaseDatabase.instance
-                .ref('online_heroes/${_user!.uid}')
-                .set({
+            final onlineHeroRef =
+                FirebaseDatabase.instance.ref('online_heroes/${_user!.uid}');
+            await onlineHeroRef.set({
               'lat': currentPos.latitude,
               'lng': currentPos.longitude,
               'latitude': currentPos.latitude,
@@ -970,6 +981,17 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               'category': _normalizeHeroVehicleType(_vehicleType).toLowerCase(),
               'lastUpdated': ServerValue.timestamp,
             });
+            // FIX: every .remove() call on this node elsewhere in this
+            // file only runs on a GRACEFUL exit (dispose(), the offline
+            // toggle, tab-hidden cleanup) — none of that code runs if the
+            // hero force-closes the app, the OS kills the process, their
+            // network drops, or a browser tab gets killed outright. This
+            // is a server-side hook: Firebase's own RTDB server removes
+            // this node the instant it detects the connection is gone,
+            // no matter how ungracefully the client left. Re-registering
+            // it on every write is safe/idempotent — it just replaces
+            // the pending disconnect action with an equivalent one.
+            unawaited(onlineHeroRef.onDisconnect().remove());
             _lastUploadedPosition = currentPos;
             debugPrint(
               '🔥 [ONLINE] Wrote hero position to RTDB '
@@ -1000,6 +1022,25 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         _heroPingSub?.cancel();
         _heroPingSub = null;
         _stopServicePingListening();
+        // FIX: this is the root cause of "admin dispatched a ride but the
+        // hero never saw it." Going online (the `if (online)` branch
+        // above) writes online_heroes/{uid} — but going offline never
+        // removed it. So after a hero manually flips the toggle off,
+        // their RTDB radar entry lingered with stale coordinates and a
+        // stale isAvailable value, and kept showing as "AVAILABLE" on
+        // the admin's Dispatch Heroes map/list indefinitely (until an
+        // ungraceful disconnect eventually fired the onDisconnect()
+        // cleanup added earlier, or the hero went online again and
+        // overwrote it). An admin could then dispatch a ride straight to
+        // a hero who looked available but whose ping listener had
+        // already been cancelled two lines above — the ping went
+        // nowhere, silently, with no error on either side.
+        FirebaseDatabase.instance
+            .ref('online_heroes/${_user!.uid}')
+            .remove()
+            .catchError((Object e) {
+          debugPrint('[HeroHomeScreen] online_heroes cleanup on offline-toggle failed: $e');
+        });
       }
     } catch (e) {
       debugPrint('[HeroHomeScreen] syncOnlineStatus error: ');
@@ -1089,7 +1130,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           }
         }
         _lastUploadedPosition = pos;
-        await FirebaseDatabase.instance.ref('online_heroes/${_user!.uid}').set({
+        final onlineHeroRef =
+            FirebaseDatabase.instance.ref('online_heroes/${_user!.uid}');
+        await onlineHeroRef.set({
           'lat': pos.latitude,
           'lng': pos.longitude,
           'latitude': pos.latitude,
@@ -1100,6 +1143,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           'category': _normalizeHeroVehicleType(_vehicleType).toLowerCase(),
           'lastUpdated': ServerValue.timestamp,
         });
+        // See the matching comment on the other online_heroes.set() call
+        // above (~line 960) — server-side cleanup for ungraceful exits.
+        unawaited(onlineHeroRef.onDisconnect().remove());
 
         // Firestore: SKIPPED in timer — status writes are handled by
         // _syncOnlineStatus with its own 3-minute gate.
@@ -2432,19 +2478,66 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           return !(status == 'completed' && paymentStatus == 'paid');
         }).toList();
         if (visibleDocs.isEmpty) return const SizedBox.shrink();
+        // FIX (per Nizam's request — "hero ku yella process um main
+        // page nadakama"): this used to render the FULL interactive
+        // _ServiceRequestStatusCard (status stepper, Navigate buttons,
+        // advance/complete/payment actions) inline in this scrolling
+        // list — cluttered when a hero has more than one active task.
+        // Now the home tab only shows a compact summary tile; tapping
+        // it opens HeroTaskDetailScreen, a dedicated full-screen page
+        // for that one task where all of that same interactive body
+        // now lives (unchanged logic, just moved off the main page).
         return Column(
           children: visibleDocs.map((doc) {
             final data = doc.data();
-            return _ServiceRequestStatusCard(
-              requestId: doc.id,
-              requestType: data['requestType'] as String? ?? 'hero_booking',
-              status: data['status'] as String? ?? 'hero_assigned',
-              customerName: data['customerName'] as String? ?? 'Customer',
-              estimatedAmount: (data['estimatedAmount'] as num?)?.toDouble(),
-              finalAmount: (data['finalAmount'] as num?)?.toDouble(),
-              paymentStatus: data['paymentStatus'] as String?,
-              estimateApprovedByCustomer:
-                  data['estimateApprovedByCustomer'] as bool?,
+            final customerName = data['customerName'] as String? ?? 'Customer';
+            final requestType = data['requestType'] as String? ?? 'hero_booking';
+            final status = data['status'] as String? ?? 'hero_assigned';
+            return Container(
+              margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFFF4FA3).withValues(alpha: 0.2)),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 3))],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => HeroTaskDetailScreen(requestId: doc.id)),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                requestType.replaceAll('_', ' '),
+                                style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 13),
+                              ),
+                              Text('For $customerName', style: const TextStyle(color: Colors.black54, fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: const Color(0xFFFF4FA3).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                          child: Text(status.replaceAll('_', ' '), style: const TextStyle(color: Color(0xFFFF4FA3), fontSize: 10, fontWeight: FontWeight.w700)),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.chevron_right_rounded, color: Colors.black38),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             );
           }).toList(),
         );
@@ -4300,6 +4393,87 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 }
 
 // ================================================================
+// HERO TASK DETAIL SCREEN (per Nizam's request): "hero ku yella
+// process um main page nadakama, task start pannunathum oru page la
+// task open agi athu mudiravarayum antha page la irukamari
+// panirlam" — the full accept→start→navigate→complete→payment flow
+// used to live inline inside a card in the scrolling home-tab list,
+// crowded next to every other active task. Now the home list only
+// shows a compact summary tile (see _buildActiveServiceRequestsBanner
+// below); tapping it pushes this dedicated full-screen page, and the
+// hero stays on it — doing every step of THIS task, including the
+// Navigate buttons — until the task is fully closed out. Reuses
+// _ServiceRequestStatusCard's entire interactive body unchanged (same
+// file, so its privacy is not an issue) rather than duplicating any of
+// that logic — this is purely a full-screen presentation wrapper with
+// its own live doc listener so it keeps working even after the home
+// list's own stream re-queries.
+class HeroTaskDetailScreen extends StatelessWidget {
+  final String requestId;
+  const HeroTaskDetailScreen({super.key, required this.requestId});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFFFFBFE),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFFFFBFE),
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black87),
+        title: const Text('Task', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w800)),
+        centerTitle: true,
+      ),
+      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance.collection('service_requests').doc(requestId).snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator(color: Color(0xFFFF4FA3)));
+          }
+          final doc = snapshot.data!;
+          if (!doc.exists) {
+            // Task was deleted (hero's own "Delete Task" action, or
+            // admin cancellation) — nothing left to show, step back to
+            // the home list automatically instead of leaving the hero
+            // stuck staring at a gone task.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+            });
+            return const SizedBox.shrink();
+          }
+          final data = doc.data()!;
+          final status = data['status'] as String? ?? 'hero_assigned';
+          final paymentStatus = data['paymentStatus'] as String?;
+          // Fully closed out — same terminal condition the home list
+          // uses to stop showing a task. Auto-return the hero to the
+          // main list right when the task finishes, per "athu
+          // mudiravarayum antha page la irukanum" (stay only until it's
+          // done).
+          if (status == 'completed' && paymentStatus == 'paid') {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+            });
+          }
+          return SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: _ServiceRequestStatusCard(
+              requestId: doc.id,
+              requestType: data['requestType'] as String? ?? 'hero_booking',
+              status: status,
+              customerName: data['customerName'] as String? ?? 'Customer',
+              estimatedAmount: (data['estimatedAmount'] as num?)?.toDouble(),
+              finalAmount: (data['finalAmount'] as num?)?.toDouble(),
+              paymentStatus: paymentStatus,
+              estimateApprovedByCustomer: data['estimateApprovedByCustomer'] as bool?,
+              details: (data['details'] as Map<String, dynamic>?) ?? const {},
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ================================================================
 // SERVICE REQUEST STATUS CARD — minimal 3-button status-advance UI
 // for the Broadcast Order System. Deliberately simple per spec.
 // (Status-advance order lives in kServiceRequestAdvanceOrder,
@@ -4323,6 +4497,13 @@ class _ServiceRequestStatusCard extends StatefulWidget {
   /// back to null in the same write, so `false` is never actually
   /// observed here in practice, only null/true).
   final bool? estimateApprovedByCustomer;
+  /// NEW (per Nizam's request): raw `details` map off the service_
+  /// requests doc — used to pull whatever pickup/drop coordinates that
+  /// particular request type actually captured, to power the
+  /// "Navigate" buttons below. Not every requestType has coordinates
+  /// yet (see _pickupDropForRequest below) — those simply don't show a
+  /// button rather than showing a broken one.
+  final Map<String, dynamic> details;
   const _ServiceRequestStatusCard({
     required this.requestId,
     required this.requestType,
@@ -4332,6 +4513,7 @@ class _ServiceRequestStatusCard extends StatefulWidget {
     this.finalAmount,
     this.paymentStatus,
     this.estimateApprovedByCustomer,
+    this.details = const {},
   });
 
   @override
@@ -4340,6 +4522,103 @@ class _ServiceRequestStatusCard extends StatefulWidget {
 
 class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
   bool _updating = false;
+
+  // ── NAVIGATE-TO-LOCATION (per Nizam's request) ────────────────────
+  // Opens the External Google Maps app/site in navigation mode — same
+  // idea as the bike-taxi ride flow's map, but for service_requests
+  // tasks (hero_booking / food orders / electronics / grocery / custom
+  // orders), using whatever coordinates that particular requestType
+  // captured at order time via LocationCaptureField (see
+  // location_capture_field.dart):
+  //   - hero_booking: details.fromLocationLat/Lng (pickup, only for
+  //     pickup-delivery tasks) and details.locationLat/Lng (drop).
+  //   - custom_food_order (Food Genie): details.shopLat/Lng (pickup)
+  //     and details.deliveryLatitude/Longitude (drop).
+  //   - electronics_service, custom_order, grocery_order: single
+  //     location only (details.locationLat/Lng) — the customer's own
+  //     pickup/delivery/inspection address, no separate second point.
+  //   - catalog_food_order: seller's shop has no real coordinates on
+  //     file yet (sellers/{id}.latitude/longitude are still hardcoded
+  //     0.0 at onboarding — a separate gap, not fixable from this card)
+  //     and checkout never collected a delivery address either, so
+  //     still nothing to navigate to for this one type.
+  // Returns null when this request type + doc simply has nothing usable.
+  ({double lat, double lng})? _pickupCoords() {
+    final d = widget.details;
+    if (widget.requestType == 'hero_booking') {
+      final lat = (d['fromLocationLat'] as num?)?.toDouble();
+      final lng = (d['fromLocationLng'] as num?)?.toDouble();
+      if (lat != null && lng != null) return (lat: lat, lng: lng);
+    } else if (widget.requestType == 'custom_food_order') {
+      final lat = (d['shopLat'] as num?)?.toDouble();
+      final lng = (d['shopLng'] as num?)?.toDouble();
+      if (lat != null && lng != null) return (lat: lat, lng: lng);
+    }
+    return null;
+  }
+
+  ({double lat, double lng})? _dropCoords() {
+    final d = widget.details;
+    if (widget.requestType == 'hero_booking') {
+      final lat = (d['locationLat'] as num?)?.toDouble();
+      final lng = (d['locationLng'] as num?)?.toDouble();
+      if (lat != null && lng != null) return (lat: lat, lng: lng);
+    } else if (widget.requestType == 'custom_food_order') {
+      final lat = (d['deliveryLatitude'] as num?)?.toDouble();
+      final lng = (d['deliveryLongitude'] as num?)?.toDouble();
+      if (lat != null && lng != null) return (lat: lat, lng: lng);
+    } else if (widget.requestType == 'electronics_service' ||
+        widget.requestType == 'custom_order' ||
+        widget.requestType == 'grocery_order') {
+      final lat = (d['locationLat'] as num?)?.toDouble();
+      final lng = (d['locationLng'] as num?)?.toDouble();
+      if (lat != null && lng != null) return (lat: lat, lng: lng);
+    }
+    return null;
+  }
+
+  Future<void> _openGoogleMapsNav(double lat, double lng) async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
+    );
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open Google Maps.'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Widget _navButton(String label, ({double lat, double lng}) coords) {
+    return Expanded(
+      child: OutlinedButton.icon(
+        onPressed: () => _openGoogleMapsNav(coords.lat, coords.lng),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: const Color(0xFF2979FF),
+          side: const BorderSide(color: Color(0xFF2979FF)),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+        ),
+        icon: const Icon(Icons.navigation_rounded, size: 15),
+        label: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+      ),
+    );
+  }
+
+  Widget _buildNavigateRow() {
+    final pickup = _pickupCoords();
+    final drop = _dropCoords();
+    if (pickup == null && drop == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
+      child: Row(
+        children: [
+          if (pickup != null) _navButton('Navigate to Pickup', pickup),
+          if (pickup != null && drop != null) const SizedBox(width: 8),
+          if (drop != null) _navButton('Navigate to Customer', drop),
+        ],
+      ),
+    );
+  }
 
   Future<void> _advanceTo(String newStatus) async {
     // Gate 1: before starting work, the hero must quote an estimate
@@ -4482,6 +4761,7 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
               ),
             ],
           ),
+          if (widget.status != 'completed') _buildNavigateRow(),
           if (widget.estimatedAmount != null && widget.status != 'completed') ...[
             const SizedBox(height: 6),
             Text(
@@ -4567,6 +4847,24 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
                 ),
                 child: const Text('Payment Received ✓',
                     style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.w800),),
+              )
+            // FIX (payment-trust audit, per Nizam's request): tapping
+            // "Mark Payment Received (Cash)" no longer immediately closes
+            // the task — it now sets an interim 'hero_marked_paid' status
+            // that waits for the CUSTOMER to confirm on their own screen
+            // (service_request_payment_screen.dart). Previously this
+            // button flipped straight to 'paid' and the badge above would
+            // show "Payment Received ✓" even though the customer never
+            // confirmed anything — a hero could falsely claim payment.
+            else if (widget.paymentStatus == 'hero_marked_paid')
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFBB00).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Text('Waiting for customer to confirm…',
+                    style: TextStyle(color: Color(0xFFB8860B), fontSize: 11, fontWeight: FontWeight.w800),),
               )
             else
               SizedBox(

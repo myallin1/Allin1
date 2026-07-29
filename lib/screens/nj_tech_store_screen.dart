@@ -16,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/service_request_cache_service.dart';
 import '../services/service_request_service.dart';
 import '../utils/service_request_labels.dart';
+import '../widgets/location_capture_field.dart';
 import 'service_request_tracking_screen.dart';
 
 // ── Brand Colors (matches dashboard theme) ───────────────────────
@@ -684,6 +685,11 @@ class _CategoryModalState extends State<_CategoryModal> {
   final _phoneCtrl   = TextEditingController();
   final _issueCtrl   = TextEditingController();
   final _formKey     = GlobalKey<FormState>();
+  // NEW (per Nizam's request): pickup/inspection location, same
+  // Use-My-Location + Select-on-Map pattern as every other order form.
+  final _addressCtrl = TextEditingController();
+  double? _addressLat;
+  double? _addressLng;
   bool _sending      = false;
 
   @override
@@ -691,6 +697,7 @@ class _CategoryModalState extends State<_CategoryModal> {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _issueCtrl.dispose();
+    _addressCtrl.dispose();
     super.dispose();
   }
 
@@ -742,6 +749,10 @@ class _CategoryModalState extends State<_CategoryModal> {
           'category': widget.category.id,
           'categoryLabel': widget.category.title,
           'issue': issue,
+          if (_addressCtrl.text.trim().isNotEmpty)
+            'address': _addressCtrl.text.trim(),
+          if (_addressLat != null) 'locationLat': _addressLat,
+          if (_addressLng != null) 'locationLng': _addressLng,
         },
       );
 
@@ -1011,6 +1022,43 @@ class _CategoryModalState extends State<_CategoryModal> {
                       ),
                       validator: (v) => (v?.trim().isEmpty ?? true)
                           ? 'Please describe your issue' : null,
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    // Pickup/inspection address — NEW (per Nizam's
+                    // request): this form previously collected zero
+                    // location data, so a hero assigned to pick up the
+                    // device or inspect it on-site had nowhere to
+                    // navigate to. Optional (not validated) since some
+                    // enquiries are drop-off-at-shop only.
+                    TextFormField(
+                      controller: _addressCtrl,
+                      maxLines: 2,
+                      style: GoogleFonts.outfit(color: _kText, fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: 'Pickup / inspection address (optional)',
+                        hintStyle: GoogleFonts.outfit(color: _kMuted, fontSize: 13),
+                        filled: true,
+                        fillColor: _kSurface,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    LocationCaptureField(
+                      addressController: _addressCtrl,
+                      pickerTitle: 'Pickup / inspection location',
+                      accentColor: cat.color,
+                      onLocationPicked: (lat, lng) {
+                        setState(() {
+                          _addressLat = lat;
+                          _addressLng = lng;
+                        });
+                      },
                     ),
 
                     const SizedBox(height: 16),
