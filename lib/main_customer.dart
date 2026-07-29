@@ -35,6 +35,7 @@ import 'services/ai_activation_service.dart';
 import 'services/analytics_service.dart';
 import 'services/api_service.dart';
 import 'services/cache_service.dart';
+import 'services/db_usage_tracker.dart';
 import 'services/hive_cache.dart';
 import 'services/local_sync_service.dart';
 import 'services/localization_service.dart';
@@ -93,6 +94,49 @@ Future<void> _ensureFirebaseInitialized() async {
   }
 }
 
+// FIX (black/white-screen-stuck audit, per Nizam's request): the
+// fallback shown when Firebase can't be reached even after retries —
+// previously this scenario just left the tab blank with no runApp() at
+// all. Deliberately tiny/dependency-free (no theming service, no
+// providers) since those aren't initialized yet at this point in boot.
+class _BootFailedApp extends StatelessWidget {
+  final VoidCallback onRetry;
+  const _BootFailedApp({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: const Color(0xFFFFFFFF),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.wifi_off_rounded, color: Color(0xFF8F5A78), size: 48),
+                const SizedBox(height: 16),
+                const Text(
+                  "Couldn't connect. Please check your internet and try again.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xFF3D1230), fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: onRetry,
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4FA3)),
+                  child: const Text('Retry', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -123,12 +167,40 @@ void main() async {
         }
       };
 
-      try {
-        await _ensureFirebaseInitialized();
-      } catch (e) {
-        debugPrint('[main_customer] Fatal: Firebase init failed: $e');
+      // FIX (black/white-screen-stuck audit, per Nizam's request): this
+      // used to be a single try/attempt — on any Firebase.initializeApp
+      // failure (a transient network blip is common on weaker Erode
+      // mobile connections; this is a REAL network call, not local
+      // setup) it just `return`ed, meaning runApp() below never ran.
+      // Flutter's engine had nothing to paint, forever — no error, no
+      // retry, just a permanently blank tab. Now: retry a few times with
+      // a short delay (covers the common transient case), and if it's
+      // still failing after that, show an in-app "Couldn't connect —
+      // Retry" screen instead of leaving the tab blank.
+      var firebaseReady = false;
+      Object? lastFirebaseError;
+      for (var attempt = 1; attempt <= 3 && !firebaseReady; attempt++) {
+        try {
+          await _ensureFirebaseInitialized();
+          firebaseReady = true;
+        } catch (e) {
+          lastFirebaseError = e;
+          debugPrint('[main_customer] Firebase init attempt $attempt failed: $e');
+          if (attempt < 3) {
+            await Future<void>.delayed(const Duration(seconds: 2));
+          }
+        }
+      }
+      if (!firebaseReady) {
+        debugPrint('[main_customer] Fatal: Firebase init failed after retries: $lastFirebaseError');
+        runApp(_BootFailedApp(onRetry: main));
         return;
       }
+
+      // DB usage monitor — tags every counted read/write from this app
+      // as 'customer' so admin's DB Monitor screen can see per-app
+      // Firestore usage. See lib/services/db_usage_tracker.dart.
+      DbUsageTracker.instance.init('customer');
 
       await runZonedGuarded(() async {
         // ── BOOT PHASE 1: only what the first screen genuinely needs ──

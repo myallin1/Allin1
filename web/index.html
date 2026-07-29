@@ -563,6 +563,16 @@
     <div class="splash-subtitle" style="color:#8A4E72;font-size:14px;">made love ❤ with erode</div>
     <div class="splash-loader" aria-hidden="true"></div>
     <div class="splash-status">Loading...</div>
+    <!-- FIX (black/white-screen-stuck audit, per Nizam's request): shown
+         only if Flutter never boots (see the 8s fallback below). Hidden
+         by default so it never flashes during a normal fast load. -->
+    <button id="splash-retry-btn" style="
+        display:none; margin-top:22px; padding:10px 22px; border:none;
+        border-radius:10px; background:#FF4FA3; color:#fff; font-size:13px;
+        font-weight:700; font-family:'Noto Sans Tamil', sans-serif;
+        cursor:pointer;">
+      Retry
+    </button>
   </div>
 
   <!-- Splash Screen Script -->
@@ -570,6 +580,8 @@
     (function () {
       var splash = document.getElementById('splash-screen');
       var status = document.querySelector('.splash-status');
+      var retryBtn = document.getElementById('splash-retry-btn');
+      var firstFrameFired = false;
 
       // Update status text
       var statuses = ['Initializing...', 'Loading resources...', 'Preparing app...', 'Almost ready...'];
@@ -581,6 +593,7 @@
 
       // Hide splash when Flutter is ready
       window.addEventListener('flutter-first-frame', function () {
+        firstFrameFired = true;
         clearInterval(statusInterval);
         if (splash) {
           splash.classList.add('hidden');
@@ -591,17 +604,41 @@
         }
       }, { once: true });
 
-      // Fallback: hide after 8 seconds
+      // FIX (black/white-screen-stuck audit, per Nizam's request): this
+      // used to unconditionally HIDE the splash after 8 seconds no
+      // matter what — including when Flutter genuinely failed to boot
+      // (slow/dropped network mid-download on a weak Erode connection,
+      // a JS exception, low-memory phone killing the tab's script).
+      // Since <body> has no background color of its own, hiding the
+      // splash in that failure case left a literally blank white page
+      // with NO error, NO retry — just silence forever, matching
+      // exactly what Nizam reported ("black/white screen la
+      // ninnuruthu"). Now: if flutter-first-frame never fired by 8s,
+      // keep the splash visible and swap the loader for a Retry button
+      // instead of hiding into a dead page.
       setTimeout(function () {
+        if (firstFrameFired) return;
         clearInterval(statusInterval);
-        if (splash && splash.classList.contains('visible')) {
-          splash.classList.add('hidden');
-          splash.classList.remove('visible');
-          setTimeout(function () {
-            splash.style.display = 'none';
-          }, 400);
+        if (status) status.textContent = 'Taking longer than usual to load.';
+        if (retryBtn) {
+          retryBtn.style.display = 'inline-block';
+          retryBtn.addEventListener('click', function () {
+            window.location.reload();
+          });
         }
       }, 8000);
+
+      // Second-chance net: if the tab is still stuck on the splash 20s
+      // in (retry button shown but ignored, or JS truly wedged), most
+      // browsers will still run this timer since it was scheduled
+      // early — auto-reload once so a forgotten/backgrounded tab
+      // doesn't sit blank/stuck indefinitely without the user having to
+      // notice and tap Retry themselves.
+      setTimeout(function () {
+        if (!firstFrameFired) {
+          window.location.reload();
+        }
+      }, 20000);
     })();
   </script>
 

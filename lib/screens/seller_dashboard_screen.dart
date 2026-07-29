@@ -6,14 +6,18 @@
 
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/food_models.dart';
 import '../services/food_seller_service.dart';
-import 'seller_menu_setup_screen.dart';
-import 'seller_onboarding_screen.dart';
+import 'seller_electronics_dashboard_screen.dart';
+import 'seller_grocery_dashboard_screen.dart';
+import 'seller_home_kitchen_menu_screen.dart';
+import 'seller_vertical_picker_screen.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF0D0D18);
@@ -46,25 +50,103 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   List<FoodOrderModel> _activeOrders = [];
   int _menuItemCount = 0;
 
+  // FIX (root cause of "customer places order, seller never sees it"):
+  // the customer-side checkout in seller_detail_screen.dart deliberately
+  // writes catalog/menu food orders to `service_requests` (requestType
+  // 'catalog_food_order') instead of `food_orders`, to reuse the
+  // existing hero-dispatch broadcast mechanism for delivery. But this
+  // dashboard only ever listened to `food_orders` — so those orders
+  // were being created successfully and dispatched to heroes, but the
+  // SELLER (who needs to actually prepare the food) had no visibility
+  // into them at all. Added a second, read-only stream here so sellers
+  // can at least see what's been ordered from them. Also required a
+  // Firestore rule fix — service_requests read previously had no
+  // clause granting the seller (details.sellerId) access; see
+  // firestore.rules.
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _catalogOrdersSub;
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _catalogOrders = [];
+
+  // FIX (root cause of the seller dashboard sometimes getting stuck
+  // showing nothing after registration/login): _loadProfile() used to
+  // read `_auth.currentUser?.uid` exactly ONCE, and if Firebase Auth's
+  // session hadn't finished rehydrating yet (a real race right after a
+  // fresh sign-in, especially coming out of a slow/COOP-interrupted
+  // Google Sign-In popup on web), `uid` was null and this just
+  // `return`ed — leaving `_isLoadingProfile` stuck at `true` forever,
+  // with no retry and no listener for auth becoming ready later. Now
+  // listens to authStateChanges() so a delayed auth rehydration is
+  // picked up automatically instead of stranding the screen.
+  StreamSubscription<User?>? _authSub;
+  bool _showRetryButton = false;
+
   @override
   void initState() {
     super.initState();
     _loadProfile();
+    _authSub = _auth.authStateChanges().listen((user) {
+      if (user != null && _seller == null && mounted) {
+        _loadProfile();
+      }
+    });
+    // Safety net: if nothing has resolved after 8 seconds (auth never
+    // became ready, or a slow network), stop spinning silently forever
+    // and give the seller a manual way out instead of a stuck screen.
+    Future.delayed(const Duration(seconds: 8), () {
+      if (mounted && _isLoadingProfile) {
+        setState(() => _showRetryButton = true);
+      }
+    });
   }
 
   Future<void> _loadProfile() async {
     final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      // Don't leave the spinner stuck forever — authStateChanges()
+      // above will call _loadProfile() again the moment a session
+      // becomes available. If it never does (genuinely signed out),
+      // _isLoadingProfile stays true and the retry button in build()'s
+      // timeout fallback (see below) lets the seller recover manually
+      // instead of being stuck on a blank/spinner screen indefinitely.
+      return;
+    }
 
     try {
       final seller = await _service.getSeller(uid);
       if (!mounted) return;
 
       if (seller == null) {
+        // Brand-new seller, no profile yet — let them pick which
+        // vertical (Hotel/Grocery/Electronics) they're registering as
+        // before any onboarding form. Was a direct push to
+        // SellerOnboardingScreen (Hotel-only) before verticals existed.
         Navigator.pushReplacement(
           context,
           MaterialPageRoute<void>(
-              builder: (_) => const SellerOnboardingScreen()),
+              builder: (_) => const SellerVerticalPickerScreen()),
+        );
+        return;
+      }
+
+      // A seller already registered under a non-Hotel vertical (picked
+      // Grocery/Electronics during onboarding) belongs on that
+      // vertical's own dashboard, not this Hotel-shaped one — this
+      // screen's order/menu logic below is entirely food/hotel-specific
+      // and doesn't apply to them. Hotel (and anyone from before
+      // verticals existed, who defaults to 'hotel') falls through and
+      // keeps using this screen exactly as it always has.
+      if (seller.businessVertical == 'grocery') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute<void>(
+              builder: (_) => const SellerGroceryDashboardScreen()),
+        );
+        return;
+      }
+      if (seller.businessVertical == 'electronics') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute<void>(
+              builder: (_) => const SellerElectronicsDashboardScreen()),
         );
         return;
       }
@@ -75,6 +157,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
       });
 
       _listenToOrders(uid);
+      _listenToCatalogOrders(uid);
       _loadMenuItemCount(uid);
     } catch (e) {
       if (mounted) {
@@ -93,6 +176,32 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
     );
   }
 
+  // See the FIX comment near _catalogOrders above — this is the
+  // missing piece that let orders vanish for the seller. Equality-only
+  // filters (requestType + details.sellerId + status whereIn), no
+  // orderBy, so no composite index is needed.
+  void _listenToCatalogOrders(String sellerId) {
+    _catalogOrdersSub = FirebaseFirestore.instance
+        .collection('service_requests')
+        .where('requestType', isEqualTo: 'catalog_food_order')
+        .where('details.sellerId', isEqualTo: sellerId)
+        .where('status', whereIn: [
+          'pending',
+          'admin_review',
+          'hero_assigned',
+          'in_progress',
+          'nearing_completion',
+        ])
+        .snapshots()
+        .listen((snap) {
+      if (mounted) {
+        setState(() => _catalogOrders = snap.docs);
+      }
+    }, onError: (Object e) {
+      debugPrint('[SellerDashboard] Catalog orders listener error: $e');
+    });
+  }
+
   Future<void> _loadMenuItemCount(String sellerId) async {
     try {
       final items = await _service.getAvailableMenuItems(sellerId);
@@ -105,6 +214,8 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   @override
   void dispose() {
     _ordersSub?.cancel();
+    _catalogOrdersSub?.cancel();
+    _authSub?.cancel();
     super.dispose();
   }
 
@@ -152,29 +263,98 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
 
   Future<void> _navigateToMenuSetup() async {
     if (_seller == null) return;
-    final result = await Navigator.push<bool>(
+    // FIX (per Nizam's request): every seller now authors their own
+    // custom dishes (own photo + name + description + price) instead
+    // of only 'home_made' sellers getting that and everyone else being
+    // limited to SellerMenuSetupScreen's fixed admin-curated
+    // toggle-price catalog. A brand-new seller with no menu items at
+    // all previously had no way to actually put their own food in
+    // front of customers unless the admin's preset catalog happened to
+    // already contain their dishes — this screen (originally built
+    // only for Home Made Foods) is now the one menu-authoring flow for
+    // every seller subCategory. SellerMenuSetupScreen is kept around
+    // (not deleted) in case it's wanted again later, just no longer
+    // wired into this button.
+    await Navigator.push<void>(
       context,
-      MaterialPageRoute<bool>(
-        builder: (_) => SellerMenuSetupScreen(sellerId: _seller!.id),
+      MaterialPageRoute<void>(
+        builder: (_) => SellerHomeKitchenMenuScreen(
+          sellerId: _seller!.id,
+          title: 'My Menu',
+          categoryName: _seller!.subCategory == 'home_made' ? 'Home Kitchen' : 'Menu',
+        ),
       ),
     );
-    if (result == true) {
-      await _loadMenuItemCount(_seller!.id);
-    }
+    await _loadMenuItemCount(_seller!.id);
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoadingProfile) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: _bg,
         body: Center(
-          child: CircularProgressIndicator(color: _teal),
+          child: _showRetryButton
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.wifi_off_rounded, color: _muted, size: 40),
+                    const SizedBox(height: 12),
+                    Text('Taking longer than usual to load your shop.',
+                        style: GoogleFonts.outfit(color: _text, fontSize: 13)),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: _teal),
+                      onPressed: () {
+                        setState(() {
+                          _showRetryButton = false;
+                          _isLoadingProfile = true;
+                        });
+                        _loadProfile();
+                      },
+                      icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                      label: const Text('Retry', style: TextStyle(color: Colors.white)),
+                    ),
+                  ],
+                )
+              : const CircularProgressIndicator(color: _teal),
         ),
       );
     }
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        // FIX (back-button audit, per Nizam's request): unlike the
+        // customer/hero/admin root shells, this screen has no tabs to
+        // reset first — a single-page dashboard — so back here should
+        // just confirm-exit, same as tab 0 does elsewhere. Previously
+        // there was NO handling at all: Navigator.canPop()==false at
+        // this root meant back fell straight through to the OS/browser
+        // default action and the app closed instantly.
+        final exit = await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            backgroundColor: _bg,
+            title: const Text('Leave the app?',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+            content: const Text('Close Allin1 Seller?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('No'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Yes', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+        );
+        if (exit == true && context.mounted) SystemNavigator.pop();
+      },
+      child: Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
         title: Text(
@@ -222,6 +402,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -448,7 +629,75 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
           )
         else
           ..._activeOrders.map(_buildOrderCard),
+        if (_catalogOrders.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Text(
+            'App Orders (${_catalogOrders.length})',
+            style: GoogleFonts.outfit(
+              color: _text,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Placed via your shop page — a hero will pick these up for delivery.',
+            style: GoogleFonts.outfit(color: _muted, fontSize: 11.5),
+          ),
+          const SizedBox(height: 12),
+          ..._catalogOrders.map(_buildCatalogOrderCard),
+        ],
       ],
+    );
+  }
+
+  Widget _buildCatalogOrderCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
+    final details = (data['details'] as Map<String, dynamic>?) ?? {};
+    final customerName = (data['customerName'] as String?) ?? 'Customer';
+    final items = (details['items'] as List<dynamic>?) ?? [];
+    final subtotal = (details['subtotal'] as num?)?.toDouble() ?? 0;
+    final status = (data['status'] as String?) ?? 'pending';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _orange.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(customerName,
+                  style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _orange.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(status,
+                    style: GoogleFonts.outfit(color: _orange, fontSize: 10, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          for (final item in items)
+            if (item is Map)
+              Text(
+                '${item['quantity'] ?? 1} × ${item['name'] ?? 'Item'}',
+                style: GoogleFonts.outfit(color: _muted, fontSize: 12),
+              ),
+          const SizedBox(height: 6),
+          Text('₹${subtotal.toStringAsFixed(0)}',
+              style: GoogleFonts.outfit(color: _gold, fontWeight: FontWeight.w800, fontSize: 14)),
+        ],
+      ),
     );
   }
 

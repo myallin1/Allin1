@@ -1073,6 +1073,103 @@ class _PaymentScreenState extends State<PaymentScreen>
             ),
           ),
         ),
+        // FIX (UPI-payment audit, per Nizam's request): the tile above
+        // only tries a `upi://` deep link via url_launcher, which is an
+        // Android-app-only URI scheme. On the deployed PWA (a browser),
+        // launching a non-http(s) custom scheme like this reliably fails
+        // — url_launcher_web has no handler for it — so on web this tile
+        // always ended in "No UPI app opened", with no other way to
+        // actually pay. This manual fallback (same UI already built for
+        // the dispute-recovery banner below) is now always shown too:
+        // customer can pay the exact number directly in ANY UPI app,
+        // then tap "I've Paid" to re-check Firestore once, without
+        // depending on the deep link working at all.
+        const SizedBox(height: 14),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF9F0),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Or pay manually in any UPI app to:',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  color: _muted,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: _copyUpiNumber,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 10,),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _border),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _upiCollectionNumber,
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: _text,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Icon(Icons.copy_rounded, color: _gold, size: 18),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: OutlinedButton(
+                  onPressed: _recheckingPayment
+                      ? null
+                      : () {
+                          setState(() => _awaitingHeroConfirmation = true);
+                          _recheckDisputedPayment();
+                        },
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: _gold),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),),
+                  ),
+                  child: _recheckingPayment
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: _gold,),
+                        )
+                      : Text(
+                          "I've Paid — Check Now",
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            color: _gold,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }

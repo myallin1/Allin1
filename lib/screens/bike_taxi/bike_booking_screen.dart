@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -416,13 +417,49 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     }
   }
 
-  void _returnToRootSafely() {
+  // FIX (back-button depth audit, per Nizam's request): this used to
+  // silently do NOTHING when canPop() was false — and canPop() IS false
+  // right after a ride completes, because payment_screen.dart and
+  // ride_tracking_screen.dart both intentionally reset the whole stack
+  // with pushAndRemoveUntil(BikeBookingScreen, (route) => false) once a
+  // ride is done (so back can't return into a finished ride — that part
+  // is correct). But that leaves THIS screen as the sole root route, so
+  // canPop() is false, the old `if (navigator.canPop())` guard silently
+  // skipped everything, and the very next back-press here — one of the
+  // most common moments in the whole app, right after finishing a ride —
+  // did nothing at all. Now: if there's something to pop, pop to root
+  // (unchanged); if this genuinely IS the root, show the same
+  // confirm-exit dialog every other app root already uses, instead of a
+  // silent no-op.
+  Future<void> _returnToRootSafely() async {
     if (!mounted) {
       return;
     }
     final navigator = Navigator.of(context);
     if (navigator.canPop()) {
       navigator.popUntil((route) => route.isFirst);
+      return;
+    }
+    final exit = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Leave the app?',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+        content: const Text('Close Allin1?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yes', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (exit == true && mounted) {
+      SystemNavigator.pop();
     }
   }
 
@@ -1408,6 +1445,15 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
             _isSearching = false;
           });
         }
+        // FIX: demand-monitoring, per Nizam's request — log what
+        // customers actually search for so admin can see where in
+        // Erode demand clusters vs. where hero coverage is (compared
+        // against heroes' preferredWorkLocation field on hero_register_
+        // screen.dart). Fire-and-forget: never blocks or fails the
+        // search itself, and only fires once suggestions come back
+        // (not on every keystroke — the 500ms debounce already
+        // coalesces that).
+        _logLocationSearch(normalizedQuery, suggestions.length);
       } catch (_) {
         if (mounted && requestId == _searchRequestId) {
           setState(() {
@@ -1416,6 +1462,18 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
           });
         }
       }
+    });
+  }
+
+  void _logLocationSearch(String query, int resultCount) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    FirebaseFirestore.instance.collection('location_search_logs').add({
+      'query': query,
+      'resultCount': resultCount,
+      'userId': uid,
+      'createdAt': FieldValue.serverTimestamp(),
+    }).catchError((Object e) {
+      debugPrint('[BikeBooking] location_search_logs write failed: $e');
     });
   }
 

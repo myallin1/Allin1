@@ -13,15 +13,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app_navigator.dart';
 import 'firebase_options.dart';
 import 'config/api_config.dart';
-import 'screens/auth/profile_setup_screen.dart';
 import 'screens/bike_taxi/hero_dashboard_shell.dart';
 import 'screens/hero_login_screen.dart';
+import 'screens/hero_pending_screen.dart';
+import 'screens/hero_register_screen.dart';
 import 'screens/splash_setup_screen.dart';
+import 'services/db_usage_tracker.dart';
 import 'services/hero_ride_notification_service.dart';
 import 'services/hero_web_audio_service.dart';
 import 'services/localization_service.dart';
 import 'services/map_service.dart';
-import 'services/session_service.dart';
 import 'widgets/hero_premium_loader.dart';
 import 'package:flutter/foundation.dart';
 
@@ -61,6 +62,54 @@ Future<void> _ensureFirebaseInitialized() async {
       return;
     }
     rethrow;
+  }
+}
+
+// FIX (black/white-screen-stuck audit, per Nizam's request): fallback
+// shown when Firebase can't be reached even after retries. Previously
+// _ensureFirebaseInitialized() was awaited with NO try/catch at all in
+// the appRunner below — on any failure (a transient network blip is a
+// real possibility on weaker Erode mobile connections; this is a real
+// network call) the exception just propagated out and runApp() below
+// never ran. The Flutter engine had nothing to paint, forever — no
+// error, no retry, just a permanently blank/black tab. Deliberately
+// tiny/dependency-free here (no theming service, no providers) since
+// those aren't initialized yet at this point in boot.
+class _BootFailedApp extends StatelessWidget {
+  final VoidCallback onRetry;
+  const _BootFailedApp({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: const Color(0xFFFFFBFE),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.wifi_off_rounded, color: Color(0xFF8F5A78), size: 48),
+                const SizedBox(height: 16),
+                const Text(
+                  "Couldn't connect. Please check your internet and try again.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xFF3D1230), fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: onRetry,
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4FA3)),
+                  child: const Text('Retry', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -225,7 +274,32 @@ void main() async {
     appRunner: () async {
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-      await _ensureFirebaseInitialized();
+      // FIX (black/white-screen-stuck audit, per Nizam's request): retry
+      // a few times with a short delay (covers the common transient
+      // network-blip case) before giving up; on total failure show an
+      // in-app Retry screen instead of leaving the tab blank — see
+      // _BootFailedApp comment above for the full failure mode this
+      // closes.
+      var firebaseReady = false;
+      Object? lastFirebaseError;
+      for (var attempt = 1; attempt <= 3 && !firebaseReady; attempt++) {
+        try {
+          await _ensureFirebaseInitialized();
+          firebaseReady = true;
+        } catch (e) {
+          lastFirebaseError = e;
+          debugPrint('[main_hero] Firebase init attempt $attempt failed: $e');
+          if (attempt < 3) {
+            await Future<void>.delayed(const Duration(seconds: 2));
+          }
+        }
+      }
+      if (!firebaseReady) {
+        debugPrint('[main_hero] Fatal: Firebase init failed after retries: $lastFirebaseError');
+        runApp(_BootFailedApp(onRetry: main));
+        return;
+      }
+      DbUsageTracker.instance.init('hero');
       await HeroRideNotificationService.initialize();
 
       // Start global RTDB ping listener reacting to Auth changes
@@ -343,15 +417,23 @@ class _HeroSetupGate extends StatelessWidget {
         }
 
         return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          // ── Cache-first: resolves from SQLite cache on return visits ──
+          // FIX (approved-hero stuck on pending, root cause): this used to
+          // force GetOptions(source: Source.cache) with a catchError that
+          // only falls back to the server if the cache read fails
+          // outright. A cache HIT is not the same as a FRESH value — once
+          // this device had cached this doc (e.g. right after profile
+          // setup), that stale snapshot was reused forever, since
+          // FirebaseAuth.signOut() does not clear Firestore's local
+          // persistence (it's a separate on-device store, survives across
+          // logout/login on the same browser). A plain get() still uses
+          // the local cache automatically when genuinely offline (that's
+          // the SDK's built-in behavior), but prefers a fresh server read
+          // whenever one is reachable — which is what an approval-status
+          // gate actually needs to be correct.
           future: FirebaseFirestore.instance
               .collection('users')
               .doc(user.uid)
-              .get(const GetOptions(source: Source.cache))
-              .catchError((_) => FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(user.uid)
-                  .get()),
+              .get(),
           builder: (context, userSnapshot) {
             // Show loader only on true cold start when cache is empty
             if (userSnapshot.connectionState == ConnectionState.waiting &&
@@ -374,15 +456,77 @@ class _HeroSetupGate extends StatelessWidget {
             final needsSetup = phone.isEmpty || !isSetupComplete;
 
             if (needsSetup) {
+              // FIX (merge duplicate registration forms): this branch used
+              // to route to ProfileSetupScreen — a lightweight generic form
+              // (phone + vehicle category only) shared with the customer
+              // app, which wrote a heroes/{uid} doc with zero identity
+              // fields for admin to actually verify against. HeroRegisterScreen
+              // (the full form with name/DOB/address/license/aadhaar/pan +
+              // mandatory doc photos, used by the phone-OTP hero login path)
+              // is now the single source of truth for hero onboarding.
               return _buildFadingChild(
                 'hero-profile-setup',
-                const ProfileSetupScreen(preferredRole: UserType.hero),
+                const HeroRegisterScreen(),
               );
             }
 
-            return _buildFadingChild(
-              'hero-dashboard',
-              const HeroDashboardShell(),
+            // FIX (admin-approval bypass): this branch used to jump straight
+            // to HeroDashboardShell whenever a Firebase Auth session already
+            // existed and the generic cross-role `users/{uid}` doc looked
+            // "set up" — a flag any of the 4 Allin1 apps can set, since they
+            // all share one Firebase Auth pool. It never checked the
+            // hero-specific `heroes/{uid}.approvalStatus` field, so anyone
+            // with a session from ANY app (or a pre-approval session) could
+            // reach the hero dashboard without admin approval. HeroLoginScreen
+            // already enforces this correctly for fresh logins — we mirror
+            // that same check here for the "session already exists" path.
+            return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              // FIX: same stale-cache-lockout bug as the users/{uid} read
+              // above, but worse here — this is the actual approvalStatus
+              // check. A hero approved by admin AFTER this device had
+              // already cached their 'pending' heroes doc would be stuck
+              // seeing HeroPendingScreen forever (logout/login doesn't
+              // clear the on-device cache), because the forced
+              // Source.cache read always "succeeded" with the old value
+              // and catchError never fired. Plain get() fixes this the
+              // same way.
+              future: FirebaseFirestore.instance
+                  .collection('heroes')
+                  .doc(user.uid)
+                  .get(),
+              builder: (context, heroSnapshot) {
+                if (heroSnapshot.connectionState == ConnectionState.waiting &&
+                    !heroSnapshot.hasData) {
+                  return _buildFadingChild(
+                    'hero-approval-check-loading',
+                    _buildLoadingScaffold(
+                      'Checking Hero Access',
+                      'Verifying your admin approval status',
+                    ),
+                  );
+                }
+
+                final heroDoc = heroSnapshot.data;
+                final heroData = heroDoc?.data();
+                final approvalStatus = heroData?['approvalStatus']
+                    ?.toString()
+                    .trim()
+                    .toLowerCase();
+                final isApproved =
+                    heroDoc?.exists == true && approvalStatus == 'approved';
+
+                if (!isApproved) {
+                  return _buildFadingChild(
+                    'hero-pending',
+                    const HeroPendingScreen(),
+                  );
+                }
+
+                return _buildFadingChild(
+                  'hero-dashboard',
+                  const HeroDashboardShell(),
+                );
+              },
             );
           },
         );

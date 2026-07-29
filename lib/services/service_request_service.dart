@@ -375,19 +375,27 @@ class ServiceRequestService {
     });
   }
 
-  /// Hero-side: the final "close the task" action — acknowledges the
-  /// hero has physically received payment (relevant for cash; for
-  /// markServiceRequestPaid's UPI/wallet path this is effectively
-  /// already true, but the hero still gets an explicit closing action
-  /// to parallel the ride flow's "Collect Payment" → ride-complete
-  /// step). Does not change `status` (already 'completed') — only
-  /// paymentStatus.
+  /// Hero-side: hero claims cash payment was collected. FIX (per
+  /// Nizam's request): this used to write paymentStatus:'paid' directly
+  /// — the exact same terminal value markServiceRequestPaid() writes
+  /// when the CUSTOMER themselves confirms payment. That meant a hero
+  /// could unilaterally flip a task to "paid" with zero input from the
+  /// customer, which immediately unlocked the rating prompt on the
+  /// customer's screen even if the customer never actually paid or
+  /// never tapped anything — a trust/fraud gap ("hero ve thane
+  /// solliduvaru, customer ku theriyaame rating varum"). Now this only
+  /// writes an INTERIM status; service_request_payment_screen.dart
+  /// shows the customer an explicit "Hero says Cash payment received —
+  /// confirm?" step, and only the customer's own confirmation (which
+  /// calls markServiceRequestPaid, the method above) sets the real
+  /// 'paid' status that unlocks rating. Does not change `status`
+  /// (already 'completed') — only paymentStatus.
   Future<void> markServiceRequestPaymentReceived(String requestId) async {
     await FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
         .update({
-      'paymentStatus': 'paid',
+      'paymentStatus': 'hero_marked_paid',
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }

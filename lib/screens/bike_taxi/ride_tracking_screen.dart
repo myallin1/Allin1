@@ -11,6 +11,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -105,13 +106,40 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   String? _rideErrorMessage;
   DateTime? _lastRouteDrawAt;
 
-  void _returnToRootSafely() {
+  // FIX (back-button depth audit, per Nizam's request): same silent
+  // no-op bug as bike_booking_screen.dart's _returnToRootSafely — when
+  // canPop() is false (this screen ended up as the sole root route,
+  // e.g. restored directly on app resume), back-press did nothing at
+  // all instead of confirming exit.
+  Future<void> _returnToRootSafely() async {
     if (!mounted) {
       return;
     }
     final navigator = Navigator.of(context);
     if (navigator.canPop()) {
       navigator.popUntil((route) => route.isFirst);
+      return;
+    }
+    final exit = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Leave the app?',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+        content: const Text('Close Allin1?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yes', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (exit == true && mounted) {
+      SystemNavigator.pop();
     }
   }
 

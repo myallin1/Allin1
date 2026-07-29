@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'hero_history_screen.dart';
 import 'hero_home_screen.dart';
@@ -23,12 +24,37 @@ class _HeroDashboardShellState extends State<HeroDashboardShell> {
 
   int _tabIndex = 0;
 
-  late final List<Widget> _tabs = <Widget>[
-    const HeroHomeScreen(embedded: true),
-    const HeroHistoryScreen(),
-    const HeroProfileTab(),
-    const HeroSosScreen(),
-  ];
+  // FIX (unwanted-read audit, per Nizam's request): IndexedStack builds
+  // AND MOUNTS every child immediately on first frame regardless of
+  // which tab is active — History/Profile/SOS were all starting their
+  // own Firestore listeners the instant the Hero app opened, even
+  // though a hero almost always lands on Radar (tab 0) first and may
+  // never tap the other 3 tabs in that session. Same root cause and
+  // same fix already applied to SuperAdminHomeScreen's Hero/Electronics
+  // tabs: only put the REAL widget in a slot once that tab has actually
+  // been visited; unvisited slots get a cheap placeholder. Once
+  // visited, IndexedStack keeps the real widget mounted for the rest of
+  // the screen's life, so switching back after the first visit is still
+  // instant with no re-listen.
+  final Set<int> _visitedTabs = {0};
+
+  static const List<Widget> _placeholder = [SizedBox.shrink()];
+
+  void _goToTab(int index) {
+    setState(() {
+      _tabIndex = index;
+      _visitedTabs.add(index);
+    });
+  }
+
+  List<Widget> get _tabs => <Widget>[
+        const HeroHomeScreen(embedded: true),
+        _visitedTabs.contains(1)
+            ? const HeroHistoryScreen()
+            : _placeholder.first,
+        _visitedTabs.contains(2) ? const HeroProfileTab() : _placeholder.first,
+        _visitedTabs.contains(3) ? const HeroSosScreen() : _placeholder.first,
+      ];
 
   Widget _inactiveIcon(IconData icon) {
     return Container(
@@ -71,9 +97,52 @@ class _HeroDashboardShellState extends State<HeroDashboardShell> {
     );
   }
 
+  // FIX (back-button audit, per Nizam's request): this shell had zero
+  // back-press handling — unlike dashboard_screen.dart (customer app),
+  // which already traps back to reset to tab 0 first / confirm-exit on
+  // tab 0. Without this, pressing back (hardware button or the browser's
+  // back button on the PWA) while on any tab hit Navigator.canPop()==
+  // false at the root and fell straight through to the OS/browser's
+  // default action — the app just closed instantly, no step-by-step
+  // "go back to previous tab" behavior a hero would expect. Mirrors the
+  // exact same pattern for consistency across apps.
+  Future<bool> _handleBackPress() async {
+    if (_tabIndex != 0) {
+      _goToTab(0);
+      return false;
+    }
+    final exit = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: _surface,
+        title: const Text('Leave the app?',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+        content: const Text('Close Allin1 Hero?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No', style: TextStyle(color: _pink)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yes', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    return exit == true;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final shouldExit = await _handleBackPress();
+        if (shouldExit && context.mounted) SystemNavigator.pop();
+      },
+      child: Scaffold(
       backgroundColor: _bg,
       body: IndexedStack(
         index: _tabIndex,
@@ -95,7 +164,7 @@ class _HeroDashboardShellState extends State<HeroDashboardShell> {
           top: false,
           child: BottomNavigationBar(
             currentIndex: _tabIndex,
-            onTap: (index) => setState(() => _tabIndex = index),
+            onTap: _goToTab,
             backgroundColor: _surface,
             elevation: 0,
             type: BottomNavigationBarType.fixed,
@@ -133,6 +202,7 @@ class _HeroDashboardShellState extends State<HeroDashboardShell> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

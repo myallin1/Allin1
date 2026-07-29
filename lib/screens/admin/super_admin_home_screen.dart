@@ -4,15 +4,18 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:colorful_iconify_flutter/icons/fluent_emoji_flat.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../services/db_usage_tracker.dart';
 import 'admin_dashboard_screen.dart';
+import 'admin_food_orders_screen.dart';
 import 'admin_service_requests_screen.dart';
+import 'admin_sos_kyc_approvals_screen.dart';
 import 'commission_settings_screen.dart';
+import 'erode_offers_management_screen.dart';
 
 class SuperAdminHomeScreen extends StatefulWidget {
   const SuperAdminHomeScreen({super.key});
@@ -26,7 +29,6 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
   static const Color _surface = Color(0xFF12121E);
   static const Color _purple = Color(0xFF6C63FF);
   static const Color _orange = Color(0xFFFF6B35);
-  static const Color _green = Color(0xFF00C853);
   static const Color _gold = Color(0xFFFFBB00);
   static const Color _text = Color(0xFFEEEEF5);
 
@@ -45,17 +47,59 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
   Set<String> _knownWaitingIds = {};
   bool _alertPrimed = false;
 
+  // FIX (root cause of "admin app open = ~1000 reads", found while
+  // chasing the same symptom in admin_dashboard_screen.dart — see that
+  // file for the full explanation): _buildSosCallCenterBanner() used to
+  // call .snapshots() INLINE inside its build method, called from this
+  // StatefulWidget's overall build path. Any rebuild anywhere in this
+  // screen tore down and recreated this listener, re-paying the full
+  // initial-read cost every time. Hoisted to an instance field, created
+  // once. Kept LIVE (not manual-refresh) — this feeds the emergency SOS
+  // banner, which is safety-critical and must update instantly.
+  //
+  // NOTE: _statsRowRidesStream (Rides Today/Active Heroes/Revenue stat
+  // row) used to live here too, with NO .limit() at all — a genuinely
+  // unbounded live listener. The widget that rendered it was already
+  // removed per Nizam's request (duplicated AdminDashboardScreen's own
+  // Overview tab), but the stream itself was accidentally left running
+  // just to feed the DB usage side-channel counter — i.e. a real,
+  // uncapped Firestore listener open on every admin app load with ZERO
+  // UI benefit. Deleted entirely as part of the auto-listener cleanup.
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _sosAlertsStream;
+
+  // FIX (unnecessary-read consolidation): _NavWaitingDot (x2, bottom nav)
+  // and _AdminReviewBadgeWrapper used to each open their OWN separate
+  // service_requests listener with an overlapping status filter — 3
+  // extra live listeners, on top of the alert listener below which
+  // already reads nearly the same data. Every one of those re-paid the
+  // full query cost independently, every single time this screen opened
+  // — exactly the "app open = unwanted database read" pattern Nizam
+  // flagged. Hoisted to ONE shared stream (broadest superset: any
+  // requestType, status pending/admin_review); every badge widget below
+  // now derives its count by filtering this SAME stream's already-
+  // fetched docs client-side, instead of opening its own listener.
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _waitingRequestsStream;
+
   @override
   void initState() {
     super.initState();
-    _alertSub = FirebaseFirestore.instance
+    _waitingRequestsStream = FirebaseFirestore.instance
         .collection('service_requests')
-        .where('requestType', whereIn: ['hero_booking', 'electronics_service'])
         .where('status', whereIn: ['pending', 'admin_review'])
-        .snapshots()
-        .listen(_onWaitingRequestsChanged, onError: (Object e) {
+        .snapshots();
+    _alertSub = _waitingRequestsStream.listen(_onWaitingRequestsChanged,
+        onError: (Object e) {
       debugPrint('[SuperAdminHome] Alert listener error: $e');
     });
+    _sosAlertsStream = FirebaseFirestore.instance
+        .collection('sos_alerts')
+        .where('status', isEqualTo: 'active')
+        .snapshots();
+
+    // DB usage monitor — side-channel count, shares the same
+    // broadcast stream StreamBuilder already listens to, no extra reads.
+    _waitingRequestsStream.listen((s) => DbUsageTracker.instance.recordRead(s.docs.length));
+    _sosAlertsStream.listen((s) => DbUsageTracker.instance.recordRead(s.docs.length));
   }
 
   @override
@@ -65,8 +109,16 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
     super.dispose();
   }
 
+  static const _alertRequestTypes = {'hero_booking', 'electronics_service'};
+
   void _onWaitingRequestsChanged(QuerySnapshot<Map<String, dynamic>> snapshot) {
-    final currentIds = snapshot.docs.map((d) => d.id).toSet();
+    // The shared stream now covers ALL requestTypes (widened so the nav
+    // dots/admin-review badge can reuse it) — filter back down to just
+    // the two types the alert sound is meant for.
+    final currentIds = snapshot.docs
+        .where((d) => _alertRequestTypes.contains(d.data()['requestType']))
+        .map((d) => d.id)
+        .toSet();
     if (!_alertPrimed) {
       // First snapshot after this screen opened — just record the
       // baseline, don't alert for requests that were already waiting.
@@ -93,13 +145,6 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
     } catch (e) {
       debugPrint('[SuperAdminHome] Alert sound failed (non-fatal): $e');
     }
-  }
-
-  String _todayStart() {
-    final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day)
-        .millisecondsSinceEpoch
-        .toString();
   }
 
   void _showSnack(BuildContext context, String msg) {
@@ -137,45 +182,140 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
   // like tapping into any other detail screen.
   int _tabIndex = 0;
 
+  // FIX (read-spike root cause): Flutter's IndexedStack builds AND MOUNTS
+  // every child immediately on first frame, regardless of which index is
+  // active — it never defers or disposes non-visible children. That
+  // means both AdminServiceRequestsScreen instances below used to run
+  // their initState() (and start their own service_requests .snapshots()
+  // listener, each re-reading the WHOLE collection) the moment Admin
+  // Home opened, even if the admin never tapped Hero or Electronics —
+  // this is what was driving the ~1000-read spike on every admin app
+  // open. Fix: track which tab indices have actually been visited, and
+  // only put the REAL widget in that IndexedStack slot once visited;
+  // unvisited slots get a cheap placeholder instead. Once visited, the
+  // real widget stays in that slot for the rest of the screen's life
+  // (IndexedStack keeps it mounted exactly as before), so switching back
+  // and forth after the first visit is still instant with no re-listen.
+  final Set<int> _visitedTabs = {0};
+
+  void _goToTab(int index) {
+    setState(() {
+      _tabIndex = index;
+      _visitedTabs.add(index);
+    });
+  }
+
+  // FIX (per Nizam's request): App Settings / Check for Updates / Logout
+  // used to sit directly on the main Overview page, making it feel
+  // cluttered. Moved into a left-side drawer (tray) instead — opened via
+  // the hamburger icon in _buildHeader() — so the main page only shows
+  // what admin needs to glance at daily (Manage tiles), with settings
+  // tucked away one tap deeper, same drawer pattern any admin panel uses.
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  // FIX (back-button audit, per Nizam's request): this screen — the
+  // admin app's root home — had zero back-press handling, exactly the
+  // same gap found in the Hero app's dashboard shell. Pressing back
+  // (hardware button or the browser back button on the PWA) hit
+  // Navigator.canPop()==false at the root and fell straight through to
+  // the OS/browser default action, closing the app instantly instead of
+  // stepping back tab-by-tab like dashboard_screen.dart (customer app)
+  // already does. Same pattern applied here for consistency.
+  Future<bool> _handleBackPress() async {
+    if (_tabIndex != 0) {
+      _goToTab(0);
+      return false;
+    }
+    final exit = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: _bg,
+        title: const Text('Leave the app?',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+        content: const Text('Close Allin1 Admin?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yes', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    return exit == true;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final shouldExit = await _handleBackPress();
+        if (shouldExit && context.mounted) SystemNavigator.pop();
+      },
+      child: Scaffold(
+      key: _scaffoldKey,
       backgroundColor: _bg,
+      drawer: _buildDrawer(context),
       body: SafeArea(
         child: IndexedStack(
           index: _tabIndex,
           children: [
             _buildOverviewTab(context),
-            AdminServiceRequestsScreen(
-              key: const ValueKey('hero_tab'),
-              requestType: 'hero_booking',
-              title: 'Hero Booking Status',
-            ),
-            AdminServiceRequestsScreen(
-              key: const ValueKey('electronics_tab'),
-              requestType: 'electronics_service',
-              title: 'Electronics Booking',
-            ),
+            _visitedTabs.contains(1)
+                ? AdminServiceRequestsScreen(
+                    key: const ValueKey('hero_tab'),
+                    requestType: 'hero_booking',
+                    title: 'Hero Booking Status',
+                  )
+                : const SizedBox.shrink(),
+            _visitedTabs.contains(2)
+                ? AdminServiceRequestsScreen(
+                    key: const ValueKey('electronics_tab'),
+                    requestType: 'electronics_service',
+                    title: 'Electronics Booking',
+                  )
+                : const SizedBox.shrink(),
+            // NEW (per Nizam's request): 4th tab — one-time customer SOS
+            // KYC verification queue. Same lazy-mount pattern as Hero/
+            // Electronics above (only mounts, and only starts its
+            // listener, once the admin actually taps this tab).
+            _visitedTabs.contains(3)
+                ? const AdminSosKycApprovalsScreen(key: ValueKey('cus_sos_tab'))
+                : const SizedBox.shrink(),
+            // NEW (per Nizam's request): 5th tab — Food Orders. Same
+            // lazy-mount pattern as every other tab here (only builds,
+            // and only fires its first manual fetch, once the admin
+            // actually taps this tab).
+            _visitedTabs.contains(4)
+                ? const AdminFoodOrdersScreen(key: ValueKey('food_orders_tab'))
+                : const SizedBox.shrink(),
           ],
         ),
       ),
       bottomNavigationBar: _buildBottomNav(),
+      ),
     );
   }
 
   Widget _buildOverviewTab(BuildContext context) {
+    // FIX (per Nizam's request): removed the Rides Today/Active Heroes/
+    // Revenue stat row from this outer page — it duplicated what's
+    // already visible the moment admin taps into Taxi & Transportation
+    // (AdminDashboardScreen has its own, identical Overview tab), so
+    // showing it twice was redundant. App Settings + Check for Updates
+    // + Logout also moved out of the main scroll into the left drawer
+    // (see _buildDrawer) — this page now shows only what needs a daily
+    // glance: the SOS banner and the Manage entry point.
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(child: _buildHeader(context)),
         SliverToBoxAdapter(child: _buildSosCallCenterBanner(context)),
-        SliverToBoxAdapter(child: _buildStatsRow()),
-        // Single "Manage" section — every category an admin manages
-        // (taxi/transportation, app settings) lives here, clearly
-        // labeled. Hero/Electronics moved to their own bottom-nav tabs
-        // above — Taxi and Settings stay here since Taxi pushes its
-        // own full screen and Settings is a lightweight one-off.
         SliverToBoxAdapter(child: _buildManageSection(context)),
-        SliverToBoxAdapter(child: _buildFooter(context)),
       ],
     );
   }
@@ -183,17 +323,47 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
   // Same visual convention as dashboard_screen.dart's _buildBottomNav:
   // Row of InkWell icon+label items, active one highlighted.
   Widget _buildBottomNav() {
-    final List<({String icon, String label, String? requestType})> items = [
-      (icon: FluentEmojiFlat.bar_chart, label: 'Overview', requestType: null),
+    final List<({String icon, String label, String? requestType, bool isSos, bool isFoodOrders})> items = [
+      (icon: FluentEmojiFlat.bar_chart, label: 'Overview', requestType: null, isSos: false, isFoodOrders: false),
       (
         icon: FluentEmojiFlat.man_superhero,
         label: 'Hero',
-        requestType: 'hero_booking'
+        requestType: 'hero_booking',
+        isSos: false,
+        isFoodOrders: false,
       ),
       (
         icon: FluentEmojiFlat.mobile_phone,
         label: 'Electronics',
-        requestType: 'electronics_service'
+        requestType: 'electronics_service',
+        isSos: false,
+        isFoodOrders: false,
+      ),
+      // NEW (per Nizam's request): 4th tab for one-time customer SOS
+      // KYC verification. Separate badge source (sos_kyc_requests, not
+      // service_requests) — see isSos branch below. Uses a plain
+      // Material icon (not FluentEmojiFlat) below since this is the
+      // only tab whose icon isn't a pre-existing, already-confirmed-
+      // valid FluentEmojiFlat SVG string constant.
+      (
+        icon: '',
+        label: 'SOS Verify',
+        requestType: null,
+        isSos: true,
+        isFoodOrders: false,
+      ),
+      // NEW (per Nizam's request): 5th tab — Food Orders management.
+      // Deliberately requestType: null (no live "new booking" badge
+      // stream attached) — AdminFoodOrdersScreen itself is a manual
+      // "tap refresh" report, not a live listener, per the explicit
+      // "auto listener oodama reload button vacharlam" instruction, so
+      // this tab shouldn't imply live push notifications either.
+      (
+        icon: '',
+        label: 'Food Orders',
+        requestType: null,
+        isSos: false,
+        isFoodOrders: true,
       ),
     ];
     return Container(
@@ -215,7 +385,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
             final item = items[i];
             return Expanded(
               child: InkWell(
-                onTap: () => setState(() => _tabIndex = i),
+                onTap: () => _goToTab(i),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -227,7 +397,13 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                           height: 22,
                           child: Opacity(
                             opacity: active ? 1.0 : 0.55,
-                            child: SvgPicture.string(item.icon),
+                            child: item.isSos
+                                ? Icon(Icons.sos_rounded,
+                                    color: active ? _gold : _text.withOpacity(0.55), size: 22)
+                                : item.isFoodOrders
+                                    ? Icon(Icons.restaurant_menu_rounded,
+                                        color: active ? _gold : _text.withOpacity(0.55), size: 22)
+                                    : SvgPicture.string(item.icon),
                           ),
                         ),
                         if (item.requestType != null)
@@ -235,7 +411,14 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                             top: -4,
                             right: -8,
                             child: _NavWaitingDot(
-                                requestType: item.requestType!),
+                                requestType: item.requestType!,
+                                waitingStream: _waitingRequestsStream),
+                          ),
+                        if (item.isSos)
+                          const Positioned(
+                            top: -4,
+                            right: -8,
+                            child: _SosKycWaitingDot(),
                           ),
                       ],
                     ),
@@ -258,10 +441,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
 
   Widget _buildSosCallCenterBanner(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('sos_alerts')
-          .where('status', isEqualTo: 'active')
-          .snapshots(),
+      stream: _sosAlertsStream,
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const SizedBox.shrink();
@@ -364,6 +544,11 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
       ),
       child: Row(
         children: [
+          IconButton(
+            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+            icon: Icon(Icons.menu_rounded, color: _text.withOpacity(0.7)),
+            tooltip: 'Settings menu',
+          ),
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
@@ -411,124 +596,13 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
     );
   }
 
-  Widget _buildStatsRow() {
-    final todayMs = int.parse(_todayStart());
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-      child: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('rides')
-            .where(
-              'createdAt',
-              isGreaterThanOrEqualTo:
-                  Timestamp.fromMillisecondsSinceEpoch(todayMs),
-            )
-            .snapshots(),
-        builder: (context, snapshot) {
-          int totalRides = 0;
-          double revenue = 0;
-          if (snapshot.hasData) {
-            final docs = snapshot.data!.docs;
-            totalRides = docs.length;
-            for (final doc in docs) {
-              final data = doc.data()! as Map<String, dynamic>;
-              final finalFare = (data['finalFare'] as num?)?.toDouble();
-              final actualFare = (data['actualFare'] as num?)?.toDouble();
-              final tipAmount = (data['tipAmount'] as num?)?.toDouble();
-              final estFare = (data['fare'] as num?)?.toDouble();
-              if (finalFare != null) {
-                revenue += finalFare;
-              } else if (actualFare != null) {
-                revenue += actualFare + (tipAmount ?? 0);
-              } else {
-                revenue += estFare ?? 0;
-              }
-            }
-          }
-          return Container(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
-            decoration: BoxDecoration(
-              color: _surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _purple.withOpacity(0.15)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _statChip(
-                  icon: Icons.directions_bike,
-                  label: 'Rides Today',
-                  value: snapshot.hasData ? '$totalRides' : '…',
-                  color: _orange,
-                ),
-                _divider(),
-                _activeHeroesChip(),
-                _divider(),
-                _statChip(
-                  icon: Icons.currency_rupee,
-                  label: 'Revenue',
-                  value:
-                      snapshot.hasData ? '₹${revenue.toStringAsFixed(0)}' : '…',
-                  color: _gold,
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _activeHeroesChip() {
-    return StreamBuilder<DatabaseEvent>(
-      stream: FirebaseDatabase.instance.ref('online_heroes').onValue,
-      builder: (context, snap) {
-        int count = 0;
-        if (snap.hasData && snap.data!.snapshot.value != null) {
-          final val = snap.data!.snapshot.value;
-          if (val is Map) {
-            count = val.length;
-          }
-        }
-        return _statChip(
-          icon: Icons.flash_on,
-          label: 'Active Heroes',
-          value: '${snap.hasData ? count : '…'}',
-          color: _green,
-        );
-      },
-    );
-  }
-
-  Widget _statChip({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 18),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            color: color,
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(color: _text.withOpacity(0.5), fontSize: 10.5),
-        ),
-      ],
-    );
-  }
-
-  Widget _divider() =>
-      Container(height: 36, width: 1, color: _text.withOpacity(0.08));
+  // FIX (per Nizam's request): the Rides Today/Active Heroes/Revenue
+  // stat row that used to live here was removed — it duplicated
+  // AdminDashboardScreen's own Overview tab shown the moment admin taps
+  // into Taxi & Transportation below, so showing it twice was
+  // redundant. The stream that fed it (_statsRowRidesStream, unbounded
+  // live listener) has since been deleted entirely too — see the note
+  // near _sosAlertsStream above.
 
   // ── Manage section — single source of truth for every admin
   // category, all in one clearly-labeled place. Replaces the old
@@ -559,6 +633,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
           ),
           const SizedBox(height: 10),
           _AdminReviewBadgeWrapper(
+            waitingStream: _waitingRequestsStream,
             child: _ManageTile(
               label: 'Taxi & Transportation',
               subtitle: 'Rides, customers, escalated orders',
@@ -572,109 +647,99 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 12),
           // Hero Booking Status and Electronics Booking used to be tiles
           // here too — they're now their own bottom-nav tabs (Hero /
           // Electronics) so admins reach them with one tap instead of
           // Overview -> tile -> pushed screen. Taxi stays a tile because
           // AdminDashboardScreen owns its own full Scaffold/bottom-nav
           // and is reached by push, not by swapping this screen's body.
-          _ManageTile(
-            label: 'App Settings',
-            subtitle: 'Commission, fares, ads, credentials',
-            iconSvg: FluentEmojiFlat.gear,
-            color: _gold,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute<void>(
-                builder: (_) => const CommissionSettingsScreen(),
-              ),
-            ),
-          ),
+          // App Settings moved to the left drawer (see _buildDrawer) —
+          // this Manage section now holds only Taxi & Transportation.
         ],
       ),
     );
   }
 
-  Widget _buildFooter(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      child: Column(
-        children: [
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => Navigator.pushReplacement(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) => const SuperAdminHomeScreen(),
-                ),
-              ),
-              icon: const Icon(
-                Icons.update_rounded,
-                color: _purple,
-                size: 18,
-              ),
-              label: const Text(
-                'Check for Updates',
+  // FIX (per Nizam's request): App Settings, Check for Updates, and
+  // Logout moved here from the main Overview scroll — opened via the
+  // hamburger icon in _buildHeader(), same as any standard admin-panel
+  // side drawer, so the main page stays focused on daily-glance content.
+  Widget _buildDrawer(BuildContext context) {
+    return Drawer(
+      backgroundColor: _surface,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+              child: Text(
+                'Settings',
                 style: TextStyle(
-                  color: _purple,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 13),
-                side: const BorderSide(
-                  color: _purple,
-                  width: 1.2,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  color: _text,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => _logout(context),
-              icon: const Icon(
-                Icons.logout_rounded,
-                color: Color(0xFFFF5252),
-                size: 18,
-              ),
-              label: const Text(
-                'Logout',
-                style: TextStyle(
-                  color: Color(0xFFFF5252),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 13),
-                side: const BorderSide(
-                  color: Color(0xFFFF5252),
-                  width: 1.2,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+            Divider(color: _purple.withOpacity(0.15), height: 1),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Icon(Icons.settings_outlined, color: _gold),
+              title: Text('App Settings', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Commission, fares, ads, credentials',
+                  style: TextStyle(color: _text.withOpacity(0.5), fontSize: 11)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const CommissionSettingsScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.local_offer_outlined, color: Color(0xFFFF4FA3)),
+              title: Text('Erode Offers', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Manage shop offers shown to customers',
+                  style: TextStyle(color: _text.withOpacity(0.5), fontSize: 11)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const AdminErodeOffersScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.update_rounded, color: _purple),
+              title: Text('Check for Updates', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const SuperAdminHomeScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout_rounded, color: Color(0xFFFF5252)),
+              title: const Text('Logout',
+                  style: TextStyle(color: Color(0xFFFF5252), fontWeight: FontWeight.w600)),
+              onTap: () {
+                Navigator.pop(context);
+                _logout(context);
+              },
+            ),
+            const Spacer(),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                'v1.0.0',
+                style: TextStyle(color: _text.withOpacity(0.3), fontSize: 12, letterSpacing: 0.5),
               ),
             ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'v1.0.0',
-            style: TextStyle(
-              color: _text.withOpacity(0.3),
-              fontSize: 12,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -778,15 +843,53 @@ class _ManageTile extends StatelessWidget {
 // (no room for "N waiting" text at nav-bar icon size).
 class _NavWaitingDot extends StatelessWidget {
   final String requestType;
-  const _NavWaitingDot({required this.requestType});
+  final Stream<QuerySnapshot<Map<String, dynamic>>> waitingStream;
+  const _NavWaitingDot({required this.requestType, required this.waitingStream});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: waitingStream,
+      builder: (context, snapshot) {
+        final count = snapshot.data?.docs
+                .where((d) => d.data()['requestType'] == requestType)
+                .length ??
+            0;
+        if (count == 0) return const SizedBox.shrink();
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+          constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFF1744),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: const Color(0xFF12121E), width: 1.5),
+          ),
+          child: Text(
+            count > 9 ? '9+' : '$count',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// Live pending-count dot for the Cus SOS tab — separate collection
+// (sos_kyc_requests) from the service_requests-based badges above, so
+// it gets its own small dedicated listener (only starts once this tab
+// area is actually rendered, which is always — it's a small,
+// deliberately narrow status==pending query, not the whole collection).
+class _SosKycWaitingDot extends StatelessWidget {
+  const _SosKycWaitingDot();
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
-          .collection('service_requests')
-          .where('requestType', isEqualTo: requestType)
-          .where('status', whereIn: ['pending', 'admin_review'])
+          .collection('sos_kyc_requests')
+          .where('status', isEqualTo: 'pending')
           .snapshots(),
       builder: (context, snapshot) {
         final count = snapshot.data?.docs.length ?? 0;
@@ -802,8 +905,7 @@ class _NavWaitingDot extends StatelessWidget {
           child: Text(
             count > 9 ? '9+' : '$count',
             textAlign: TextAlign.center,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800),
+            style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800),
           ),
         );
       },
@@ -861,17 +963,18 @@ class _WaitingBadge extends StatelessWidget {
 // above, which also creates its stream inline in a StatelessWidget.
 class _AdminReviewBadgeWrapper extends StatelessWidget {
   final Widget child;
-  const _AdminReviewBadgeWrapper({required this.child});
+  final Stream<QuerySnapshot<Map<String, dynamic>>> waitingStream;
+  const _AdminReviewBadgeWrapper({required this.child, required this.waitingStream});
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('service_requests')
-          .where('status', isEqualTo: 'admin_review')
-          .snapshots(),
+      stream: waitingStream,
       builder: (context, snapshot) {
-        final count = snapshot.data?.docs.length ?? 0;
+        final count = snapshot.data?.docs
+                .where((d) => d.data()['status'] == 'admin_review')
+                .length ??
+            0;
         return Stack(
           clipBehavior: Clip.none,
           children: [

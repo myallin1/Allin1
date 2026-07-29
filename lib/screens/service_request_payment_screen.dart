@@ -71,6 +71,35 @@ class _ServiceRequestPaymentScreenState
     }
   }
 
+  // FIX (payment-trust audit, per Nizam's request): the hero's own
+  // "Mark Payment Received (Cash)" button (hero_home_screen.dart) now
+  // only writes the interim paymentStatus:'hero_marked_paid' — it can no
+  // longer unlock rating by itself. The customer must explicitly confirm
+  // here before this becomes the real 'paid' status. "No" just leaves
+  // the task in this state; the customer can still pick Cash/UPI
+  // themselves below if the hero's claim was wrong.
+  Future<void> _confirmHeroMarkedPaid() async {
+    setState(() => _submitting = true);
+    try {
+      await ServiceRequestService()
+          .markServiceRequestPaid(widget.requestId, method: 'cash');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Payment confirmed. Thank you!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not confirm payment: $e'),
+              backgroundColor: Colors.red,),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -110,6 +139,10 @@ class _ServiceRequestPaymentScreenState
               (data['estimatedAmount'] as num?)?.toDouble();
           final paymentStatus = data['paymentStatus'] as String? ?? '';
           final isPaid = paymentStatus == 'paid';
+          // Hero claimed cash was received but the customer hasn't
+          // confirmed it yet — see FIX comment on
+          // markServiceRequestPaymentReceived() in service_request_service.dart.
+          final isHeroMarkedPaid = paymentStatus == 'hero_marked_paid';
           final amount = finalAmount ?? estimatedAmount ?? 0;
           final assignedHeroId = data['assignedHeroId'] as String?;
           // Not yet rated — RatingFeedbackSheet itself has no
@@ -169,8 +202,67 @@ class _ServiceRequestPaymentScreenState
                   ),
                 ),
                 const Spacer(),
-                if (!isPaid && finalAmount != null) ...[
+                if (isHeroMarkedPaid) ...[
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF6E0),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFFFD980)),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Your hero marked this task as Cash paid. '
+                          'Did you actually pay ₹${amount.toStringAsFixed(0)}?',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.outfit(
+                              color: _kText,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,),
+                        ),
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: ElevatedButton(
+                            onPressed:
+                                _submitting ? null : _confirmHeroMarkedPaid,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _kGreen,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),),
+                            ),
+                            child: Text('Yes, I paid this',
+                                style: GoogleFonts.outfit(
+                                    fontWeight: FontWeight.w800,),),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          "No? Pick how you actually paid below.",
+                          style: GoogleFonts.outfit(
+                              color: _kMuted, fontSize: 11,),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                if ((!isPaid && !isHeroMarkedPaid) &&
+                    finalAmount != null) ...[
                   Text('Choose how you paid',
+                      style: GoogleFonts.outfit(
+                          color: _kText,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,),),
+                  const SizedBox(height: 10),
+                  _payMethodButton('UPI', Icons.qr_code_rounded, 'upi'),
+                  const SizedBox(height: 10),
+                  _payMethodButton('Cash', Icons.payments_rounded, 'cash'),
+                ] else if (!isPaid && isHeroMarkedPaid && finalAmount != null) ...[
+                  Text('Or choose how you paid',
                       style: GoogleFonts.outfit(
                           color: _kText,
                           fontSize: 14,
