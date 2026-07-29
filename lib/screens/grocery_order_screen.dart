@@ -16,6 +16,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/cloudinary_upload_service.dart';
 import '../services/service_request_service.dart';
 import '../widgets/location_capture_field.dart';
+import '../widgets/server_busy_dialog.dart';
 import 'grocery_order_status_screen.dart';
 import 'service_request_tracking_screen.dart';
 
@@ -124,9 +125,7 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send order: $e'), backgroundColor: Colors.red),
-        );
+        showServerBusyDialog(context);
       }
     } finally {
       if (mounted) setState(() => _submitting = false);

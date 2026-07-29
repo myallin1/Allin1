@@ -19,6 +19,7 @@ import 'dart:async';
 
 import '../services/location_service.dart';
 import '../services/map_service.dart';
+import '../widgets/server_busy_dialog.dart';
 import '../services/shared_location_inbox.dart';
 import '../services/service_request_service.dart';
 import '../utils/location_link_parser.dart';
@@ -536,9 +537,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send request: $e'), backgroundColor: Colors.red),
-        );
+        showServerBusyDialog(context);
       }
     } finally {
       if (mounted) setState(() => _submitting = false);

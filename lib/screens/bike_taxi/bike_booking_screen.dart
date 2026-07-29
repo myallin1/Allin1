@@ -23,6 +23,7 @@ import '../../services/map_service.dart';
 import '../../services/recent_places_service.dart';
 import '../../services/session_service.dart';
 import '../../widgets/allin1_map_widget.dart';
+import '../../widgets/server_busy_dialog.dart';
 import '../../widgets/vehicle_selection_bottom_sheet.dart';
 import '../login_screen.dart';
 import '../payment_screen.dart';
@@ -1943,6 +1944,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
          debugPrint('🔥 [RIDE CREATION] Firestore document created successfully! Doc ID: ${rideRef.id}');
        }).catchError((dynamic e) {
          debugPrint('[BikeBookingScreen] Background ride creation failed: $e');
+         if (mounted) {
+           showServerBusyDialog(context);
+         }
        });
 
       if (!mounted) return;
@@ -1959,9 +1963,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     } catch (e) {
       debugPrint('🔥 [RIDE CREATION ERROR] Crashed with: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to book ride. Please try again.')),
-        );
+        showServerBusyDialog(context);
       }
     }
   }

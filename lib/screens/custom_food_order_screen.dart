@@ -15,6 +15,7 @@ import '../services/location_service.dart';
 import '../services/map_service.dart';
 import '../services/service_request_service.dart';
 import '../utils/service_request_labels.dart';
+import '../widgets/server_busy_dialog.dart';
 import 'category_screen.dart';
 import 'food_order_status_screen.dart';
 import 'location_picker_screen.dart';
@@ -209,9 +210,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send order: $e'), backgroundColor: Colors.red),
-        );
+        showServerBusyDialog(context);
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);

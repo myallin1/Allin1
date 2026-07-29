@@ -14,6 +14,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../services/service_request_service.dart';
 import '../widgets/location_capture_field.dart';
+import '../widgets/server_busy_dialog.dart';
 import 'service_request_tracking_screen.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
@@ -93,9 +94,7 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send request: $e'), backgroundColor: Colors.red),
-        );
+        showServerBusyDialog(context);
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
