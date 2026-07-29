@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive/hive.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/ai_activation_service.dart';
 import '../services/localization_service.dart';
@@ -581,6 +582,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // FIX (Play Store pre-submission blocker): these tiles used to be
+  // no-op onTap: () {} — Play Console requires a working, reachable
+  // privacy policy (and reviewers check Terms too). Both pages are
+  // static HTML served alongside every web build (web/privacy.html,
+  // web/terms.html — flutter build web copies everything under web/
+  // into build/web/ automatically, so they're live at
+  // https://my-allin1.web.app/privacy.html the moment the next deploy
+  // runs) and reachable from native builds via url_launcher.
+  Future<void> _openLegalPage(String fileName) async {
+    final url = Uri.parse('https://my-allin1.web.app/$fileName');
+    final opened = await launchUrl(url, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the page. Check your connection.')),
+      );
+    }
+  }
+
   Widget _buildPrivacySettings() {
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -594,14 +613,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: Icons.privacy_tip_outlined,
             title: 'Privacy Policy',
             subtitle: 'View our privacy policy',
-            onTap: () {},
+            onTap: () => _openLegalPage('privacy.html'),
           ),
           _buildDivider(),
           _buildTapTile(
             icon: Icons.description_outlined,
             title: 'Terms of Service',
             subtitle: 'View terms and conditions',
-            onTap: () {},
+            onTap: () => _openLegalPage('terms.html'),
           ),
           _buildDivider(),
           _buildTapTile(

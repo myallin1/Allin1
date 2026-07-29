@@ -5,7 +5,13 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+    <!-- FIX (Play Store pre-submission blocker): ACCESS_BACKGROUND_LOCATION
+         removed — grep confirmed no code anywhere requests "always"/background
+         location (permission_service.dart only ever asks for foreground
+         location), so this permission was declared but unused across all 3
+         flavors. Keeping it would have required completing Play Console's
+         Background Location declaration form (justification + video) for a
+         permission nothing in the app actually uses. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
@@ -16,6 +22,17 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <!-- NOT vestigial: required by AppUpdateChecker/update_service.dart's
+         one-tap self-update flow (OpenFilex.open() on a downloaded APK from
+         GitHub Releases needs this to launch Android's package installer).
+         Keep alongside the FileProvider below, which the installer intent
+         also depends on. If this build is ever distributed through Play
+         Store instead of sideloaded, note that Play Store already handles
+         updates itself — this self-download-and-install path is only for
+         the sideloaded/direct-APK distribution channel and should probably
+         be disabled for a Play-distributed build, since Play's policies
+         discourage apps installing other APKs outside Play's own update
+         mechanism. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
     <application
