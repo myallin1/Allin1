@@ -7,6 +7,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'sos_kyc_verification_screen.dart';
+
 class SosScreen extends StatefulWidget {
   const SosScreen({super.key});
 
@@ -170,7 +172,7 @@ class _SosScreenState extends State<SosScreen> {
           children: [
             _buildTrustHeader(),
             const SizedBox(height: 28),
-            _buildSosCard(),
+            _buildSosGateOrCard(),
             const SizedBox(height: 22),
             _buildPoliceButton(),
             const SizedBox(height: 18),
@@ -227,6 +229,120 @@ class _SosScreenState extends State<SosScreen> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // NEW (per Nizam's request): the SOS button used to fire instantly on
+  // a 3-tap gesture with zero verification — easy to trigger by
+  // accident/misuse, wasting a safety feature meant for real
+  // emergencies. Now gated behind a one-time KYC verification
+  // (sos_kyc_requests/{uid}), reviewed by admin's Cus SOS Approval tab.
+  // Real-time listener so the button unlocks the instant admin
+  // approves, without the customer needing to reopen the app.
+  Widget _buildSosGateOrCard() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return _buildSosCard();
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('sos_kyc_requests')
+          .doc(user.uid)
+          .snapshots(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CircularProgressIndicator(color: _red)),
+          );
+        }
+        final data = snap.data?.data();
+        final status = data?['status'] as String?;
+
+        if (status == 'approved') {
+          return _buildSosCard();
+        }
+        if (status == 'pending') {
+          return _buildKycStatusCard(
+            icon: Icons.hourglass_top_rounded,
+            color: _darkRed,
+            title: 'Verification Pending',
+            message: 'Your SOS KYC details are with admin for review. '
+                'This is a one-time check — once approved, your SOS button '
+                'activates permanently.',
+          );
+        }
+        if (status == 'rejected') {
+          final reason = data?['rejectionReason'] as String? ?? '';
+          return _buildKycStatusCard(
+            icon: Icons.error_outline_rounded,
+            color: _red,
+            title: 'Verification Rejected',
+            message: reason.isNotEmpty
+                ? 'Reason: $reason\n\nPlease correct and resubmit.'
+                : 'Please correct your details and resubmit.',
+            actionLabel: 'Resubmit KYC',
+          );
+        }
+        // Not submitted yet.
+        return _buildKycStatusCard(
+          icon: Icons.verified_user_outlined,
+          color: _pink,
+          title: 'Verify KYC to Activate SOS',
+          message: 'For your safety and to prevent misuse of this emergency '
+              'network, please verify your identity once before using SOS.',
+          actionLabel: 'Start Verification',
+        );
+      },
+    );
+  }
+
+  Widget _buildKycStatusCard({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String message,
+    String? actionLabel,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: const Color(0xFFFFD2E6)),
+        boxShadow: [
+          BoxShadow(color: color.withValues(alpha: 0.14), blurRadius: 28, offset: const Offset(0, 14)),
+        ],
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 56),
+          const SizedBox(height: 14),
+          Text(title,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(color: _navy, fontSize: 18, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          Text(message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.notoSansTamil(color: const Color(0xFF7A4B63), fontSize: 13, height: 1.4)),
+          if (actionLabel != null) ...[
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: () => Navigator.push(context,
+                    MaterialPageRoute<void>(builder: (_) => const SosKycVerificationScreen())),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _pink,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                child: Text(actionLabel,
+                    style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700)),
+              ),
+            ),
+          ],
         ],
       ),
     );
