@@ -97,6 +97,14 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
         .collection('service_requests')
         .where('requestType', isEqualTo: widget.requestType)
         .orderBy('createdAt', descending: true)
+        // FIX (read-spike follow-up from the IndexedStack fix): this
+        // query used to be unbounded, re-reading this request type's
+        // ENTIRE history on every listen. Admin only ever needs to
+        // work the recent/active queue here, not months of completed
+        // history — 100 most-recent covers that with room to spare.
+        // Picked a safe default rather than blocking on a product
+        // decision; raise this if 100 ever turns out to be too few.
+        .limit(100)
         .snapshots()
         .listen(
       (snapshot) {

@@ -8,6 +8,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // ── Theme (matches admin dashboard) ────────────────────────────
 const Color _bg = Color(0xFF0A0A1A);
@@ -176,12 +177,43 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
                 onView: () => _showDetailDialog(doc.id, data),
                 onApprove: () => _approveHero(doc.id, data),
                 onReject: () => _rejectHero(doc.id, data),
+                onCall: () => _callHero(data['phone'] as String? ?? ''),
               );
             },
           );
         },
       ),
     );
+  }
+
+  // FIX: admin had no way to call a hero straight from this screen to
+  // verify their identity before approving — Nizam explicitly asked for
+  // a call button that dials whatever phone number the hero themselves
+  // typed at registration (not a placeholder admin number).
+  Future<void> _callHero(String phone) async {
+    final digits = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    if (digits.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No phone number on file for this hero'),
+          backgroundColor: _red,
+        ),
+      );
+      return;
+    }
+    final url = Uri.parse('tel:$digits');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to open phone dialer'),
+          backgroundColor: _red,
+        ),
+      );
+    }
   }
 
   // ── Detail Dialog ──────────────────────────────────────────────
@@ -192,6 +224,10 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
     final vehicleNumber = data['vehicleNumber'] as String? ?? 'N/A';
     final vehicleType = data['vehicleType'] as String? ?? 'N/A';
     final licenseNumber = data['licenseNumber'] as String? ?? 'N/A';
+    final aadhaarNumber = data['aadhaarNumber'] as String? ?? 'N/A';
+    final panNumber = data['panNumber'] as String? ?? 'N/A';
+    final preferredWorkLocation =
+        data['preferredWorkLocation'] as String? ?? '';
     final onboardingMethod = data['onboardingMethod'] as String? ?? 'N/A';
     final createdAt = data['createdAt'] as Timestamp?;
 
@@ -216,7 +252,8 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
               _detailRow('Phone', phone),
               _detailRow('Vehicle No.', vehicleNumber),
               _detailRow('Vehicle Type', vehicleType),
-              _detailRow('License', licenseNumber),
+              if (preferredWorkLocation.trim().isNotEmpty)
+                _detailRow('Preferred Area', preferredWorkLocation),
               _detailRow('Onboarding', onboardingMethod),
               _detailRow(
                 'Submitted',
@@ -225,6 +262,20 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
                         '${createdAt.toDate().hour}:${createdAt.toDate().minute.toString().padLeft(2, '0')}'
                     : 'N/A',
               ),
+              const SizedBox(height: 14),
+              // FIX: per Nizam's request — pair each typed number
+              // directly with its own proof photo (line by line, same
+              // order the hero filled the registration form), instead
+              // of listing all numbers first and all photos separately
+              // at the bottom. Admin can now read the number straight
+              // off the photo and compare it against what was typed,
+              // right there, without scrolling back and forth.
+              Text('Proof Verification',
+                  style: GoogleFonts.outfit(color: _muted, fontSize: 11, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              _detailRowWithPhoto('Aadhaar', aadhaarNumber, data['aadhaarDocUrl'] as String?),
+              _detailRowWithPhoto('PAN', panNumber, data['panDocUrl'] as String?),
+              _detailRowWithPhoto('License', licenseNumber, data['licenseDocUrl'] as String?),
               const SizedBox(height: 8),
               Text(
                 'UID: $uid',
@@ -238,9 +289,88 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
           ),
         ),
         actions: [
+          if (phone != 'N/A' && phone.trim().isNotEmpty)
+            TextButton.icon(
+              onPressed: () => _callHero(phone),
+              icon: const Icon(Icons.call_rounded, size: 16, color: _green),
+              label: const Text('Call Hero', style: TextStyle(color: _green)),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Close', style: TextStyle(color: _muted)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFullImage(String title, String url) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            InteractiveViewer(
+              child: Image.network(url, fit: BoxFit.contain),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Pairs a typed number with its own proof photo, line by line — see
+  // FIX comment at the _showDetailDialog call site above.
+  Widget _detailRowWithPhoto(String label, String value, String? photoUrl) {
+    final hasPhoto = photoUrl != null && photoUrl.isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: const TextStyle(fontSize: 11, color: _muted, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(value.isNotEmpty ? value : 'N/A',
+                    style: const TextStyle(fontSize: 13, color: _text, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: hasPhoto ? () => _showFullImage(label, photoUrl) : null,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: hasPhoto
+                  ? Image.network(
+                      photoUrl,
+                      width: 64,
+                      height: 64,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        width: 64,
+                        height: 64,
+                        color: _card,
+                        child: const Icon(Icons.broken_image_outlined, color: _muted, size: 20),
+                      ),
+                    )
+                  : Container(
+                      width: 64,
+                      height: 64,
+                      color: _card,
+                      child: const Icon(Icons.image_not_supported_outlined, color: _muted, size: 20),
+                    ),
+            ),
           ),
         ],
       ),
@@ -531,12 +661,14 @@ class _HeroApprovalCard extends StatelessWidget {
   final VoidCallback onView;
   final VoidCallback onApprove;
   final VoidCallback onReject;
+  final VoidCallback onCall;
   const _HeroApprovalCard({
     required this.uid,
     required this.data,
     required this.onView,
     required this.onApprove,
     required this.onReject,
+    required this.onCall,
   });
 
   @override
@@ -602,6 +734,14 @@ class _HeroApprovalCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (phone.isNotEmpty)
+                IconButton(
+                  onPressed: onCall,
+                  icon: const Icon(Icons.call_rounded, color: _green, size: 20),
+                  tooltip: 'Call to verify',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                ),
               if (createdAt != null)
                 Text(
                   '${createdAt.toDate().day}/${createdAt.toDate().month}',
@@ -712,5 +852,6 @@ class _HeroApprovalCard extends StatelessWidget {
     properties.add(ObjectFlagProperty<VoidCallback>.has('onView', onView));
     properties.add(ObjectFlagProperty<VoidCallback>.has('onApprove', onApprove));
     properties.add(ObjectFlagProperty<VoidCallback>.has('onReject', onReject));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onCall', onCall));
   }
 }

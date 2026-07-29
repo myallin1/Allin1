@@ -17,6 +17,7 @@ import 'screens/admin/fare_management_screen.dart';
 import 'screens/admin/super_admin_home_screen.dart';
 import 'screens/admin/task_approvals_screen.dart';
 import 'screens/login_screen.dart';
+import 'services/db_usage_tracker.dart';
 import 'services/localization_service.dart';
 import 'services/session_service.dart';
 
@@ -72,6 +73,7 @@ void main() {
         runApp(_InitErrorApp('Firebase initialization failed:\n$e'));
         return;
       }
+      DbUsageTracker.instance.init('admin');
       runApp(const AdminApp());
     },
   );

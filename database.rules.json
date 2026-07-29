@@ -22,6 +22,26 @@
         }
       }
     },
+    "active_service_requests": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$requestId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "hero_service_pings": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$heroId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "$requestId": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      }
+    },
     "signals": {
       ".read": "auth != null",
       ".write": "auth != null"
@@ -51,6 +71,20 @@
     "dispute_reports": {
       ".read": "auth != null",
       "$reportId": {
+        ".write": "auth != null"
+      }
+    },
+    "hero_status_updates": {
+      ".read": "auth != null",
+      "$heroId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "sos_alerts": {
+      ".read": "auth != null",
+      "$uid": {
+        ".read": "auth != null",
         ".write": "auth != null"
       }
     }

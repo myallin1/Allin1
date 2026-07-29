@@ -37,6 +37,13 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
   String? _selectedHeroName;
   String? _selectedHeroPhone;
   bool _isLoading = false;
+  // Separate from _isLoading above (that one's the dispatch bottom-sheet's
+  // "Send Ride Request" submit spinner — a different concern). This one
+  // tracks whether the FIRST online_heroes snapshot has arrived yet, so
+  // the UI can tell "still loading" apart from "genuinely zero heroes
+  // online right now" instead of showing "No heroes online" for a moment
+  // on every screen open before the real data lands.
+  bool _heroesLoading = true;
 
   final TextEditingController _nameCtrl = TextEditingController();
   final TextEditingController _phoneCtrl = TextEditingController();
@@ -92,7 +99,12 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
       (event) {
         final raw = event.snapshot.value;
         if (raw is! Map) {
-          if (mounted) setState(() => _onlineHeroes = []);
+          if (mounted) {
+            setState(() {
+              _onlineHeroes = [];
+              _heroesLoading = false;
+            });
+          }
           return;
         }
 
@@ -127,7 +139,12 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
           debugPrint('online_heroes parse error: $e');
         }
 
-        if (mounted) setState(() => _onlineHeroes = heroes);
+        if (mounted) {
+          setState(() {
+            _onlineHeroes = heroes;
+            _heroesLoading = false;
+          });
+        }
       },
       onError: (e) {
         if (mounted) {
@@ -339,6 +356,13 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (_heroesLoading) {
+      return const Scaffold(
+        backgroundColor: _bg,
+        body: Center(child: CircularProgressIndicator(color: _pink)),
+      );
+    }
+
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(

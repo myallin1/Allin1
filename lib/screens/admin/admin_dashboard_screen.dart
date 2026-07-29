@@ -4,6 +4,8 @@
 // recent transactions
 // ================================================================
 
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -11,8 +13,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/db_usage_tracker.dart';
+import '../../widgets/manual_refresh_header.dart';
 import 'ads_management_screen.dart';
 import 'admin_hero_dispatch_screen.dart';
+import 'admin_detailed_reports_screen.dart';
 import 'admin_new_orders_screen.dart';
 import 'admin_ride_tracking_screen.dart';
 import 'approved_heroes_screen.dart';
@@ -73,6 +78,29 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   // which tab is selected (see _buildBottomNav()).
   late final Stream<QuerySnapshot> _adminReviewCountStream;
 
+  // FIX (per Nizam's request — cut auto-listeners, use manual refresh):
+  // _buildStatCards() (rides, limit 200), _buildOnlineHeroes() (heroes),
+  // and _buildRecentTransactions() (wallet_transactions, limit 15) used
+  // to be live .snapshots() listeners that stayed open the whole time
+  // this screen was mounted, re-reading on every server-side change.
+  // These are "overview/browse" widgets, not safety-critical live feeds,
+  // so they're now one-time .get() fetches triggered once on load and
+  // again only when the admin taps the round refresh button — see
+  // ManualRefreshHeader. (Booking-notification badges above — pending
+  // hero approvals / admin_review count — stay live since admins need
+  // to know about those immediately.)
+  QuerySnapshot? _statCardsSnapshot;
+  bool _statCardsLoading = true;
+  DateTime? _statCardsSyncedAt;
+
+  QuerySnapshot? _onlineHeroesSnapshot;
+  bool _onlineHeroesLoading = true;
+  DateTime? _onlineHeroesSyncedAt;
+
+  QuerySnapshot? _recentTransactionsSnapshot;
+  bool _recentTransactionsLoading = true;
+  DateTime? _recentTransactionsSyncedAt;
+
   @override
   void initState() {
     super.initState();
@@ -84,8 +112,68 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         .collection('service_requests')
         .where('status', isEqualTo: 'admin_review')
         .snapshots();
+
+    // DB usage monitor — side-channel .listen() on each already-hoisted
+    // stream just to count docs per snapshot; this does NOT add extra
+    // Firestore reads (Firestore snapshots() streams are broadcast
+    // streams — StreamBuilder above and this .listen() share the same
+    // underlying query/watch). See lib/services/db_usage_tracker.dart.
+    _pendingHeroApprovalsStream.listen((s) => DbUsageTracker.instance.recordRead(s.docs.length));
+    _adminReviewCountStream.listen((s) => DbUsageTracker.instance.recordRead(s.docs.length));
+
+    unawaited(_fetchStatCards());
+    unawaited(_fetchOnlineHeroes());
+    unawaited(_fetchRecentTransactions());
+
     // Use unawaited if we don't want to block, or just call it since it handles its own state
     _computeWalletTotal();
+  }
+
+  Future<void> _fetchStatCards() async {
+    if (mounted) setState(() => _statCardsLoading = true);
+    final snap = await FirebaseFirestore.instance
+        .collection('rides')
+        .orderBy('createdAt', descending: true)
+        .limit(200)
+        .get();
+    DbUsageTracker.instance.recordRead(snap.docs.length);
+    if (!mounted) return;
+    setState(() {
+      _statCardsSnapshot = snap;
+      _statCardsLoading = false;
+      _statCardsSyncedAt = DateTime.now();
+    });
+  }
+
+  Future<void> _fetchOnlineHeroes() async {
+    if (mounted) setState(() => _onlineHeroesLoading = true);
+    final snap = await FirebaseFirestore.instance
+        .collection('heroes')
+        .where('status', whereIn: ['online', 'on_ride'])
+        .get();
+    DbUsageTracker.instance.recordRead(snap.docs.length);
+    if (!mounted) return;
+    setState(() {
+      _onlineHeroesSnapshot = snap;
+      _onlineHeroesLoading = false;
+      _onlineHeroesSyncedAt = DateTime.now();
+    });
+  }
+
+  Future<void> _fetchRecentTransactions() async {
+    if (mounted) setState(() => _recentTransactionsLoading = true);
+    final snap = await FirebaseFirestore.instance
+        .collection('wallet_transactions')
+        .orderBy('createdAt', descending: true)
+        .limit(15)
+        .get();
+    DbUsageTracker.instance.recordRead(snap.docs.length);
+    if (!mounted) return;
+    setState(() {
+      _recentTransactionsSnapshot = snap;
+      _recentTransactionsLoading = false;
+      _recentTransactionsSyncedAt = DateTime.now();
+    });
   }
 
   Future<void> _showUtrDialog(String rideDocId, String customerName, double amount) async {
@@ -185,9 +273,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _computeWalletTotal() async {
     // V1 Launch: Wallet feature backend is on hold to save DB costs.
     // UI remains intact, but backend returns 0.0
+    //
+    // FIX: this used to only set _walletTotal, never _walletLoading (which
+    // starts true) — the "Wallet Pool" stat card checks _walletLoading to
+    // decide whether to show a spinner or the value, so it was stuck
+    // showing a spinner forever even though _walletTotal was already 0.0.
     if (mounted) {
       setState(() {
         _walletTotal = 0.0;
+        _walletLoading = false;
       });
     }
   }
@@ -775,6 +869,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         _buildStatCards(),
+        const SizedBox(height: 14),
+        // FIX: per Nizam's explicit request — moved from being buried
+        // inside the "More" menu to a visible tile right on the Taxi
+        // main/Overview page, so it's easy to find without hunting
+        // through menus. Still opens a confirmation warning per-report
+        // before any deep read happens (see AdminDetailedReportsScreen).
+        _buildDbAndReportsTile(context),
         const SizedBox(height: 20),
         _buildOnlineHeroes(),
         const SizedBox(height: 20),
@@ -783,92 +884,137 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
+  Widget _buildDbAndReportsTile(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () => Navigator.push(context,
+          MaterialPageRoute<void>(builder: (_) => const AdminDetailedReportsScreen())),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A2A),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _green.withOpacity(0.3)),
+          boxShadow: [
+            BoxShadow(color: _green.withOpacity(0.1), blurRadius: 8, spreadRadius: 1),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: _green.withOpacity(0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.query_stats_rounded, color: _green, size: 22),
+            ),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('DB & Detailed Report',
+                      style: TextStyle(color: _text, fontSize: 14, fontWeight: FontWeight.w700)),
+                  SizedBox(height: 2),
+                  Text('Usage billing, location demand, DB usage — deep-read warning before opening',
+                      style: TextStyle(color: _muted, fontSize: 11)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: _muted, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── Stat Cards Row (rides today + wallet total) ───────────────
   Widget _buildStatCards() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('rides')
-          .orderBy('createdAt', descending: true)
-          .limit(200)
-          .snapshots(),
-      builder: (context, snap) {
-        int ridesToday = 0;
-        double earningsToday = 0;
-        if (snap.hasData) {
-          for (final doc in snap.data!.docs) {
-            final d = doc.data()! as Map<String, dynamic>;
-            if (_isToday(d['createdAt'])) {
-              ridesToday++;
-              final finalFare = (d['finalFare'] as num?)?.toDouble();
-              final actualFare = (d['actualFare'] as num?)?.toDouble();
-              final tipAmount = (d['tipAmount'] as num?)?.toDouble();
-              final estFare = (d['fare'] as num?)?.toDouble();
-              if (finalFare != null) {
-                earningsToday += finalFare;
-              } else if (actualFare != null) {
-                earningsToday += actualFare + (tipAmount ?? 0.0);
-              } else {
-                earningsToday += estFare ?? 0.0;
-              }
-            }
-          }
+    int ridesToday = 0;
+    double earningsToday = 0;
+    final docs = _statCardsSnapshot?.docs ?? [];
+    for (final doc in docs) {
+      final d = doc.data()! as Map<String, dynamic>;
+      if (_isToday(d['createdAt'])) {
+        ridesToday++;
+        final finalFare = (d['finalFare'] as num?)?.toDouble();
+        final actualFare = (d['actualFare'] as num?)?.toDouble();
+        final tipAmount = (d['tipAmount'] as num?)?.toDouble();
+        final estFare = (d['fare'] as num?)?.toDouble();
+        if (finalFare != null) {
+          earningsToday += finalFare;
+        } else if (actualFare != null) {
+          earningsToday += actualFare + (tipAmount ?? 0.0);
+        } else {
+          earningsToday += estFare ?? 0.0;
         }
-        return Column(
+      }
+    }
+    return Column(
+      children: [
+        ManualRefreshHeader(
+          lastSyncedAt: _statCardsSyncedAt,
+          loading: _statCardsLoading,
+          onRefresh: () => unawaited(_fetchStatCards()),
+          accentColor: _orange,
+          textColor: _muted,
+        ),
+        const SizedBox(height: 8),
+        Row(
           children: [
-            Row(
-              children: [
-                _statCard(
-                  '🏍️',
-                  'Rides Today',
-                  '$ridesToday',
-                  _orange,
-                  snap.connectionState == ConnectionState.waiting,
-                ),
-                const SizedBox(width: 12),
-                StreamBuilder<DatabaseEvent>(
-                  stream: FirebaseDatabase.instance.ref('online_heroes').onValue,
-                  builder: (context, rtdbSnap) {
-                    int activeNow = 0;
-                    if (rtdbSnap.hasData && rtdbSnap.data!.snapshot.value != null) {
-                      final val = rtdbSnap.data!.snapshot.value;
-                      if (val is Map) activeNow = val.length;
-                    }
-                    return _statCard(
-                      '⚡',
-                      'Active Now',
-                      '${rtdbSnap.hasData ? activeNow : '…'}',
-                      _green,
-                      false,
-                    );
-                  },
-                ),
-              ],
+            _statCard(
+              '🏍️',
+              'Rides Today',
+              '$ridesToday',
+              _orange,
+              _statCardsLoading && _statCardsSnapshot == null,
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                _statCard(
-                  '💰',
-                  'Fare Today',
-                  '₹${earningsToday.toInt()}',
-                  _gold,
-                  snap.connectionState == ConnectionState.waiting,
-                ),
-                const SizedBox(width: 12),
-                _statCard(
-                  '💳',
-                  'Wallet Pool',
-                  _walletLoading
-                      ? '...'
-                      : '₹${_walletTotal.toStringAsFixed(0)}',
-                  _purple,
-                  _walletLoading,
-                ),
-              ],
+            const SizedBox(width: 12),
+            StreamBuilder<DatabaseEvent>(
+              stream: FirebaseDatabase.instance.ref('online_heroes').onValue,
+              builder: (context, rtdbSnap) {
+                int activeNow = 0;
+                if (rtdbSnap.hasData && rtdbSnap.data!.snapshot.value != null) {
+                  final val = rtdbSnap.data!.snapshot.value;
+                  if (val is Map) activeNow = val.length;
+                }
+                return _statCard(
+                  '⚡',
+                  'Active Now',
+                  '${rtdbSnap.hasData ? activeNow : '…'}',
+                  _green,
+                  false,
+                );
+              },
             ),
           ],
-        );
-      },
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            _statCard(
+              '💰',
+              'Fare Today',
+              '₹${earningsToday.toInt()}',
+              _gold,
+              _statCardsLoading && _statCardsSnapshot == null,
+            ),
+            const SizedBox(width: 12),
+            _statCard(
+              '💳',
+              'Wallet Pool',
+              _walletLoading
+                  ? '...'
+                  : '₹${_walletTotal.toStringAsFixed(0)}',
+              _purple,
+              _walletLoading,
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -928,26 +1074,28 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   // ── Online Heroes Live Feed ────────────────────────────────────
   Widget _buildOnlineHeroes() {
+    final docs = _onlineHeroesSnapshot?.docs ?? [];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionHeader('🟢', 'Online Heroes', _green),
+        const SizedBox(height: 8),
+        ManualRefreshHeader(
+          lastSyncedAt: _onlineHeroesSyncedAt,
+          loading: _onlineHeroesLoading,
+          onRefresh: () => unawaited(_fetchOnlineHeroes()),
+          accentColor: _green,
+          textColor: _muted,
+        ),
         const SizedBox(height: 10),
-        StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('heroes')
-              .where('status', whereIn: ['online', 'on_ride']).snapshots(),
-          builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(color: _green, strokeWidth: 2),
-              );
-            }
-            final docs = snap.data?.docs ?? [];
-            if (docs.isEmpty) {
-              return _emptyCard('No heroes online right now', '🛵');
-            }
-            return Column(
+        if (_onlineHeroesLoading && _onlineHeroesSnapshot == null)
+          const Center(
+            child: CircularProgressIndicator(color: _green, strokeWidth: 2),
+          )
+        else if (docs.isEmpty)
+          _emptyCard('No heroes online right now', '🛵')
+        else
+          Column(
               children: docs.map((doc) {
                 final d = doc.data()! as Map<String, dynamic>;
                 final name = d['captainName'] as String? ?? 'Hero';
@@ -1038,38 +1186,35 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ),
                 );
               }).toList(),
-            );
-          },
-        ),
+            ),
       ],
     );
   }
 
   // ── Recent Transactions ───────────────────────────────────────
   Widget _buildRecentTransactions() {
+    final docs = _recentTransactionsSnapshot?.docs ?? [];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionHeader('💳', 'Recent Transactions', _purple),
+        const SizedBox(height: 8),
+        ManualRefreshHeader(
+          lastSyncedAt: _recentTransactionsSyncedAt,
+          loading: _recentTransactionsLoading,
+          onRefresh: () => unawaited(_fetchRecentTransactions()),
+          accentColor: _purple,
+          textColor: _muted,
+        ),
         const SizedBox(height: 10),
-        StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('wallet_transactions')
-              .orderBy('createdAt', descending: true)
-              .limit(15)
-              .snapshots(),
-          builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child:
-                    CircularProgressIndicator(color: _purple, strokeWidth: 2),
-              );
-            }
-            final docs = snap.data?.docs ?? [];
-            if (docs.isEmpty) {
-              return _emptyCard('No transactions yet', '💸');
-            }
-            return Column(
+        if (_recentTransactionsLoading && _recentTransactionsSnapshot == null)
+          const Center(
+            child: CircularProgressIndicator(color: _purple, strokeWidth: 2),
+          )
+        else if (docs.isEmpty)
+          _emptyCard('No transactions yet', '💸')
+        else
+          Column(
               children: docs.map((doc) {
                 final d = doc.data()! as Map<String, dynamic>;
                 final type = d['type'] as String? ?? 'debit';
@@ -1168,9 +1313,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ),
                 );
               }).toList(),
-            );
-          },
-        ),
+            ),
       ],
     );
   }
@@ -1620,6 +1763,11 @@ class _MoreSheet extends StatelessWidget {
                 onTopUp();
               },
             ),
+            // FIX: this used to be a separate "Detailed Reports" tile
+            // here too — now a single entry point, moved to a visible
+            // "DB & Detailed Report" card right on the Taxi Overview
+            // page (see _buildDbAndReportsTile), per Nizam's explicit
+            // request. Not duplicated here anymore.
             const SizedBox(height: 16),
             _sheetSectionLabel('SETTINGS'),
             _sheetTile(

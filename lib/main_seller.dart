@@ -9,9 +9,10 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
 import 'screens/seller_dashboard_screen.dart';
-import 'screens/seller_menu_setup_screen.dart';
+import 'screens/seller_home_kitchen_menu_screen.dart';
 import 'screens/seller_onboarding_screen.dart';
 import 'screens/seller_screen.dart';
+import 'services/db_usage_tracker.dart';
 import 'services/localization_service.dart';
 import 'services/session_service.dart';
 
@@ -28,6 +29,7 @@ void main() async {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
+      DbUsageTracker.instance.init('seller');
       runApp(const SellerApp());
     },
   );
@@ -70,8 +72,11 @@ class SellerApp extends StatelessWidget {
       onGenerateRoute: (settings) {
         if (settings.name == '/seller-menu-setup') {
           final sellerId = settings.arguments as String;
+          // FIX (per Nizam's request): every seller authors their own
+          // custom dishes now — see seller_dashboard_screen.dart and
+          // seller_onboarding_screen.dart for the same change.
           return MaterialPageRoute(
-            builder: (_) => SellerMenuSetupScreen(sellerId: sellerId),
+            builder: (_) => SellerHomeKitchenMenuScreen(sellerId: sellerId, title: 'My Menu', categoryName: 'Menu'),
           );
         }
         return null;
