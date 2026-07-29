@@ -391,9 +391,12 @@
            build/app/outputs/flutter-apk/app-customer-release.apk  →  customer_app.apk
            build/app/outputs/flutter-apk/app-hero-release.apk      →  hero_app.apk
            build/app/outputs/flutter-apk/app-admin-release.apk     →  admin_app.apk
-      3. Drop all 3 files into:  web/   (same folder as this index.html)
-      4. Run:  firebase deploy
-      5. Done! All 3 download buttons below immediately serve the new APKs.
+      3. FIX: instead of manual renaming/dropping, upload the release
+         APKs (allin1-customer.apk / allin1-hero.apk / allin1-admin.apk)
+         to the myallin1/Allin1-update-release GitHub repo's latest
+         release (see build_apk_release.ps1 at repo root). The buttons
+         below point at /releases/latest/download/... so they always
+         serve the newest release automatically.
     ================================================================
   -->
 
@@ -418,14 +421,14 @@
       📲 Download NJ TECH Apps
     </p>
     <div style="display:flex; flex-direction:column; gap:8px;">
-      <a href="https://github.com/myallin1/Allin1-update-release/releases/download/v1.0.0/customer_app.apk" download="customer_app.apk" style="
+      <a href="https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-customer.apk" download="allin1-customer.apk" style="
         display:flex; align-items:center; justify-content:center; gap:8px;
         background:linear-gradient(135deg,#FF4FA3,#BE2A7A);
         color:#fff; text-decoration:none; font-size:13px; font-weight:700;
         padding:10px 16px; border-radius:12px;">
         🛒 Download Customer App
       </a>
-      <a href="https://github.com/myallin1/Allin1-update-release/releases/download/v1.0.0/hero_app.apk" download="hero_app.apk" style="
+      <a href="https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-hero.apk" download="allin1-hero.apk" style="
         display:flex; align-items:center; justify-content:center; gap:8px;
         background:linear-gradient(135deg,#7B6FE0,#5A50C8);
         color:#fff; text-decoration:none; font-size:13px; font-weight:700;
