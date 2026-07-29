@@ -1,7 +1,7 @@
 ﻿name: erode_superapp
 description: Erode All-in-One Super App - Multi-vendor Commerce MVP by NJ TECH
 publish_to: 'none'
-version: 1.0.1+27
+version: 1.0.1+57
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -41,6 +41,11 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   http: ^1.2.1
+  # Pure-Dart image decode/resize/re-encode — works on web (no platform
+  # channels), used to compress photos client-side before uploading to
+  # Cloudinary so we don't ship full-resolution camera photos over the
+  # wire. See cloudinary_upload_service.dart.
+  image: ^4.2.0
   intl: ^0.19.0
   latlong2: ^0.9.1
   package_info_plus: ^9.0.0
@@ -91,6 +96,7 @@ flutter:
     - .env
     - assets/
     - assets/images/
+    - assets/images/printing/
     - assets/videos/
     - assets/sounds/
     - shorebird.yaml

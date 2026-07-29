@@ -30,7 +30,7 @@ import 'car_wash_screen.dart';
 import 'coming_soon_screen.dart';
 import 'construction_screen.dart';
 import 'grocery_order_screen.dart';
-// import 'printing_service_screen.dart'; // TODO(printing): file missing, feature temporarily disabled
+import 'printing_service_screen.dart';
 import 'guru_chat_screen.dart';
 import 'nj_tech_service_screen.dart';
 import 'nj_tech_store_screen.dart';
@@ -91,6 +91,18 @@ class _DashboardScreenState extends State<DashboardScreen>
   static const int _tabCount = 5;
 
   int _navIndex = 0;
+
+  // FIX (unwanted-read audit, per Nizam's request): IndexedStack below
+  // used to mount ALL 5 tabs (Home/Rewards/PlayZone/GuruChat/SOS)
+  // immediately on app open, regardless of which one was active — each
+  // one starting its own listeners the moment the customer app opened,
+  // same root cause already fixed on the admin and hero home screens.
+  // Only put the REAL widget in a slot once that tab has actually been
+  // visited; unvisited slots get a cheap placeholder. Tab 0 (Home) is
+  // always needed immediately. _restoreLastTab() below may also jump
+  // straight to a persisted tab on relaunch — that index must count as
+  // "visited" too, so it renders for real instead of a placeholder.
+  final Set<int> _visitedTabs = {0};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   final _user = FirebaseAuth.instance.currentUser;
 
@@ -204,7 +216,10 @@ class _DashboardScreenState extends State<DashboardScreen>
       // releases, and a stale out-of-bounds index would throw inside
       // IndexedStack.
       if (last > 0 && last < _tabCount) {
-        setState(() => _navIndex = last);
+        setState(() {
+          _navIndex = last;
+          _visitedTabs.add(last);
+        });
       }
     } catch (e) {
       debugPrint('[Dashboard] last-tab restore failed: $e');
@@ -308,7 +323,10 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   void _goTab(int i) {
-    setState(() => _navIndex = i);
+    setState(() {
+      _navIndex = i;
+      _visitedTabs.add(i);
+    });
     PrefsCache.saveLastTab(i);
   }
 
@@ -404,15 +422,23 @@ class _DashboardScreenState extends State<DashboardScreen>
                     userStream: const Stream.empty(),
                   ),
                 ),
-                KeepAliveTab(
-                  child: RewardsScreen(
-                    promoOffers: _promoOffers,
-                    onClaimPromo: _claimPromo,
-                  ),
-                ),
-                const KeepAliveTab(child: PlayZoneScreen()),
-                const KeepAliveTab(child: GuruChatScreen()),
-                const KeepAliveTab(child: SosScreen()),
+                _visitedTabs.contains(1)
+                    ? KeepAliveTab(
+                        child: RewardsScreen(
+                          promoOffers: _promoOffers,
+                          onClaimPromo: _claimPromo,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+                _visitedTabs.contains(2)
+                    ? const KeepAliveTab(child: PlayZoneScreen())
+                    : const SizedBox.shrink(),
+                _visitedTabs.contains(3)
+                    ? const KeepAliveTab(child: GuruChatScreen())
+                    : const SizedBox.shrink(),
+                _visitedTabs.contains(4)
+                    ? const KeepAliveTab(child: SosScreen())
+                    : const SizedBox.shrink(),
               ],
           ),
         ],
@@ -837,9 +863,9 @@ class _HomeTab extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           GestureDetector(
-            onTap: () => Navigator.push<void>(
+            onTap: () => Navigator.push(
               context,
-              MaterialPageRoute<void>(builder: (_) => const CustomFoodOrderScreen()),
+              MaterialPageRoute(builder: (_) => const CustomFoodOrderScreen()),
             ),
             child: Container(
               width: double.infinity,
@@ -963,9 +989,9 @@ class _HomeTab extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           GestureDetector(
-            onTap: () => Navigator.push<void>(
+            onTap: () => Navigator.push(
               context,
-              MaterialPageRoute<void>(builder: (_) => const NJTechStoreScreen()),
+              MaterialPageRoute(builder: (_) => const NJTechStoreScreen()),
             ),
             child: Container(
               width: double.infinity,
@@ -1153,9 +1179,9 @@ class _HomeTab extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           GestureDetector(
-            onTap: () => Navigator.push<void>(
+            onTap: () => Navigator.push(
               context,
-              MaterialPageRoute<void>(builder: (_) => const HeroBookingScreen()),
+              MaterialPageRoute(builder: (_) => const HeroBookingScreen()),
             ),
             child: Container(
               width: double.infinity,
@@ -1217,11 +1243,9 @@ class _HomeTab extends StatelessWidget {
           const SizedBox(height: 10),
           GestureDetector(
             onTap: () {
-              // TODO(printing): PrintingServiceScreen is missing
-              // (printing_service_screen.dart not found). Navigation disabled
-              // until the screen is restored.
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Printing service is temporarily unavailable')),
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PrintingServiceScreen()),
               );
             },
             child: Container(
