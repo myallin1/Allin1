@@ -19,7 +19,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/pwa_cache_platform_stub.dart'
     if (dart.library.html) '../services/pwa_cache_platform_web.dart';
+import '../config/city_config.dart';
 import '../services/app_update_checker.dart';
+import '../services/city_service.dart';
 import '../services/update_service.dart';
 import '../services/web_version_checker.dart';
 
@@ -93,6 +95,14 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   int _navIndex = 0;
 
+  // Multi-city (Plan 3): displayed under the "Hi, Name" greeting. Starts
+  // at whatever's cached locally (or kDefaultCity 'erode' on first-ever
+  // launch), then _detectCityInBackground() silently refreshes it via
+  // GPS + reverse-geocoding once the frame is up -- no loading spinner,
+  // no blocking the UI, and zero Firestore/RTDB cost (GPS + geocoding
+  // are device/OS-side calls, not database reads).
+  String _displayCity = kDefaultCity;
+
   // FIX (unwanted-read audit, per Nizam's request): IndexedStack below
   // used to mount ALL 5 tabs (Home/Rewards/PlayZone/GuruChat/SOS)
   // immediately on app open, regardless of which one was active — each
@@ -159,6 +169,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     WidgetsBinding.instance.addObserver(this);
     unawaited(_restoreLastTab());
     unawaited(_silentBackupIfNeeded());
+    unawaited(_detectCityInBackground());
     // Auto-show the daily Paytm Soundbox scratch card once per calendar day.
     // Runs after first frame so a bottom sheet can be shown safely.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -279,6 +290,25 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Future<bool> _alreadyScratchedToday() async =>
       (await HiveCache.get<String>('last_scratch_date')) == _todayKey();
+
+  /// Multi-city (Plan 3): resolves the customer's real current city via
+  /// GPS + reverse-geocoding, entirely in the background. Loads the
+  /// last-cached value immediately (instant, no flicker to 'Erode' on
+  /// repeat opens), then kicks off a fresh GPS read; if that resolves
+  /// to a different (supported) city, updates the header. No dialogs,
+  /// no spinners, no Firestore/RTDB reads -- CityService.detectAndUpdateCity()
+  /// is device-side only and silently falls back to the cached value on
+  /// any failure (permission denied, GPS off, no network for geocoding).
+  Future<void> _detectCityInBackground() async {
+    final cached = await CityService.getCurrentCity();
+    if (mounted && cached != _displayCity) {
+      setState(() => _displayCity = cached);
+    }
+    final detected = await CityService.detectAndUpdateCity();
+    if (mounted && detected != _displayCity) {
+      setState(() => _displayCity = detected);
+    }
+  }
 
   Future<void> _silentBackupIfNeeded() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -484,9 +514,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const Text(
-                  'Erode, TN',
-                  style: TextStyle(color: kMuted, fontSize: 9, letterSpacing: 0.5),
+                Text(
+                  '${cityLabelFor(_displayCity)}, TN',
+                  style: const TextStyle(color: kMuted, fontSize: 9, letterSpacing: 0.5),
                 ),
               ],
             ),

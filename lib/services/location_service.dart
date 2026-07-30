@@ -3,6 +3,7 @@
 // Allin1 Super App v1.0
 // ================================================================
 
+import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -110,6 +111,36 @@ class LocationService {
     try {
       // Using placemarks from geocoding
       return '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}';
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ================================================================
+  // Get City Name from Coordinates (Reverse Geocoding)
+  // FIX: getAddressFromCoordinates above never actually called the
+  // geocoding package despite its comment claiming to -- it just
+  // formatted the raw lat/lng as text. This is a real reverse-geocode
+  // call, used by city_service.dart's silent city-detection on app
+  // open (Multi-city Plan 3) to resolve GPS -> a real city name.
+  // Device-only API call (no Firestore/RTDB read), so this costs
+  // nothing on our database usage.
+  // ================================================================
+  Future<String?> getCityFromCoordinates(LatLng position) async {
+    try {
+      final placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+      if (placemarks.isEmpty) return null;
+      final p = placemarks.first;
+      // locality is usually the city; subAdministrativeArea (district)
+      // is a reasonable fallback for areas where locality comes back
+      // empty (common for smaller towns in geocoding results).
+      final city = (p.locality?.trim().isNotEmpty ?? false)
+          ? p.locality!.trim()
+          : p.subAdministrativeArea?.trim();
+      return (city?.isNotEmpty ?? false) ? city : null;
     } catch (e) {
       return null;
     }
