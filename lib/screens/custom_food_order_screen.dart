@@ -29,7 +29,7 @@ const Color kMuted = Color(0xFF9999BB);
 const Color kGold = Color(0xFFFFBB00);
 
 class CustomFoodOrderScreen extends StatefulWidget {
-  // FIX (per Nizam's request): lets a caller like SubwayMenuScreen
+  // FIX (per Nizam's request): lets a caller like PartnerShopOrderScreen
   // pre-fill the shop name + items summary and reuse this screen's
   // already-working order-submission pipeline (writes to
   // service_requests, dispatches to a hero) instead of building a

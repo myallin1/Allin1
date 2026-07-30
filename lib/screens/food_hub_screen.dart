@@ -2,22 +2,25 @@
 // FoodHubScreen — Landing page shown when a customer taps "Food
 // Delivery" from the home dashboard.
 // ================================================================
-// Per Nizam's request: top-left tile is "Custom Order" (the existing
-// free-text order form, unchanged), and a second tile "Subway" opens
-// a dedicated in-app Subway menu (subway_menu_screen.dart) — the
-// whole ordering flow stays inside the app, never links out.
+// Per Nizam's updated plan: top tile is "Custom Order" (free-text
+// order form, unchanged). Below it is a grid of partner-shop tiles
+// (Subway, Domino's, KFC, Taj Hotel, A2B, Jameen Restaurant, ...) —
+// each shop already has its own online ordering site, so tapping a
+// shop opens PartnerShopOrderScreen, which links out to that site for
+// the actual order + payment, then hands the customer back into our
+// existing CustomFoodOrderScreen for pickup + delivery by an Allin1
+// hero. New shops only need to be added to kPartnerShops.
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'custom_food_order_screen.dart';
-import 'subway_menu_screen.dart';
+import 'partner_shop_order_screen.dart';
 
 const Color _kBg = Color(0xFFFFFFFF);
 const Color _kText = Color(0xFF1A1A2E);
 const Color _kMuted = Color(0xFF9999BB);
 const Color _kPink = Color(0xFFFF4FA3);
 const Color _kPinkDark = Color(0xFFBE2A7A);
-const Color _kSubwayGreen = Color(0xFF008938);
 
 class FoodHubScreen extends StatelessWidget {
   const FoodHubScreen({super.key});
@@ -32,44 +35,49 @@ class FoodHubScreen extends StatelessWidget {
         iconTheme: const IconThemeData(color: _kText),
         title: Text('🍛 Food Delivery', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 18)),
       ),
-      body: Padding(
+      body: ListView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('What would you like to order?', style: GoogleFonts.outfit(color: _kMuted, fontSize: 13)),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _HubTile(
-                    label: 'Custom Order',
-                    subtitle: 'Order from any shop in Erode',
-                    icon: Icons.restaurant_menu_rounded,
-                    gradient: const [_kPink, _kPinkDark],
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const CustomFoodOrderScreen()),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: _HubTile(
-                    label: 'Subway',
-                    subtitle: 'Order your favourite sub',
-                    icon: Icons.lunch_dining_rounded,
-                    gradient: const [_kSubwayGreen, Color(0xFF00612A)],
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const SubwayMenuScreen()),
-                    ),
-                  ),
-                ),
-              ],
+        children: [
+          Text('What would you like to order?', style: GoogleFonts.outfit(color: _kMuted, fontSize: 13)),
+          const SizedBox(height: 16),
+          _HubTile(
+            label: 'Custom Order',
+            subtitle: 'Order from any shop in Erode',
+            icon: Icons.restaurant_menu_rounded,
+            gradient: const [_kPink, _kPinkDark],
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CustomFoodOrderScreen()),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 20),
+          Text('Order from your favourite shops', style: GoogleFonts.outfit(color: _kText, fontSize: 14.5, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text('Order & pay on their site — our hero picks it up & delivers it to you.', style: GoogleFonts.outfit(color: _kMuted, fontSize: 12)),
+          const SizedBox(height: 14),
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 14,
+            mainAxisSpacing: 14,
+            childAspectRatio: 1.35,
+            children: kPartnerShops
+                .map(
+                  (shop) => _HubTile(
+                    label: shop.name,
+                    subtitle: shop.subtitle,
+                    icon: Icons.storefront_rounded,
+                    gradient: shop.gradient,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => PartnerShopOrderScreen(shop: shop)),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
       ),
     );
   }
@@ -112,9 +120,9 @@ class _HubTile extends StatelessWidget {
               child: Icon(icon, color: gradient.last, size: 22),
             ),
             const Spacer(),
-            Text(label, style: GoogleFonts.outfit(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900)),
+            Text(label, style: GoogleFonts.outfit(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w900), maxLines: 1, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 4),
-            Text(subtitle, style: GoogleFonts.outfit(color: Colors.white.withValues(alpha: 0.85), fontSize: 11.5)),
+            Text(subtitle, style: GoogleFonts.outfit(color: Colors.white.withValues(alpha: 0.85), fontSize: 11), maxLines: 2, overflow: TextOverflow.ellipsis),
           ],
         ),
       ),
