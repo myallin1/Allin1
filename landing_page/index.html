@@ -59,11 +59,19 @@
 
   .download-strip {
     display: inline-flex; align-items: center; gap: 8px;
-    margin-top: 18px; background: var(--card2); border: 1px solid #2A2A40;
+    margin-top: 18px; background: var(--card2); border: 1px solid rgba(255,187,0,0.5);
     color: var(--text); text-decoration: none; font-weight: 700; font-size: 13.5px;
     padding: 10px 20px; border-radius: 12px;
+    box-shadow: 0 0 0 0 rgba(255,187,0,0.5);
+    animation: glow-pulse 2s ease-in-out infinite;
   }
   .download-strip .zap { color: var(--gold); }
+  @keyframes glow-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(255,187,0,0.45); }
+    70%  { box-shadow: 0 0 0 10px rgba(255,187,0,0); }
+    100% { box-shadow: 0 0 0 0 rgba(255,187,0,0); }
+  }
+  .download-strip-block { text-align: center; margin: 40px 0; }
 
   .section-title { font-size: 24px; font-weight: 800; text-align: center; margin: 56px 0 8px; }
   .section-sub { text-align: center; color: var(--muted); font-size: 15px; margin-bottom: 32px; }
@@ -154,13 +162,6 @@
       <div class="card"><div class="icon-badge" style="background:var(--purple);color:#fff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="6"/><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><circle cx="15" cy="13" r="1"/><circle cx="18" cy="11" r="1"/></svg></div><h3>Game Zone</h3><p>காத்திருக்கும் போது 2048, Memory Match, Whack-a-Mole போன்ற game விளையாடுங்க.</p></div>
     </div>
 
-    <div class="hero-cta-block">
-      <div class="icon-badge" style="background:var(--purple);color:#fff;margin:0 auto 14px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg></div>
-      <h2>Allin1-ல Hero-வா சேர விரும்புறீங்களா?</h2>
-      <p>உங்க பைக்/கார்-ல ரைடு &amp; டெலிவரி பண்ணி சம்பாதிங்க. இப்பவே Hero-வா register பண்ணுங்க.</p>
-      <a class="btn-purple" href="https://hero-allin1.web.app" target="_blank" rel="noopener">🏍️ Hero-வா Register பண்ணு</a>
-    </div>
-
     <div class="how">
       <h2>எப்படி ஆரம்பிக்கலாம்?</h2>
       <p class="sub2">Install பண்ண வேண்டாம் — Browser-லேயே ஆப் போல் use பண்ணலாம்.</p>
@@ -169,6 +170,19 @@
         <div class="step"><div class="num">2</div><p>உங்க போன் நம்பர் வச்சு ஒரு நிமிடத்தில் Sign up பண்ணுங்க</p></div>
         <div class="step"><div class="num">3</div><p>ரைடு, உணவு, மளிகை — எதுவேணும்னாலும் Order பண்ணுங்க!</p></div>
       </div>
+    </div>
+
+    <div class="download-strip-block">
+      <a class="download-strip" href="https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-customer.apk">
+        <span class="zap">⚡</span> App-ஐ Download பண்ணுங்க — 10x வேகமா!
+      </a>
+    </div>
+
+    <div class="hero-cta-block">
+      <div class="icon-badge" style="background:var(--purple);color:#fff;margin:0 auto 14px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg></div>
+      <h2>Allin1-ல Hero-வா சேர விரும்புறீங்களா?</h2>
+      <p>உங்க பைக்/கார்-ல ரைடு &amp; டெலிவரி பண்ணி சம்பாதிங்க. இப்பவே Hero-வா register பண்ணுங்க.</p>
+      <a class="btn-purple" href="https://hero-allin1.web.app" target="_blank" rel="noopener">🏍️ Hero-வா Register பண்ணு</a>
     </div>
   </div>
 
@@ -200,13 +214,6 @@
       <div class="card"><div class="icon-badge" style="background:var(--purple);color:#fff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="6"/><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><circle cx="15" cy="13" r="1"/><circle cx="18" cy="11" r="1"/></svg></div><h3>Game Zone</h3><p>Play quick games like 2048, Memory Match, and Whack-a-Mole while you wait.</p></div>
     </div>
 
-    <div class="hero-cta-block">
-      <div class="icon-badge" style="background:var(--purple);color:#fff;margin:0 auto 14px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg></div>
-      <h2>Want to become an Allin1 Hero?</h2>
-      <p>Earn money giving rides and deliveries on your own bike or car. Register as a Hero right now.</p>
-      <a class="btn-purple" href="https://hero-allin1.web.app" target="_blank" rel="noopener">🏍️ Register as a Hero</a>
-    </div>
-
     <div class="how">
       <h2>How to get started</h2>
       <p class="sub2">No install needed — use it right in your browser, just like an app.</p>
@@ -215,6 +222,19 @@
         <div class="step"><div class="num">2</div><p>Sign up in under a minute with your phone number</p></div>
         <div class="step"><div class="num">3</div><p>Order anything — rides, food, groceries, and more!</p></div>
       </div>
+    </div>
+
+    <div class="download-strip-block">
+      <a class="download-strip" href="https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-customer.apk">
+        <span class="zap">⚡</span> Download the App — 10x Faster!
+      </a>
+    </div>
+
+    <div class="hero-cta-block">
+      <div class="icon-badge" style="background:var(--purple);color:#fff;margin:0 auto 14px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg></div>
+      <h2>Want to become an Allin1 Hero?</h2>
+      <p>Earn money giving rides and deliveries on your own bike or car. Register as a Hero right now.</p>
+      <a class="btn-purple" href="https://hero-allin1.web.app" target="_blank" rel="noopener">🏍️ Register as a Hero</a>
     </div>
   </div>
 
