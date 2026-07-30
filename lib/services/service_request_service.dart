@@ -12,6 +12,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart' as rtdb;
 import 'package:flutter/foundation.dart' show debugPrint;
 
+import '../config/city_config.dart';
+import 'city_service.dart';
+
 /// Canonical status enum — the single source of truth for lifecycle state.
 /// UI label sets (task-type vs goods-type) are presentation-only mappings
 /// on top of these exact string values; never introduce a second enum.
@@ -64,6 +67,12 @@ class ServiceRequestService {
         : FirebaseFirestore.instance.collection('service_requests').doc();
     final requestId = docRef.id;
 
+    // Multi-city (Plan 3): tags this request with the customer's current
+    // city so the broadcast below only pings same-city heroes. Defaults
+    // to kDefaultCity ('erode') until a real city-picker UI exists for
+    // customers.
+    final requestCity = await CityService.getCurrentCity();
+
     await docRef.set({
       'requestId': requestId,
       'requestType': requestType,
@@ -76,6 +85,7 @@ class ServiceRequestService {
       'assignedHeroName': null,
       'assignedHeroPhone': null,
       'assignmentMethod': null,
+      'city': requestCity,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -96,6 +106,7 @@ class ServiceRequestService {
       'currentPingHeroId': '',
       'acceptedHeroId': '',
       'pingExpiresAt': pingExpiresAt,
+      'city': requestCity,
       'createdAt': rtdb.ServerValue.timestamp,
     });
 
@@ -106,14 +117,18 @@ class ServiceRequestService {
       customerPhone: customerPhone,
       details: details,
       pingExpiresAt: pingExpiresAt,
+      requestCity: requestCity,
     );
 
     return requestId;
   }
 
-  /// Broadcasts a ping to every hero currently online AND available.
-  /// Reuses the existing bike-taxi/parcel hero pool — no category
-  /// filtering, since this is not a new hero recruitment.
+  /// Broadcasts a ping to every hero currently online AND available IN
+  /// THE SAME CITY as the request. Reuses the existing bike-taxi/parcel
+  /// hero pool — no category filtering, since this is not a new hero
+  /// recruitment. Multi-city (Plan 3): previously pinged every online
+  /// hero nationwide with zero geographic filter — a real gap once more
+  /// than one city shares this same online_heroes RTDB node.
   Future<void> _broadcastToEligibleHeroes({
     required String requestId,
     required String requestType,
@@ -121,6 +136,7 @@ class ServiceRequestService {
     required String customerPhone,
     required Map<String, dynamic> details,
     required int pingExpiresAt,
+    required String requestCity,
   }) async {
     final snap =
         await rtdb.FirebaseDatabase.instance.ref('online_heroes').get();
@@ -134,6 +150,11 @@ class ServiceRequestService {
       final heroData = Map<String, dynamic>.from(heroDataRaw);
       final isAvailable = (heroData['isAvailable'] as bool?) ?? false;
       if (!isAvailable) return;
+
+      final heroCity = (heroData['city'] as String?)?.trim().toLowerCase().isNotEmpty == true
+          ? (heroData['city'] as String).trim().toLowerCase()
+          : kDefaultCity;
+      if (heroCity != requestCity) return;
 
       futures.add(
         rtdb.FirebaseDatabase.instance

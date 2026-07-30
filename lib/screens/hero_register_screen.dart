@@ -12,6 +12,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../config/city_config.dart';
 import '../services/cloudinary_upload_service.dart';
 // ROUTING FIX (merge duplicate registration/status flows): this screen is
 // now reached DIRECTLY, before any sign-in step, so a fresh hero may have
@@ -429,6 +430,13 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
          'aadhaarNumber': _aadhaarController.text.trim(),
          'panNumber': _panController.text.trim(),
          'preferredWorkLocation': _preferredLocationController.text.trim(),
+         // Multi-city (Plan 3): defaults to kDefaultCity ('erode') since
+         // there's no city-picker UI in this form yet -- every hero
+         // registering today is in Erode anyway. When a second city goes
+         // live, add a dropdown here (kSupportedCities) and pass the
+         // selected slug instead of the constant. Admin can also
+         // reassign a hero's city later from the admin app if needed.
+         'city': kDefaultCity,
          'vehicleType': vehicleType,
          'heroCategory': vehicleType,
          'vehicleCategoryLabel': vehicleCategoryLabel,

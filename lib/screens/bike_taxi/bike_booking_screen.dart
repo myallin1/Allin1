@@ -22,6 +22,7 @@ import '../../services/location_service.dart';
 import '../../services/map_service.dart';
 import '../../services/recent_places_service.dart';
 import '../../services/session_service.dart';
+import '../../services/city_service.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../../widgets/server_busy_dialog.dart';
 import '../../widgets/vehicle_selection_bottom_sheet.dart';
@@ -1815,6 +1816,11 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     try {
       final rideRef = FirebaseFirestore.instance.collection('rides').doc();
       final normalizedDist = double.parse(dist.toStringAsFixed(2));
+      // Multi-city (Plan 3): tags this ride with the customer's current
+      // city so ride_search_screen.dart's hero-ping queue can filter to
+      // same-city heroes only. Defaults to kDefaultCity ('erode') until
+      // a real city-picker UI exists for customers.
+      final rideCity = await CityService.getCurrentCity();
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -1887,6 +1893,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
          'vehicle_category': _normalizeCategoryKey(vehicleType),
          'status': 'searching',
          'paymentStatus': 'pending',
+         'city': rideCity,
          'createdAt': FieldValue.serverTimestamp(),
          'heroId': null,
          'captainId': null,

@@ -21,6 +21,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app_navigator.dart';
+import '../../config/city_config.dart';
 import '../../models/ride_model.dart';
 import '../../services/app_update_checker.dart';
 import '../../services/db_usage_tracker.dart';
@@ -102,6 +103,12 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   // Payment notification state
   bool _paymentAlertShown = false;
   String _vehicleType = 'bike';
+  // Multi-city (Plan 3): loaded from heroes/{uid}.city, defaults to
+  // kDefaultCity ('erode') for every hero doc created before this field
+  // existed. Written into the online_heroes RTDB presence node so
+  // service_request_service.dart / ride_search_screen.dart can filter
+  // dispatch candidates by city.
+  String _heroCity = kDefaultCity;
 
   // Cached stats — loaded once per session in _loadHeroData()
   int _totalRides = 0;
@@ -802,6 +809,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           _firstLoginToday = isFirstToday;
           _waiverCompleted = rate <= 0.0;
           _vehicleType = vehicleType;
+          _heroCity = (data['city'] as String?)?.trim().toLowerCase().isNotEmpty == true
+              ? (data['city'] as String).trim().toLowerCase()
+              : kDefaultCity;
           // FIX BUG #3: Restore online state from Firestore if captain was online
           _isOnline = (data['isOnline'] as bool?) ?? false;
         });
@@ -979,6 +989,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               'vehicleType': _normalizeHeroVehicleType(_vehicleType),
               'isAvailable': _activeRideId.isEmpty,
               'category': _normalizeHeroVehicleType(_vehicleType).toLowerCase(),
+              'city': _heroCity,
               'lastUpdated': ServerValue.timestamp,
             });
             // FIX: every .remove() call on this node elsewhere in this

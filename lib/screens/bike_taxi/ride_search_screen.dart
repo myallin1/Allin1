@@ -11,7 +11,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../config/city_config.dart';
 import '../../models/ride_model.dart';
+import '../../services/city_service.dart';
 import '../../utils/otp_utils.dart';
 import '../../widgets/allin1_map_widget.dart';
 import 'ride_tracking_screen.dart';
@@ -185,6 +187,14 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       final pickupLng = widget.ride.pickupLongitude ?? 77.7172;
       print('[RideSearch] _fetchNearbyHeroes: pickup=$pickupLat,$pickupLng');
 
+      // Multi-city (Plan 3): the 3km bounding box below already makes
+      // cross-city matches practically impossible today (cities are far
+      // apart), but as more cities share this same online_heroes RTDB
+      // node, an explicit city check is the real safety net rather than
+      // relying on geography alone. Defaults both sides to kDefaultCity
+      // for any hero/customer that predates this field.
+      final rideCity = await CityService.getCurrentCity();
+
       final onlineSnap = await FirebaseDatabase.instance
           .ref('online_heroes')
           .once();
@@ -242,6 +252,14 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         final isAvailable = data['isAvailable'] as bool?;
         if (isAvailable == false) {
           debugPrint('🔥 [REJECTED] Hero $heroId rejected because isAvailable=false');
+          continue;
+        }
+
+        final heroCity = (data['city'] as String?)?.trim().toLowerCase().isNotEmpty == true
+            ? (data['city'] as String).trim().toLowerCase()
+            : kDefaultCity;
+        if (heroCity != rideCity) {
+          debugPrint('🔥 [REJECTED] Hero $heroId rejected: city mismatch (hero=$heroCity, ride=$rideCity)');
           continue;
         }
 
