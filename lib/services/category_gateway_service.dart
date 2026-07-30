@@ -71,11 +71,26 @@ class CategoryGatewayService {
       }
 
       // STEP 2: Cache miss — fetch from Firestore
+      //
+      // FIX (same root cause as loadSellerProducts below, and the
+      // usage_billing_service.dart index issue fixed earlier this
+      // session): combining two equality .where() clauses with
+      // .orderBy() on a THIRD field (rating) requires a deployed
+      // Firestore composite index. No firestore.indexes.json exists in
+      // this repo, so that index isn't guaranteed to exist on the live
+      // project — if it's missing, Firestore throws
+      // failed-precondition: requires an index, and the old
+      // catch (e) { return []; } below silently swallowed it. Every
+      // correctly-registered seller (hotel/menu created fine on the
+      // seller side) would render as an empty hotel list on the
+      // customer's food category browse screen, with zero visible
+      // error — exactly the reported "seller creates hotel, customer
+      // can't see/order from it" symptom. Removed orderBy and sort
+      // client-side instead (capped at 50 results, cheap to sort).
       final snapshot = await _firestore
           .collection(_getCategoryCollection(category))
           .where('category', isEqualTo: _getCategoryFilter(category))
           .where('status', isEqualTo: 'active')
-          .orderBy('rating', descending: true)
           .limit(50)
           .get();
 
@@ -86,14 +101,24 @@ class CategoryGatewayService {
               ...doc.data(),
             },
           )
-          .toList();
+          .toList()
+        ..sort((a, b) => ((b['rating'] as num?) ?? 0).compareTo((a['rating'] as num?) ?? 0));
 
       // STEP 3: Update cache
       await _cache.cacheSellers(categoryKey, sellers);
 
       return sellers;
     } catch (e) {
-      return [];
+      // FIX: rethrow instead of silently returning [] -- same reasoning
+      // as loadSellerProducts' fix below. A genuinely-empty category
+      // (no sellers yet) and a crashed query (missing index,
+      // permission-denied, offline) used to render as the exact same
+      // "no sellers" empty state, making this bug invisible without
+      // direct Firestore Console access. Callers should catch this and
+      // show a real "Failed to load" + Retry state, matching
+      // seller_detail_screen.dart's existing pattern for
+      // loadSellerProducts.
+      rethrow;
     }
   }
 
