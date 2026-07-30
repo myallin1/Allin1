@@ -17,6 +17,7 @@ import '../services/food_seller_service.dart';
 import 'seller_electronics_dashboard_screen.dart';
 import 'seller_grocery_dashboard_screen.dart';
 import 'seller_home_kitchen_menu_screen.dart';
+import 'seller_pending_screen.dart';
 import 'seller_vertical_picker_screen.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
@@ -147,6 +148,28 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
           context,
           MaterialPageRoute<void>(
               builder: (_) => const SellerElectronicsDashboardScreen()),
+        );
+        return;
+      }
+
+      // FIX (seller approval gate): a seller stuck in 'pending' (not yet
+      // reviewed by admin) or 'rejected' must never land on the live
+      // dashboard — this covers a seller who registered, closed the app
+      // before approval came through, then reopened it later. Route them
+      // back to the same live status screen instead. 'active' (including
+      // legacy pre-approval-gate sellers with no explicit status set,
+      // defaulted to 'active' in SellerModel.fromJson) falls through to
+      // the normal dashboard below, unchanged.
+      if (seller.status == 'pending' || seller.status == 'rejected') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => SellerPendingScreen(
+              sellerId: seller.id,
+              sellerName: seller.name,
+              categoryName: seller.subCategory == 'home_made' ? 'Home Kitchen' : 'Menu',
+            ),
+          ),
         );
         return;
       }

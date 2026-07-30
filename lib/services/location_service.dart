@@ -3,8 +3,12 @@
 // Allin1 Super App v1.0
 // ================================================================
 
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
 class LocationService {
@@ -127,6 +131,25 @@ class LocationService {
   // nothing on our database usage.
   // ================================================================
   Future<String?> getCityFromCoordinates(LatLng position) async {
+    // FIX (root cause of "Use my current location" doing nothing on the
+    // web PWA -- reported: customer manually on Coimbatore, physically
+    // in Erode, tapped "Use my current location" and it never switched
+    // to Erode): the `geocoding` package (placemarkFromCoordinates) has
+    // NO web platform implementation at all -- it's Android/iOS/macOS
+    // only. On Flutter Web this throws MissingPluginException every
+    // single time, silently caught below, so city_service.dart's
+    // detectAndUpdateCity() always fell back to whatever city was
+    // already cached (Coimbatore, in this case) with zero indication
+    // anything failed. Native Android/iOS builds were never affected --
+    // this only broke the web build (my-allin1.web.app).
+    // Fix: on web, use BigDataCloud's free client-side reverse-geocode
+    // API instead (no API key needed, CORS-enabled, no cost -- HTTP call
+    // straight from the browser, not billed against our Firestore/RTDB
+    // usage). Native platforms keep using the geocoding package as
+    // before.
+    if (kIsWeb) {
+      return _getCityFromCoordinatesWeb(position);
+    }
     try {
       final placemarks = await placemarkFromCoordinates(
         position.latitude,
@@ -141,6 +164,33 @@ class LocationService {
           ? p.locality!.trim()
           : p.subAdministrativeArea?.trim();
       return (city?.isNotEmpty ?? false) ? city : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<String?> _getCityFromCoordinatesWeb(LatLng position) async {
+    try {
+      final uri = Uri.parse(
+        'https://api.bigdatacloud.net/data/reverse-geocode-client'
+        '?latitude=${position.latitude}&longitude=${position.longitude}&localityLanguage=en',
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200) return null;
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      // BigDataCloud's "city" field is often empty for Indian towns;
+      // "locality" is the more reliable field here, same fallback
+      // ordering as the native path above.
+      final city = (data['city'] as String?)?.trim();
+      final locality = (data['locality'] as String?)?.trim();
+      final principalSubdivision = (data['principalSubdivision'] as String?)?.trim();
+      final resolved = (city?.isNotEmpty ?? false)
+          ? city
+          : (locality?.isNotEmpty ?? false)
+              ? locality
+              : principalSubdivision;
+      return (resolved?.isNotEmpty ?? false) ? resolved : null;
     } catch (e) {
       return null;
     }

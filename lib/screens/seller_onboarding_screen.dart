@@ -8,7 +8,7 @@ import '../config/food_categories.dart';
 import '../models/food_models.dart';
 import '../services/food_seller_service.dart';
 import '../services/location_service.dart';
-import 'seller_home_kitchen_menu_screen.dart';
+import 'seller_pending_screen.dart';
 
 const Color _bg = Color(0xFF08080F);
 const Color _surface = Color(0xFF0D0D18);
@@ -140,7 +140,18 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
         phone: _phoneController.text.trim(),
         isOpen: false,
         estimatedPrepTimeMin: 20,
-        status: 'active',
+        // FIX (per Nizam/CTO's explicit request — seller approval gate):
+        // sellers used to go live to customers the instant they finished
+        // onboarding ('active' immediately). With a franchise model
+        // expanding across 5 cities, an unverified/fake seller going
+        // live instantly is a brand risk. Sellers now default to
+        // 'pending' — category_gateway_service.dart's loadCategoryData()
+        // already filters `.where('status', isEqualTo: 'active')` for
+        // the customer-facing browse screen, so a pending seller is
+        // automatically invisible to customers with no other code
+        // changes needed. Admin flips this to 'active' via the new
+        // admin_seller_approval_screen.dart once verified.
+        status: 'pending',
         createdAt: now,
         updatedAt: now,
       );
@@ -149,17 +160,17 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
 
       if (!mounted) return;
 
-      // FIX (per Nizam's request): every seller now lands on the
-      // custom dish-authoring screen (own photo/name/price) right
-      // after onboarding instead of SellerMenuSetupScreen's fixed
-      // preset catalog — a brand-new seller had no way to put their
-      // own actual food in front of customers otherwise.
+      // FIX (seller approval gate): a brand-new seller now lands on a
+      // live "under review" status screen (SellerPendingScreen) instead
+      // of straight into menu-authoring. It auto-navigates to the menu
+      // screen the moment admin flips status to 'active' — see
+      // seller_pending_screen.dart and admin_seller_approval_screen.dart.
       Navigator.pushReplacement(
         context,
         MaterialPageRoute<void>(
-          builder: (_) => SellerHomeKitchenMenuScreen(
+          builder: (_) => SellerPendingScreen(
             sellerId: uid,
-            title: 'My Menu',
+            sellerName: _nameController.text.trim(),
             categoryName: _selectedSubCategory == 'home_made' ? 'Home Kitchen' : 'Menu',
           ),
         ),

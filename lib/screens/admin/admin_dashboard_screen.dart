@@ -26,6 +26,7 @@ import 'credentials_admin_screen.dart';
 import 'customer_rides_screen.dart';
 import 'fare_management_screen.dart';
 import 'hero_approvals_screen.dart';
+import 'admin_seller_approval_screen.dart';
 
 // ── Theme ──────────────────────────────────────────────────────
 const Color _bg = Color(0xFF0A0A1A);
@@ -36,6 +37,7 @@ const Color _gold = Color(0xFFFFBB00);
 const Color _orange = Color(0xFFFF6B35);
 const Color _red = Color(0xFFFF5252);
 const Color _purple = Color(0xFF6C63FF);
+const Color _teal = Color(0xFF11998E);
 const Color _text = Color(0xFFEEEEF5);
 const Color _muted = Color(0xFF7777A0);
 
@@ -87,6 +89,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   // a Firestore listener on every unrelated setState() rebuild.
   late final Stream<QuerySnapshot> _pendingHeroApprovalsStream;
 
+  // Same caching reasoning — feeds the new "Seller Approvals" badge in
+  // the nav sheet (seller approval gate, per Nizam/CTO's request).
+  late final Stream<QuerySnapshot> _pendingSellerApprovalsStream;
+
   // Same caching reasoning as above — feeds the "New Orders" bottom-nav
   // badge, which (like the AppBar) is always mounted regardless of
   // which tab is selected (see _buildBottomNav()).
@@ -126,6 +132,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         .collection('service_requests')
         .where('status', isEqualTo: 'admin_review')
         .snapshots();
+    _pendingSellerApprovalsStream = FirebaseFirestore.instance
+        .collection('sellers')
+        .where('status', isEqualTo: 'pending')
+        .snapshots();
 
     // DB usage monitor — side-channel .listen() on each already-hoisted
     // stream just to count docs per snapshot; this does NOT add extra
@@ -134,6 +144,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     // underlying query/watch). See lib/services/db_usage_tracker.dart.
     _pendingHeroApprovalsStream.listen((s) => DbUsageTracker.instance.recordRead(s.docs.length));
     _adminReviewCountStream.listen((s) => DbUsageTracker.instance.recordRead(s.docs.length));
+    _pendingSellerApprovalsStream.listen((s) => DbUsageTracker.instance.recordRead(s.docs.length));
 
     unawaited(_fetchStatCards());
     unawaited(_fetchOnlineHeroes());
@@ -780,6 +791,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       ),
       builder: (_) => _MoreSheet(
         pendingHeroApprovalsStream: _pendingHeroApprovalsStream,
+        pendingSellerApprovalsStream: _pendingSellerApprovalsStream,
         onTopUp: () => _showTopUpDialog(context),
         onDownloadApp: _downloadAdminApp,
       ),
@@ -1679,11 +1691,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 // ================================================================
 class _MoreSheet extends StatelessWidget {
   final Stream<QuerySnapshot> pendingHeroApprovalsStream;
+  final Stream<QuerySnapshot> pendingSellerApprovalsStream;
   final VoidCallback onTopUp;
   final VoidCallback onDownloadApp;
 
   const _MoreSheet({
     required this.pendingHeroApprovalsStream,
+    required this.pendingSellerApprovalsStream,
     required this.onTopUp,
     required this.onDownloadApp,
   });
@@ -1743,6 +1757,34 @@ class _MoreSheet extends StatelessWidget {
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const ApprovedHeroesScreen()));
+              },
+            ),
+            const SizedBox(height: 16),
+            _sheetSectionLabel('SELLERS'),
+            _sheetTile(
+              context,
+              icon: Icons.storefront_outlined,
+              iconColor: _teal,
+              label: 'Seller Approvals',
+              trailing: StreamBuilder<QuerySnapshot>(
+                stream: pendingSellerApprovalsStream,
+                builder: (context, snap) {
+                  final count = snap.data?.docs.length ?? 0;
+                  if (count == 0) return const SizedBox.shrink();
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: _red,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(count > 9 ? '9+' : '$count',
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                  );
+                },
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const AdminSellerApprovalScreen()));
               },
             ),
             const SizedBox(height: 16),
