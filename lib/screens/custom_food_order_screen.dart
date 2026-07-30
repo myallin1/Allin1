@@ -29,14 +29,24 @@ const Color kMuted = Color(0xFF9999BB);
 const Color kGold = Color(0xFFFFBB00);
 
 class CustomFoodOrderScreen extends StatefulWidget {
-  const CustomFoodOrderScreen({super.key});
+  // FIX (per Nizam's request): lets a caller like SubwayMenuScreen
+  // pre-fill the shop name + items summary and reuse this screen's
+  // already-working order-submission pipeline (writes to
+  // service_requests, dispatches to a hero) instead of building a
+  // second, separate order-writing codepath for every partner shop.
+  // Customer still confirms/edits delivery address + name here before
+  // submitting, same as any other order.
+  final String? initialShop;
+  final String? initialItems;
+
+  const CustomFoodOrderScreen({super.key, this.initialShop, this.initialItems});
   @override
   State<CustomFoodOrderScreen> createState() => _CustomFoodOrderScreenState();
 }
 
 class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
-  final _shopCtrl = TextEditingController();
-  final _itemsCtrl = TextEditingController();
+  late final _shopCtrl = TextEditingController(text: widget.initialShop ?? '');
+  late final _itemsCtrl = TextEditingController(text: widget.initialItems ?? '');
   final _nameCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   bool _isLoading = false;

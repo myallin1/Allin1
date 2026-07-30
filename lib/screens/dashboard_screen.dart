@@ -27,7 +27,7 @@ import '../services/web_version_checker.dart';
 
 import '../widgets/banner_slider.dart';
 import 'bike_taxi/bike_booking_screen.dart';
-import 'custom_food_order_screen.dart';
+import 'food_hub_screen.dart';
 import 'hero_booking_screen.dart';
 import 'car_wash_screen.dart';
 import 'coming_soon_screen.dart';
@@ -451,7 +451,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     switch (id) {
       case 'taxi':        _navigate(const BikeBookingScreen()); break;
       case 'broadband':   _launchBroadband(); break;
-      case 'food':        _navigate(const CustomFoodOrderScreen()); break;
+      case 'food':        _navigate(const FoodHubScreen()); break;
       case 'grocery':     _navigate(const GroceryOrderScreen()); break;
       case 'njtech':      _navigate(const NJTechStoreScreen()); break;
       case 'carwash':     _navigate(const CarWashScreen()); break;
@@ -1004,7 +1004,7 @@ class _HomeTab extends StatelessWidget {
           GestureDetector(
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const CustomFoodOrderScreen()),
+              MaterialPageRoute(builder: (_) => const FoodHubScreen()),
             ),
             child: Container(
               width: double.infinity,
