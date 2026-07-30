@@ -6,12 +6,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:lottie/lottie.dart';
-import 'package:scratcher/scratcher.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/db_usage_tracker.dart';
 import '../widgets/promo_overlay.dart';
 import '../widgets/banner_slider.dart';
+import '../widgets/server_busy_dialog.dart' show kCallCenterNumberIntl;
 import '../widgets/soundbox_easter_egg_overlay.dart';
 import 'guru_chat_screen.dart';
 import 'erode_offers_section.dart';
@@ -21,7 +21,8 @@ const Color _paytmDarkBlue = Color(0xFF002970);
 const Color _rewardInk = Color(0xFF121A3D);
 const Color _rewardPink = Color(0xFFFF4FA3);
 const Color _rewardWhite = Color(0xFFFFFBFE);
-const String _quizReward = 'Free Tempered Glass / ₹200 Off!';
+const Color _aiPurple = Color(0xFF6C63FF);
+const Color _aiPurpleDark = Color(0xFF3D3494);
 
 class RewardsScreen extends StatefulWidget {
   const RewardsScreen({
@@ -49,15 +50,28 @@ class _RewardsScreenState extends State<RewardsScreen>
     duration: const Duration(milliseconds: 1450),
   )..repeat(reverse: true);
 
-  bool _checkingQuizLock = true;
-  bool _quizLockedForToday = false;
-  String? _activeCouponCode;
+  // FIX (per Nizam's explicit request — the old rewards page was a
+  // scam pattern): this used to be a scratch-card that unlocked a
+  // rigged "come back tomorrow" dead end almost every time — a fake
+  // reward that misled customers with no real payout. Replaced with
+  // two genuine, ONE-TIME-PER-ACCOUNT quiz rewards, permanently
+  // recorded on the customer's own users/{uid} doc (never resets
+  // daily, never re-askable after being answered once): a Paytm quiz
+  // that auto-unlocks a real cashback coupon, and an AI general-
+  // knowledge quiz that unlocks a free 1-year Guru AI subscription
+  // (claimed via WhatsApp to our support number, then activated
+  // manually on our side).
+  bool _loadingRewards = true;
+  bool _paytmQuizClaimed = false;
+  String? _paytmCouponCode;
+  bool _aiQuizClaimed = false;
+
   int _topTab = 0; // 0 = Rewards, 1 = Erode Offers
 
   @override
   void initState() {
     super.initState();
-    unawaited(_loadQuizLock());
+    unawaited(_loadRewardsState());
   }
 
   @override
@@ -66,12 +80,10 @@ class _RewardsScreenState extends State<RewardsScreen>
     super.dispose();
   }
 
-  Future<void> _loadQuizLock() async {
+  Future<void> _loadRewardsState() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      if (mounted) {
-        setState(() => _checkingQuizLock = false);
-      }
+      if (mounted) setState(() => _loadingRewards = false);
       return;
     }
 
@@ -82,47 +94,39 @@ class _RewardsScreenState extends State<RewardsScreen>
           .get();
       DbUsageTracker.instance.recordRead(1);
       final data = snap.data() ?? <String, dynamic>{};
-      final lastQuizWonAt = data['lastQuizWonAt'];
-      final activeCoupon = data['activeCoupon'];
-      final locked = lastQuizWonAt is Timestamp &&
-          DateTime.now().difference(lastQuizWonAt.toDate()) <
-              const Duration(hours: 24);
+      final rewardsV2 = (data['rewardsV2'] as Map<String, dynamic>?) ?? {};
 
       if (!mounted) return;
       setState(() {
-        _quizLockedForToday = locked;
-        _activeCouponCode = activeCoupon is Map<String, dynamic>
-            ? activeCoupon['code'] as String?
-            : null;
-        _checkingQuizLock = false;
+        _paytmQuizClaimed = rewardsV2['paytmQuizClaimed'] == true;
+        _paytmCouponCode = rewardsV2['paytmCouponCode'] as String?;
+        _aiQuizClaimed = rewardsV2['aiQuizClaimed'] == true;
+        _loadingRewards = false;
       });
     } catch (e) {
-      debugPrint('[RewardsScreen] Quiz lock check failed: $e');
-      if (mounted) {
-        setState(() => _checkingQuizLock = false);
-      }
+      debugPrint('[RewardsScreen] Rewards state load failed: $e');
+      if (mounted) setState(() => _loadingRewards = false);
     }
   }
 
-  Future<void> _openPaytmQuizScratchDialog() async {
-    if (_checkingQuizLock) return;
-
-    if (_quizLockedForToday) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Come back tomorrow for your next reward!'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
+  Future<void> _openPaytmQuizDialog() async {
+    if (_loadingRewards || _paytmQuizClaimed) return;
     await showDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.62),
-      builder: (context) => const _PaytmQuizScratchDialog(),
+      builder: (context) => const _PaytmQuizDialog(),
     );
-    await _loadQuizLock();
+    await _loadRewardsState();
+  }
+
+  Future<void> _openAiQuizDialog() async {
+    if (_loadingRewards || _aiQuizClaimed) return;
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.62),
+      builder: (context) => const _AiQuizDialog(),
+    );
+    await _loadRewardsState();
   }
 
   @override
@@ -199,12 +203,6 @@ class _RewardsScreenState extends State<RewardsScreen>
             ),
           ),
         ),
-        // Floating Gift Box — bottom-right
-        Positioned(
-          right: 16,
-          bottom: 20,
-          child: _RewardsFloatingGiftBox(onTap: _openPaytmQuizScratchDialog),
-        ),
         // Bouncing Paytm soundbox. Previously mounted app-wide on
         // MaterialApp's builder, which kept its per-frame Ticker running
         // over every screen in the app. Now it lives here only, so it
@@ -246,7 +244,7 @@ class _RewardsScreenState extends State<RewardsScreen>
           ),
           const SizedBox(height: 8),
           Text(
-            'Tap the glowing Paytm quiz card, scratch the cover, and unlock your entry.',
+            'Answer 2 quick one-time questions to unlock real rewards — no daily wait, no gimmicks.',
             style: GoogleFonts.outfit(
               color: Colors.white.withValues(alpha: 0.9),
               fontSize: 13,
@@ -310,14 +308,38 @@ class _RewardsScreenState extends State<RewardsScreen>
 
   List<Widget> _buildRewardsTabContent() {
     return [
-      _GlowingPaytmQuizCard(
+      _QuizRewardCard(
         animation: _glowController,
-        onTap: _openPaytmQuizScratchDialog,
-        disabled: _checkingQuizLock || _quizLockedForToday,
-        lockedMessage: _quizLockedForToday
-            ? 'Come back tomorrow for your next reward!'
-            : 'Checking reward status...',
-        couponCode: _activeCouponCode,
+        onTap: _openPaytmQuizDialog,
+        loading: _loadingRewards,
+        claimed: _paytmQuizClaimed,
+        badgeLabel: 'PAYTM QUIZ',
+        title: _paytmQuizClaimed ? 'Reward unlocked!' : 'Paytm Quiz: Win a Cashback Box',
+        subtitle: _paytmQuizClaimed
+            ? (_paytmCouponCode != null
+                ? 'Your coupon: $_paytmCouponCode — claim at NJ TECH.'
+                : 'You already answered this quiz.')
+            : 'Answer 1 quick question about Paytm to unlock your free cashback box — one-time only.',
+        icon: Icons.quiz_rounded,
+        claimedIcon: Icons.verified_rounded,
+        gradient: const [_paytmBlue, _paytmDarkBlue],
+        ctaLabel: _paytmQuizClaimed ? 'Already claimed' : 'Tap to answer',
+      ),
+      const SizedBox(height: 16),
+      _QuizRewardCard(
+        animation: _glowController,
+        onTap: _openAiQuizDialog,
+        loading: _loadingRewards,
+        claimed: _aiQuizClaimed,
+        badgeLabel: 'AI QUIZ',
+        title: _aiQuizClaimed ? 'Guru AI subscription claimed!' : 'AI Quiz: Win 1-Year Guru AI',
+        subtitle: _aiQuizClaimed
+            ? 'We\'ll activate your subscription shortly after your WhatsApp message.'
+            : 'Answer 1 simple AI general-knowledge question to unlock a free 1-year Guru AI subscription — one-time only.',
+        icon: Icons.psychology_alt_rounded,
+        claimedIcon: Icons.verified_rounded,
+        gradient: const [_aiPurple, _aiPurpleDark],
+        ctaLabel: _aiQuizClaimed ? 'Already claimed' : 'Tap to answer',
       ),
       const SizedBox(height: 26),
       Text(
@@ -350,23 +372,36 @@ class _RewardsScreenState extends State<RewardsScreen>
   }
 }
 
-class _GlowingPaytmQuizCard extends StatelessWidget {
-  const _GlowingPaytmQuizCard({
+class _QuizRewardCard extends StatelessWidget {
+  const _QuizRewardCard({
     required this.animation,
     required this.onTap,
-    required this.disabled,
-    required this.lockedMessage,
-    this.couponCode,
+    required this.loading,
+    required this.claimed,
+    required this.badgeLabel,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.claimedIcon,
+    required this.gradient,
+    required this.ctaLabel,
   });
 
   final Animation<double> animation;
   final VoidCallback onTap;
-  final bool disabled;
-  final String lockedMessage;
-  final String? couponCode;
+  final bool loading;
+  final bool claimed;
+  final String badgeLabel;
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final IconData claimedIcon;
+  final List<Color> gradient;
+  final String ctaLabel;
 
   @override
   Widget build(BuildContext context) {
+    final disabled = loading || claimed;
     return AnimatedBuilder(
       animation: animation,
       builder: (context, _) {
@@ -375,146 +410,88 @@ class _GlowingPaytmQuizCard extends StatelessWidget {
           onTap: disabled ? null : onTap,
           child: Container(
             width: double.infinity,
-            constraints: const BoxConstraints(minHeight: 230),
-            padding: const EdgeInsets.all(24),
+            constraints: const BoxConstraints(minHeight: 190),
+            padding: const EdgeInsets.all(22),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: disabled
-                    ? const [Color(0xFFB8C7D9), Color(0xFF667A94)]
-                    : const [_paytmBlue, _paytmDarkBlue],
+                colors: claimed
+                    ? const [Color(0xFF8FBFA0), Color(0xFF4E7A5E)]
+                    : gradient,
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: BorderRadius.circular(34),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.62),
-                width: 1.4,
-              ),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.2),
               boxShadow: [
                 BoxShadow(
-                  color: (disabled ? Colors.blueGrey : _paytmBlue).withValues(
-                    alpha: 0.28 + (pulse * 0.18),
-                  ),
-                  blurRadius: disabled ? 18 : 24 + (pulse * 26),
-                  spreadRadius: disabled ? 1 : 2 + (pulse * 9),
-                  offset: const Offset(0, 16),
-                ),
-                BoxShadow(
-                  color: _paytmDarkBlue.withValues(alpha: 0.32),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
+                  color: gradient.first.withValues(alpha: 0.26 + (claimed ? 0 : pulse * 0.16)),
+                  blurRadius: claimed ? 16 : 20 + (pulse * 20),
+                  spreadRadius: claimed ? 1 : 2 + (pulse * 6),
+                  offset: const Offset(0, 12),
                 ),
               ],
             ),
             child: Stack(
               children: [
                 Positioned(
-                  right: -18,
-                  top: -18,
+                  right: -14,
+                  top: -14,
                   child: Icon(
-                    disabled
-                        ? Icons.lock_clock_rounded
-                        : Icons.auto_awesome_rounded,
-                    size: 128,
+                    claimed ? Icons.check_circle_outline_rounded : Icons.auto_awesome_rounded,
+                    size: 100,
                     color: Colors.white.withValues(alpha: 0.14),
                   ),
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Row(
                       children: [
                         Container(
-                          width: 74,
-                          height: 74,
-                          decoration: BoxDecoration(
+                          width: 56,
+                          height: 56,
+                          decoration: const BoxDecoration(
                             shape: BoxShape.circle,
                             color: Colors.white,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.white.withValues(alpha: 0.46),
-                                blurRadius: 24,
-                                spreadRadius: 3,
-                              ),
-                            ],
                           ),
-                          child: Icon(
-                            disabled
-                                ? Icons.verified_rounded
-                                : Icons.quiz_rounded,
-                            color: _paytmDarkBlue,
-                            size: 38,
-                          ),
+                          child: Icon(claimed ? claimedIcon : icon, color: gradient.last, size: 28),
                         ),
-                        const SizedBox(width: 14),
+                        const SizedBox(width: 12),
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 7,
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.18),
                             borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.38),
-                            ),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
                           ),
                           child: Text(
-                            disabled ? 'DAILY LOCK' : 'SCRATCH QUIZ',
+                            claimed ? 'CLAIMED' : badgeLabel,
                             style: GoogleFonts.outfit(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 1.1,
+                              color: Colors.white, fontSize: 10.5,
+                              fontWeight: FontWeight.w900, letterSpacing: 1.0,
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
                     Text(
-                      disabled
-                          ? 'Reward locked for today'
-                          : 'Paytm Quiz: Win Upto ₹500',
-                      style: GoogleFonts.outfit(
-                        color: Colors.white,
-                        fontSize: 28,
-                        height: 1.05,
-                        fontWeight: FontWeight.w900,
-                      ),
+                      title,
+                      style: GoogleFonts.outfit(color: Colors.white, fontSize: 19, height: 1.1, fontWeight: FontWeight.w900),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 6),
                     Text(
-                      disabled
-                          ? couponCode == null
-                              ? lockedMessage
-                              : '$lockedMessage\nActive coupon: $couponCode'
-                          : 'Scratch now to unlock your NJ TECH quiz entry and gift box.',
-                      style: GoogleFonts.outfit(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        fontSize: 14,
-                        height: 1.35,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      subtitle,
+                      style: GoogleFonts.outfit(color: Colors.white.withValues(alpha: 0.9), fontSize: 12.5, height: 1.35, fontWeight: FontWeight.w600),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 14),
                     Row(
                       children: [
-                        Text(
-                          disabled ? 'Daily reward claimed' : 'Tap to scratch',
-                          style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(
-                          Icons.arrow_forward_rounded,
-                          color: Colors.white,
-                          size: 20,
-                        ),
+                        Text(ctaLabel, style: GoogleFonts.outfit(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w900)),
+                        if (!claimed) ...[
+                          const SizedBox(width: 6),
+                          const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
+                        ],
                       ],
                     ),
                   ],
@@ -532,115 +509,77 @@ class _GlowingPaytmQuizCard extends StatelessWidget {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<Animation<double>>('animation', animation));
     properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
-    properties.add(DiagnosticsProperty<bool>('disabled', disabled));
-    properties.add(StringProperty('lockedMessage', lockedMessage));
-    properties.add(StringProperty('couponCode', couponCode));
+    properties.add(DiagnosticsProperty<bool>('loading', loading));
+    properties.add(DiagnosticsProperty<bool>('claimed', claimed));
+    properties.add(StringProperty('badgeLabel', badgeLabel));
+    properties.add(StringProperty('title', title));
+    properties.add(StringProperty('subtitle', subtitle));
+    properties.add(StringProperty('ctaLabel', ctaLabel));
   }
 }
 
-enum _QuizDialogStage { scratch, quiz, success, timeout, wrong }
+// ================================================================
+// Shared quiz dialog scaffolding — question -> correct/wrong, no
+// countdown timer and no daily lock (that scarcity mechanic was the
+// dishonest part of the old scratch card). Each question is
+// answerable exactly once per account, ever — enforced by the caller
+// checking Firestore's rewardsV2.*Claimed flags before even opening
+// the dialog.
+// ================================================================
+enum _RewardQuizStage { question, wrong, success }
 
-class _PaytmQuizScratchDialog extends StatefulWidget {
-  const _PaytmQuizScratchDialog();
-
+class _PaytmQuizDialog extends StatefulWidget {
+  const _PaytmQuizDialog();
   @override
-  State<_PaytmQuizScratchDialog> createState() =>
-      _PaytmQuizScratchDialogState();
+  State<_PaytmQuizDialog> createState() => _PaytmQuizDialogState();
 }
 
-class _PaytmQuizScratchDialogState extends State<_PaytmQuizScratchDialog> {
-  static const String _giftBoxLottieUrl =
-      'https://assets2.lottiefiles.com/packages/lf20_touohxv0.json';
+class _PaytmQuizDialogState extends State<_PaytmQuizDialog> {
   static const String _chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
-  Timer? _quizTimer;
-  _QuizDialogStage _stage = _QuizDialogStage.scratch;
-  int _secondsLeft = 15;
-  bool _savingWin = false;
+  _RewardQuizStage _stage = _RewardQuizStage.question;
+  bool _saving = false;
   String? _couponCode;
-
-  @override
-  void dispose() {
-    _quizTimer?.cancel();
-    super.dispose();
-  }
-
-  void _startQuiz() {
-    if (_stage != _QuizDialogStage.scratch) return;
-    setState(() {
-      _stage = _QuizDialogStage.quiz;
-      _secondsLeft = 15;
-    });
-    _quizTimer?.cancel();
-    _quizTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_secondsLeft <= 1) {
-        timer.cancel();
-        setState(() {
-          _secondsLeft = 0;
-          _stage = _QuizDialogStage.timeout;
-        });
-        return;
-      }
-      setState(() => _secondsLeft--);
-    });
-  }
 
   String _generateCouponCode() {
     final random = Random.secure();
-    return List.generate(
-      6,
-      (_) => _chars[random.nextInt(_chars.length)],
-    ).join();
+    return List.generate(6, (_) => _chars[random.nextInt(_chars.length)]).join();
   }
 
-  Future<void> _answerQuiz(bool isNjTech) async {
-    if (_stage != _QuizDialogStage.quiz || _secondsLeft <= 0 || _savingWin) {
-      return;
-    }
-    _quizTimer?.cancel();
-
-    if (!isNjTech) {
-      setState(() => _stage = _QuizDialogStage.wrong);
+  Future<void> _answer(bool correct) async {
+    if (_saving) return;
+    if (!correct) {
+      setState(() => _stage = _RewardQuizStage.wrong);
       return;
     }
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      setState(() => _stage = _QuizDialogStage.wrong);
+      setState(() => _stage = _RewardQuizStage.wrong);
       return;
     }
 
-    setState(() => _savingWin = true);
+    setState(() => _saving = true);
     final code = _generateCouponCode();
-    final expiresAt = DateTime.now().add(const Duration(hours: 48));
     try {
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'lastQuizWonAt': FieldValue.serverTimestamp(),
-        'activeCoupon': {
-          'code': code,
-          'reward': _quizReward,
-          'source': 'paytm_quiz',
-          'expiresAt': Timestamp.fromDate(expiresAt),
-          'createdAt': FieldValue.serverTimestamp(),
-          'status': 'active',
+        'rewardsV2': {
+          'paytmQuizClaimed': true,
+          'paytmCouponCode': code,
+          'paytmClaimedAt': FieldValue.serverTimestamp(),
         },
-      }, SetOptions(merge: true),);
+      }, SetOptions(merge: true));
       if (!mounted) return;
       setState(() {
         _couponCode = code;
-        _savingWin = false;
-        _stage = _QuizDialogStage.success;
+        _saving = false;
+        _stage = _RewardQuizStage.success;
       });
     } catch (e) {
-      debugPrint('[RewardsScreen] Quiz win save failed: $e');
+      debugPrint('[RewardsScreen] Paytm quiz claim save failed: $e');
       if (mounted) {
         setState(() {
-          _savingWin = false;
-          _stage = _QuizDialogStage.wrong;
+          _saving = false;
+          _stage = _RewardQuizStage.wrong;
         });
       }
     }
@@ -650,10 +589,7 @@ class _PaytmQuizScratchDialogState extends State<_PaytmQuizScratchDialog> {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     return Dialog(
-      insetPadding: EdgeInsets.symmetric(
-        horizontal: width < 420 ? 18 : 34,
-        vertical: 24,
-      ),
+      insetPadding: EdgeInsets.symmetric(horizontal: width < 420 ? 18 : 34, vertical: 24),
       backgroundColor: Colors.transparent,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 460),
@@ -662,361 +598,312 @@ class _PaytmQuizScratchDialogState extends State<_PaytmQuizScratchDialog> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(30),
-            boxShadow: [
-              BoxShadow(
-                color: _paytmDarkBlue.withValues(alpha: 0.28),
-                blurRadius: 34,
-                offset: const Offset(0, 18),
-              ),
-            ],
+            boxShadow: [BoxShadow(color: _paytmDarkBlue.withValues(alpha: 0.28), blurRadius: 34, offset: const Offset(0, 18))],
           ),
           child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 320),
-            child: _buildStageContent(context),
+            duration: const Duration(milliseconds: 280),
+            child: switch (_stage) {
+              _RewardQuizStage.question => _buildQuestion(context),
+              _RewardQuizStage.wrong => _buildWrong(context),
+              _RewardQuizStage.success => _buildSuccess(context),
+            },
           ),
         ),
       ),
     );
   }
 
-  Widget _buildStageContent(BuildContext context) {
-    return switch (_stage) {
-      _QuizDialogStage.scratch => _buildScratchContent(context),
-      _QuizDialogStage.quiz => _buildQuizContent(context),
-      _QuizDialogStage.success => _buildSuccessContent(context),
-      _QuizDialogStage.timeout => _buildMessageContent(
-          context,
-          icon: Icons.timer_off_rounded,
-          title: "Time's up! Try again tomorrow.",
-          subtitle: 'The 15-second quiz window closed.',
-        ),
-      _QuizDialogStage.wrong => _buildMessageContent(
-          context,
-          icon: Icons.info_outline_rounded,
-          title: 'Try again tomorrow.',
-          subtitle: 'Hint: NJ TECH is the service center to remember.',
-        ),
-    };
-  }
-
-  Widget _dialogHeader(BuildContext context, String title) {
+  Widget _header(BuildContext context, String title) {
     return Row(
       children: [
         Container(
-          width: 44,
-          height: 44,
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(colors: [_paytmBlue, _paytmDarkBlue]),
-          ),
-          child: const Icon(Icons.card_giftcard_rounded, color: Colors.white),
+          width: 44, height: 44,
+          decoration: const BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: [_paytmBlue, _paytmDarkBlue])),
+          child: const Icon(Icons.quiz_rounded, color: Colors.white),
         ),
         const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            title,
-            style: GoogleFonts.outfit(
-              color: _rewardInk,
-              fontSize: 19,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
-        IconButton(
-          onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.close_rounded),
-          color: _rewardInk,
-        ),
+        Expanded(child: Text(title, style: GoogleFonts.outfit(color: _rewardInk, fontSize: 18, fontWeight: FontWeight.w900))),
+        IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close_rounded), color: _rewardInk),
       ],
     );
   }
 
-  Widget _buildScratchContent(BuildContext context) {
+  Widget _buildQuestion(BuildContext context) {
     return Column(
-      key: const ValueKey('scratch'),
+      key: const ValueKey('q'),
       mainAxisSize: MainAxisSize.min,
       children: [
-        _dialogHeader(context, 'Paytm Quiz Scratch'),
-        const SizedBox(height: 14),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: Scratcher(
-            brushSize: 42,
-            threshold: 50,
-            color: _paytmBlue,
-            onThreshold: _startQuiz,
-            child: Container(
-              width: double.infinity,
-              height: 250,
-              padding: const EdgeInsets.all(22),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [_paytmDarkBlue, _paytmBlue],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.emoji_events_rounded,
-                    color: Colors.white,
-                    size: 58,
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    'Quiz Entry',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.outfit(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Congratulations! Answer this simple NJ TECH question to unlock your ₹500 / Gift Box.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.outfit(
-                      color: Colors.white.withValues(alpha: 0.92),
-                      fontSize: 14,
-                      height: 1.35,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        _scratchHint(),
-      ],
-    );
-  }
-
-  Widget _scratchHint() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: _paytmDarkBlue,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.touch_app_rounded, color: Colors.white, size: 18),
-          const SizedBox(width: 8),
-          Text(
-            'Scratch Here',
-            style: GoogleFonts.outfit(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQuizContent(BuildContext context) {
-    return Column(
-      key: const ValueKey('quiz'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _dialogHeader(context, '15 Second Quiz'),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: _rewardPink.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: _rewardPink.withValues(alpha: 0.28)),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.timer_rounded, color: _rewardPink),
-              const SizedBox(width: 8),
-              Text(
-                '$_secondsLeft seconds left',
-                style: GoogleFonts.outfit(
-                  color: _rewardPink,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
+        _header(context, 'Paytm Quiz'),
+        const SizedBox(height: 16),
+        Text(
+          'What is Paytm mainly used for?',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.outfit(color: _rewardInk, fontSize: 20, height: 1.2, fontWeight: FontWeight.w900),
         ),
         const SizedBox(height: 20),
-        Text(
-          'What is the best Mobile & Laptop Service Center in Erode?',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.outfit(
-            color: _rewardInk,
-            fontSize: 22,
-            height: 1.18,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        const SizedBox(height: 22),
-        _quizOption(
-          label: 'A) NJ TECH',
-          icon: Icons.workspace_premium_rounded,
-          onTap: () => unawaited(_answerQuiz(true)),
-        ),
-        const SizedBox(height: 12),
-        _quizOption(
-          label: 'B) Others',
-          icon: Icons.storefront_rounded,
-          onTap: () => unawaited(_answerQuiz(false)),
-        ),
-        if (_savingWin) ...[
-          const SizedBox(height: 16),
-          const CircularProgressIndicator(color: _paytmBlue),
-        ],
+        _option('A) Digital payments & mobile recharge', Icons.account_balance_wallet_rounded, () => unawaited(_answer(true))),
+        const SizedBox(height: 10),
+        _option('B) Food delivery', Icons.fastfood_rounded, () => unawaited(_answer(false))),
+        const SizedBox(height: 10),
+        _option('C) Movie streaming', Icons.movie_rounded, () => unawaited(_answer(false))),
+        if (_saving) ...[const SizedBox(height: 14), const CircularProgressIndicator(color: _paytmBlue)],
       ],
     );
   }
 
-  Widget _quizOption({
-    required String label,
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
+  Widget _option(String label, IconData icon, VoidCallback onTap) {
     return SizedBox(
       width: double.infinity,
       child: FilledButton.icon(
-        onPressed: _savingWin ? null : onTap,
-        icon: Icon(icon),
-        label: Text(label),
+        onPressed: _saving ? null : onTap,
+        icon: Icon(icon), label: Text(label),
         style: FilledButton.styleFrom(
-          backgroundColor: _paytmDarkBlue,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-          textStyle: GoogleFonts.outfit(
-            fontSize: 16,
-            fontWeight: FontWeight.w900,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
+          backgroundColor: _paytmDarkBlue, foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          textStyle: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          alignment: Alignment.centerLeft,
         ),
       ),
     );
   }
 
-  Widget _buildSuccessContent(BuildContext context) {
+  Widget _buildWrong(BuildContext context) {
+    return Column(
+      key: const ValueKey('wrong'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _header(context, 'Paytm Quiz'),
+        const SizedBox(height: 20),
+        const Icon(Icons.info_outline_rounded, color: _rewardPink, size: 64),
+        const SizedBox(height: 12),
+        Text('Not quite — try again!', style: GoogleFonts.outfit(color: _rewardInk, fontSize: 20, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            onPressed: () => setState(() => _stage = _RewardQuizStage.question),
+            style: FilledButton.styleFrom(backgroundColor: _paytmDarkBlue, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
+            child: const Text('Try Again'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSuccess(BuildContext context) {
     return Column(
       key: const ValueKey('success'),
       mainAxisSize: MainAxisSize.min,
       children: [
-        _dialogHeader(context, 'Gift Box Unlocked'),
-        SizedBox(
-          height: 190,
-          child: Lottie.network(
-            _giftBoxLottieUrl,
-            repeat: false,
-            fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => const Icon(
-              Icons.card_giftcard_rounded,
-              color: _rewardPink,
-              size: 112,
-            ),
-          ),
-        ),
-        Text(
-          '🎉 YOU WON! 🎉\n$_quizReward',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.outfit(
-            color: _rewardInk,
-            fontSize: 24,
-            height: 1.15,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        const SizedBox(height: 16),
+        _header(context, 'Reward Unlocked!'),
+        const SizedBox(height: 12),
+        const Icon(Icons.card_giftcard_rounded, color: _rewardPink, size: 88),
+        const SizedBox(height: 12),
+        Text('🎉 Free Paytm Cashback Box! 🎉', textAlign: TextAlign.center, style: GoogleFonts.outfit(color: _rewardInk, fontSize: 20, height: 1.15, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 14),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [_paytmBlue, _rewardPink]),
-            borderRadius: BorderRadius.circular(22),
-          ),
+          decoration: BoxDecoration(gradient: const LinearGradient(colors: [_paytmBlue, _rewardPink]), borderRadius: BorderRadius.circular(20)),
           child: Column(
             children: [
-              Text(
-                'Coupon Code',
-                style: GoogleFonts.outfit(
-                  color: Colors.white.withValues(alpha: 0.86),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+              Text('Coupon Code', style: GoogleFonts.outfit(color: Colors.white.withValues(alpha: 0.86), fontSize: 12, fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),
-              SelectableText(
-                _couponCode ?? '------',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.outfit(
-                  color: Colors.white,
-                  fontSize: 30,
-                  letterSpacing: 4,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
+              SelectableText(_couponCode ?? '------', textAlign: TextAlign.center, style: GoogleFonts.outfit(color: Colors.white, fontSize: 28, letterSpacing: 4, fontWeight: FontWeight.w900)),
             ],
           ),
         ),
-        const SizedBox(height: 14),
-        Text(
-          'Claim at NJ TECH within 48 Hours!',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.outfit(
-            color: _rewardPink,
-            fontSize: 16,
-            fontWeight: FontWeight.w900,
+        const SizedBox(height: 12),
+        Text('Claim at NJ TECH!', textAlign: TextAlign.center, style: GoogleFonts.outfit(color: _rewardPink, fontSize: 15, fontWeight: FontWeight.w900)),
+      ],
+    );
+  }
+}
+
+// ================================================================
+// AI general-knowledge quiz -> 1-year Guru AI subscription. Correct
+// answer doesn't auto-grant anything (unlike the Paytm quiz's instant
+// coupon) — it unlocks a "Claim via WhatsApp" button, since activating
+// a real Guru AI subscription needs a human on our side to add the
+// customer's API key manually (see guru_chat_screen.dart's FIX
+// comment). One WhatsApp claim, ever, per account.
+// ================================================================
+class _AiQuizDialog extends StatefulWidget {
+  const _AiQuizDialog();
+  @override
+  State<_AiQuizDialog> createState() => _AiQuizDialogState();
+}
+
+class _AiQuizDialogState extends State<_AiQuizDialog> {
+  _RewardQuizStage _stage = _RewardQuizStage.question;
+  bool _saving = false;
+  bool _claiming = false;
+
+  void _answer(bool correct) {
+    setState(() => _stage = correct ? _RewardQuizStage.success : _RewardQuizStage.wrong);
+  }
+
+  Future<void> _claimViaWhatsApp() async {
+    if (_claiming) return;
+    setState(() => _claiming = true);
+    final user = FirebaseAuth.instance.currentUser;
+    try {
+      final name = (user?.displayName?.trim().isNotEmpty ?? false) ? user!.displayName!.trim() : 'Customer';
+      final message = Uri.encodeComponent(
+        'I claimed Guru AI subscription 🎉\nName: $name\nMobile: ${user?.phoneNumber ?? 'N/A'}\nEmail: ${user?.email ?? 'N/A'}',
+      );
+      final uri = Uri.parse('https://wa.me/$kCallCenterNumberIntl?text=$message');
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+      if (user != null) {
+        setState(() => _saving = true);
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'rewardsV2': {
+            'aiQuizClaimed': true,
+            'aiClaimedAt': FieldValue.serverTimestamp(),
+          },
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      debugPrint('[RewardsScreen] AI quiz WhatsApp claim failed: $e');
+    } finally {
+      if (mounted) setState(() { _saving = false; _claiming = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    return Dialog(
+      insetPadding: EdgeInsets.symmetric(horizontal: width < 420 ? 18 : 34, vertical: 24),
+      backgroundColor: Colors.transparent,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 460),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: [BoxShadow(color: _aiPurpleDark.withValues(alpha: 0.28), blurRadius: 34, offset: const Offset(0, 18))],
+          ),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 280),
+            child: switch (_stage) {
+              _RewardQuizStage.question => _buildQuestion(context),
+              _RewardQuizStage.wrong => _buildWrong(context),
+              _RewardQuizStage.success => _buildSuccess(context),
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _header(BuildContext context, String title) {
+    return Row(
+      children: [
+        Container(
+          width: 44, height: 44,
+          decoration: const BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: [_aiPurple, _aiPurpleDark])),
+          child: const Icon(Icons.psychology_alt_rounded, color: Colors.white),
+        ),
+        const SizedBox(width: 12),
+        Expanded(child: Text(title, style: GoogleFonts.outfit(color: _rewardInk, fontSize: 18, fontWeight: FontWeight.w900))),
+        IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close_rounded), color: _rewardInk),
+      ],
+    );
+  }
+
+  Widget _buildQuestion(BuildContext context) {
+    return Column(
+      key: const ValueKey('q'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _header(context, 'AI Quiz'),
+        const SizedBox(height: 16),
+        Text('What does "AI" stand for?', textAlign: TextAlign.center, style: GoogleFonts.outfit(color: _rewardInk, fontSize: 20, height: 1.2, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 20),
+        _option('A) Artificial Intelligence', Icons.smart_toy_rounded, () => _answer(true)),
+        const SizedBox(height: 10),
+        _option('B) Automated Internet', Icons.wifi_rounded, () => _answer(false)),
+        const SizedBox(height: 10),
+        _option('C) Advanced Interface', Icons.window_rounded, () => _answer(false)),
+      ],
+    );
+  }
+
+  Widget _option(String label, IconData icon, VoidCallback onTap) {
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon), label: Text(label),
+        style: FilledButton.styleFrom(
+          backgroundColor: _aiPurpleDark, foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          textStyle: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          alignment: Alignment.centerLeft,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWrong(BuildContext context) {
+    return Column(
+      key: const ValueKey('wrong'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _header(context, 'AI Quiz'),
+        const SizedBox(height: 20),
+        const Icon(Icons.info_outline_rounded, color: _aiPurple, size: 64),
+        const SizedBox(height: 12),
+        Text('Not quite — try again!', style: GoogleFonts.outfit(color: _rewardInk, fontSize: 20, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            onPressed: () => setState(() => _stage = _RewardQuizStage.question),
+            style: FilledButton.styleFrom(backgroundColor: _aiPurpleDark, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
+            child: const Text('Try Again'),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildMessageContent(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String subtitle,
-  }) {
+  Widget _buildSuccess(BuildContext context) {
     return Column(
-      key: ValueKey(title),
+      key: const ValueKey('success'),
       mainAxisSize: MainAxisSize.min,
       children: [
-        _dialogHeader(context, 'Paytm Quiz'),
-        const SizedBox(height: 22),
-        Icon(icon, color: _rewardPink, size: 72),
-        const SizedBox(height: 16),
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: GoogleFonts.outfit(
-            color: _rewardInk,
-            fontSize: 24,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
+        _header(context, 'Reward Unlocked!'),
+        const SizedBox(height: 12),
+        const Icon(Icons.workspace_premium_rounded, color: _aiPurple, size: 88),
+        const SizedBox(height: 12),
+        Text('🎉 1-Year Guru AI Subscription! 🎉', textAlign: TextAlign.center, style: GoogleFonts.outfit(color: _rewardInk, fontSize: 19, height: 1.15, fontWeight: FontWeight.w900)),
         const SizedBox(height: 8),
         Text(
-          subtitle,
+          'Tap below to message us on WhatsApp — we\'ll activate your subscription shortly after.',
           textAlign: TextAlign.center,
-          style: GoogleFonts.outfit(
-            color: _rewardInk.withValues(alpha: 0.64),
-            fontSize: 14,
-            height: 1.35,
-            fontWeight: FontWeight.w600,
+          style: GoogleFonts.outfit(color: _rewardInk.withValues(alpha: 0.64), fontSize: 13, height: 1.35, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: _claiming ? null : () => unawaited(_claimViaWhatsApp()),
+            icon: _saving
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.chat_rounded),
+            label: Text(_claiming ? 'Opening WhatsApp...' : 'Claim via WhatsApp'),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF25D366), foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              textStyle: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w900),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            ),
           ),
         ),
       ],
@@ -1124,63 +1011,9 @@ class _RewardOfferTile extends StatelessWidget {
   }
 }
 
-// ================================================================
-// FLOATING GIFT BOX — Rewards Tab
-// ================================================================
-class _RewardsFloatingGiftBox extends StatefulWidget {
-  final VoidCallback onTap;
-  const _RewardsFloatingGiftBox({required this.onTap});
-  @override
-  State<_RewardsFloatingGiftBox> createState() => _RewardsFloatingGiftBoxState();
-}
-
-class _RewardsFloatingGiftBoxState extends State<_RewardsFloatingGiftBox>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _glow;
-  late final Animation<double> _pulse;
-
-  @override
-  void initState() {
-    super.initState();
-    _glow = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1200))
-      ..repeat(reverse: true);
-    _pulse = Tween<double>(begin: 0.85, end: 1.08).animate(
-        CurvedAnimation(parent: _glow, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() { _glow.dispose(); super.dispose(); }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _pulse,
-      builder: (_, __) => Transform.scale(
-        scale: _pulse.value,
-        child: GestureDetector(
-          onTap: widget.onTap,
-          child: Container(
-            width: 60, height: 60,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const RadialGradient(colors: [
-                Color(0xFFFFDD00), Color(0xFFFF9800),
-              ]),
-              boxShadow: [
-                BoxShadow(
-                    color: const Color(0xFFFFBB00)
-                        .withValues(alpha: 0.5 + 0.35 * _pulse.value),
-                    blurRadius: 22,
-                    spreadRadius: 4),
-              ],
-            ),
-            child: const Center(
-              child: Text('🎁', style: TextStyle(fontSize: 28)),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
+// FLOATING GIFT BOX (removed) — this was a second entry point into the
+// same rigged "come back tomorrow" scratch-card dead end as the old
+// _GlowingPaytmQuizCard, per Nizam's request to remove that scam
+// pattern entirely. The two _QuizRewardCard tiles above are now the
+// only reward entry points, and the floating Guru Bot button (kept, in
+// build() above) is legitimate navigation, not a reward mechanic.

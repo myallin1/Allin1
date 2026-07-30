@@ -632,7 +632,12 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Widget _buildBottomNav() {
     const items = [
-      {'icon': Icons.home_rounded,           'label': 'Home'},
+      // FIX (per Nizam's request): the Home tab's icon slot now shows an
+      // 'A1' text badge instead of a generic house glyph — reads as an
+      // actual brand mark rather than a stock icon. 'icon' is left null
+      // for this entry and handled as a special case below; the 'Home'
+      // text label underneath is untouched.
+      {'icon': null,                          'label': 'Home'},
       {'icon': Icons.card_giftcard_rounded,  'label': 'Rewards'},
       {'icon': Icons.sports_esports_rounded, 'label': 'Play Zone'},
       {'icon': Icons.smart_toy_rounded,      'label': 'Guru AI'},
@@ -649,7 +654,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         child: Row(
           children: List.generate(items.length, (i) {
             final active = _navIndex == i;
-            final icon  = items[i]['icon']  as IconData;
+            final icon  = items[i]['icon']  as IconData?;
             final label = items[i]['label'] as String;
             return Expanded(
               child: InkWell(
@@ -657,7 +662,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(icon, color: active ? kPink : kMuted, size: 24),
+                    icon != null
+                        ? Icon(icon, color: active ? kPink : kMuted, size: 24)
+                        : _A1BadgeIcon(active: active),
                     const SizedBox(height: 3),
                     Text(label, style: TextStyle(
                         fontSize: 9.5,
@@ -668,6 +675,41 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             );
           }),
+        ),
+      ),
+    );
+  }
+}
+
+// ================================================================
+// A1 BRAND BADGE — Home tab icon replacement
+// ================================================================
+// Small rounded-square 'A1' wordmark used in place of Icons.home_rounded
+// on the bottom nav's Home tab — reads as a brand mark rather than a
+// generic stock icon. Sizing matches the 24px Icon() slot it replaces
+// so the row layout doesn't shift.
+class _A1BadgeIcon extends StatelessWidget {
+  final bool active;
+  const _A1BadgeIcon({required this.active});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 24,
+      height: 24,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: active ? kPink : kMuted.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Text(
+        'A1',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+          letterSpacing: -0.3,
+          color: active ? Colors.white : kMuted,
+          height: 1,
         ),
       ),
     );

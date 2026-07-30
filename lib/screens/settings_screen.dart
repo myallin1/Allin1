@@ -11,11 +11,9 @@ import 'package:hive/hive.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../services/ai_activation_service.dart';
 import '../services/localization_service.dart';
 import '../services/map_service.dart';
 import '../services/theme_service.dart';
-import 'ai_settings_screen.dart';
 
 const Color kSurface = Color(0xFF0D0D18);
 const Color kCard = Color(0xFF141420);
@@ -143,7 +141,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final themeService = context.watch<ThemeService>();
-    final aiActivation = context.watch<AiActivationService>();
 
     if (_isLoading) {
       return const Scaffold(
@@ -179,10 +176,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
             _buildPreferenceSettings(themeService),
             const SizedBox(height: 28),
-            _buildSectionHeader('Guru AI'),
-            const SizedBox(height: 12),
-            _buildAiConfigurationSection(aiActivation),
-            const SizedBox(height: 28),
+            // FIX (per Nizam's explicit request): removed the "Guru AI"
+            // settings section here — it let customers paste their OWN
+            // Groq API key directly (a raw key-input TextField in
+            // AiSettingsScreen), which both bypassed and exposed the
+            // intended activation flow (customer WhatsApps a claim ->
+            // we manually add their key server-side, see
+            // rewards_screen.dart's _AiQuizDialog). Nothing about that
+            // manual admin step should ever be visible to customers, and
+            // letting them self-serve their own key defeated the entire
+            // point of it being an admin-controlled reward.
             _buildSectionHeader('🗺️ Map Provider'),
             const SizedBox(height: 12),
             _buildMapProviderSettings(),
@@ -374,97 +377,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildAiConfigurationSection(AiActivationService aiActivation) {
-    final activated = aiActivation.isAiActivated;
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: kCard2,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: activated ? kGreen.withValues(alpha: 0.28) : kBorder,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: activated
-                    ? kGreen.withValues(alpha: 0.12)
-                    : kPurple.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                activated
-                    ? Icons.auto_awesome_rounded
-                    : Icons.key_rounded,
-                color: activated ? kGreen : kPurple,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'AI Configuration',
-                    style: GoogleFonts.outfit(
-                      color: kText,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    activated
-                        ? 'Guru AI is ready on this device.'
-                        : 'Add your Groq API key for advanced BYOK access.',
-                    style: GoogleFonts.outfit(
-                      color: kMuted,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: activated
-                    ? kGreen.withValues(alpha: 0.14)
-                    : kOrange.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                activated ? 'Ready' : 'Setup',
-                style: GoogleFonts.outfit(
-                  color: activated ? kGreen : kOrange,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            IconButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                    builder: (_) => const AiSettingsScreen(),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.chevron_right_rounded, color: kMuted),
-            ),
-          ],
-        ),
       ),
     );
   }

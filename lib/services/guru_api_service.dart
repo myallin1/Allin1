@@ -35,9 +35,15 @@ class GuruApiService {
       return 'Tell me what you need, and I will guide you quickly.';
     }
 
+    // FIX (per Nizam's explicit request): this used to literally tell
+    // the customer "Add the Groq API key before launch" — leaking the
+    // internal activation mechanism (customer WhatsApps a claim, we
+    // manually add their key server-side — see rewards_screen.dart's
+    // _AiQuizDialog) straight into the chat UI. Replaced with a plain,
+    // friendly message that reveals nothing about how activation works.
     final apiKey = await _resolveApiKey();
     if (apiKey.isEmpty) {
-      return 'Guru AI is ready. Add the Groq API key before launch to activate live replies.';
+      return "Guru AI isn't available on your account yet. Please check back soon!";
     }
 
     try {
