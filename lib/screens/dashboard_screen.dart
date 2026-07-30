@@ -2038,6 +2038,53 @@ Future<void> _applyNativeAppUpdate(BuildContext context) async {
 }
 
 // ================================================================
+// DOWNLOAD FAILED FALLBACK
+// ================================================================
+// Shown when launchUrl can't open the APK download link directly (see
+// _apkBtn's FIX comment) — gives the customer a way to still get the
+// app (copy the link, open in the system browser manually) instead of
+// a dead tap with no explanation.
+void _showDownloadFailedDialog(BuildContext context, String url) {
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: const Color(0xFF1A1A26),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text('Couldn\'t start download', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Your browser blocked the direct download. Copy this link and open it in Chrome instead:',
+            style: TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+          const SizedBox(height: 12),
+          SelectableText(url, style: const TextStyle(color: Colors.white, fontSize: 12)),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: url));
+            if (ctx.mounted) {
+              ScaffoldMessenger.of(ctx).showSnackBar(
+                const SnackBar(content: Text('Link copied')),
+              );
+            }
+          },
+          child: const Text('Copy Link', style: TextStyle(color: Colors.white70)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Close', style: TextStyle(color: Colors.white38)),
+        ),
+      ],
+    ),
+  );
+}
+
+// ================================================================
 // APK DOWNLOAD SHEET
 // ================================================================
 void _showApkSheet(BuildContext context) {
@@ -2071,12 +2118,14 @@ void _showApkSheet(BuildContext context) {
         // single source of truth for these URLs instead of a third
         // hardcoded copy.
         _apkBtn(
+          context: context,
           label: '🛒  Download Customer App',
           gradient: [kPink, kPinkDark],
           url: UpdateService().fallbackApkUrl('customer'),
         ),
         const SizedBox(height: 10),
         _apkBtn(
+          context: context,
           label: '🏍️  Download Hero App',
           gradient: [kPurple, const Color(0xFF5A50C8)],
           url: UpdateService().fallbackApkUrl('hero'),
@@ -2092,13 +2141,36 @@ void _showApkSheet(BuildContext context) {
   );
 }
 
-Widget _apkBtn({required String label,
-    required List<Color> gradient, required String url}) {
+Widget _apkBtn({
+    required BuildContext context,
+    required String label,
+    required List<Color> gradient,
+    required String url}) {
   return GestureDetector(
     onTap: () async {
+      // FIX (root cause of "tap Download App and nothing happens — the
+      // sheet just sits there, only Back works"): canLaunchUrl() can
+      // return false on some mobile browser / installed-PWA contexts for
+      // a direct-download https link (no query permission granted, or
+      // the browser's "can this app handle this URL" check is stricter
+      // in standalone/PWA display mode than in a normal tab) — and the
+      // old code did NOTHING when that happened: no error, no snackbar,
+      // no visible feedback at all. That silent no-op is exactly what
+      // reads as "frozen." Now always attempts launchUrl regardless of
+      // canLaunchUrl's answer (canLaunchUrl is known to be unreliable
+      // for https on some Android WebView/PWA builds), wrapped in a
+      // try/catch that surfaces a real error + a manual-copy fallback if
+      // the browser genuinely can't open it.
       final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      try {
+        final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (!launched && context.mounted) {
+          _showDownloadFailedDialog(context, url);
+        }
+      } catch (e) {
+        if (context.mounted) {
+          _showDownloadFailedDialog(context, url);
+        }
       }
     },
     child: Container(
