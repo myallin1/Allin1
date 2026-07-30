@@ -30,6 +30,12 @@ class SellerModel {
   /// exactly as it always has — none of them silently become "grocery."
   final String businessVertical;
 
+  // Multi-city: which city this seller operates in -- feeds the same
+  // city-based dispatch/filtering as heroes/rides. Defaults to 'erode'
+  // for backward compatibility with sellers created before this field
+  // existed.
+  final String city;
+
   SellerModel({
     required this.id,
     required this.name,
@@ -49,6 +55,7 @@ class SellerModel {
     this.createdAt,
     this.updatedAt,
     this.businessVertical = 'hotel',
+    this.city = 'erode',
   });
 
   factory SellerModel.fromJson(Map<String, dynamic> json) {
@@ -75,6 +82,7 @@ class SellerModel {
           ? (json['updatedAt'] as Timestamp).toDate()
           : null,
       businessVertical: (json['businessVertical'] as String?) ?? 'hotel',
+      city: (json['city'] as String?) ?? 'erode',
     );
   }
 
@@ -118,6 +126,7 @@ class SellerModel {
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
       'businessVertical': businessVertical,
+      'city': city,
     };
   }
 
@@ -159,6 +168,7 @@ class SellerModel {
     DateTime? createdAt,
     DateTime? updatedAt,
     String? businessVertical,
+    String? city,
   }) {
     return SellerModel(
       id: id ?? this.id,
@@ -178,6 +188,7 @@ class SellerModel {
       coverImageUrl: coverImageUrl ?? this.coverImageUrl,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      city: city ?? this.city,
       businessVertical: businessVertical ?? this.businessVertical,
     );
   }

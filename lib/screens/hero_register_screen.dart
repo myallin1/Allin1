@@ -10,10 +10,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config/city_config.dart';
 import '../services/cloudinary_upload_service.dart';
+import '../services/location_service.dart';
 // ROUTING FIX (merge duplicate registration/status flows): this screen is
 // now reached DIRECTLY, before any sign-in step, so a fresh hero may have
 // no Firebase Auth session at all when they hit Submit — Google Sign-In is
@@ -135,12 +137,44 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
   // screen). Stored as preferredWorkLocation on the heroes doc, shown in
   // HeroApprovalsScreen's detail dialog.
   final _preferredLocationController = TextEditingController();
-  // Multi-city (Nizam's plan, item 3): hero picks their operating city
-  // at registration; admin sees + verifies it in hero_approvals_screen.dart
-  // during approval. Defaults to whichever city is currently selected
-  // in the app (CityService), so a hero registering after picking their
-  // city on the customer-facing picker doesn't have to re-select it.
-  String _selectedCity = kDefaultCity;
+  // Multi-city (Nizam's plan, item 3): GPS-detected (not manually
+  // picked) via "Use my current location" -- mandatory, null until
+  // _detectCity() resolves it. admin sees + verifies it in
+  // hero_approvals_screen.dart during approval.
+  String? _selectedCity;
+  bool _detectingCity = false;
+
+  Future<void> _detectCity() async {
+    setState(() => _detectingCity = true);
+    try {
+      final position = await LocationService().getCurrentLocation();
+      if (position == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not get your location. Please enable GPS and try again.'), backgroundColor: _red),
+          );
+        }
+        return;
+      }
+      final cityName = await LocationService().getCityFromCoordinates(
+        LatLng(position.latitude, position.longitude),
+      );
+      final matched = cityName == null
+          ? null
+          : (() {
+              final normalized = cityName.trim().toLowerCase();
+              for (final c in kSupportedCities) {
+                if (normalized.contains(c.slug) || c.slug.contains(normalized)) return c.slug;
+              }
+              return null;
+            })();
+      if (mounted) {
+        setState(() => _selectedCity = matched ?? kDefaultCity);
+      }
+    } finally {
+      if (mounted) setState(() => _detectingCity = false);
+    }
+  }
   String? _selectedVehicleType;
   bool _agreedEmergencyResponder = false;
 
@@ -355,6 +389,12 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       );
       return;
     }
+    if (_selectedCity == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please tap "Use my current location" first.'), backgroundColor: _red),
+      );
+      return;
+    }
 
     // FIX: doc photos are now mandatory — block submission if any of the
     // 3 are missing instead of silently allowing an all-numbers-no-proof
@@ -436,11 +476,11 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
          'aadhaarNumber': _aadhaarController.text.trim(),
          'panNumber': _panController.text.trim(),
          'preferredWorkLocation': _preferredLocationController.text.trim(),
-         // Multi-city: hero's self-selected operating city (dropdown
-         // above) — feeds dispatch matching so this hero only receives
-         // pings for rides/orders in their own city. Admin can also
-         // reassign a hero's city later from the admin app if needed.
-         'city': _selectedCity,
+         // Multi-city: hero's GPS-detected operating city — feeds
+         // dispatch matching so this hero only receives pings for
+         // rides/orders in their own city. Admin can also reassign a
+         // hero's city later from the admin app if needed.
+         'city': _selectedCity ?? kDefaultCity,
          'vehicleType': vehicleType,
          'heroCategory': vehicleType,
          'vehicleCategoryLabel': vehicleCategoryLabel,
@@ -785,31 +825,38 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
               const SizedBox(height: 12),
               // Multi-city: which CITY this hero operates in (structured,
               // filterable — feeds dispatch matching so this hero only
-              // gets pinged for rides/orders in their own city). Distinct
-              // from the free-text "Preferred Work Area" field below,
-              // which is a finer-grained area-within-the-city hint.
-              Text(
-                'City',
-                style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w600, fontSize: 13),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: _muted.withValues(alpha: 0.3)),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _selectedCity,
-                    isExpanded: true,
-                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: _muted),
-                    items: kSupportedCities
-                        .map((c) => DropdownMenuItem(value: c.slug, child: Text(c.label)))
-                        .toList(),
-                    onChanged: (v) {
-                      if (v != null) setState(() => _selectedCity = v);
-                    },
+              // gets pinged for rides/orders in their own city). GPS-
+              // detected via "Use my current location" (mandatory, per
+              // Nizam's request), not manually picked — same pattern as
+              // seller_onboarding_screen.dart. Distinct from the
+              // free-text "Preferred Work Area" field below, which is a
+              // finer-grained area-within-the-city hint.
+              InkWell(
+                onTap: _detectingCity ? null : _detectCity,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: _selectedCity != null ? _njPink.withValues(alpha: 0.12) : _card,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _selectedCity != null ? _njPink : _muted.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      _detectingCity
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _njPink))
+                          : Icon(_selectedCity != null ? Icons.check_circle_rounded : Icons.my_location_rounded, color: _njPink, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _selectedCity != null
+                              ? 'City: ${cityLabelFor(_selectedCity!)}'
+                              : 'Use my current location (required)',
+                          style: GoogleFonts.outfit(color: _text, fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

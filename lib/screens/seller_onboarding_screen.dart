@@ -1,10 +1,13 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:latlong2/latlong.dart';
 
+import '../config/city_config.dart';
 import '../config/food_categories.dart';
 import '../models/food_models.dart';
 import '../services/food_seller_service.dart';
+import '../services/location_service.dart';
 import 'seller_home_kitchen_menu_screen.dart';
 
 const Color _bg = Color(0xFF08080F);
@@ -36,6 +39,53 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
   String _selectedSubCategory = 'biriyani';
   bool _isSaving = false;
 
+  // Multi-city (per Nizam's plan): city + real lat/lng are GPS-detected
+  // via "Use my current location", not typed. Mandatory -- _onSubmit()
+  // blocks until this is set. This also fixes a real pre-existing bug:
+  // latitude/longitude were previously hardcoded to 0.0 at submit time
+  // (never geolocated at all), which would have put every seller's pin
+  // in the Gulf of Guinea on any map view keyed off these fields.
+  String? _detectedCity;
+  double? _detectedLat;
+  double? _detectedLng;
+  bool _detectingLocation = false;
+
+  Future<void> _detectLocation() async {
+    setState(() => _detectingLocation = true);
+    try {
+      final position = await LocationService().getCurrentLocation();
+      if (position == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not get your location. Please enable GPS and try again.'), backgroundColor: Colors.redAccent),
+          );
+        }
+        return;
+      }
+      final cityName = await LocationService().getCityFromCoordinates(
+        LatLng(position.latitude, position.longitude),
+      );
+      final matched = cityName == null
+          ? null
+          : (() {
+              final normalized = cityName.trim().toLowerCase();
+              for (final c in kSupportedCities) {
+                if (normalized.contains(c.slug) || c.slug.contains(normalized)) return c.slug;
+              }
+              return null;
+            })();
+      if (mounted) {
+        setState(() {
+          _detectedLat = position.latitude;
+          _detectedLng = position.longitude;
+          _detectedCity = matched ?? kDefaultCity;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _detectingLocation = false);
+    }
+  }
+
   final FoodSellerService _service = FoodSellerService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
@@ -63,6 +113,13 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
   Future<void> _onSubmit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    if (_detectedCity == null || _detectedLat == null || _detectedLng == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please tap "Use my current location" first.'), backgroundColor: Colors.redAccent),
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     try {
@@ -77,8 +134,9 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
         subCategory: _selectedSubCategory,
         hotelType: _selectedHotelType,
         address: _addressController.text.trim(),
-        latitude: 0.0,
-        longitude: 0.0,
+        latitude: _detectedLat!,
+        longitude: _detectedLng!,
+        city: _detectedCity!,
         phone: _phoneController.text.trim(),
         isOpen: false,
         estimatedPrepTimeMin: 20,
@@ -440,6 +498,39 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
             ),
             validator: (v) =>
                 (v == null || v.trim().isEmpty) ? 'Address is required' : null,
+          ),
+          const SizedBox(height: 12),
+          // Multi-city: mandatory GPS-detected city + real lat/lng --
+          // replaces the previous hardcoded 0.0/0.0 that never actually
+          // captured a location.
+          InkWell(
+            onTap: _detectingLocation ? null : _detectLocation,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: _detectedCity != null ? _teal.withValues(alpha: 0.12) : _card2,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _detectedCity != null ? _teal : _border),
+              ),
+              child: Row(
+                children: [
+                  _detectingLocation
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _teal))
+                      : Icon(_detectedCity != null ? Icons.check_circle_rounded : Icons.my_location_rounded, color: _teal, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _detectedCity != null
+                          ? 'Location set: ${cityLabelFor(_detectedCity!)}'
+                          : 'Use my current location (required)',
+                      style: GoogleFonts.outfit(color: _text, fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
