@@ -10,6 +10,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../config/city_config.dart';
+
 // ── Theme (matches admin dashboard) ────────────────────────────
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -228,6 +230,10 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
     final panNumber = data['panNumber'] as String? ?? 'N/A';
     final preferredWorkLocation =
         data['preferredWorkLocation'] as String? ?? '';
+    // Multi-city: hero's self-selected operating city, shown here so
+    // admin can verify it during approval (e.g. catch a hero who
+    // registered from Coimbatore but accidentally left it on Erode).
+    final city = cityLabelFor(data['city'] as String? ?? kDefaultCity);
     final onboardingMethod = data['onboardingMethod'] as String? ?? 'N/A';
     final createdAt = data['createdAt'] as Timestamp?;
 
@@ -250,6 +256,7 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
             children: [
               _detailRow('Email', email),
               _detailRow('Phone', phone),
+              _detailRow('City', city),
               _detailRow('Vehicle No.', vehicleNumber),
               _detailRow('Vehicle Type', vehicleType),
               if (preferredWorkLocation.trim().isNotEmpty)

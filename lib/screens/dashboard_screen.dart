@@ -310,6 +310,62 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
+  /// Manual city switch (Nizam's plan, item 2): tapping the city text
+  /// under "Hi, Name" opens the full kSupportedCities list. Picking one
+  /// marks it as a manual override (CityService.setCurrentCityManually)
+  /// so future silent GPS detection won't flip it back -- e.g. a
+  /// customer in Erode checking Coimbatore prices/heroes ahead of a
+  /// trip stays on Coimbatore until they change it again. "Use my
+  /// current location" at the top clears that override and re-runs
+  /// GPS detection immediately.
+  Future<void> _showCityPicker() async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: kMuted.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 16),
+            Text('Select City', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 16, color: kText)),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.my_location_rounded, color: kPink),
+              title: Text('Use my current location', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14)),
+              onTap: () => Navigator.pop(ctx, '__auto__'),
+            ),
+            const Divider(height: 1),
+            for (final city in kSupportedCities)
+              ListTile(
+                leading: Icon(
+                  city.slug == _displayCity ? Icons.check_circle_rounded : Icons.location_city_rounded,
+                  color: city.slug == _displayCity ? kPink : kMuted,
+                ),
+                title: Text(city.label, style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14)),
+                onTap: () => Navigator.pop(ctx, city.slug),
+              ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+    if (selected == null) return;
+
+    if (selected == '__auto__') {
+      await CityService.clearManualOverride();
+      final detected = await CityService.detectAndUpdateCity();
+      if (mounted) setState(() => _displayCity = detected);
+    } else {
+      await CityService.setCurrentCityManually(selected);
+      if (mounted) setState(() => _displayCity = selected);
+    }
+  }
+
   Future<void> _silentBackupIfNeeded() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -514,9 +570,19 @@ class _DashboardScreenState extends State<DashboardScreen>
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                Text(
-                  '${cityLabelFor(_displayCity)}, TN',
-                  style: const TextStyle(color: kMuted, fontSize: 9, letterSpacing: 0.5),
+                GestureDetector(
+                  onTap: _showCityPicker,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${cityLabelFor(_displayCity)}, TN',
+                        style: const TextStyle(color: kMuted, fontSize: 9, letterSpacing: 0.5, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.keyboard_arrow_down_rounded, size: 12, color: kMuted),
+                    ],
+                  ),
                 ),
               ],
             ),

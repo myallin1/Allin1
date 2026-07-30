@@ -135,6 +135,12 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
   // screen). Stored as preferredWorkLocation on the heroes doc, shown in
   // HeroApprovalsScreen's detail dialog.
   final _preferredLocationController = TextEditingController();
+  // Multi-city (Nizam's plan, item 3): hero picks their operating city
+  // at registration; admin sees + verifies it in hero_approvals_screen.dart
+  // during approval. Defaults to whichever city is currently selected
+  // in the app (CityService), so a hero registering after picking their
+  // city on the customer-facing picker doesn't have to re-select it.
+  String _selectedCity = kDefaultCity;
   String? _selectedVehicleType;
   bool _agreedEmergencyResponder = false;
 
@@ -430,13 +436,11 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
          'aadhaarNumber': _aadhaarController.text.trim(),
          'panNumber': _panController.text.trim(),
          'preferredWorkLocation': _preferredLocationController.text.trim(),
-         // Multi-city (Plan 3): defaults to kDefaultCity ('erode') since
-         // there's no city-picker UI in this form yet -- every hero
-         // registering today is in Erode anyway. When a second city goes
-         // live, add a dropdown here (kSupportedCities) and pass the
-         // selected slug instead of the constant. Admin can also
+         // Multi-city: hero's self-selected operating city (dropdown
+         // above) — feeds dispatch matching so this hero only receives
+         // pings for rides/orders in their own city. Admin can also
          // reassign a hero's city later from the admin app if needed.
-         'city': kDefaultCity,
+         'city': _selectedCity,
          'vehicleType': vehicleType,
          'heroCategory': vehicleType,
          'vehicleCategoryLabel': vehicleCategoryLabel,
@@ -777,6 +781,37 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                 maxLines: 2,
                 validator: (v) =>
                     v!.trim().isEmpty ? 'Address is required' : null,
+              ),
+              const SizedBox(height: 12),
+              // Multi-city: which CITY this hero operates in (structured,
+              // filterable — feeds dispatch matching so this hero only
+              // gets pinged for rides/orders in their own city). Distinct
+              // from the free-text "Preferred Work Area" field below,
+              // which is a finer-grained area-within-the-city hint.
+              Text(
+                'City',
+                style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: _muted.withValues(alpha: 0.3)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedCity,
+                    isExpanded: true,
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: _muted),
+                    items: kSupportedCities
+                        .map((c) => DropdownMenuItem(value: c.slug, child: Text(c.label)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setState(() => _selectedCity = v);
+                    },
+                  ),
+                ),
               ),
               const SizedBox(height: 12),
               // FIX: work-area interest field, per Nizam's request — lets

@@ -31,7 +31,7 @@ const List<CityOption> kSupportedCities = [
   CityOption('coimbatore', 'Coimbatore'),
   CityOption('salem', 'Salem'),
   CityOption('tiruppur', 'Tiruppur'),
-  CityOption('namakkal', 'Namakkal'),
+  CityOption('tiruchy', 'Tiruchy'),
 ];
 
 String cityLabelFor(String slug) {

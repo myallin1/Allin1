@@ -20,15 +20,44 @@ import 'location_service.dart';
 
 class CityService {
   static const String _prefsKey = 'selected_city';
+  // Set true the moment the customer manually picks a city from the
+  // picker (dashboard_screen.dart's city tap). Once set, silent GPS
+  // auto-detection stops overwriting their choice -- e.g. someone who
+  // manually switches to Coimbatore while physically still in Erode
+  // (checking prices/heroes ahead of a trip) shouldn't get silently
+  // flipped back to Erode next time GPS resolves.
+  static const String _manualFlagKey = 'selected_city_is_manual';
 
   static Future<String> getCurrentCity() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_prefsKey) ?? kDefaultCity;
   }
 
+  /// Explicit manual pick (from the city-picker UI). Marks the flag so
+  /// detectAndUpdateCity() won't silently override this later.
+  static Future<void> setCurrentCityManually(String citySlug) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsKey, citySlug);
+    await prefs.setBool(_manualFlagKey, true);
+  }
+
+  /// Internal/auto-detect write path -- does NOT set the manual flag.
   static Future<void> setCurrentCity(String citySlug) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefsKey, citySlug);
+  }
+
+  static Future<bool> isManuallySet() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_manualFlagKey) ?? false;
+  }
+
+  /// Lets the customer go back to "auto-detect via GPS" after having
+  /// manually picked a city -- offered as a "Use my current location"
+  /// option in the city picker alongside the explicit city list.
+  static Future<void> clearManualOverride() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_manualFlagKey, false);
   }
 
   /// Silent GPS-based city detection, called once on app-open (dashboard
@@ -39,12 +68,17 @@ class CityService {
   /// dialog once (same as every other location feature in the app) --
   /// after that it's silent on every future app open.
   ///
+  /// Skips entirely if the customer has manually picked a city (see
+  /// setCurrentCityManually) -- their explicit choice always wins over
+  /// GPS until they manually change it again or tap "Use my location".
+  ///
   /// Returns the resolved city slug (persisted via setCurrentCity), or
   /// the previously cached/default city if GPS/geocoding fails for any
   /// reason (no network, permission denied, etc) -- never throws, never
   /// blocks the caller with a loading state.
   static Future<String> detectAndUpdateCity() async {
     final fallback = await getCurrentCity();
+    if (await isManuallySet()) return fallback;
     try {
       final position = await LocationService().getCurrentLocation();
       if (position == null) return fallback;
