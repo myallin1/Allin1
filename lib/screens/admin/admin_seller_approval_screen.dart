@@ -13,6 +13,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/city_config.dart';
+import '../../services/food_db_service.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -77,7 +78,10 @@ class _AdminSellerApprovalScreenState extends State<AdminSellerApprovalScreen> {
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
+        // FIX (Nizam's cost-cutting plan): sellers now live on the
+        // second "myallin1-food" Firebase project, not the main one.
+        stream: FoodDbService()
+            .firestore
             .collection('sellers')
             .where('status', isEqualTo: 'pending')
             .snapshots(),
@@ -301,7 +305,7 @@ class _AdminSellerApprovalScreenState extends State<AdminSellerApprovalScreen> {
     );
 
     try {
-      await FirebaseFirestore.instance.collection('sellers').doc(sellerId).set(
+      await FoodDbService().firestore.collection('sellers').doc(sellerId).set(
         {
           'status': 'active',
           'approvedAt': FieldValue.serverTimestamp(),
@@ -400,7 +404,7 @@ class _AdminSellerApprovalScreenState extends State<AdminSellerApprovalScreen> {
     );
 
     try {
-      await FirebaseFirestore.instance.collection('sellers').doc(sellerId).set(
+      await FoodDbService().firestore.collection('sellers').doc(sellerId).set(
         {
           'status': 'rejected',
           'rejectionReason': reason,
@@ -445,7 +449,8 @@ class _MenuItemsPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      future: FirebaseFirestore.instance
+      future: FoodDbService()
+          .firestore
           .collection('sellers')
           .doc(sellerId)
           .collection('menu_items')

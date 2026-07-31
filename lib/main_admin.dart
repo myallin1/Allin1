@@ -18,6 +18,8 @@ import 'screens/admin/super_admin_home_screen.dart';
 import 'screens/admin/task_approvals_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/db_usage_tracker.dart';
+import 'services/food_db_service.dart';
+import 'services/food_firebase_options.dart';
 import 'services/localization_service.dart';
 import 'services/session_service.dart';
 
@@ -74,6 +76,11 @@ void main() {
         return;
       }
       DbUsageTracker.instance.init('admin');
+      // Secondary "myallin1-food" project — sellers/menu_items/food_orders
+      // only, keeps that browsing/approval traffic off the main project's
+      // quota. Awaited so it's ready before the seller-approvals screen
+      // can be reached — never throws itself (errors caught internally).
+      await FoodDbService().ensureInitialized(FoodFirebaseOptions.forAdminApp());
       runApp(const AdminApp());
     },
   );

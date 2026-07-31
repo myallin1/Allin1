@@ -13,6 +13,8 @@ import 'screens/seller_home_kitchen_menu_screen.dart';
 import 'screens/seller_onboarding_screen.dart';
 import 'screens/seller_screen.dart';
 import 'services/db_usage_tracker.dart';
+import 'services/food_db_service.dart';
+import 'services/food_firebase_options.dart';
 import 'services/localization_service.dart';
 import 'services/session_service.dart';
 
@@ -30,6 +32,11 @@ void main() async {
         options: DefaultFirebaseOptions.currentPlatform,
       );
       DbUsageTracker.instance.init('seller');
+      // Secondary "myallin1-food" project — sellers/menu_items/food_orders
+      // live here now. Seller app is web-only (PWA), so it always uses
+      // the web config regardless of platform. Awaited so the dashboard
+      // never races an unready secondary connection.
+      await FoodDbService().ensureInitialized(FoodFirebaseOptions.web);
       runApp(const SellerApp());
     },
   );

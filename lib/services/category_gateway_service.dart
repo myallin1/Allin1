@@ -5,6 +5,7 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'cache_service.dart';
+import 'food_db_service.dart';
 
 enum Category {
   bikeTaxi,
@@ -22,7 +23,14 @@ class CategoryGatewayService {
   CategoryGatewayService._internal();
 
   final CacheService _cache = CacheService();
+  // Taxi rides stay on the MAIN project (shared with hero/admin ride
+  // handling — never touches the second "myallin1-food" project).
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // FIX (Nizam's cost-cutting plan): sellers/menu_items (every seller
+  // vertical — food, grocery, tech, pharmacy) now live on the SECOND,
+  // dedicated "myallin1-food" Firebase project, not the main database.
+  FirebaseFirestore get _sellersDb => FoodDbService().firestore;
 
   // ── Category to Firestore Collection Mapping ───────────────
   String _getCategoryCollection(Category category) {
@@ -41,6 +49,9 @@ class CategoryGatewayService {
         return 'rides';
     }
   }
+
+  bool _isSellerCategory(Category category) =>
+      _getCategoryCollection(category) == 'sellers';
 
   String _getCategoryFilter(Category category) {
     switch (category) {
@@ -87,7 +98,8 @@ class CategoryGatewayService {
       // error — exactly the reported "seller creates hotel, customer
       // can't see/order from it" symptom. Removed orderBy and sort
       // client-side instead (capped at 50 results, cheap to sort).
-      final snapshot = await _firestore
+      final db = _isSellerCategory(category) ? _sellersDb : _firestore;
+      final snapshot = await db
           .collection(_getCategoryCollection(category))
           .where('category', isEqualTo: _getCategoryFilter(category))
           .where('status', isEqualTo: 'active')
@@ -151,7 +163,7 @@ class CategoryGatewayService {
       // had real, correctly-written documents in it. Removed the
       // orderBy and sort client-side instead (menu lists are small —
       // capped at 100 here, effectively far fewer per seller).
-      final snapshot = await _firestore
+      final snapshot = await _sellersDb
           .collection('sellers')
           .doc(sellerId)
           .collection('menu_items')

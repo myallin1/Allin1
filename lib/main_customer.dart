@@ -36,6 +36,8 @@ import 'services/analytics_service.dart';
 import 'services/api_service.dart';
 import 'services/cache_service.dart';
 import 'services/db_usage_tracker.dart';
+import 'services/food_db_service.dart';
+import 'services/food_firebase_options.dart';
 import 'services/hive_cache.dart';
 import 'services/local_sync_service.dart';
 import 'services/localization_service.dart';
@@ -201,6 +203,14 @@ void main() async {
       // as 'customer' so admin's DB Monitor screen can see per-app
       // Firestore usage. See lib/services/db_usage_tracker.dart.
       DbUsageTracker.instance.init('customer');
+
+      // Secondary "myallin1-food" project — sellers/menu_items/food_orders
+      // only, keeps category-browsing traffic off the main project's
+      // quota. Awaited here (not fire-and-forget) so it's guaranteed
+      // ready by the time any screen needs it — this call itself never
+      // throws (failures are caught + logged inside the service), it
+      // just leaves the secondary DB unavailable if it fails.
+      await FoodDbService().ensureInitialized(FoodFirebaseOptions.forCustomerApp());
 
       await runZonedGuarded(() async {
         // ── BOOT PHASE 1: only what the first screen genuinely needs ──

@@ -14,6 +14,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/db_usage_tracker.dart';
+import '../../services/food_db_service.dart';
 import '../../widgets/manual_refresh_header.dart';
 import 'ads_management_screen.dart';
 import 'admin_hero_dispatch_screen.dart';
@@ -132,7 +133,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         .collection('service_requests')
         .where('status', isEqualTo: 'admin_review')
         .snapshots();
-    _pendingSellerApprovalsStream = FirebaseFirestore.instance
+    // FIX (Nizam's cost-cutting plan): sellers now live on the second
+    // "myallin1-food" Firebase project, not the main one.
+    _pendingSellerApprovalsStream = FoodDbService()
+        .firestore
         .collection('sellers')
         .where('status', isEqualTo: 'pending')
         .snapshots();

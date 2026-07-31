@@ -21,6 +21,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../services/food_db_service.dart';
 import '../services/session_service.dart';
 import 'login_screen.dart';
 import 'seller_home_kitchen_menu_screen.dart';
@@ -64,7 +65,10 @@ class _SellerPendingScreenState extends State<SellerPendingScreen> {
   }
 
   void _listen() {
-    _statusSub = FirebaseFirestore.instance
+    // FIX (Nizam's cost-cutting plan): sellers now live on the second
+    // "myallin1-food" Firebase project, not the main one.
+    _statusSub = FoodDbService()
+        .firestore
         .collection('sellers')
         .doc(widget.sellerId)
         .snapshots()

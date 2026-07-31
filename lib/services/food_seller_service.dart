@@ -11,13 +11,19 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/food_models.dart';
+import 'food_db_service.dart';
 
 class FoodSellerService {
   FoodSellerService._internal();
   static final FoodSellerService _instance = FoodSellerService._internal();
   factory FoodSellerService() => _instance;
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // FIX (Nizam's cost-cutting plan): sellers/menu_items/food_orders now
+  // live on the SECOND, dedicated "myallin1-food" Firebase project
+  // (own free Spark quota), not the main app database. Auth stays on
+  // the main project — FirebaseAuth.instance below is still main-app
+  // auth, only used to read the current uid, not to talk to Firestore.
+  FirebaseFirestore get _firestore => FoodDbService().firestore;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // ── Collection References ─────────────────────────────────────
