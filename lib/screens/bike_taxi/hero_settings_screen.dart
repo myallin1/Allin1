@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
  import '../../services/localization_service.dart';
  import '../../services/map_service.dart';
+ import '../../services/theme_service.dart';
 
 class HeroSettingsScreen extends StatefulWidget {
   const HeroSettingsScreen({super.key});
@@ -172,6 +173,10 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
             _buildSectionHeader('Language & Region'),
             const SizedBox(height: 12),
             _buildLanguageSettings(),
+            const SizedBox(height: 28),
+            _buildSectionHeader('Theme'),
+            const SizedBox(height: 12),
+            _buildThemeSettings(),
             const SizedBox(height: 28),
             _buildSectionHeader('About'),
             const SizedBox(height: 12),
@@ -387,6 +392,66 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
       },
       title: Text(
         displayName,
+        style: GoogleFonts.outfit(
+          color: _text,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      secondary: isSelected
+          ? Icon(Icons.check_circle_rounded, color: _pink, size: 20)
+          : Icon(Icons.circle_outlined, color: _muted, size: 20),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+    );
+  }
+
+  static const List<Map<String, String>> _themeOptions = <Map<String, String>>[
+    {'key': 'pink_white', 'label': 'Pink & White'},
+    {'key': 'dark_purple', 'label': 'Dark Purple'},
+    {'key': 'system_dark', 'label': 'System Dark'},
+    {'key': 'system_light', 'label': 'System Light'},
+    {'key': 'multicolor', 'label': 'Multicolor'},
+  ];
+
+  Widget _buildThemeSettings() {
+    // Reactive: rebuilds automatically when the theme changes.
+    final currentKey = context.watch<ThemeService>().themeKey;
+    return Container(
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _pink.withValues(alpha: 0.2)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12FF4FA3),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < _themeOptions.length; i++) ...[
+            if (i > 0) const Divider(height: 1, indent: 56, endIndent: 16),
+            _buildThemeTile(_themeOptions[i]['key']!, _themeOptions[i]['label']!, currentKey),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildThemeTile(String key, String label, String currentKey) {
+    final isSelected = currentKey == key;
+    return RadioListTile<String>(
+      value: key,
+      groupValue: currentKey,
+      onChanged: (String? val) {
+        if (val != null) {
+          unawaited(context.read<ThemeService>().setTheme(val));
+        }
+      },
+      title: Text(
+        label,
         style: GoogleFonts.outfit(
           color: _text,
           fontSize: 14,

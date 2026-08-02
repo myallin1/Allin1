@@ -23,6 +23,7 @@ import 'services/hero_ride_notification_service.dart';
 import 'services/hero_web_audio_service.dart';
 import 'services/localization_service.dart';
 import 'services/map_service.dart';
+import 'services/theme_service.dart';
 import 'widgets/hero_premium_loader.dart';
 import 'package:flutter/foundation.dart';
 
@@ -337,34 +338,33 @@ class HeroApp extends StatelessWidget {
     // LocalizationService (en/ta/tg) is now available app-wide — see
     // hero_settings_screen.dart's language picker, which used to save
     // to a shared_preferences key nothing else ever read.
-    return ChangeNotifierProvider(
-      create: (_) => LocalizationService(),
-      child: GestureDetector(
-      onTap: () {
-        if (kIsWeb) HeroWebAudioService().unlock();
-      },
-      child: MaterialApp(
-        navigatorKey: navigatorKey,
-        title: 'hero allin1',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          scaffoldBackgroundColor: const Color(0xFFFFFBFE),
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFFFF4FA3),
-          ).copyWith(
-            primary: const Color(0xFFFF4FA3),
-            secondary: const Color(0xFFFF9CCC),
-            surface: Colors.white,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => LocalizationService()),
+        // FIX (Nizam's 5-theme request): Hero app used to have its own
+        // hardcoded pink ThemeData with no way to change it. Now shares
+        // the same ThemeService as the customer app (5 selectable
+        // themes), switchable from hero_settings_screen.dart.
+        ChangeNotifierProvider(create: (_) => ThemeService()),
+      ],
+      child: Consumer<ThemeService>(
+        builder: (context, themeService, _) => GestureDetector(
+          onTap: () {
+            if (kIsWeb) HeroWebAudioService().unlock();
+          },
+          child: MaterialApp(
+            navigatorKey: navigatorKey,
+            title: 'hero allin1',
+            debugShowCheckedModeBanner: false,
+            theme: themeService.currentTheme,
+            initialRoute: '/',
+            routes: {
+              '/': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
+              '/hero-home': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
+              '/hero-ride': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
+            },
           ),
         ),
-        initialRoute: '/',
-        routes: {
-          '/': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
-          '/hero-home': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
-          '/hero-ride': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
-        },
-      ),
       ),
     );
   }

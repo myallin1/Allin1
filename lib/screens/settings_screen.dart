@@ -344,7 +344,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 Text(
-                  'Choose Purple or NJ Tech instantly',
+                  'Pick your favourite look',
                   style: GoogleFonts.outfit(
                     color: kMuted,
                     fontSize: 12,
@@ -360,12 +360,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: GoogleFonts.outfit(color: kText, fontSize: 13),
               items: const [
                 DropdownMenuItem(
-                  value: 'purple',
-                  child: Text('Purple'),
+                  value: 'pink_white',
+                  child: Text('Pink & White'),
                 ),
                 DropdownMenuItem(
-                  value: 'nj_tech',
-                  child: Text('NJ Tech'),
+                  value: 'dark_purple',
+                  child: Text('Dark Purple'),
+                ),
+                DropdownMenuItem(
+                  value: 'system_dark',
+                  child: Text('System Dark'),
+                ),
+                DropdownMenuItem(
+                  value: 'system_light',
+                  child: Text('System Light'),
+                ),
+                DropdownMenuItem(
+                  value: 'multicolor',
+                  child: Text('Multicolor'),
                 ),
               ],
               onChanged: (value) {
