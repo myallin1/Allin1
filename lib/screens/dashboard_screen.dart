@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'package:scratcher/scratcher.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -22,6 +23,7 @@ import '../services/pwa_cache_platform_stub.dart'
 import '../config/city_config.dart';
 import '../services/app_update_checker.dart';
 import '../services/city_service.dart';
+import '../services/localization_service.dart';
 import '../services/update_service.dart';
 import '../services/web_version_checker.dart';
 
@@ -626,7 +628,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Hi, $firstName',
+                  '${context.watch<LocalizationService>().t('greeting_hi')}, $firstName',
                   style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w700, fontSize: 14),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -925,7 +927,7 @@ class _HomeTab extends StatelessWidget {
         const SizedBox(height: 20),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text('What do you need today?',
+          child: Text(context.watch<LocalizationService>().t('what_need_today'),
               style: GoogleFonts.outfit(
                   fontSize: 17, fontWeight: FontWeight.w800, color: kText)),
         ),
@@ -986,14 +988,14 @@ class _HomeTab extends StatelessWidget {
                       SvgPicture.string(FluentEmojiFlat.taxi, width: 20, height: 20),
                       const SizedBox(width: 6),
                       Text(
-                        'Taxi & Transportation',
+                        context.watch<LocalizationService>().t('taxi_mega_title'),
                         style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
-                  const Text(
-                    '  Bike, Auto, Cab, Parcel & Rent',
-                    style: TextStyle(color: kMuted, fontSize: 11),
+                  Text(
+                    '  ${context.watch<LocalizationService>().t('taxi_mega_subtitle')}',
+                    style: const TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1049,14 +1051,14 @@ class _HomeTab extends StatelessWidget {
                       SvgPicture.string(FluentEmojiFlat.hamburger, width: 20, height: 20),
                       const SizedBox(width: 6),
                       Text(
-                        'Food Delivery',
+                        context.watch<LocalizationService>().t('food_delivery_title'),
                         style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
-                  const Text(
-                    '  Order from ANY shop in Erode!',
-                    style: TextStyle(color: kMuted, fontSize: 11),
+                  Text(
+                    '  ${context.watch<LocalizationService>().t('food_mega_subtitle')}',
+                    style: const TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1112,14 +1114,14 @@ class _HomeTab extends StatelessWidget {
                       SvgPicture.string(FluentEmojiFlat.shopping_cart, width: 20, height: 20),
                       const SizedBox(width: 6),
                       Text(
-                        'Grocery Order',
+                        context.watch<LocalizationService>().t('grocery_mega_title'),
                         style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
-                  const Text(
-                    '  Type your list or snap a photo',
-                    style: TextStyle(color: kMuted, fontSize: 11),
+                  Text(
+                    '  ${context.watch<LocalizationService>().t('grocery_mega_subtitle')}',
+                    style: const TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1175,14 +1177,14 @@ class _HomeTab extends StatelessWidget {
                       SvgPicture.string(FluentEmojiFlat.mobile_phone, width: 20, height: 20),
                       const SizedBox(width: 6),
                       Text(
-                        'Electronic Services',
+                        context.watch<LocalizationService>().t('electronics_mega_title'),
                         style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
-                  const Text(
-                    '  Mobile, Laptop, PC, CCTV, TV & AC',
-                    style: TextStyle(color: kMuted, fontSize: 11),
+                  Text(
+                    '  ${context.watch<LocalizationService>().t('electronics_mega_subtitle')}',
+                    style: const TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1239,14 +1241,14 @@ class _HomeTab extends StatelessWidget {
                       SvgPicture.string(FluentEmojiFlat.oncoming_taxi, width: 20, height: 20),
                       const SizedBox(width: 6),
                       Text(
-                        'Car Service & Wash',
+                        context.watch<LocalizationService>().t('carservice_mega_title'),
                         style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
-                  const Text(
-                    '  Water Wash, Repairs & Old Spares',
-                    style: TextStyle(color: kMuted, fontSize: 11),
+                  Text(
+                    '  ${context.watch<LocalizationService>().t('carservice_mega_subtitle')}',
+                    style: const TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1302,14 +1304,14 @@ class _HomeTab extends StatelessWidget {
                       SvgPicture.string(FluentEmojiFlat.building_construction, width: 20, height: 20),
                       const SizedBox(width: 6),
                       Text(
-                        'Constructions & Building',
+                        context.watch<LocalizationService>().t('construction_mega_title'),
                         style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
-                  const Text(
-                    '  Usha Constructions, Contracts & Plans',
-                    style: TextStyle(color: kMuted, fontSize: 11),
+                  Text(
+                    '  ${context.watch<LocalizationService>().t('construction_mega_subtitle')}',
+                    style: const TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1365,14 +1367,14 @@ class _HomeTab extends StatelessWidget {
                       SvgPicture.string(FluentEmojiFlat.man_superhero, width: 20, height: 20),
                       const SizedBox(width: 6),
                       Text(
-                        'Hero Booking',
+                        context.watch<LocalizationService>().t('hero_booking_mega_title'),
                         style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
-                  const Text(
-                    '  Hire a Hero for any tasks & deliveries',
-                    style: TextStyle(color: kMuted, fontSize: 11),
+                  Text(
+                    '  ${context.watch<LocalizationService>().t('hero_booking_mega_subtitle')}',
+                    style: const TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1428,14 +1430,14 @@ class _HomeTab extends StatelessWidget {
                       SvgPicture.string(FluentEmojiFlat.printer, width: 20, height: 20),
                       const SizedBox(width: 6),
                       Text(
-                        'Designing & Printing',
+                        context.watch<LocalizationService>().t('printing_mega_title'),
                         style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
-                  const Text(
-                    '  Visiting Cards, Flex, Bill Books & Notices',
-                    style: TextStyle(color: kMuted, fontSize: 11),
+                  Text(
+                    '  ${context.watch<LocalizationService>().t('printing_mega_subtitle')}',
+                    style: const TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1493,14 +1495,14 @@ class _HomeTab extends StatelessWidget {
                       SvgPicture.string(FluentEmojiFlat.hammer_and_wrench, width: 20, height: 20),
                       const SizedBox(width: 6),
                       Text(
-                        'Other Services',
+                        context.watch<LocalizationService>().t('otherservices_mega_title'),
                         style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
-                  const Text(
-                    '  Broadband, Mobile Puncture & More',
-                    style: TextStyle(color: kMuted, fontSize: 11),
+                  Text(
+                    '  ${context.watch<LocalizationService>().t('otherservices_mega_subtitle')}',
+                    style: const TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1518,10 +1520,10 @@ class _HomeTab extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildSmallActionTile(context, FluentEmojiFlat.antenna_bars, 'Internet', () => onTileTap('broadband')),
-                _buildSmallActionTile(context, FluentEmojiFlat.motorcycle, 'Puncture', () => onTileTap('puncture')),
-                _buildSmallActionTile(context, FluentEmojiFlat.broom, 'Cleaning', () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ComingSoonScreen(role: 'Home Cleaning')))),
-                _buildSmallActionTile(context, FluentEmojiFlat.high_voltage, 'Electrician', () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ComingSoonScreen(role: 'Electrician')))),
+                _buildSmallActionTile(context, FluentEmojiFlat.antenna_bars, context.watch<LocalizationService>().t('other_internet_label'), () => onTileTap('broadband')),
+                _buildSmallActionTile(context, FluentEmojiFlat.motorcycle, context.watch<LocalizationService>().t('other_puncture_label'), () => onTileTap('puncture')),
+                _buildSmallActionTile(context, FluentEmojiFlat.broom, context.watch<LocalizationService>().t('other_cleaning_label'), () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ComingSoonScreen(role: 'Home Cleaning')))),
+                _buildSmallActionTile(context, FluentEmojiFlat.high_voltage, context.watch<LocalizationService>().t('other_electrician_label'), () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ComingSoonScreen(role: 'Electrician')))),
               ],
             ),
           ),
