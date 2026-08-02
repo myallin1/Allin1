@@ -12,7 +12,9 @@
 // hero. New shops only need to be added to kPartnerShops.
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
+import '../services/localization_service.dart';
 import 'custom_food_order_screen.dart';
 import 'partner_shop_order_screen.dart';
 
@@ -27,22 +29,23 @@ class FoodHubScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.watch<LocalizationService>().t;
     return Scaffold(
       backgroundColor: _kBg,
       appBar: AppBar(
         backgroundColor: _kBg,
         elevation: 0,
         iconTheme: const IconThemeData(color: _kText),
-        title: Text('🍛 Food Delivery', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 18)),
+        title: Text('🍛 ${t('food_delivery_title')}', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 18)),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('What would you like to order?', style: GoogleFonts.outfit(color: _kMuted, fontSize: 13)),
+          Text(t('food_hub_prompt'), style: GoogleFonts.outfit(color: _kMuted, fontSize: 13)),
           const SizedBox(height: 16),
           _HubTile(
-            label: 'Custom Order',
-            subtitle: 'Order from any shop in Erode',
+            label: t('custom_order_title'),
+            subtitle: t('food_hub_custom_subtitle'),
             icon: Icons.restaurant_menu_rounded,
             gradient: const [_kPink, _kPinkDark],
             onTap: () => Navigator.push(
@@ -51,9 +54,9 @@ class FoodHubScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          Text('Order from your favourite shops', style: GoogleFonts.outfit(color: _kText, fontSize: 14.5, fontWeight: FontWeight.w800)),
+          Text(t('food_hub_shops_heading'), style: GoogleFonts.outfit(color: _kText, fontSize: 14.5, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          Text('Order & pay on their site — our hero picks it up & delivers it to you.', style: GoogleFonts.outfit(color: _kMuted, fontSize: 12)),
+          Text(t('food_hub_shops_subheading'), style: GoogleFonts.outfit(color: _kMuted, fontSize: 12)),
           const SizedBox(height: 14),
           GridView.count(
             crossAxisCount: 2,

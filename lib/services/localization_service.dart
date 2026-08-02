@@ -114,6 +114,11 @@ class LocalizationService extends ChangeNotifier {
       'other_cleaning_label': 'Cleaning',
       'other_electrician_label': 'Electrician',
       'greeting_hi': 'Hi',
+      // ── Food Hub screen ──
+      'food_hub_prompt': 'What would you like to order?',
+      'food_hub_custom_subtitle': 'Order from any shop in Erode',
+      'food_hub_shops_heading': 'Order from your favourite shops',
+      'food_hub_shops_subheading': 'Order & pay on their site — our hero picks it up & delivers it to you.',
     },
     'ta': {
       'app_title': 'my allin1',
@@ -212,6 +217,10 @@ class LocalizationService extends ChangeNotifier {
       'other_cleaning_label': 'சுத்தம்',
       'other_electrician_label': 'எலக்ட்ரீஷியன்',
       'greeting_hi': 'ஹாய்',
+      'food_hub_prompt': 'என்ன ஆர்டர் செய்ய விரும்புகிறீர்கள்?',
+      'food_hub_custom_subtitle': 'ஈரோட்டில் எந்த கடையிலிருந்தும் ஆர்டர் செய்யுங்கள்',
+      'food_hub_shops_heading': 'உங்களுக்கு பிடித்த கடைகளிலிருந்து ஆர்டர் செய்யுங்கள்',
+      'food_hub_shops_subheading': 'அவர்களின் தளத்தில் ஆர்டர் செய்து பணம் செலுத்துங்கள் — எங்கள் ஹீரோ அதை எடுத்து உங்களிடம் கொண்டு வருவார்.',
     },
     'tg': {
       'app_title': 'my allin1',
@@ -313,6 +322,10 @@ class LocalizationService extends ChangeNotifier {
       'other_cleaning_label': 'Cleaning',
       'other_electrician_label': 'Electrician',
       'greeting_hi': 'Hi',
+      'food_hub_prompt': 'Enna order pannanum?',
+      'food_hub_custom_subtitle': 'Erode la ethachum shop-la irunthu order pannunga',
+      'food_hub_shops_heading': 'Unga favourite shops-la irunthu order pannunga',
+      'food_hub_shops_subheading': 'Avanga site-la order pannunga pay pannunga — namma hero adha eduthu unga kitta kondu varuvaru.',
     },
     // FIX (Nizam's language request): added Hindi as the 4th supported
     // language, keyed off the SAME keys as en/ta/tg so every existing
@@ -418,6 +431,10 @@ class LocalizationService extends ChangeNotifier {
       'other_cleaning_label': 'सफाई',
       'other_electrician_label': 'इलेक्ट्रीशियन',
       'greeting_hi': 'नमस्ते',
+      'food_hub_prompt': 'आप क्या ऑर्डर करना चाहेंगे?',
+      'food_hub_custom_subtitle': 'ईरोड की किसी भी दुकान से ऑर्डर करें',
+      'food_hub_shops_heading': 'अपनी पसंदीदा दुकानों से ऑर्डर करें',
+      'food_hub_shops_subheading': 'उनकी साइट पर ऑर्डर करें और भुगतान करें — हमारा हीरो उसे लेकर आपके पास पहुंचाएगा।',
     },
   };
 
