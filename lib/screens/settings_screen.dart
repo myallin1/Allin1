@@ -6,6 +6,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive/hive.dart';
 import 'package:provider/provider.dart';
@@ -14,6 +15,13 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/localization_service.dart';
 import '../services/map_service.dart';
 import '../services/theme_service.dart';
+import '../widgets/server_busy_dialog.dart' show kCallCenterNumberIntl;
+
+// Rate App / Share App links — customer app's actual Play Store
+// package name (see android/app/build.gradle.kts customer flavor) and
+// its live PWA link.
+const String kPlayStoreUrl = 'https://play.google.com/store/apps/details?id=com.njtech.myallin1';
+const String kCustomerAppShareUrl = 'https://my-allin1.web.app';
 
 const Color kSurface = Color(0xFF0D0D18);
 const Color kCard = Color(0xFF141420);
@@ -59,15 +67,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // FIX #1: Hive optimization + MapService init safety
+  //
+  // FIX (Nizam's lag report): this used to `await _mapService.initialize()`
+  // — which makes a live network call to check Ola Maps availability,
+  // with up to a 5-second timeout (see map_service.dart) — BEFORE
+  // flipping _isLoading to false. Every single open of Settings was
+  // gated behind that network round-trip even though nothing else on
+  // this screen needs it (the map-provider tile below is reactive via
+  // ListenableBuilder and updates itself once MapService finishes).
+  // Now Hive settings load first (fast, local-only) and the spinner
+  // clears immediately; MapService initializes in the background and
+  // the map-provider tile just updates in place a moment later.
   Future<void> _initServices() async {
+    _mapService = MapService();
     try {
       _settingsBox = Hive.isBoxOpen('settings')
           ? Hive.box('settings')
           : await Hive.openBox('settings');
-      _mapService = MapService();
-      if (!_mapService.isInitialized) {
-        await _mapService.initialize();
-      }
       await _loadSettings();
       if (mounted) {
         setState(() => _isLoading = false);
@@ -77,6 +93,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+
+    if (!_mapService.isInitialized) {
+      unawaited(_mapService.initialize());
     }
   }
 
@@ -572,24 +592,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: Icons.star_outline,
             title: 'Rate App',
             subtitle: 'Rate us on Play Store',
-            onTap: () {},
+            onTap: _rateApp,
           ),
           _buildDivider(),
           _buildTapTile(
             icon: Icons.share_outlined,
             title: 'Share App',
             subtitle: 'Invite friends to join',
-            onTap: () {},
+            onTap: _shareApp,
           ),
           _buildDivider(),
           _buildTapTile(
             icon: Icons.help_outline,
             title: 'Help & Support',
             subtitle: 'Get help with issues',
-            onTap: () {},
+            onTap: _openHelpAndSupport,
           ),
         ],
       ),
+    );
+  }
+
+  // FIX (Nizam's audit): Rate App / Share App / Help & Support were
+  // dead onTap: () {} no-ops — tapping them visibly did nothing.
+  Future<void> _rateApp() async {
+    final uri = Uri.parse(kPlayStoreUrl);
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok) _showLinkFailedSnack(kPlayStoreUrl);
+    } catch (_) {
+      _showLinkFailedSnack(kPlayStoreUrl);
+    }
+  }
+
+  Future<void> _shareApp() async {
+    const message =
+        'Try myallin1 — Erode\'s own super app for bike taxi, food, grocery & more, all in one place!\n$kCustomerAppShareUrl';
+    await Clipboard.setData(const ClipboardData(text: message));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Link copied! Share it with your friends.')),
+    );
+  }
+
+  Future<void> _openHelpAndSupport() async {
+    final message = Uri.encodeComponent('Hi, I need help with the Allin1 app.');
+    final uri = Uri.parse('https://wa.me/$kCallCenterNumberIntl?text=$message');
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok) _showLinkFailedSnack('https://wa.me/$kCallCenterNumberIntl');
+    } catch (_) {
+      _showLinkFailedSnack('https://wa.me/$kCallCenterNumberIntl');
+    }
+  }
+
+  void _showLinkFailedSnack(String url) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not open link: $url')),
     );
   }
 
