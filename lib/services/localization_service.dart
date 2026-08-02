@@ -246,6 +246,89 @@ class LocalizationService extends ChangeNotifier {
       'scan_and_wait_hero': 'Paytm Soundbox scan pannitu, Hero unga bill confirm panna vara wait pannu.',
       'open_upi_scan_soundbox': 'UPI la Paytm open pannu, Hero Soundbox scan pannu, exact bill amount pay pannu.',
     },
+    // FIX (Nizam's language request): added Hindi as the 4th supported
+    // language, keyed off the SAME keys as en/ta/tg so every existing
+    // t('key') call site automatically gains Hindi support with zero
+    // other code changes.
+    'hi': {
+      'app_title': 'my allin1',
+      'greeting': 'नमस्ते',
+      'what_need_today': 'आज आपको क्या चाहिए?',
+      'bike_taxi_title': 'बाइक टैक्सी',
+      'bike_taxi_subtitle': 'ईरोड में तेज़ सवारी',
+      'food_delivery_title': 'फ़ूड डिलीवरी',
+      'food_delivery_subtitle': '16वीं रोड की खासियतें',
+      'grocery_title': 'किराना',
+      'grocery_subtitle': 'ताज़ा और तेज़',
+      'tech_store_title': 'टेक स्टोर',
+      'tech_store_subtitle': 'NJ TECH गैजेट्स',
+      'custom_order_title': 'कस्टम ऑर्डर',
+      'custom_order_subtitle': 'खास सेवा के लिए पूछें',
+      'broadband_title': 'ब्रॉडबैंड / वाईफाई',
+      'broadband_subtitle': 'अपनी इंटरनेट सेवा प्रबंधित करें',
+      'mobile_puncture_title': 'मोबाइल पंक्चर',
+      'mobile_puncture_subtitle': 'तुरंत पंक्चर मरम्मत',
+      'pharmacy_title': 'फार्मेसी',
+      'pharmacy_subtitle': 'दवाइयाँ घर पहुंचाई जाएंगी',
+      'book_puncture': 'पंक्चर के लिए बुक करें?',
+      'call_now': 'अभी कॉल करें',
+      'later': 'बाद में',
+      'service_coming_soon': 'जल्द ही आ रहा है!',
+      'language_label': 'भाषा',
+      'home_label': 'होम',
+      'chat_label': 'लाइव रेट्स',
+      'rides_label': 'प्ले ज़ोन',
+      'account_label': 'खाता',
+      'my_rides_label': 'मेरी सवारियाँ',
+      'live_rates_label': 'लाइव रेट्स',
+      'play_zone_label': 'प्ले ज़ोन',
+      'live_label': 'लाइव',
+      'erode_label': 'ईरोड, तमिलनाडु',
+      'live_rates_title': 'लाइव रेट्स',
+      'live_rates_subtitle':
+          'ईरोड के लिए सोना, चांदी और पेट्रोल की कीमतें एक ही नज़र में।',
+      'today_price_label': 'आज की कीमत',
+      'play_zone_title': 'प्ले ज़ोन',
+      'play_zone_subtitle':
+          'NJ TECH 3x3 पहेली हल करें और अपना सबसे अच्छा समय हराएं।',
+      'sliding_puzzle_title': 'स्लाइडिंग पज़ल गेम',
+      'moves_label': 'चालें',
+      'time_label': 'समय',
+      'reset_label': 'रीसेट',
+      'play_again_label': 'फिर से खेलें',
+      'puzzle_instruction':
+          'NJ TECH और ईरोड के पैटर्न टुकड़ों को सही तरीके से मिलाएं।',
+      'solved_title': 'आपने हल कर लिया!',
+      'solved_message_intro': 'शानदार चालें!',
+      'bike_label': 'बाइक',
+      'auto_label': 'ऑटो',
+      'cab_label': 'कैब',
+      'parcel_label': 'पार्सल',
+      'mini_truck_label': 'मिनी ट्रक',
+      'lorry_label': 'लॉरी',
+      'emergency_manpower_label': 'एसओएस',
+      'where_to_go_hint': 'आप कहाँ जाना चाहते हैं?',
+      'choose_vehicle_label': 'वाहन चुनें',
+      'distance_label': 'दूरी',
+      'eta_label': 'ईटीए',
+      'choose_destination_title': 'गंतव्य चुनें',
+      'update_pickup_title': 'पिकअप अपडेट करें',
+      'drag_map_hint':
+          'ईरोड में जगह खोजने के लिए मैप खींचें या 3 अक्षर टाइप करें।',
+      'pickup_location_label': 'पिकअप स्थान',
+      'drop_destination_label': 'ड्रॉप गंतव्य',
+      'drop_pin_destination_title': 'गंतव्य के लिए पिन लगाएं',
+      'drop_pin_pickup_title': 'पिकअप के लिए पिन लगाएं',
+      'finding_street_label': 'सही सड़क का पता खोजा जा रहा है...',
+      'move_map_to_select_label': 'चुनने के लिए मैप को हिलाएं',
+      'use_as_destination_label': 'गंतव्य के रूप में उपयोग करें',
+      'use_as_pickup_label': 'पिकअप के रूप में उपयोग करें',
+      'pay_via_soundbox': 'Paytm साउंडबॉक्स से बिल भरें',
+      'scan_soundbox_qr': 'फिजिकल साउंडबॉक्स QR स्कैन करें और भुगतान होने पर पुष्टि करें।',
+      'awaiting_hero_payment': 'हीरो की पुष्टि का इंतज़ार है...',
+      'scan_and_wait_hero': 'कृपया Paytm साउंडबॉक्स स्कैन करें और हीरो द्वारा आपके बिल की पुष्टि होने तक प्रतीक्षा करें।',
+      'open_upi_scan_soundbox': 'UPI चूज़र से Paytm खोलें, हीरो का Paytm साउंडबॉक्स स्कैन करें, और सही बिल राशि पूरी करें।',
+    },
   };
 
   String _languageCode;
@@ -258,6 +341,8 @@ class LocalizationService extends ChangeNotifier {
         return 'தமிழ்';
       case 'tg':
         return 'Tanglish';
+      case 'hi':
+        return 'हिन्दी';
       default:
         return 'English';
     }

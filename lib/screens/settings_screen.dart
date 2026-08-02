@@ -143,6 +143,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       {'code': 'en', 'name': 'English'},
       {'code': 'ta', 'name': 'Tamil'},
       {'code': 'tg', 'name': 'Thanglish'},
+      {'code': 'hi', 'name': 'Hindi'},
     ];
     for (final lang in languages) {
       if (lang['code'] == code) return lang['name']!;
@@ -805,10 +806,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // Codes match LocalizationService's translation-map keys directly
-  // (en/ta/tg) — see localization_service.dart. Only 3 languages are
-  // supported app-wide right now, so this list intentionally has no
-  // 4th option; adding one here would need a matching translation set
-  // added there first, or it'd be another dead-end button.
+  // (en/ta/tg/hi) — see localization_service.dart.
   static const List<Map<String, String>> _languages = [
     {
       'code': 'en',
@@ -827,6 +825,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'name': 'Thanglish',
       'emoji': 'TG',
       'desc': 'Tamil words in English letters',
+    },
+    {
+      'code': 'hi',
+      'name': 'Hindi',
+      'emoji': 'HI',
+      'desc': 'हिन्दी में सब कुछ',
     },
   ];
 

@@ -375,6 +375,8 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
           _buildLanguageTile('ta', 'தமிழ்', currentCode),
           const Divider(height: 1, indent: 56, endIndent: 16),
           _buildLanguageTile('tg', 'Tanglish (Tamil + English)', currentCode),
+          const Divider(height: 1, indent: 56, endIndent: 16),
+          _buildLanguageTile('hi', 'हिन्दी (Hindi)', currentCode),
         ],
       ),
     );
