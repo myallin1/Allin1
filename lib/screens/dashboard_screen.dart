@@ -26,6 +26,7 @@ import '../services/update_service.dart';
 import '../services/web_version_checker.dart';
 
 import '../widgets/banner_slider.dart';
+import '../widgets/coach_mark_overlay.dart';
 import 'bike_taxi/bike_booking_screen.dart';
 import 'food_hub_screen.dart';
 import 'hero_booking_screen.dart';
@@ -117,6 +118,14 @@ class _DashboardScreenState extends State<DashboardScreen>
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   final _user = FirebaseAuth.instance.currentUser;
 
+  // FIX (Nizam's request): first-time-open "how to use this app" coach
+  // mark tour — spotlights the real bottom-nav tabs on the real home
+  // screen (not a separate slideshow). GlobalKeys attached to each tab
+  // in _buildBottomNav() below; shown exactly once ever per install via
+  // CoachMarkPrefs. See widgets/coach_mark_overlay.dart.
+  static const String _dashboardTourId = 'dashboard_v1';
+  final List<GlobalKey> _navTabKeys = List.generate(_tabCount, (_) => GlobalKey());
+
   // ── Classic Rewards promo state ──────────────────────────────
   List<PromoOfferItem> _promoOffers = const [
     // ── V2: Daily Quiz & Referral cards temporarily hidden ──
@@ -170,10 +179,62 @@ class _DashboardScreenState extends State<DashboardScreen>
     unawaited(_restoreLastTab());
     unawaited(_silentBackupIfNeeded());
     unawaited(_detectCityInBackground());
-    // Auto-show the daily Paytm Soundbox scratch card once per calendar day.
-    // Runs after first frame so a bottom sheet can be shown safely.
+    // Auto-show the daily Paytm Soundbox scratch card once per calendar day
+    // — but only AFTER the first-open coach mark tour (if any) has been
+    // shown/dismissed, so the two overlays never fight for the screen.
+    // Runs after first frame so a bottom sheet/overlay can be shown safely.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+      final seenTour = await CoachMarkPrefs.hasSeenTour(_dashboardTourId);
+      if (!seenTour) {
+        if (!mounted) return;
+        await CoachMarkPrefs.markTourSeen(_dashboardTourId);
+        showCoachMarkTour(
+          context,
+          steps: [
+            const CoachMarkStep(
+              title: 'Welcome to Allin1! 👋',
+              description:
+                  'Everything Erode needs in one app — bike taxi, food delivery, grocery, tech store, and more. Quick tour of the basics?',
+            ),
+            CoachMarkStep(
+              title: 'Home',
+              description: 'Book a taxi, order food/grocery, or ask for any custom service — all from here.',
+              targetKey: _navTabKeys[0],
+            ),
+            CoachMarkStep(
+              title: 'Rewards',
+              description: 'Answer quick quizzes to unlock real rewards like a free Paytm box or a Guru AI subscription.',
+              targetKey: _navTabKeys[1],
+            ),
+            CoachMarkStep(
+              title: 'Play Zone',
+              description: 'Play quick games like 2048 and Whack-a-Mole while you wait for your ride or order.',
+              targetKey: _navTabKeys[2],
+            ),
+            CoachMarkStep(
+              title: 'Guru AI',
+              description: 'Your AI assistant — ask it anything about booking, tracking, or the app in general.',
+              targetKey: _navTabKeys[3],
+            ),
+            CoachMarkStep(
+              title: 'Safety',
+              description: 'One-tap SOS emergency help, verified for real safety when you need it most.',
+              targetKey: _navTabKeys[4],
+            ),
+          ],
+          onFinish: () async {
+            if (!mounted) return;
+            // _alreadyScratchedToday() is async because HiveCache.get() is.
+            if (!await _alreadyScratchedToday()) {
+              if (!mounted) return;
+              _showScratchCardModal();
+            }
+          },
+        );
+        return;
+      }
+
       // _alreadyScratchedToday() is async because HiveCache.get() is.
       // It previously read the Future without awaiting and cast it to
       // String?, which threw a TypeError before this branch could run —
@@ -658,6 +719,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             final label = items[i]['label'] as String;
             return Expanded(
               child: InkWell(
+                key: _navTabKeys[i],
                 onTap: () => _goTab(i),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),

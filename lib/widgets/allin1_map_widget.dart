@@ -267,6 +267,22 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
 
   @override
   Widget build(BuildContext context) {
+    // FIX (Nizam's back-button stutter report): wraps the whole map
+    // subtree in a RepaintBoundary. _mapService is a global singleton
+    // shared by EVERY Allin1MapWidget instance across the taxi/food/
+    // hero flows -- without this, a repaint triggered by this map (tile
+    // decode, marker move) forces Flutter to also re-examine unrelated
+    // sibling widgets on the same screen (e.g. during a pop transition),
+    // which is a common cause of a brief 1-2s jank right when leaving a
+    // map-heavy screen. RepaintBoundary isolates this widget's paint
+    // layer so that cost stays contained to the map itself. Pure
+    // performance isolation -- no behavior change.
+    return RepaintBoundary(
+      child: _buildMap(context),
+    );
+  }
+
+  Widget _buildMap(BuildContext context) {
     // FIX #2: Single rebuild mechanism via ListenableBuilder
     // NO Streams, NO ValueKey - only ChangeNotifier
     return ListenableBuilder(
