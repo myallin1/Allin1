@@ -1055,6 +1055,37 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
 
   // ── Location Tracking ─────────────────────────────────────────
   Future<void> _initLocationTracking() async {
+    // Fast path: the dashboard already warms up LocationService (permission
+    // + a first GPS fix) the moment the app opens (see
+    // dashboard_screen.dart's _prefetchLocationInBackground). If that
+    // already produced a cached position by the time the customer taps
+    // Taxi, use it immediately -- skip the "Checking GPS permission..."
+    // loading state entirely and just refresh silently in the background
+    // for accuracy, instead of making the customer wait through the whole
+    // permission+fetch flow again.
+    final cachedPos = _locationService.currentPosition;
+    if (cachedPos != null) {
+      if (mounted) {
+        setState(() {
+          _isInitializingLocation = false;
+          _locationPermissionRequired = false;
+          _startupStatus = 'Live location ready';
+        });
+      }
+      _updateUserLocation(
+        LatLng(cachedPos.latitude, cachedPos.longitude),
+        animateMap: true,
+      );
+      // Silent background refresh for a more precise fix; UI already shows
+      // the cached location so this doesn't block anything.
+      unawaited(_locationService.getCurrentLocation().then((pos) {
+        if (pos != null && mounted) {
+          _updateUserLocation(LatLng(pos.latitude, pos.longitude));
+        }
+      }));
+      return;
+    }
+
     if (mounted) {
       setState(() {
         _isInitializingLocation = true;

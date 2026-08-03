@@ -24,6 +24,8 @@ import '../config/city_config.dart';
 import '../services/app_update_checker.dart';
 import '../services/city_service.dart';
 import '../services/localization_service.dart';
+import '../services/location_service.dart';
+import '../services/theme_service.dart';
 import '../services/update_service.dart';
 import '../services/web_version_checker.dart';
 
@@ -52,26 +54,55 @@ import '../services/hive_cache.dart';
 import '../services/prefs_cache.dart';
 
 // ── Brand Colors ─────────────────────────────────────────────────
-const Color kPink     = Color(0xFFFF4FA3);
-const Color kPinkDark = Color(0xFFBE2A7A);
-const Color kPinkBg   = Color(0xFFFFF0F7);
-const Color kBg       = Color(0xFFFFFFFF);
-const Color kSurface  = Color(0xFFF8F8FF);
-const Color kNJDark   = Color(0xFF130B28);
-const Color kNJDark2  = Color(0xFF2A1060);
-const Color kText     = Color(0xFF1A1A2E);
-const Color kMuted    = Color(0xFF9999BB);
-const Color kGreen    = Color(0xFF00C853);
-const Color kTeal     = Color(0xFF00BFA5);
-const Color kBlue     = Color(0xFF1565C0);
-const Color kGold     = Color(0xFFFFBB00);
-const Color kPurple   = Color(0xFF7B6FE0);
-const Color kBorder   = Color(0xFFEEEEF5);
-const Color kRed      = Color(0xFFFF5252);
+// NOTE: these used to be `const` — hardcoded to the pink&white palette no
+// matter what theme the customer picked in Settings. Per Nizam's decision
+// (CTO-reviewed): dropped `const` so they're live variables that
+// _syncDashboardPalette() below refreshes from the active ThemeService
+// theme every time the dashboard rebuilds — so switching theme actually
+// reflects on the home page instead of always showing pink&white.
+Color kPink     = const Color(0xFFFF4FA3);
+Color kPinkDark = const Color(0xFFBE2A7A);
+Color kPinkBg   = const Color(0xFFFFF0F7);
+Color kBg       = const Color(0xFFFFFFFF);
+Color kSurface  = const Color(0xFFF8F8FF);
+Color kNJDark   = const Color(0xFF130B28);
+Color kNJDark2  = const Color(0xFF2A1060);
+Color kText     = const Color(0xFF1A1A2E);
+Color kMuted    = const Color(0xFF9999BB);
+Color kGreen    = const Color(0xFF00C853);
+Color kTeal     = const Color(0xFF00BFA5);
+Color kBlue     = const Color(0xFF1565C0);
+Color kGold     = const Color(0xFFFFBB00);
+Color kPurple   = const Color(0xFF7B6FE0);
+Color kBorder   = const Color(0xFFEEEEF5);
+Color kRed      = const Color(0xFFFF5252);
+
+/// Refreshes the dashboard's palette variables (above) from whichever
+/// theme is currently active in [ThemeService]. Semantic status colors
+/// (green/teal/blue/gold/purple/red) are left as-is on purpose -- they
+/// mean "success"/"info"/"warning" etc regardless of theme, only the
+/// brand + surface colors should follow the selected theme.
+void _syncDashboardPalette(ThemeService ts) {
+  final theme = ts.currentTheme;
+  final cs = theme.colorScheme;
+  kPink = cs.primary;
+  kPinkDark = cs.secondary;
+  kPinkBg = cs.primary.withValues(alpha: 0.06);
+  kBg = theme.scaffoldBackgroundColor;
+  kSurface = cs.surface;
+  kNJDark = cs.surface;
+  kNJDark2 = cs.primary;
+  kText = cs.onSurface;
+  kMuted = cs.onSurface.withValues(alpha: 0.55);
+  kBorder = theme.dividerColor;
+}
 
 // ── NJ Tech Quick-Service Icons ──────────────────────────────────
 // ── Banner Items ──────────────────────────────────────────────────
-const _bannerItems = [
+// Was a top-level `const` list -- turned into a getter (recomputed on
+// every access) so the 'color' entries pick up live kPink/kTeal/etc
+// values instead of freezing whatever they were at first app load.
+List<Map<String, Object>> get _bannerItems => [
   {'title': 'BIKE TAXI', 'emoji': '🏍️', 'color': kTeal},
   {'title': 'CAB', 'emoji': '🚗', 'color': kBlue},
   {'title': 'AUTO', 'emoji': '🛺', 'color': kPurple},
@@ -181,6 +212,11 @@ class _DashboardScreenState extends State<DashboardScreen>
     unawaited(_restoreLastTab());
     unawaited(_silentBackupIfNeeded());
     unawaited(_detectCityInBackground());
+    // Per Nizam's request: warm up GPS the moment the home page opens, so
+    // by the time the customer taps Taxi/Food/Hero, LocationService already
+    // has a cached position ready — the booking screen no longer has to
+    // run its own permission-check + GPS-fetch from a cold start.
+    unawaited(_prefetchLocationInBackground());
     // Auto-show the daily Paytm Soundbox scratch card once per calendar day
     // — but only AFTER the first-open coach mark tour (if any) has been
     // shown/dismissed, so the two overlays never fight for the screen.
@@ -373,6 +409,25 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
+  /// Silently warms up GPS permission + a first fix as soon as the home
+  /// page opens (LocationService is a singleton, so whatever it caches
+  /// here is instantly reused by BikeBookingScreen / other flows without
+  /// re-running the permission dialog + GPS wait from scratch). Silent
+  /// no-op on failure (permission denied, GPS off) -- the booking screen
+  /// still has its own fallback UI for that case, this is purely a
+  /// best-effort speed-up.
+  Future<void> _prefetchLocationInBackground() async {
+    try {
+      final locationService = LocationService();
+      final hasPermission = await locationService.checkAndRequestPermission();
+      if (hasPermission) {
+        await locationService.getCurrentLocation();
+      }
+    } catch (_) {
+      // Silent -- booking screens re-check permission/GPS themselves.
+    }
+  }
+
   /// Manual city switch (Nizam's plan, item 2): tapping the city text
   /// under "Hi, Name" opens the full kSupportedCities list. Picking one
   /// marks it as a manual override (CityService.setCurrentCityManually)
@@ -398,7 +453,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             Text('Select City', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 16, color: kText)),
             const SizedBox(height: 8),
             ListTile(
-              leading: const Icon(Icons.my_location_rounded, color: kPink),
+              leading: Icon(Icons.my_location_rounded, color: kPink),
               title: Text('Use my current location', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14)),
               onTap: () => Navigator.pop(ctx, '__auto__'),
             ),
@@ -531,6 +586,12 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Refresh the dashboard's kPink/kBg/etc palette from whichever theme
+    // is currently active. `watch` (not `read`) so this re-runs and the
+    // whole home page repaints whenever the customer changes theme in
+    // Settings -- this is what makes the theme switcher actually visible
+    // on the home page instead of always showing pink & white.
+    _syncDashboardPalette(context.watch<ThemeService>());
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
@@ -547,9 +608,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                 style: GoogleFonts.outfit(color: kMuted)),
             actions: [
               TextButton(onPressed: () => Navigator.pop(context, false),
-                  child: const Text('No', style: TextStyle(color: kPink))),
+                  child: Text('No', style: TextStyle(color: kPink))),
               TextButton(onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Yes', style: TextStyle(color: kRed))),
+                  child: Text('Yes', style: TextStyle(color: kRed))),
             ],
           ),
         );
@@ -608,7 +669,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       surfaceTintColor: Colors.transparent,
       titleSpacing: 0,
       leading: IconButton(
-        icon: const Icon(Icons.menu_rounded, color: kPink, size: 26),
+        icon: Icon(Icons.menu_rounded, color: kPink, size: 26),
         onPressed: () => _scaffoldKey.currentState?.openDrawer(),
       ),
       title: Row(
@@ -640,10 +701,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                     children: [
                       Text(
                         '${cityLabelFor(_displayCity)}, TN',
-                        style: const TextStyle(color: kMuted, fontSize: 9, letterSpacing: 0.5, fontWeight: FontWeight.w700),
+                        style: TextStyle(color: kMuted, fontSize: 9, letterSpacing: 0.5, fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(width: 2),
-                      const Icon(Icons.keyboard_arrow_down_rounded, size: 12, color: kMuted),
+                      Icon(Icons.keyboard_arrow_down_rounded, size: 12, color: kMuted),
                     ],
                   ),
                 ),
@@ -671,11 +732,11 @@ class _DashboardScreenState extends State<DashboardScreen>
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: kPink.withValues(alpha: 0.3)),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.wallet_rounded, size: 16, color: kPink),
-              SizedBox(width: 4),
+              const SizedBox(width: 4),
               Text(
                 '₹0',
                 style: TextStyle(color: kPink, fontWeight: FontWeight.w700, fontSize: 13),
@@ -686,7 +747,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         const SizedBox(width: 8),
         GestureDetector(
           onTap: () => _showApkSheet(context),
-          child: const Icon(Icons.notifications_outlined, color: kText, size: 22),
+          child: Icon(Icons.notifications_outlined, color: kText, size: 22),
         ),
         const SizedBox(width: 16),
       ],
@@ -709,7 +770,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     return Container(
       decoration: BoxDecoration(
         color: kBg,
-        border: const Border(top: BorderSide(color: kBorder, width: 1)),
+        border: Border(top: BorderSide(color: kBorder, width: 1)),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 16, offset: const Offset(0, -4))],
       ),
@@ -995,7 +1056,7 @@ class _HomeTab extends StatelessWidget {
                   ),
                   Text(
                     '  ${context.watch<LocalizationService>().t('taxi_mega_subtitle')}',
-                    style: const TextStyle(color: kMuted, fontSize: 11),
+                    style: TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1058,7 +1119,7 @@ class _HomeTab extends StatelessWidget {
                   ),
                   Text(
                     '  ${context.watch<LocalizationService>().t('food_mega_subtitle')}',
-                    style: const TextStyle(color: kMuted, fontSize: 11),
+                    style: TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1121,7 +1182,7 @@ class _HomeTab extends StatelessWidget {
                   ),
                   Text(
                     '  ${context.watch<LocalizationService>().t('grocery_mega_subtitle')}',
-                    style: const TextStyle(color: kMuted, fontSize: 11),
+                    style: TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1184,7 +1245,7 @@ class _HomeTab extends StatelessWidget {
                   ),
                   Text(
                     '  ${context.watch<LocalizationService>().t('electronics_mega_subtitle')}',
-                    style: const TextStyle(color: kMuted, fontSize: 11),
+                    style: TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1248,7 +1309,7 @@ class _HomeTab extends StatelessWidget {
                   ),
                   Text(
                     '  ${context.watch<LocalizationService>().t('carservice_mega_subtitle')}',
-                    style: const TextStyle(color: kMuted, fontSize: 11),
+                    style: TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1311,7 +1372,7 @@ class _HomeTab extends StatelessWidget {
                   ),
                   Text(
                     '  ${context.watch<LocalizationService>().t('construction_mega_subtitle')}',
-                    style: const TextStyle(color: kMuted, fontSize: 11),
+                    style: TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1374,7 +1435,7 @@ class _HomeTab extends StatelessWidget {
                   ),
                   Text(
                     '  ${context.watch<LocalizationService>().t('hero_booking_mega_subtitle')}',
-                    style: const TextStyle(color: kMuted, fontSize: 11),
+                    style: TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1437,7 +1498,7 @@ class _HomeTab extends StatelessWidget {
                   ),
                   Text(
                     '  ${context.watch<LocalizationService>().t('printing_mega_subtitle')}',
-                    style: const TextStyle(color: kMuted, fontSize: 11),
+                    style: TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1502,7 +1563,7 @@ class _HomeTab extends StatelessWidget {
                   ),
                   Text(
                     '  ${context.watch<LocalizationService>().t('otherservices_mega_subtitle')}',
-                    style: const TextStyle(color: kMuted, fontSize: 11),
+                    style: TextStyle(color: kMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -1591,7 +1652,7 @@ class _HomeTab extends StatelessWidget {
           Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              const Text('★ Featured Shop',
+              Text('★ Featured Shop',
                   style: TextStyle(color: kGold, fontSize: 10,
                       fontWeight: FontWeight.w700)),
               const Spacer(),
@@ -1607,10 +1668,10 @@ class _HomeTab extends StatelessWidget {
             const SizedBox(height: 2),
             Text('Erode Fresh', style: GoogleFonts.outfit(
                 color: kText, fontSize: 15, fontWeight: FontWeight.w800)),
-            const Text('★★  · Fresh Groceries',
+            Text('★★  · Fresh Groceries',
                 style: TextStyle(color: kMuted, fontSize: 11)),
           ])),
-          const Icon(Icons.chevron_right_rounded, color: kMuted),
+          Icon(Icons.chevron_right_rounded, color: kMuted),
         ]),
       ),
     );
@@ -1701,16 +1762,16 @@ class _HomeTab extends StatelessWidget {
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: kPurple.withValues(alpha: 0.4)),
                   ),
-                  child: const Text('GURU', style: TextStyle(
+                  child: Text('GURU', style: TextStyle(
                       color: kPurple, fontSize: 8,
                       fontWeight: FontWeight.w800)),
                 ),
               ]),
               const SizedBox(height: 2),
-              const Text('Visit NJ TECH to unlock the 1-year free Guru AI offer.',
+              Text('Visit NJ TECH to unlock the 1-year free Guru AI offer.',
                   style: TextStyle(color: kMuted, fontSize: 10)),
             ])),
-            const Icon(Icons.chevron_right_rounded, color: kMuted),
+            Icon(Icons.chevron_right_rounded, color: kMuted),
           ]),
         ),
       ),
@@ -1739,7 +1800,7 @@ class _ProfileDrawer extends StatelessWidget {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [kPink, kPinkDark],
                 begin: Alignment.topLeft,
@@ -1819,7 +1880,7 @@ class _ProfileDrawer extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
+                      gradient: LinearGradient(
                         colors: [kPurple, Color(0xFF5A50C8)],
                         begin: Alignment.topLeft, end: Alignment.bottomRight,
                       ),
@@ -1852,7 +1913,7 @@ class _ProfileDrawer extends StatelessWidget {
               ),
 
               const SizedBox(height: 20),
-              const Divider(color: kBorder, height: 1),
+              Divider(color: kBorder, height: 1),
               const SizedBox(height: 10),
 
               _drawerItem(context, Icons.logout_rounded,
@@ -1958,7 +2019,7 @@ Future<void> _checkForUpdates(BuildContext context) async {
         actions: [
           TextButton(
             onPressed: () => navigator.pop(),
-            child: const Text('Got it', style: TextStyle(color: kPink)),
+            child: Text('Got it', style: TextStyle(color: kPink)),
           ),
         ],
       ),
@@ -1994,14 +2055,14 @@ Future<void> _runManualUpdateCheck(BuildContext context) async {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       content: Row(
         mainAxisSize: MainAxisSize.min,
-        children: const [
+        children: [
           SizedBox(
             width: 22,
             height: 22,
             child: CircularProgressIndicator(strokeWidth: 2.4, color: kPink),
           ),
-          SizedBox(width: 18),
-          Flexible(
+          const SizedBox(width: 18),
+          const Flexible(
             child: Text(
               'Checking for updates...',
               style: TextStyle(color: Colors.white, fontSize: 14),
@@ -2040,14 +2101,14 @@ Future<void> _runManualUpdateCheck(BuildContext context) async {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       content: Row(
         mainAxisSize: MainAxisSize.min,
-        children: const [
+        children: [
           SizedBox(
             width: 22,
             height: 22,
             child: CircularProgressIndicator(strokeWidth: 2.4, color: kPink),
           ),
-          SizedBox(width: 18),
-          Flexible(
+          const SizedBox(width: 18),
+          const Flexible(
             child: Text(
               'Updating the app...',
               style: TextStyle(color: Colors.white, fontSize: 14),
@@ -2349,7 +2410,7 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
               border: Border.all(color: kPink.withValues(alpha: 0.4)),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.lock_rounded, color: kPink, size: 12),
+              Icon(Icons.lock_rounded, color: kPink, size: 12),
               const SizedBox(width: 4),
               Text('erodefiber.net',
                   style: GoogleFonts.outfit(
@@ -2360,7 +2421,7 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
         ]),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: kPink),
+            icon: Icon(Icons.refresh_rounded, color: kPink),
             onPressed: _openInApp,
             tooltip: 'Reload',
           ),
@@ -2369,7 +2430,7 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
       body: Center(
         child: _loading
             ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                const CircularProgressIndicator(color: kPink),
+                CircularProgressIndicator(color: kPink),
                 const SizedBox(height: 20),
                 Text('Opening Erode Fiber...',
                     style: GoogleFonts.outfit(
