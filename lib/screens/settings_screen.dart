@@ -254,7 +254,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // point of it being an admin-controlled reward.
             _buildSectionHeader('🗺️ ${t('map_provider_section')}'),
             const SizedBox(height: 12),
-            _buildMapProviderSettings(),
+            _buildMapProviderSettings(t),
             const SizedBox(height: 28),
             _buildSectionHeader(t('language_region_section')),
             const SizedBox(height: 12),
@@ -262,13 +262,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 28),
             _buildSectionHeader(t('privacy_security_section')),
             const SizedBox(height: 12),
-            _buildPrivacySettings(),
+            _buildPrivacySettings(t),
             const SizedBox(height: 28),
             _buildSectionHeader(t('about_section')),
             const SizedBox(height: 12),
-            _buildAboutSection(),
+            _buildAboutSection(t),
             const SizedBox(height: 40),
-            _buildAppVersion(),
+            _buildAppVersion(t),
           ],
         ),
       ),
@@ -462,7 +462,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // ── Map Provider Settings ──
-  Widget _buildMapProviderSettings() {
+  Widget _buildMapProviderSettings(String Function(String) t) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: kCard2,
@@ -471,13 +471,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       child: Column(
         children: [
-          _buildMapProviderInfoTile(),
+          _buildMapProviderInfoTile(t),
         ],
       ),
     );
   }
 
-  Widget _buildMapProviderInfoTile() {
+  Widget _buildMapProviderInfoTile(String Function(String) t) {
     return ListenableBuilder(
       listenable: _mapService,
       builder: (context, _) {
@@ -511,7 +511,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Map Provider (Auto-Managed)',
+                      t('map_provider_info_title'),
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w600,
                           ),
@@ -519,8 +519,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 2),
                     Text(
                       isFallback
-                          ? 'Using OpenStreetMap (Ola Maps unavailable)'
-                          : 'Using Ola Maps (Primary)',
+                          ? t('map_provider_fallback')
+                          : t('map_provider_primary'),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Theme.of(context)
                                 .colorScheme
@@ -592,7 +592,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Widget _buildPrivacySettings() {
+  Widget _buildPrivacySettings(String Function(String) t) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: kCard2,
@@ -603,22 +603,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           _buildTapTile(
             icon: Icons.privacy_tip_outlined,
-            title: 'Privacy Policy',
-            subtitle: 'View our privacy policy',
+            title: t('privacy_policy_title'),
+            subtitle: t('privacy_policy_subtitle'),
             onTap: () => _openLegalPage('privacy.html'),
           ),
           _buildDivider(),
           _buildTapTile(
             icon: Icons.description_outlined,
-            title: 'Terms of Service',
-            subtitle: 'View terms and conditions',
+            title: t('terms_title'),
+            subtitle: t('terms_subtitle'),
             onTap: () => _openLegalPage('terms.html'),
           ),
           _buildDivider(),
           _buildTapTile(
             icon: Icons.delete_outline,
-            title: 'Delete Account',
-            subtitle: 'Permanently delete your account',
+            title: t('delete_account_title'),
+            subtitle: t('delete_account_subtitle'),
             titleColor: kRed,
             onTap: _showDeleteAccountDialog,
           ),
@@ -627,7 +627,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildAboutSection() {
+  Widget _buildAboutSection(String Function(String) t) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: kCard2,
@@ -638,22 +638,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           _buildTapTile(
             icon: Icons.star_outline,
-            title: 'Rate App',
-            subtitle: 'Rate us on Play Store',
+            title: t('rate_app_title'),
+            subtitle: t('rate_app_subtitle'),
             onTap: _rateApp,
           ),
           _buildDivider(),
           _buildTapTile(
             icon: Icons.share_outlined,
-            title: 'Share App',
-            subtitle: 'Invite friends to join',
+            title: t('share_app_title'),
+            subtitle: t('share_app_subtitle'),
             onTap: _shareApp,
           ),
           _buildDivider(),
           _buildTapTile(
             icon: Icons.help_outline,
-            title: 'Help & Support',
-            subtitle: 'Get help with issues',
+            title: t('help_support_title'),
+            subtitle: t('help_support_subtitle'),
             onTap: _openHelpAndSupport,
           ),
         ],
@@ -679,7 +679,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Clipboard.setData(const ClipboardData(text: message));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Link copied! Share it with your friends.')),
+      SnackBar(content: Text(context.read<LocalizationService>().t('share_link_copied_snack'))),
     );
   }
 
@@ -696,8 +696,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _showLinkFailedSnack(String url) {
     if (!mounted) return;
+    final t = context.read<LocalizationService>().t;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Could not open link: $url')),
+      SnackBar(content: Text('${t('could_not_open_link_snack')}: $url')),
     );
   }
 
@@ -819,12 +820,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildAppVersion() {
+  Widget _buildAppVersion(String Function(String) t) {
     return Center(
       child: Column(
         children: [
           Text(
-            'Allin1 Super App',
+            t('app_version_name'),
             style: GoogleFonts.outfit(
               color: kText,
               fontSize: 16,
@@ -833,7 +834,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Version 1.0.0 (Build 1)',
+            t('app_version_number'),
             style: GoogleFonts.outfit(
               color: kMuted,
               fontSize: 12,
@@ -841,7 +842,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Made with ❤️ in Erode',
+            t('app_made_with_love'),
             style: GoogleFonts.outfit(
               color: kMuted,
               fontSize: 11,
@@ -1064,6 +1065,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showCurrencyPicker() {
+    final t = context.read<LocalizationService>().t;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: kCard2,
@@ -1077,7 +1079,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Select Currency',
+              t('select_currency_title'),
               style: GoogleFonts.outfit(
                 color: kText,
                 fontSize: 18,
@@ -1085,9 +1087,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            _buildCurrencyOption(ctx, 'INR (₹)', 'Indian Rupee'),
-            _buildCurrencyOption(ctx, r'USD ($)', 'US Dollar'),
-            _buildCurrencyOption(ctx, 'EUR (€)', 'Euro'),
+            _buildCurrencyOption(ctx, 'INR (₹)', t('currency_inr_name')),
+            _buildCurrencyOption(ctx, r'USD ($)', t('currency_usd_name')),
+            _buildCurrencyOption(ctx, 'EUR (€)', t('currency_eur_name')),
           ],
         ),
       ),
@@ -1127,23 +1129,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showDeleteAccountDialog() {
+    final t = context.read<LocalizationService>().t;
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: kCard2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
-          'Delete Account?',
+          t('delete_account_dialog_title'),
           style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w600),
         ),
         content: Text(
-          'This action cannot be undone. All your data including ride history, saved addresses, and payment methods will be permanently deleted.',
+          t('delete_account_dialog_body'),
           style: GoogleFonts.outfit(color: kMuted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.outfit(color: kMuted)),
+            child: Text(t('cancel_label'), style: GoogleFonts.outfit(color: kMuted)),
           ),
           TextButton(
             onPressed: () {
@@ -1151,7 +1154,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
-                    'Account deletion requested. Contact support for assistance.',
+                    t('delete_account_requested_snack'),
                     style: GoogleFonts.notoSansTamil(color: Colors.white),
                   ),
                   backgroundColor: kOrange,
@@ -1160,7 +1163,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             },
             child: Text(
-              'Delete',
+              t('delete_label'),
               style: GoogleFonts.outfit(
                 color: kRed,
                 fontWeight: FontWeight.w600,
