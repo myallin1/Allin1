@@ -12,19 +12,43 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:provider/provider.dart';
+
+import '../services/theme_service.dart';
 import '../services/update_service.dart';
 
-const Color kSurface = Color(0xFF0D0D18);
-const Color kCard = Color(0xFF141420);
-const Color kCard2 = Color(0xFF1A1A28);
-const Color kPurple = Color(0xFF7B6FE0);
-const Color kGreen = Color(0xFF3DBA6F);
-const Color kGold = Color(0xFFF5C542);
+// NOTE (Nizam's full Option 2 rollout): kPurple here is this screen's
+// PRIMARY brand color (not a decorative accent), so it gets its own
+// local sync rather than the shared app_palette.dart.
+Color kSurface = const Color(0xFF0D0D18);
+Color kCard    = const Color(0xFF141420);
+Color kCard2   = const Color(0xFF1A1A28);
+Color kPurple  = const Color(0xFF7B6FE0);
+Color kText    = const Color(0xFFEEEEF5);
+Color kMuted   = const Color(0xFF7777A0);
+Color kBorder  = const Color(0x267B6FE0);
+const Color kGreen  = Color(0xFF3DBA6F);
+const Color kGold   = Color(0xFFF5C542);
 const Color kOrange = Color(0xFFE07C6F);
-const Color kRed = Color(0xFFE05555);
-const Color kText = Color(0xFFEEEEF5);
-const Color kMuted = Color(0xFF7777A0);
-const Color kBorder = Color(0x267B6FE0);
+const Color kRed    = Color(0xFFE05555);
+
+void _syncNotificationsPalette(BuildContext context) {
+  ThemeService ts;
+  try {
+    ts = Provider.of<ThemeService>(context, listen: true);
+  } catch (_) {
+    return;
+  }
+  final theme = ts.currentTheme;
+  final cs = theme.colorScheme;
+  kPurple = cs.primary;
+  kSurface = cs.surface;
+  kCard = cs.surface;
+  kCard2 = Color.alphaBlend(cs.primary.withValues(alpha: 0.06), cs.surface);
+  kText = cs.onSurface;
+  kMuted = cs.onSurface.withValues(alpha: 0.55);
+  kBorder = theme.dividerColor;
+}
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -59,6 +83,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
   @override
   Widget build(BuildContext context) {
+    _syncNotificationsPalette(context);
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
@@ -67,7 +92,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         backgroundColor: kSurface,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: kText),
+          icon: Icon(Icons.arrow_back_ios_new, color: kText),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -100,7 +125,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   .snapshots(),
               builder: (ctx, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
+                  return Center(
                     child: CircularProgressIndicator(color: kGold),
                   );
                 }
@@ -128,7 +153,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.notifications_none, color: kMuted, size: 64),
+          Icon(Icons.notifications_none, color: kMuted, size: 64),
           const SizedBox(height: 16),
           Text(
             'No notifications',
@@ -295,7 +320,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                     child: Row(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        const Padding(
+                                        Padding(
                                           padding: EdgeInsets.only(top: 4),
                                           child: Icon(
                                             Icons.check_circle_rounded,
@@ -452,7 +477,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   Container(
                     width: 8,
                     height: 8,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: kGold,
                       shape: BoxShape.circle,
                     ),
@@ -578,7 +603,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                           color: kGold.withValues(alpha: 0.18),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.auto_awesome_rounded,
                           color: kGold,
                           size: 20,

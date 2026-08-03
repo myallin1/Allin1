@@ -23,18 +23,44 @@ import '../widgets/server_busy_dialog.dart' show kCallCenterNumberIntl;
 const String kPlayStoreUrl = 'https://play.google.com/store/apps/details?id=com.njtech.myallin1';
 const String kCustomerAppShareUrl = 'https://my-allin1.web.app';
 
-const Color kSurface = Color(0xFF0D0D18);
-const Color kCard = Color(0xFF141420);
-const Color kCard2 = Color(0xFF1A1A28);
-const Color kPurple = Color(0xFF7B6FE0);
-const Color kPurple2 = Color(0xFF7B6FE0);
+// NOTE (Nizam's full Option 2 rollout): the theme dropdown further down
+// this screen already reads/writes ThemeService correctly -- but the
+// screen's own background/card/text colors below were still these old
+// hardcoded constants, so picking a theme never visibly changed the
+// Settings page itself. kPurple/kPurple2 here are this screen's
+// PRIMARY/SECONDARY brand color (not a decorative accent), so they get
+// their own local sync rather than the shared app_palette.dart.
+Color kSurface = const Color(0xFF0D0D18);
+Color kCard    = const Color(0xFF141420);
+Color kCard2   = const Color(0xFF1A1A28);
+Color kPurple  = const Color(0xFF7B6FE0);
+Color kPurple2 = const Color(0xFF7B6FE0);
+Color kText    = const Color(0xFFEEEEF5);
+Color kMuted   = const Color(0xFF7777A0);
+Color kBorder  = const Color(0x267B6FE0);
 const Color kOrange = Color(0xFFE07C6F);
-const Color kGreen = Color(0xFF3DBA6F);
-const Color kGold = Color(0xFFF5C542);
-const Color kRed = Color(0xFFE05555);
-const Color kText = Color(0xFFEEEEF5);
-const Color kMuted = Color(0xFF7777A0);
-const Color kBorder = Color(0x267B6FE0);
+const Color kGreen  = Color(0xFF3DBA6F);
+const Color kGold   = Color(0xFFF5C542);
+const Color kRed    = Color(0xFFE05555);
+
+void _syncSettingsPalette(BuildContext context) {
+  ThemeService ts;
+  try {
+    ts = Provider.of<ThemeService>(context, listen: true);
+  } catch (_) {
+    return;
+  }
+  final theme = ts.currentTheme;
+  final cs = theme.colorScheme;
+  kPurple = cs.primary;
+  kPurple2 = cs.secondary;
+  kSurface = cs.surface;
+  kCard = cs.surface;
+  kCard2 = Color.alphaBlend(cs.primary.withValues(alpha: 0.06), cs.surface);
+  kText = cs.onSurface;
+  kMuted = cs.onSurface.withValues(alpha: 0.55);
+  kBorder = theme.dividerColor;
+}
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -161,10 +187,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final themeService = context.watch<ThemeService>();
+    _syncSettingsPalette(context);
+    // FIX: this screen is shared -- Admin app also navigates here (see
+    // admin_dashboard_screen.dart / super_admin_home_screen.dart) but
+    // never provides ThemeService, so the previous unconditional
+    // `context.watch<ThemeService>()` here would throw and crash the
+    // whole Settings page for admins. Made defensive/nullable; the
+    // Theme picker tile below (_buildThemeTile) only renders when this
+    // is non-null.
+    ThemeService? themeService;
+    try {
+      themeService = context.watch<ThemeService>();
+    } catch (_) {
+      themeService = null;
+    }
 
     if (_isLoading) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: kSurface,
         body: Center(child: CircularProgressIndicator(color: kGold)),
       );
@@ -176,7 +215,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: kSurface,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: kText),
+          icon: Icon(Icons.arrow_back_ios_new, color: kText),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -291,7 +330,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildPreferenceSettings(ThemeService themeService) {
+  Widget _buildPreferenceSettings(ThemeService? themeService) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: kCard2,
@@ -331,8 +370,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             value: _darkModeEnabled,
             onChanged: null,
           ),
-          _buildDivider(),
-          _buildThemeTile(themeService),
+          if (themeService != null) ...[
+            _buildDivider(),
+            _buildThemeTile(themeService),
+          ],
         ],
       ),
     );
@@ -349,7 +390,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               color: kPurple.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.palette_outlined, color: kPurple, size: 20),
+            child: Icon(Icons.palette_outlined, color: kPurple, size: 20),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -756,7 +797,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: kMuted, size: 20),
+              Icon(Icons.chevron_right, color: kMuted, size: 20),
             ],
           ),
         ),
@@ -765,7 +806,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildDivider() {
-    return const Divider(
+    return Divider(
       color: kBorder,
       height: 1,
       indent: 60,
@@ -862,7 +903,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             Row(
               children: [
-                const Icon(Icons.language_rounded, color: kGold, size: 22),
+                Icon(Icons.language_rounded, color: kGold, size: 22),
                 const SizedBox(width: 8),
                 Text(
                   'Language / Mozhi',
@@ -960,7 +1001,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       if (isSel)
-                        const Icon(
+                        Icon(
                           Icons.check_circle_rounded,
                           color: kGold,
                           size: 22,
@@ -1068,7 +1109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       title: Text(name, style: GoogleFonts.outfit(color: kText)),
       trailing:
-          isSelected ? const Icon(Icons.check_circle, color: kGold) : null,
+          isSelected ? Icon(Icons.check_circle, color: kGold) : null,
     );
   }
 

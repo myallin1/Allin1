@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import '../services/theme_service.dart';
 
 /// Shown whenever a customer-facing booking/order write fails (e.g. Firestore
 /// quota/limit exceeded, network drop, etc). Instead of a generic error
@@ -24,7 +27,6 @@ Future<void> showServerBusyDialog(BuildContext context) {
 class _ServerBusyDialogContent extends StatelessWidget {
   const _ServerBusyDialogContent();
 
-  static const Color kPink = Color(0xFFFF4FA3);
   static const Color kWhatsApp = Color(0xFF25D366);
 
   Future<void> _callCenter(BuildContext context) async {
@@ -51,6 +53,16 @@ class _ServerBusyDialogContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // FIX (Nizam's full Option 2 rollout): was a hardcoded static const
+    // pink regardless of selected theme. Reads the live theme's primary
+    // color instead, falling back to the original pink if this dialog
+    // is ever shown somewhere ThemeService isn't provided.
+    Color pink = const Color(0xFFFF4FA3);
+    try {
+      pink = Provider.of<ThemeService>(context, listen: false).currentTheme.colorScheme.primary;
+    } catch (_) {
+      // keep default
+    }
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24),
@@ -60,7 +72,7 @@ class _ServerBusyDialogContent extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
-            BoxShadow(color: kPink.withValues(alpha: 0.2), blurRadius: 30, offset: const Offset(0, 12)),
+            BoxShadow(color: pink.withValues(alpha: 0.2), blurRadius: 30, offset: const Offset(0, 12)),
           ],
         ),
         child: Column(
@@ -70,10 +82,10 @@ class _ServerBusyDialogContent extends StatelessWidget {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: kPink.withValues(alpha: 0.1),
+                color: pink.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.cloud_off_rounded, color: kPink, size: 32),
+              child: Icon(Icons.cloud_off_rounded, color: pink, size: 32),
             ),
             const SizedBox(height: 18),
             Text(
@@ -97,7 +109,7 @@ class _ServerBusyDialogContent extends StatelessWidget {
                 icon: const Icon(Icons.call_rounded, size: 18),
                 label: const Text('Call Center'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: kPink,
+                  backgroundColor: pink,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

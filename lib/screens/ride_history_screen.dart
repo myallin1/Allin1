@@ -9,22 +9,48 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:provider/provider.dart';
+
 import '../services/db_usage_tracker.dart';
 import '../services/hive_cache.dart';
+import '../services/theme_service.dart';
 
-// Theme Constants
-const Color kBg = Color(0xFF08080F);
-const Color kSurface = Color(0xFF111118);
-const Color kCard = Color(0xFF1A1A26);
-const Color kCard2 = Color(0xFF20202E);
-const Color kPurple = Color(0xFF7B6FE0);
-const Color kPurple2 = Color(0xFF9B8FF0);
+// Theme Constants — NOTE (Nizam's full Option 2 rollout): kPurple/
+// kPurple2 here are this screen's PRIMARY/SECONDARY brand color (not a
+// decorative accent), so they get their own local sync rather than the
+// shared app_palette.dart.
+Color kBg      = const Color(0xFF08080F);
+Color kSurface = const Color(0xFF111118);
+Color kCard    = const Color(0xFF1A1A26);
+Color kCard2   = const Color(0xFF20202E);
+Color kPurple  = const Color(0xFF7B6FE0);
+Color kPurple2 = const Color(0xFF9B8FF0);
+Color kText    = const Color(0xFFEEEEF5);
+Color kMuted   = const Color(0xFF7777A0);
+Color kBorder  = const Color(0x2E7B6FE0);
 const Color kOrange = Color(0xFFE07C6F);
-const Color kGreen = Color(0xFF3DBA6F);
-const Color kGold = Color(0xFFF5C542);
-const Color kText = Color(0xFFEEEEF5);
-const Color kMuted = Color(0xFF7777A0);
-const Color kBorder = Color(0x2E7B6FE0);
+const Color kGreen  = Color(0xFF3DBA6F);
+const Color kGold   = Color(0xFFF5C542);
+
+void _syncRideHistoryPalette(BuildContext context) {
+  ThemeService ts;
+  try {
+    ts = Provider.of<ThemeService>(context, listen: true);
+  } catch (_) {
+    return;
+  }
+  final theme = ts.currentTheme;
+  final cs = theme.colorScheme;
+  kPurple = cs.primary;
+  kPurple2 = cs.secondary;
+  kBg = theme.scaffoldBackgroundColor;
+  kSurface = cs.surface;
+  kCard = cs.surface;
+  kCard2 = Color.alphaBlend(cs.primary.withValues(alpha: 0.06), cs.surface);
+  kText = cs.onSurface;
+  kMuted = cs.onSurface.withValues(alpha: 0.55);
+  kBorder = theme.dividerColor;
+}
 
 class RideHistoryScreen extends StatefulWidget {
   const RideHistoryScreen({super.key});
@@ -146,6 +172,7 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _syncRideHistoryPalette(context);
     return Scaffold(
       backgroundColor: kBg,
       body: SafeArea(
@@ -163,7 +190,7 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
                 backgroundColor: kSurface,
                 onRefresh: () => _loadRideHistory(forceRefresh: true),
                 child: _loading
-                    ? const Center(
+                    ? Center(
                         child: CircularProgressIndicator(color: kGold),
                       )
                     : _error != null
@@ -187,7 +214,7 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
   Widget _buildHeader(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: kSurface,
         border: Border(bottom: BorderSide(color: kBorder)),
       ),
@@ -204,7 +231,7 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
                 border: Border.all(color: kBorder),
               ),
               child:
-                  const Icon(Icons.arrow_back_ios_new, size: 14, color: kMuted),
+                  Icon(Icons.arrow_back_ios_new, size: 14, color: kMuted),
             ),
           ),
           const SizedBox(width: 12),
@@ -225,14 +252,14 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.directions_bike, size: 50, color: kMuted),
+            Icon(Icons.directions_bike, size: 50, color: kMuted),
             const SizedBox(height: 16),
             Text(
               'No rides yet!',
               style: GoogleFonts.inter(fontSize: 16, color: kText),
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Book your first ride!',
               style: TextStyle(fontSize: 12, color: kMuted),
             ),
@@ -264,7 +291,7 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.error_outline, size: 44, color: kOrange),
+                  Icon(Icons.error_outline, size: 44, color: kOrange),
                   const SizedBox(height: 14),
                   Text(
                     message,
@@ -335,7 +362,7 @@ class _RideHistoryCard extends StatelessWidget {
                 color: kGold,
               ),
               const SizedBox(width: 8),
-              Text(date, style: const TextStyle(fontSize: 11, color: kMuted)),
+              Text(date, style: TextStyle(fontSize: 11, color: kMuted)),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -358,7 +385,7 @@ class _RideHistoryCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 '₹${fare.toInt()}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
                   color: kGold,
@@ -373,13 +400,13 @@ class _RideHistoryCard extends StatelessWidget {
                 width: 8,
                 height: 8,
                 decoration:
-                    const BoxDecoration(color: kGreen, shape: BoxShape.circle),
+                    BoxDecoration(color: kGreen, shape: BoxShape.circle),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   pickup,
-                  style: const TextStyle(fontSize: 12, color: kText),
+                  style: TextStyle(fontSize: 12, color: kText),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -408,7 +435,7 @@ class _RideHistoryCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   drop,
-                  style: const TextStyle(fontSize: 12, color: kText),
+                  style: TextStyle(fontSize: 12, color: kText),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),

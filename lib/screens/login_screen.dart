@@ -8,25 +8,55 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
 import '../services/auth_service.dart';
 import '../services/session_service.dart';
+import '../services/theme_service.dart';
 import 'auth/profile_setup_screen.dart';
 import 'dashboard_screen.dart';
 
 // ── Theme ──────────────────────────────────────────────────────
-const Color kBg = Color(0xFF08080F);
-const Color kSurface = Color(0xFF0D0D18);
-const Color kCard = Color(0xFF141420);
-const Color kCard2 = Color(0xFF1A1A28);
-const Color kPurple = Color(0xFF7B6FE0);
-const Color kPurple2 = Color(0xFF9B8FF0);
+// NOTE: this screen is shared across ALL 4 apps (Customer/Hero/Admin/
+// Seller). ThemeService is only provided in the Customer + Hero app
+// trees, so _syncLoginPalette() below is defensive: in Admin/Seller
+// (no ThemeService above this widget) it silently keeps these default
+// dark-purple values, exactly as before. In Customer/Hero, kPurple/
+// kPurple2 here are this screen's PRIMARY/SECONDARY brand color (not
+// a decorative accent), so they get their own local sync rather than
+// the shared app_palette.dart (whose kPurple means something else).
+Color kBg      = const Color(0xFF08080F);
+Color kSurface = const Color(0xFF0D0D18);
+Color kCard    = const Color(0xFF141420);
+Color kCard2   = const Color(0xFF1A1A28);
+Color kPurple  = const Color(0xFF7B6FE0);
+Color kPurple2 = const Color(0xFF9B8FF0);
+Color kText    = const Color(0xFFEEEEF5);
+Color kMuted   = const Color(0xFF7777A0);
+Color kBorder  = const Color(0x267B6FE0);
 const Color kOrange = Color(0xFFE07C6F);
-const Color kGreen = Color(0xFF3DBA6F);
-const Color kGold = Color(0xFFF5C542);
-const Color kText = Color(0xFFEEEEF5);
-const Color kMuted = Color(0xFF7777A0);
-const Color kBorder = Color(0x267B6FE0);
+const Color kGreen  = Color(0xFF3DBA6F);
+const Color kGold   = Color(0xFFF5C542);
+
+void _syncLoginPalette(BuildContext context) {
+  ThemeService ts;
+  try {
+    ts = Provider.of<ThemeService>(context, listen: true);
+  } catch (_) {
+    return;
+  }
+  final theme = ts.currentTheme;
+  final cs = theme.colorScheme;
+  kPurple = cs.primary;
+  kPurple2 = cs.secondary;
+  kBg = theme.scaffoldBackgroundColor;
+  kSurface = cs.surface;
+  kCard = cs.surface;
+  kCard2 = Color.alphaBlend(cs.primary.withValues(alpha: 0.06), cs.surface);
+  kText = cs.onSurface;
+  kMuted = cs.onSurface.withValues(alpha: 0.55);
+  kBorder = theme.dividerColor;
+}
 
 class LoginScreen extends StatefulWidget {
   final UserType? presetUserType;
@@ -268,6 +298,7 @@ class _LoginScreenState extends State<LoginScreen>
   // ================================================================
   @override
   Widget build(BuildContext context) {
+    _syncLoginPalette(context);
     return Scaffold(
       backgroundColor: kBg,
       body: FadeTransition(
@@ -319,7 +350,7 @@ class _LoginScreenState extends State<LoginScreen>
           width: 88,
           height: 88,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               colors: [kPurple, kOrange],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -342,7 +373,7 @@ class _LoginScreenState extends State<LoginScreen>
 
         // App name
         ShaderMask(
-          shaderCallback: (r) => const LinearGradient(
+          shaderCallback: (r) => LinearGradient(
             colors: [kPurple2, kOrange],
           ).createShader(r),
           child: Text(
@@ -391,7 +422,7 @@ class _LoginScreenState extends State<LoginScreen>
           children: [
             Icon(icon, size: 14, color: kPurple2),
             const SizedBox(width: 4),
-            Text(label, style: const TextStyle(fontSize: 10, color: kText)),
+            Text(label, style: TextStyle(fontSize: 10, color: kText)),
           ],
         ),
       );
@@ -401,7 +432,7 @@ class _LoginScreenState extends State<LoginScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Login as:',
           style: TextStyle(
             fontSize: 12,
@@ -577,7 +608,7 @@ class _LoginScreenState extends State<LoginScreen>
           const SizedBox(height: 6),
           Text(
             cardSubtitle,
-            style: const TextStyle(fontSize: 12, color: kMuted),
+            style: TextStyle(fontSize: 12, color: kMuted),
           ),
 
           const SizedBox(height: 24),
@@ -595,7 +626,7 @@ class _LoginScreenState extends State<LoginScreen>
 
             // ── Google Sign-In Button ────────────────────────
             if (_loading)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 16),
                 child: CircularProgressIndicator(color: kPurple),
               )
@@ -603,7 +634,7 @@ class _LoginScreenState extends State<LoginScreen>
               _googleButton(),
 
             // ── Divider ──────────────────────────────────────
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
               child: Row(
                 children: [
@@ -721,7 +752,7 @@ class _LoginScreenState extends State<LoginScreen>
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.person_outline, size: 18, color: kMuted),
+            Icon(Icons.person_outline, size: 18, color: kMuted),
             const SizedBox(width: 8),
             Text(
               'Browse as guest (Demo)',
@@ -737,13 +768,13 @@ class _LoginScreenState extends State<LoginScreen>
   Widget _buildFooter() {
     return Column(
       children: [
-        const Text(
+        Text(
           'Powered by NJ TECH',
           style: TextStyle(fontSize: 11, color: kMuted),
         ),
         const SizedBox(height: 4),
         ShaderMask(
-          shaderCallback: (r) => const LinearGradient(
+          shaderCallback: (r) => LinearGradient(
             colors: [kPurple2, kOrange],
           ).createShader(r),
           child: const Text(
@@ -765,7 +796,7 @@ class _LoginScreenState extends State<LoginScreen>
       key: _formKey,
       child: Column(
         children: [
-          const Text(
+          Text(
             'Almost there! Enter your 10-digit mobile number to continue.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 13, color: kText),
@@ -777,10 +808,10 @@ class _LoginScreenState extends State<LoginScreen>
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
               labelText: 'Mobile Number',
-              labelStyle: const TextStyle(color: kMuted),
+              labelStyle: TextStyle(color: kMuted),
               hintText: '9876543210',
               hintStyle: TextStyle(color: kMuted.withValues(alpha: 0.5)),
-              prefixIcon: const Icon(Icons.phone_iphone, color: kPurple2),
+              prefixIcon: Icon(Icons.phone_iphone, color: kPurple2),
               filled: true,
               fillColor: kCard2,
               border: OutlineInputBorder(
@@ -789,11 +820,11 @@ class _LoginScreenState extends State<LoginScreen>
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: kBorder),
+                borderSide: BorderSide(color: kBorder),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: kPurple),
+                borderSide: BorderSide(color: kPurple),
               ),
             ),
             validator: (value) {
@@ -811,7 +842,7 @@ class _LoginScreenState extends State<LoginScreen>
           ),
           const SizedBox(height: 20),
           if (_loading)
-            const CircularProgressIndicator(color: kPurple)
+            CircularProgressIndicator(color: kPurple)
           else
             GestureDetector(
               onTap: _submitPhoneNumber,
@@ -819,7 +850,7 @@ class _LoginScreenState extends State<LoginScreen>
                 width: double.infinity,
                 height: 54,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [kPurple, kPurple2]),
+                  gradient: LinearGradient(colors: [kPurple, kPurple2]),
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
@@ -844,7 +875,7 @@ class _LoginScreenState extends State<LoginScreen>
           const SizedBox(height: 12),
           TextButton(
             onPressed: () => setState(() => _needsPhoneNumber = false),
-            child: const Text('Back to Login', style: TextStyle(color: kMuted)),
+            child: Text('Back to Login', style: TextStyle(color: kMuted)),
           ),
         ],
       ),

@@ -7,20 +7,45 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../services/local_sync_service.dart';
+import 'package:provider/provider.dart';
 
-const Color kSurface = Color(0xFF0D0D18);
-const Color kCard = Color(0xFF141420);
-const Color kCard2 = Color(0xFF1A1A28);
-const Color kPurple = Color(0xFF7B6FE0);
-const Color kPurple2 = Color(0xFF7B6FE0);
+import '../services/local_sync_service.dart';
+import '../services/theme_service.dart';
+
+// NOTE (Nizam's full Option 2 rollout): kPurple/kPurple2 here are this
+// screen's PRIMARY/SECONDARY brand color (not a decorative accent), so
+// they get their own local sync rather than the shared app_palette.dart.
+Color kSurface = const Color(0xFF0D0D18);
+Color kCard    = const Color(0xFF141420);
+Color kCard2   = const Color(0xFF1A1A28);
+Color kPurple  = const Color(0xFF7B6FE0);
+Color kPurple2 = const Color(0xFF7B6FE0);
+Color kText    = const Color(0xFFEEEEF5);
+Color kMuted   = const Color(0xFF7777A0);
+Color kBorder  = const Color(0x267B6FE0);
 const Color kOrange = Color(0xFFE07C6F);
-const Color kGreen = Color(0xFF3DBA6F);
-const Color kGold = Color(0xFFF5C542);
-const Color kRed = Color(0xFFE05555);
-const Color kText = Color(0xFFEEEEF5);
-const Color kMuted = Color(0xFF7777A0);
-const Color kBorder = Color(0x267B6FE0);
+const Color kGreen  = Color(0xFF3DBA6F);
+const Color kGold   = Color(0xFFF5C542);
+const Color kRed    = Color(0xFFE05555);
+
+void _syncProfilePalette(BuildContext context) {
+  ThemeService ts;
+  try {
+    ts = Provider.of<ThemeService>(context, listen: true);
+  } catch (_) {
+    return;
+  }
+  final theme = ts.currentTheme;
+  final cs = theme.colorScheme;
+  kPurple = cs.primary;
+  kPurple2 = cs.secondary;
+  kSurface = cs.surface;
+  kCard = cs.surface;
+  kCard2 = Color.alphaBlend(cs.primary.withValues(alpha: 0.06), cs.surface);
+  kText = cs.onSurface;
+  kMuted = cs.onSurface.withValues(alpha: 0.55);
+  kBorder = theme.dividerColor;
+}
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -102,13 +127,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _syncProfilePalette(context);
     return Scaffold(
       backgroundColor: kSurface,
       appBar: AppBar(
         backgroundColor: kSurface,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: kText),
+          icon: Icon(Icons.arrow_back_ios_new, color: kText),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -160,7 +186,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 width: 100,
                 height: 100,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
+                  gradient: LinearGradient(
                     colors: [kGold, Color(0xFFD4961A)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -237,7 +263,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.person_outline, color: kGold, size: 20),
+              Icon(Icons.person_outline, color: kGold, size: 20),
               const SizedBox(width: 8),
               Text(
                 'Personal Information',
@@ -337,15 +363,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: kBorder),
+          borderSide: BorderSide(color: kBorder),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: kGold, width: 1.5),
+          borderSide: BorderSide(color: kGold, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: kRed),
+          borderSide: BorderSide(color: kRed),
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -373,7 +399,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.analytics_outlined, color: kPurple, size: 20),
+              Icon(Icons.analytics_outlined, color: kPurple, size: 20),
               const SizedBox(width: 8),
               Text(
                 'Activity Stats',
@@ -579,7 +605,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right, color: kMuted, size: 20),
+                Icon(Icons.chevron_right, color: kMuted, size: 20),
               ],
             ),
           ),

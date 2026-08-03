@@ -13,7 +13,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:provider/provider.dart';
 
+import '../services/theme_service.dart';
 import 'bike_taxi/hero_dashboard_shell.dart';
 import 'hero_login_screen.dart';
 
@@ -28,17 +30,45 @@ import 'hero_login_screen.dart';
 // there's only one approvalStatus field in Firestore, so 2 and 3 always
 // change state as a pair). All the real-time listener / notification /
 // auto-redirect logic below is unchanged.
-const Color kBg = Color(0xFFFFF6FA);
-const Color kSurface = Color(0xFFFFFFFF);
-const Color kCard = Color(0xFFFFEAF3);
-const Color kPurple = Color(0xFFFF4FA3);
-const Color kPurple2 = Color(0xFFBE2A7A);
+// NOTE: kPurple/kPurple2 here are actually the PRIMARY/SECONDARY brand
+// colors (not a decorative purple accent) -- this screen's palette
+// predates a rename and was never touched. That's why this file gets
+// its own local sync function below instead of importing the shared
+// app_palette.dart (whose kPurple means something different: a fixed
+// decorative accent, not the theme's primary color).
+Color kBg      = const Color(0xFFFFF6FA);
+Color kSurface = const Color(0xFFFFFFFF);
+Color kCard    = const Color(0xFFFFEAF3);
+Color kPurple  = const Color(0xFFFF4FA3);
+Color kPurple2 = const Color(0xFFBE2A7A);
+Color kText    = const Color(0xFF201A22);
+Color kMuted   = const Color(0xFF8C7A88);
 const Color kOrange = Color(0xFFE07C6F);
-const Color kGreen = Color(0xFF00A84A);
-const Color kGold = Color(0xFFB8860B);
-const Color kRed = Color(0xFFE0245E);
-const Color kText = Color(0xFF201A22);
-const Color kMuted = Color(0xFF8C7A88);
+const Color kGreen  = Color(0xFF00A84A);
+const Color kGold   = Color(0xFFB8860B);
+const Color kRed    = Color(0xFFE0245E);
+
+/// Refreshes this screen's palette from the active ThemeService theme
+/// (per Nizam's full Option 2 rollout). Safe no-op if ThemeService
+/// isn't found in the tree (this screen is only reached from the Hero
+/// app flow, where it is provided, but this stays defensive).
+void _syncHeroPendingPalette(BuildContext context) {
+  ThemeService ts;
+  try {
+    ts = Provider.of<ThemeService>(context, listen: true);
+  } catch (_) {
+    return;
+  }
+  final theme = ts.currentTheme;
+  final cs = theme.colorScheme;
+  kPurple = cs.primary;
+  kPurple2 = cs.secondary;
+  kBg = theme.scaffoldBackgroundColor;
+  kSurface = cs.surface;
+  kCard = Color.alphaBlend(cs.primary.withValues(alpha: 0.06), cs.surface);
+  kText = cs.onSurface;
+  kMuted = cs.onSurface.withValues(alpha: 0.55);
+}
 
 class HeroPendingScreen extends StatefulWidget {
   const HeroPendingScreen({super.key});
@@ -213,7 +243,7 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
         _triggerNavigation(() async {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
+              SnackBar(
                 content: Text('Account rejected or blocked. Contact Admin.'),
                 backgroundColor: kRed,
                 behavior: SnackBarBehavior.floating,
@@ -342,6 +372,7 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _syncHeroPendingPalette(context);
     return Scaffold(
       backgroundColor: kBg,
       body: SafeArea(
@@ -357,8 +388,8 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: _isApproved
-                          ? const [kGreen, Color(0xFF00873C)]
-                          : const [kPurple, kPurple2],
+                          ? [kGreen, Color(0xFF00873C)]
+                          : [kPurple, kPurple2],
                     ),
                     borderRadius: BorderRadius.circular(40),
                     boxShadow: [
