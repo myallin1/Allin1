@@ -390,7 +390,7 @@ class _LoginScreenState extends State<LoginScreen>
 
         Text(
           'Allin1 Super App',
-          style: GoogleFonts.inter(fontSize: 16, color: kMuted),
+          style: GoogleFonts.outfit(fontSize: 16, color: kMuted),
         ),
         const SizedBox(height: 16),
 

@@ -18,6 +18,7 @@ import 'screens/admin/super_admin_home_screen.dart';
 import 'screens/admin/task_approvals_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/db_usage_tracker.dart';
+import 'services/theme_service.dart';
 import 'services/localization_service.dart';
 import 'services/session_service.dart';
 
@@ -117,7 +118,23 @@ class AdminApp extends StatelessWidget {
       child: MaterialApp(
       title: 'Allin1 Admin',
       debugShowCheckedModeBanner: false,
+      // FIX (typography audit): this used to be a bare ThemeData.dark()
+      // with no fontFamily set, so any bare TextStyle() in the admin
+      // screens (which don't route through the customer/hero apps'
+      // ThemeService) silently rendered in the platform default (Roboto)
+      // while every GoogleFonts.outfit(...) call around it rendered in
+      // Outfit -- same inconsistency as the customer app, just via a
+      // different theme object. Reusing AppBrandTheme's shared
+      // Outfit + NotoSansTamil-fallback text theme brings the admin
+      // panel in line with the rest of the app.
       theme: ThemeData.dark().copyWith(
+        fontFamily: AppBrandTheme.brandFontFamily,
+        fontFamilyFallback: AppBrandTheme.brandFontFallback,
+        textTheme: AppBrandTheme.brandTextTheme(
+          ThemeData.dark().textTheme,
+          bodyColor: const Color(0xFFEEEEF5),
+          displayColor: const Color(0xFFEEEEF5),
+        ),
         scaffoldBackgroundColor: const Color(0xFF0A0A1A),
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFFE05555),

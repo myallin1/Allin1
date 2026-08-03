@@ -15,6 +15,7 @@ import 'screens/seller_screen.dart';
 import 'services/db_usage_tracker.dart';
 import 'services/localization_service.dart';
 import 'services/session_service.dart';
+import 'services/theme_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,7 +49,18 @@ class SellerApp extends StatelessWidget {
       child: MaterialApp(
       title: 'Allin1 Partner Dashboard',
       debugShowCheckedModeBanner: false,
+      // FIX (typography audit): same fix as main_admin.dart -- this had
+      // no fontFamily set, so bare TextStyle() calls in seller screens
+      // rendered in the platform default instead of matching the
+      // GoogleFonts.outfit(...) calls used everywhere else in the file.
       theme: ThemeData.dark().copyWith(
+        fontFamily: AppBrandTheme.brandFontFamily,
+        fontFamilyFallback: AppBrandTheme.brandFontFallback,
+        textTheme: AppBrandTheme.brandTextTheme(
+          ThemeData.dark().textTheme,
+          bodyColor: const Color(0xFFEEEEF5),
+          displayColor: const Color(0xFFEEEEF5),
+        ),
         scaffoldBackgroundColor: const Color(0xFF0A0A1A),
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFF11998E),

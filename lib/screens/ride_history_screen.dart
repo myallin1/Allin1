@@ -256,7 +256,7 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
             const SizedBox(height: 16),
             Text(
               'No rides yet!',
-              style: GoogleFonts.inter(fontSize: 16, color: kText),
+              style: GoogleFonts.outfit(fontSize: 16, color: kText),
             ),
             const SizedBox(height: 6),
             Text(
@@ -296,7 +296,7 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
                   Text(
                     message,
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(fontSize: 13, color: kMuted),
+                    style: GoogleFonts.outfit(fontSize: 13, color: kMuted),
                   ),
                 ],
               ),

@@ -82,7 +82,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         backgroundColor: kSurface,
         title: Text(
           'Admin Panel',
-          style: GoogleFonts.poppins(color: kText),
+          style: GoogleFonts.outfit(color: kText),
         ),
         centerTitle: true,
         actions: [
@@ -122,7 +122,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         const SizedBox(height: 12),
                         Text(
                           'Welcome, Admin!',
-                          style: GoogleFonts.poppins(
+                          style: GoogleFonts.outfit(
                             color: Colors.white,
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
@@ -141,7 +141,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   // ── Stats Grid ────────────────────────────────────
                   Text(
                     'Platform Statistics',
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.outfit(
                       color: kText,
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
@@ -200,7 +200,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   // ── Admin Actions ─────────────────────────────────
                   Text(
                     'Management',
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.outfit(
                       color: kText,
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
@@ -264,7 +264,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           const SizedBox(height: 8),
           Text(
             value,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.outfit(
               color: kText,
               fontSize: 24,
               fontWeight: FontWeight.bold,

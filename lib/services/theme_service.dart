@@ -63,6 +63,57 @@ class AppBrandTheme {
   static const Color mutedText = Color(0xFF8A4E72);
   static const Color borderPink = Color(0x33FF4FA3);
 
+  // ── Global typography (Font Audit) ──────────────────────────────
+  // FIX (Nizam's typography audit): this used to be 'NotoSansTamil' as
+  // the ONLY global font, but ~1,150+ screens across the app never
+  // actually read Theme.of(context).textTheme -- they bypass it with
+  // their own inline GoogleFonts.outfit(...) calls (the overwhelming
+  // majority pattern, 1000+ call sites), plus a handful of stray
+  // Poppins/Roboto/Inter/Space Grotesk one-offs. The result: bare
+  // TextStyle() calls that DON'T go through GoogleFonts (~1,000+ sites,
+  // e.g. main_customer.dart, main_admin.dart, dialog/snackbar text)
+  // silently rendered in NotoSansTamil while everything else around
+  // them rendered in Outfit -- the actual source of the "inconsistent"
+  // look. Making 'Outfit' the real global font here means every one of
+  // those un-migrated bare TextStyle() calls now automatically matches
+  // the dominant Outfit look with zero per-file changes, and Tamil/
+  // Hindi/Malayalam script glyphs (which Outfit doesn't cover) still
+  // render correctly via the NotoSansTamil fallback below instead of
+  // showing tofu boxes.
+  static const String brandFontFamily = 'Outfit';
+  static const List<String> brandFontFallback = ['NotoSansTamil'];
+
+  // Public (not just used by light()/dark() below) so the admin/seller
+  // apps -- which have their own standalone ThemeData rather than going
+  // through ThemeService -- can apply the exact same Outfit +
+  // NotoSansTamil-fallback text theme instead of drifting to a 3rd look.
+  static TextTheme brandTextTheme(
+    TextTheme base, {
+    required Color bodyColor,
+    required Color displayColor,
+  }) {
+    final outfit = GoogleFonts.outfitTextTheme(base);
+    TextStyle? withFallback(TextStyle? style) =>
+        style?.copyWith(fontFamilyFallback: brandFontFallback);
+    return TextTheme(
+      displayLarge: withFallback(outfit.displayLarge),
+      displayMedium: withFallback(outfit.displayMedium),
+      displaySmall: withFallback(outfit.displaySmall),
+      headlineLarge: withFallback(outfit.headlineLarge),
+      headlineMedium: withFallback(outfit.headlineMedium),
+      headlineSmall: withFallback(outfit.headlineSmall),
+      titleLarge: withFallback(outfit.titleLarge),
+      titleMedium: withFallback(outfit.titleMedium),
+      titleSmall: withFallback(outfit.titleSmall),
+      bodyLarge: withFallback(outfit.bodyLarge),
+      bodyMedium: withFallback(outfit.bodyMedium),
+      bodySmall: withFallback(outfit.bodySmall),
+      labelLarge: withFallback(outfit.labelLarge),
+      labelMedium: withFallback(outfit.labelMedium),
+      labelSmall: withFallback(outfit.labelSmall),
+    ).apply(bodyColor: bodyColor, displayColor: displayColor);
+  }
+
   static ThemeData light({
     required Color primary,
     required Color secondary,
@@ -103,7 +154,8 @@ class AppBrandTheme {
     return ThemeData(
       brightness: Brightness.light,
       useMaterial3: true,
-      fontFamily: 'NotoSansTamil',
+      fontFamily: brandFontFamily,
+      fontFamilyFallback: brandFontFallback,
       primaryColor: primary,
       scaffoldBackgroundColor: Colors.white,
       colorScheme: scheme,
@@ -113,9 +165,8 @@ class AppBrandTheme {
       dividerColor: borderPink,
       splashColor: primary.withValues(alpha: 0.08),
       highlightColor: secondary.withValues(alpha: 0.08),
-      textTheme: GoogleFonts.notoSansTamilTextTheme(
+      textTheme: brandTextTheme(
         ThemeData.light().textTheme,
-      ).apply(
         bodyColor: deepText,
         displayColor: deepText,
       ),
@@ -272,7 +323,8 @@ class AppBrandTheme {
     return ThemeData(
       brightness: Brightness.dark,
       useMaterial3: true,
-      fontFamily: 'NotoSansTamil',
+      fontFamily: brandFontFamily,
+      fontFamilyFallback: brandFontFallback,
       primaryColor: primary,
       scaffoldBackgroundColor: background,
       colorScheme: scheme,
@@ -282,9 +334,8 @@ class AppBrandTheme {
       dividerColor: primary.withValues(alpha: 0.2),
       splashColor: primary.withValues(alpha: 0.12),
       highlightColor: secondary.withValues(alpha: 0.12),
-      textTheme: GoogleFonts.notoSansTamilTextTheme(
+      textTheme: brandTextTheme(
         ThemeData.dark().textTheme,
-      ).apply(
         bodyColor: const Color(0xFFEEEEF5),
         displayColor: const Color(0xFFEEEEF5),
       ),

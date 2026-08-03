@@ -675,7 +675,7 @@ class _CaptainScreenState extends State<CaptainScreen>
                 const SizedBox(height: 16),
                 Text(
                   'No pending rides',
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.outfit(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                     color: kText,

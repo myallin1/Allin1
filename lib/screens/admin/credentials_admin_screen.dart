@@ -116,7 +116,7 @@ class _CredentialsAdminScreenState extends State<CredentialsAdminScreen>
         backgroundColor: kSurface,
         title: Text(
           'Credential Management',
-          style: GoogleFonts.poppins(color: kText),
+          style: GoogleFonts.outfit(color: kText),
         ),
         centerTitle: true,
         bottom: TabBar(
@@ -217,7 +217,7 @@ class _CredentialsAdminScreenState extends State<CredentialsAdminScreen>
           const SizedBox(height: 8),
           Text(
             value,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.outfit(
               color: kText,
               fontSize: 24,
               fontWeight: FontWeight.bold,
