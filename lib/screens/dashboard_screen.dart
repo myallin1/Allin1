@@ -160,7 +160,14 @@ class _DashboardScreenState extends State<DashboardScreen>
   final List<GlobalKey> _navTabKeys = List.generate(_tabCount, (_) => GlobalKey());
 
   // ── Classic Rewards promo state ──────────────────────────────
-  List<PromoOfferItem> _promoOffers = const [
+  // Built once real content is needed (see _localizedPromoOffers below) so
+  // the title/subtitle/labels can come from LocalizationService instead of
+  // being frozen in English at field-init time (no BuildContext available
+  // here yet). Starts null; _ensurePromoOffersLoaded() populates it from
+  // the first build().
+  List<PromoOfferItem>? _promoOffers;
+
+  List<PromoOfferItem> _localizedPromoOffers(String Function(String) t) => [
     // ── V2: Daily Quiz & Referral cards temporarily hidden ──
     // Re-enable these two entries to bring the cards back.
     // PromoOfferItem(
@@ -176,10 +183,10 @@ class _DashboardScreenState extends State<DashboardScreen>
     //   buttonLabel: 'Refer Now',     statusLabel: 'Unlimited',
     // ),
     PromoOfferItem(
-      id: 'firstride', title: 'First Ride FREE 🛵',
-      subtitle: 'New user? Your first taxi ride is on us!',
+      id: 'firstride', title: t('promo_firstride_title'),
+      subtitle: t('promo_firstride_subtitle'),
       icon: Icons.electric_bike_rounded, claimed: false,
-      buttonLabel: 'Book Now',      statusLabel: 'New Users',
+      buttonLabel: t('promo_book_now_label'), statusLabel: t('promo_new_users_label'),
     ),
   ];
 
@@ -192,14 +199,15 @@ class _DashboardScreenState extends State<DashboardScreen>
   Timer? _pwaUpdatePollTimer;
 
   Future<void> _claimPromo(String offerId) async {
+    final t = context.read<LocalizationService>().t;
     setState(() {
-      _promoOffers = _promoOffers.map((p) =>
+      _promoOffers = (_promoOffers ?? _localizedPromoOffers(t)).map((p) =>
         p.id == offerId ? PromoOfferItem(
           id: p.id, title: p.title, subtitle: p.subtitle,
           icon: p.icon, claimed: true,
           buttonLabel: p.buttonLabel,
           claimedButtonLabel: p.claimedButtonLabel,
-          statusLabel: 'Claimed ✓',
+          statusLabel: t('promo_claimed_label'),
         ) : p,
       ).toList();
     });
@@ -227,37 +235,37 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (!seenTour) {
         if (!mounted) return;
         await CoachMarkPrefs.markTourSeen(_dashboardTourId);
+        final t = context.read<LocalizationService>().t;
         showCoachMarkTour(
           context,
           steps: [
-            const CoachMarkStep(
-              title: 'Welcome to Allin1! 👋',
-              description:
-                  'Everything Erode needs in one app — bike taxi, food delivery, grocery, tech store, and more. Quick tour of the basics?',
+            CoachMarkStep(
+              title: t('tour_welcome_title'),
+              description: t('tour_welcome_desc'),
             ),
             CoachMarkStep(
-              title: 'Home',
-              description: 'Book a taxi, order food/grocery, or ask for any custom service — all from here.',
+              title: t('nav_home_label'),
+              description: t('tour_home_desc'),
               targetKey: _navTabKeys[0],
             ),
             CoachMarkStep(
-              title: 'Rewards',
-              description: 'Answer quick quizzes to unlock real rewards like a free Paytm box or a Guru AI subscription.',
+              title: t('nav_rewards_label'),
+              description: t('tour_rewards_desc'),
               targetKey: _navTabKeys[1],
             ),
             CoachMarkStep(
-              title: 'Play Zone',
-              description: 'Play quick games like 2048 and Whack-a-Mole while you wait for your ride or order.',
+              title: t('nav_playzone_label'),
+              description: t('tour_playzone_desc'),
               targetKey: _navTabKeys[2],
             ),
             CoachMarkStep(
-              title: 'Guru AI',
-              description: 'Your AI assistant — ask it anything about booking, tracking, or the app in general.',
+              title: t('nav_guru_label'),
+              description: t('tour_guru_desc'),
               targetKey: _navTabKeys[3],
             ),
             CoachMarkStep(
-              title: 'Safety',
-              description: 'One-tap SOS emergency help, verified for real safety when you need it most.',
+              title: t('nav_safety_label'),
+              description: t('tour_safety_desc'),
               targetKey: _navTabKeys[4],
             ),
           ],
@@ -437,6 +445,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// current location" at the top clears that override and re-runs
   /// GPS detection immediately.
   Future<void> _showCityPicker() async {
+    final t = context.read<LocalizationService>().t;
     final selected = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.white,
@@ -450,11 +459,11 @@ class _DashboardScreenState extends State<DashboardScreen>
             const SizedBox(height: 12),
             Container(width: 40, height: 4, decoration: BoxDecoration(color: kMuted.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 16),
-            Text('Select City', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 16, color: kText)),
+            Text(t('select_city_title'), style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 16, color: kText)),
             const SizedBox(height: 8),
             ListTile(
               leading: Icon(Icons.my_location_rounded, color: kPink),
-              title: Text('Use my current location', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14)),
+              title: Text(t('use_current_location_label'), style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14)),
               onTap: () => Navigator.pop(ctx, '__auto__'),
             ),
             const Divider(height: 1),
@@ -592,25 +601,32 @@ class _DashboardScreenState extends State<DashboardScreen>
     // Settings -- this is what makes the theme switcher actually visible
     // on the home page instead of always showing pink & white.
     _syncDashboardPalette(context.watch<ThemeService>());
+    // Populated once from the active language on first build. A language
+    // switch afterwards only affects unclaimed cards on the next natural
+    // rebuild (e.g. reopening the Rewards tab) -- claimed status itself
+    // (rare, session-local) isn't persisted either way, matching the
+    // original English-only behavior.
+    _promoOffers ??= _localizedPromoOffers(context.watch<LocalizationService>().t);
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
         if (_navIndex != 0) { _goTab(0); return; }
+        final t = context.read<LocalizationService>().t;
         final exit = await showDialog<bool>(
           context: context,
           builder: (_) => AlertDialog(
             backgroundColor: kBg,
-            title: Text('Leave the app?',
+            title: Text(t('exit_app_title'),
                 style: GoogleFonts.outfit(
                     color: kText, fontWeight: FontWeight.w700)),
-            content: Text('Close Allin1?',
+            content: Text(t('exit_app_body'),
                 style: GoogleFonts.outfit(color: kMuted)),
             actions: [
               TextButton(onPressed: () => Navigator.pop(context, false),
-                  child: Text('No', style: TextStyle(color: kPink))),
+                  child: Text(t('no_label'), style: TextStyle(color: kPink))),
               TextButton(onPressed: () => Navigator.pop(context, true),
-                  child: Text('Yes', style: TextStyle(color: kRed))),
+                  child: Text(t('yes_label'), style: TextStyle(color: kRed))),
             ],
           ),
         );
@@ -636,7 +652,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 _visitedTabs.contains(1)
                     ? KeepAliveTab(
                         child: RewardsScreen(
-                          promoOffers: _promoOffers,
+                          promoOffers: _promoOffers!,
                           onClaimPromo: _claimPromo,
                         ),
                       )
@@ -755,17 +771,18 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _buildBottomNav() {
-    const items = [
+    final t = context.watch<LocalizationService>().t;
+    final items = [
       // FIX (per Nizam's request): the Home tab's icon slot now shows an
       // 'A1' text badge instead of a generic house glyph — reads as an
       // actual brand mark rather than a stock icon. 'icon' is left null
       // for this entry and handled as a special case below; the 'Home'
       // text label underneath is untouched.
-      {'icon': null,                          'label': 'Home'},
-      {'icon': Icons.card_giftcard_rounded,  'label': 'Rewards'},
-      {'icon': Icons.sports_esports_rounded, 'label': 'Play Zone'},
-      {'icon': Icons.smart_toy_rounded,      'label': 'Guru AI'},
-      {'icon': Icons.shield_rounded,         'label': 'Safety'},
+      {'icon': null,                          'label': t('nav_home_label')},
+      {'icon': Icons.card_giftcard_rounded,  'label': t('nav_rewards_label')},
+      {'icon': Icons.sports_esports_rounded, 'label': t('nav_playzone_label')},
+      {'icon': Icons.smart_toy_rounded,      'label': t('nav_guru_label')},
+      {'icon': Icons.shield_rounded,         'label': t('nav_safety_label')},
     ];
     return Container(
       decoration: BoxDecoration(
@@ -1623,6 +1640,7 @@ class _HomeTab extends StatelessWidget {
 
   // ── Featured Shop Card ─────────────────────────────────────────
   Widget _buildFeaturedShop(BuildContext context) {
+    final t = context.watch<LocalizationService>().t;
     return GestureDetector(
       onTap: () => Navigator.push<void>(context,
           MaterialPageRoute<void>(
@@ -1652,7 +1670,7 @@ class _HomeTab extends StatelessWidget {
           Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Text('★ Featured Shop',
+              Text(t('featured_shop_badge'),
                   style: TextStyle(color: kGold, fontSize: 10,
                       fontWeight: FontWeight.w700)),
               const Spacer(),
@@ -1660,15 +1678,15 @@ class _HomeTab extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
                   color: kGreen, borderRadius: BorderRadius.circular(6)),
-                child: const Text('Open', style: TextStyle(
+                child: Text(t('shop_open_label'), style: const TextStyle(
                     color: Colors.white, fontSize: 9,
                     fontWeight: FontWeight.w700)),
               ),
             ]),
             const SizedBox(height: 2),
-            Text('Erode Fresh', style: GoogleFonts.outfit(
+            Text(t('erode_fresh_name'), style: GoogleFonts.outfit(
                 color: kText, fontSize: 15, fontWeight: FontWeight.w800)),
-            Text('★★  · Fresh Groceries',
+            Text(t('erode_fresh_subtitle'),
                 style: TextStyle(color: kMuted, fontSize: 11)),
           ])),
           Icon(Icons.chevron_right_rounded, color: kMuted),
@@ -1679,6 +1697,7 @@ class _HomeTab extends StatelessWidget {
 
   // ── Promo Cards ────────────────────────────────────────────────
   Widget _buildPromoCards(BuildContext context) {
+    final t = context.watch<LocalizationService>().t;
     return Column(children: [
       GestureDetector(
         onTap: () => Navigator.push<void>(context,
@@ -1699,11 +1718,11 @@ class _HomeTab extends StatelessWidget {
               // copy — notoSansTamil exists to render Tamil glyphs, and
               // keeping it for English text just loads a font the app
               // doesn't otherwise need here.
-              Text('Your first ride is FREE!',
+              Text(t('promo_free_ride_title'),
                   style: GoogleFonts.outfit(
                       color: kPink, fontSize: 13, fontWeight: FontWeight.w700)),
               const SizedBox(height: 2),
-              Text('Book a Bike Taxi anywhere in Erode',
+              Text(t('promo_free_ride_subtitle'),
                   style: GoogleFonts.outfit(
                       color: Colors.white60, fontSize: 10)),
             ])),
@@ -1711,7 +1730,7 @@ class _HomeTab extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: kPink, borderRadius: BorderRadius.circular(10)),
-              child: Text('Book →', style: GoogleFonts.outfit(
+              child: Text(t('promo_book_label'), style: GoogleFonts.outfit(
                   color: Colors.white, fontSize: 11,
                   fontWeight: FontWeight.w700)),
             ),
@@ -1749,7 +1768,7 @@ class _HomeTab extends StatelessWidget {
             Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Text('Get your Guru AI subscription for 1yr free',
+                Text(t('promo_guru_title'),
                     style: GoogleFonts.outfit(
                         color: kText, fontSize: 12,
                         fontWeight: FontWeight.w700)),
@@ -1762,13 +1781,13 @@ class _HomeTab extends StatelessWidget {
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: kPurple.withValues(alpha: 0.4)),
                   ),
-                  child: Text('GURU', style: TextStyle(
+                  child: Text(t('promo_guru_badge'), style: TextStyle(
                       color: kPurple, fontSize: 8,
                       fontWeight: FontWeight.w800)),
                 ),
               ]),
               const SizedBox(height: 2),
-              Text('Visit NJ TECH to unlock the 1-year free Guru AI offer.',
+              Text(t('promo_guru_subtitle'),
                   style: TextStyle(color: kMuted, fontSize: 10)),
             ])),
             Icon(Icons.chevron_right_rounded, color: kMuted),
@@ -1789,6 +1808,7 @@ class _ProfileDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.watch<LocalizationService>().t;
     final name  = user?.displayName ?? 'Guest';
     final phone = user?.phoneNumber ?? 'Phone not added';
 
@@ -1837,17 +1857,17 @@ class _ProfileDrawer extends StatelessWidget {
               const SizedBox(height: 10),
 
               _drawerItem(context, Icons.person_outline_rounded,
-                  'My Profile', () => onNavigate(const ProfileScreen())),
+                  t('drawer_my_profile'), () => onNavigate(const ProfileScreen())),
 
               // Activity (Replaces standard history)
               _drawerItem(context, Icons.local_activity_outlined,
-                  'Activity', () => onNavigate(const RideHistoryScreen())),
+                  t('drawer_activity'), () => onNavigate(const RideHistoryScreen())),
 
               _drawerItem(context, Icons.settings_outlined,
-                  'Settings', () => onNavigate(const SettingsScreen())),
+                  t('drawer_settings'), () => onNavigate(const SettingsScreen())),
 
               _drawerItem(context, Icons.support_agent_rounded,
-                  'Help & WhatsApp Support', () async {
+                  t('drawer_help_whatsapp'), () async {
                 final url = Uri.parse("https://wa.me/918681869091?text=${Uri.encodeComponent('Hi NJ Tech! I need some help from the app.')}");
                 if (await canLaunchUrl(url)) {
                   await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -1862,7 +1882,7 @@ class _ProfileDrawer extends StatelessWidget {
               // caught up yet.
               if (kIsWeb)
                 _drawerItem(context, Icons.system_update_alt_rounded,
-                    'Check for update', () {
+                    t('drawer_check_update'), () {
                   Navigator.pop(context);
                   unawaited(_runManualUpdateCheck(context));
                 }),
@@ -1895,9 +1915,9 @@ class _ProfileDrawer extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Download the App!', style: GoogleFonts.outfit(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
+                              Text(t('drawer_download_app_title'), style: GoogleFonts.outfit(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
                               const SizedBox(height: 2),
-                              const Text('Get the app & run 10x faster!', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                              Text(t('drawer_download_app_subtitle'), style: const TextStyle(color: Colors.white70, fontSize: 10)),
                             ],
                           ),
                         ),
@@ -1917,7 +1937,7 @@ class _ProfileDrawer extends StatelessWidget {
               const SizedBox(height: 10),
 
               _drawerItem(context, Icons.logout_rounded,
-                  'Sign Out / Logout', () async {
+                  t('drawer_sign_out'), () async {
                 await LocalSyncService.instance.clearAll();
                 await HiveCache.clearAll();
                 await PrefsCache.clearAll();
@@ -1929,7 +1949,7 @@ class _ProfileDrawer extends StatelessWidget {
           // Version Info at bottom
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Text('Allin1 Super App v1.0.0',
+            child: Text(t('app_version_footer'),
               style: TextStyle(color: kMuted.withValues(alpha: 0.5), fontSize: 10, fontWeight: FontWeight.bold)
             ),
           ),
@@ -1957,10 +1977,11 @@ class _ProfileDrawer extends StatelessWidget {
 // CHECK FOR UPDATES
 // ================================================================
 Future<void> _checkForUpdates(BuildContext context) async {
+  final t = context.read<LocalizationService>().t;
   final navigator = Navigator.of(context, rootNavigator: true);
   final msg = kIsWeb
-      ? 'Please wait, app is updating...'
-      : 'Checking for updates...';
+      ? t('app_updating_msg')
+      : t('checking_updates_msg');
 
   showDialog<void>(
     context: navigator.context,
@@ -2007,19 +2028,19 @@ Future<void> _checkForUpdates(BuildContext context) async {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(children: [
           const Text('✅ ', style: TextStyle(fontSize: 20)),
-          Text('Up to Date',
+          Text(t('up_to_date_title'),
               style: GoogleFonts.outfit(
                   color: Colors.white, fontSize: 16,
                   fontWeight: FontWeight.w800)),
         ]),
         content: Text(
-          'App is up to date!\nBackground updates are active via Shorebird OTA.',
+          t('up_to_date_body'),
           style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13),
         ),
         actions: [
           TextButton(
             onPressed: () => navigator.pop(),
-            child: Text('Got it', style: TextStyle(color: kPink)),
+            child: Text(t('got_it_label'), style: TextStyle(color: kPink)),
           ),
         ],
       ),
@@ -2043,6 +2064,7 @@ Future<void> _clearPwaCacheAndReload() async {
 // reloading is exactly what the automatic UPDATE button does, so both
 // paths land the customer in the same place with the same code.
 Future<void> _runManualUpdateCheck(BuildContext context) async {
+  final t = context.read<LocalizationService>().t;
   final navigator = Navigator.of(context, rootNavigator: true);
 
   // Non-dismissible: the reload happens under this dialog, and letting
@@ -2062,10 +2084,10 @@ Future<void> _runManualUpdateCheck(BuildContext context) async {
             child: CircularProgressIndicator(strokeWidth: 2.4, color: kPink),
           ),
           const SizedBox(width: 18),
-          const Flexible(
+          Flexible(
             child: Text(
-              'Checking for updates...',
-              style: TextStyle(color: Colors.white, fontSize: 14),
+              t('checking_updates_msg'),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
             ),
           ),
         ],
@@ -2082,9 +2104,9 @@ Future<void> _runManualUpdateCheck(BuildContext context) async {
   if (!WebVersionChecker.instance.isUpdateAvailable) {
     navigator.pop();
     ScaffoldMessenger.of(navigator.context).showSnackBar(
-      const SnackBar(
-        content: Text("You're already on the latest version"),
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(t('already_latest_version_snack')),
+        duration: const Duration(seconds: 2),
       ),
     );
     return;
@@ -2108,10 +2130,10 @@ Future<void> _runManualUpdateCheck(BuildContext context) async {
             child: CircularProgressIndicator(strokeWidth: 2.4, color: kPink),
           ),
           const SizedBox(width: 18),
-          const Flexible(
+          Flexible(
             child: Text(
-              'Updating the app...',
-              style: TextStyle(color: Colors.white, fontSize: 14),
+              t('updating_app_msg'),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
             ),
           ),
         ],
@@ -2145,6 +2167,7 @@ Future<void> _runManualUpdateCheck(BuildContext context) async {
 // timing out into this same cache-clear-and-reload four seconds later.
 // Doing it directly is the same result without the dead wait.
 Future<void> _applyPwaUpdate(BuildContext context) async {
+  final t = context.read<LocalizationService>().t;
   final navigator = Navigator.of(context, rootNavigator: true);
 
   showDialog<void>(
@@ -2162,7 +2185,7 @@ Future<void> _applyPwaUpdate(BuildContext context) async {
               valueColor: AlwaysStoppedAnimation<Color>(kPink)),
         ),
         const SizedBox(height: 20),
-        Text('Please wait, app is updating...',
+        Text(t('app_updating_msg'),
             textAlign: TextAlign.center,
             style: GoogleFonts.outfit(
                 color: Colors.white, fontSize: 14,
@@ -2191,8 +2214,9 @@ Future<void> _applyPwaUpdate(BuildContext context) async {
 // old always-on button's "Up to Date / Shorebird OTA" placeholder
 // message, which never actually offered a real update.
 Future<void> _applyNativeAppUpdate(BuildContext context) async {
+  final t = context.read<LocalizationService>().t;
   ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text('Downloading update...')),
+    SnackBar(content: Text(t('downloading_update_snack'))),
   );
   try {
     await AppUpdateChecker().downloadAndInstall(appVariant: 'customer');
@@ -2212,19 +2236,20 @@ Future<void> _applyNativeAppUpdate(BuildContext context) async {
 // app (copy the link, open in the system browser manually) instead of
 // a dead tap with no explanation.
 void _showDownloadFailedDialog(BuildContext context, String url) {
+  final t = context.read<LocalizationService>().t;
   showDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
       backgroundColor: const Color(0xFF1A1A26),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text('Couldn\'t start download', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+      title: Text(t('download_failed_title'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Your browser blocked the direct download. Copy this link and open it in Chrome instead:',
-            style: TextStyle(color: Colors.white70, fontSize: 13),
+          Text(
+            t('download_failed_body'),
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 12),
           SelectableText(url, style: const TextStyle(color: Colors.white, fontSize: 12)),
@@ -2236,15 +2261,15 @@ void _showDownloadFailedDialog(BuildContext context, String url) {
             await Clipboard.setData(ClipboardData(text: url));
             if (ctx.mounted) {
               ScaffoldMessenger.of(ctx).showSnackBar(
-                const SnackBar(content: Text('Link copied')),
+                SnackBar(content: Text(t('link_copied_snack'))),
               );
             }
           },
-          child: const Text('Copy Link', style: TextStyle(color: Colors.white70)),
+          child: Text(t('copy_link_label'), style: const TextStyle(color: Colors.white70)),
         ),
         TextButton(
           onPressed: () => Navigator.pop(ctx),
-          child: const Text('Close', style: TextStyle(color: Colors.white38)),
+          child: Text(t('close_label'), style: const TextStyle(color: Colors.white38)),
         ),
       ],
     ),
@@ -2255,6 +2280,7 @@ void _showDownloadFailedDialog(BuildContext context, String url) {
 // APK DOWNLOAD SHEET
 // ================================================================
 void _showApkSheet(BuildContext context) {
+  final t = context.read<LocalizationService>().t;
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
@@ -2273,7 +2299,7 @@ void _showApkSheet(BuildContext context) {
                 color: Colors.white24,
                 borderRadius: BorderRadius.circular(2))),
         const SizedBox(height: 16),
-        Text('📲 Download NJ TECH Apps',
+        Text(t('apk_sheet_title'),
             style: GoogleFonts.outfit(
                 color: Colors.white, fontSize: 15,
                 fontWeight: FontWeight.w800)),
@@ -2286,22 +2312,22 @@ void _showApkSheet(BuildContext context) {
         // hardcoded copy.
         _apkBtn(
           context: context,
-          label: '🛒  Download Customer App',
+          label: t('download_customer_app_label'),
           gradient: [kPink, kPinkDark],
           url: UpdateService().fallbackApkUrl('customer'),
         ),
         const SizedBox(height: 10),
         _apkBtn(
           context: context,
-          label: '🏍️  Download Hero App',
+          label: t('download_hero_app_label'),
           gradient: [kPurple, const Color(0xFF5A50C8)],
           url: UpdateService().fallbackApkUrl('hero'),
         ),
         const SizedBox(height: 16),
         GestureDetector(
           onTap: () => Navigator.pop(context),
-          child: const Text('Dismiss',
-              style: TextStyle(color: Colors.white38, fontSize: 12)),
+          child: Text(t('dismiss_label'),
+              style: const TextStyle(color: Colors.white38, fontSize: 12)),
         ),
       ]),
     ),
@@ -2392,6 +2418,7 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.watch<LocalizationService>().t;
     return Scaffold(
       backgroundColor: kNJDark,
       appBar: AppBar(
@@ -2423,7 +2450,7 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
           IconButton(
             icon: Icon(Icons.refresh_rounded, color: kPink),
             onPressed: _openInApp,
-            tooltip: 'Reload',
+            tooltip: t('reload_tooltip'),
           ),
         ],
       ),
@@ -2432,7 +2459,7 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
             ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                 CircularProgressIndicator(color: kPink),
                 const SizedBox(height: 20),
-                Text('Opening Erode Fiber...',
+                Text(t('opening_erode_fiber_msg'),
                     style: GoogleFonts.outfit(
                         color: Colors.white70, fontSize: 14)),
               ])
@@ -2440,12 +2467,12 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
                 ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                     const Text('🌐', style: TextStyle(fontSize: 56)),
                     const SizedBox(height: 16),
-                    Text('Erode Fiber is open!',
+                    Text(t('erode_fiber_open_title'),
                         style: GoogleFonts.outfit(
                             color: Colors.white,
                             fontSize: 20, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 8),
-                    Text('The site loaded in-app above.',
+                    Text(t('erode_fiber_open_subtitle'),
                         style: GoogleFonts.outfit(
                             color: Colors.white54, fontSize: 13)),
                     const SizedBox(height: 28),
@@ -2461,7 +2488,7 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
                               color: kPink.withValues(alpha: 0.4),
                               blurRadius: 12)],
                         ),
-                        child: Text('← Back to Dashboard',
+                        child: Text(t('back_to_dashboard_label'),
                             style: GoogleFonts.outfit(
                                 color: Colors.white, fontSize: 14,
                                 fontWeight: FontWeight.w700)),
@@ -2472,12 +2499,12 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
                     const Icon(Icons.wifi_off_rounded,
                         color: Colors.white38, size: 56),
                     const SizedBox(height: 16),
-                    Text('Could not open in-app',
+                    Text(t('could_not_open_inapp_title'),
                         style: GoogleFonts.outfit(
                             color: Colors.white, fontSize: 18,
                             fontWeight: FontWeight.w700)),
                     const SizedBox(height: 8),
-                    Text('Check internet and try again.',
+                    Text(t('check_internet_retry_subtitle'),
                         style: GoogleFonts.outfit(
                             color: Colors.white54, fontSize: 13)),
                     const SizedBox(height: 20),
@@ -2490,7 +2517,7 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
                           color: kPink,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Text('Try Again',
+                        child: Text(t('try_again_label'),
                             style: GoogleFonts.outfit(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w700)),
@@ -2524,10 +2551,11 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.watch<LocalizationService>().t;
     // Single universal reward — no random selection, no wallet/coin credit.
     const emoji = '🎉';
-    const title = 'You won a Paytm Soundbox!';
-    const subtitle = 'Tap below to claim your reward';
+    final title = t('scratch_reward_title');
+    final subtitle = t('scratch_reward_subtitle');
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 32),
       decoration: BoxDecoration(
@@ -2548,7 +2576,7 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: kGold.withValues(alpha: 0.5)),
               ),
-              child: Text('🎰 DAILY SCRATCH',
+              child: Text(t('daily_scratch_badge'),
                   style: GoogleFonts.outfit(
                       color: kGold, fontSize: 10, fontWeight: FontWeight.w800,
                       letterSpacing: 0.5)),
@@ -2568,7 +2596,7 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
             ),
           ]),
         ),
-        Text('Scratch to reveal your gift!',
+        Text(t('scratch_reveal_hint'),
             style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13)),
         const SizedBox(height: 16),
         Padding(
@@ -2623,7 +2651,7 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
           ),
         ),
         const SizedBox(height: 6),
-        Text(_revealed ? '🎊 Revealed!' : 'Keep scratching...',
+        Text(_revealed ? t('scratch_revealed_label') : t('scratch_keep_going_label'),
             style: GoogleFonts.outfit(
                 color: _revealed ? kGreen : Colors.white38,
                 fontSize: 11, fontWeight: FontWeight.w600)),
@@ -2644,7 +2672,7 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
                         color: kGold.withValues(alpha: 0.4),
                         blurRadius: 10)],
                   ),
-                  child: Center(child: Text('📞 Call to Claim',
+                  child: Center(child: Text(t('call_to_claim_label'),
                       style: GoogleFonts.outfit(
                           color: Colors.black,
                           fontSize: 15, fontWeight: FontWeight.w800))),
@@ -2681,6 +2709,7 @@ class _GlowingUpdateButtonState extends State<_GlowingUpdateButton> with SingleT
   void dispose() { _ctrl.dispose(); super.dispose(); }
   @override
   Widget build(BuildContext context) {
+    final t = context.watch<LocalizationService>().t;
     return AnimatedBuilder(
       animation: _glow,
       builder: (context, child) {
@@ -2701,7 +2730,7 @@ class _GlowingUpdateButtonState extends State<_GlowingUpdateButton> with SingleT
               children: [
                 const Icon(Icons.system_update_alt_rounded, color: Colors.black, size: 12),
                 const SizedBox(width: 4),
-                Text('UPDATE', style: GoogleFonts.outfit(color: Colors.black, fontSize: 10, fontWeight: FontWeight.w900)),
+                Text(t('update_badge_label'), style: GoogleFonts.outfit(color: Colors.black, fontSize: 10, fontWeight: FontWeight.w900)),
               ],
             ),
           ),
@@ -2744,31 +2773,48 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
   int _currentIndex = 0;
   Timer? _autoScrollTimer;
 
-  final List<_CategorySlideData> _slides = const [
-    _CategorySlideData(title: '🚕 Taxi & Transport', icons: [
+  // Fixed count regardless of language -- used by the auto-scroll timer,
+  // which fires before/independent of any given build() and can't call
+  // t() itself. The actual translated titles are built fresh in build()
+  // via _buildSlides() below so they follow the active language.
+  static const int _slideCount = 4;
+
+  static const List<List<String>> _slideIcons = [
+    [
       FluentEmojiFlat.motor_scooter, FluentEmojiFlat.package, FluentEmojiFlat.auto_rickshaw,
       FluentEmojiFlat.oncoming_taxi, FluentEmojiFlat.delivery_truck, FluentEmojiFlat.bicycle,
-    ]),
-    _CategorySlideData(title: '🍔 Food Delivery', icons: [
+    ],
+    [
       FluentEmojiFlat.hamburger, FluentEmojiFlat.pizza, FluentEmojiFlat.chicken,
       FluentEmojiFlat.french_fries, FluentEmojiFlat.cup_with_straw, FluentEmojiFlat.shortcake,
-    ]),
-    _CategorySlideData(title: '🛒 Groceries', icons: [
+    ],
+    [
       FluentEmojiFlat.leafy_green, FluentEmojiFlat.red_apple, FluentEmojiFlat.carrot,
       FluentEmojiFlat.onion, FluentEmojiFlat.garlic, FluentEmojiFlat.shopping_cart,
-    ]),
-    _CategorySlideData(title: '🔧 Services', icons: [
+    ],
+    [
       FluentEmojiFlat.mobile_phone, FluentEmojiFlat.laptop, FluentEmojiFlat.battery,
       FluentEmojiFlat.antenna_bars, FluentEmojiFlat.hammer_and_wrench, FluentEmojiFlat.delivery_truck,
-    ]),
+    ],
   ];
+
+  List<_CategorySlideData> _buildSlides(String Function(String) t) {
+    const titleKeys = [
+      'category_taxi_slide',
+      'category_food_slide',
+      'category_grocery_slide',
+      'category_services_slide',
+    ];
+    return List.generate(_slideCount, (i) =>
+        _CategorySlideData(title: t(titleKeys[i]), icons: _slideIcons[i]));
+  }
 
   @override
   void initState() {
     super.initState();
     _autoScrollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (_pageController.hasClients) {
-        final nextPage = (_currentIndex + 1) % _slides.length;
+        final nextPage = (_currentIndex + 1) % _slideCount;
         _pageController.animateToPage(nextPage, duration: const Duration(milliseconds: 600), curve: Curves.easeInOut);
       }
     });
@@ -2783,6 +2829,8 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.watch<LocalizationService>().t;
+    final slides = _buildSlides(t);
     return Column(
       children: [
         Container(
@@ -2791,9 +2839,9 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
           child: PageView.builder(
             controller: _pageController,
             onPageChanged: (index) => setState(() => _currentIndex = index),
-            itemCount: _slides.length,
+            itemCount: slides.length,
             itemBuilder: (_, i) {
-              final slide = _slides[i];
+              final slide = slides[i];
               return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
@@ -2820,7 +2868,7 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(
-            _slides.length,
+            slides.length,
             (index) => Container(
               margin: const EdgeInsets.symmetric(horizontal: 4),
               width: 6, height: 6,
