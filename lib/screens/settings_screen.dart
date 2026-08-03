@@ -170,6 +170,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       {'code': 'ta', 'name': 'Tamil'},
       {'code': 'tg', 'name': 'Thanglish'},
       {'code': 'hi', 'name': 'Hindi'},
+      {'code': 'ml', 'name': 'Malayalam'},
     ];
     for (final lang in languages) {
       if (lang['code'] == code) return lang['name']!;
@@ -188,6 +189,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     _syncSettingsPalette(context);
+    // i18n (Nizam's phase 1 request): `watch` so the whole Settings page
+    // repaints instantly the moment the customer picks a new language
+    // in the picker below -- no restart needed, same live-update
+    // mechanism the theme switcher already uses.
+    final t = context.watch<LocalizationService>().t;
     // FIX: this screen is shared -- Admin app also navigates here (see
     // admin_dashboard_screen.dart / super_admin_home_screen.dart) but
     // never provides ThemeService, so the previous unconditional
@@ -219,7 +225,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Settings',
+          t('settings_title'),
           style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w600),
         ),
       ),
@@ -228,13 +234,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionHeader('Notifications'),
+            _buildSectionHeader(t('notifications_section')),
             const SizedBox(height: 12),
-            _buildNotificationSettings(),
+            _buildNotificationSettings(t),
             const SizedBox(height: 28),
-            _buildSectionHeader('Preferences'),
+            _buildSectionHeader(t('preferences_section')),
             const SizedBox(height: 12),
-            _buildPreferenceSettings(themeService),
+            _buildPreferenceSettings(themeService, t),
             const SizedBox(height: 28),
             // FIX (per Nizam's explicit request): removed the "Guru AI"
             // settings section here — it let customers paste their OWN
@@ -246,19 +252,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // manual admin step should ever be visible to customers, and
             // letting them self-serve their own key defeated the entire
             // point of it being an admin-controlled reward.
-            _buildSectionHeader('🗺️ Map Provider'),
+            _buildSectionHeader('🗺️ ${t('map_provider_section')}'),
             const SizedBox(height: 12),
             _buildMapProviderSettings(),
             const SizedBox(height: 28),
-            _buildSectionHeader('Language & Region'),
+            _buildSectionHeader(t('language_region_section')),
             const SizedBox(height: 12),
-            _buildLanguageSettings(),
+            _buildLanguageSettings(t),
             const SizedBox(height: 28),
-            _buildSectionHeader('Privacy & Security'),
+            _buildSectionHeader(t('privacy_security_section')),
             const SizedBox(height: 12),
             _buildPrivacySettings(),
             const SizedBox(height: 28),
-            _buildSectionHeader('About'),
+            _buildSectionHeader(t('about_section')),
             const SizedBox(height: 12),
             _buildAboutSection(),
             const SizedBox(height: 40),
@@ -281,7 +287,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildNotificationSettings() {
+  Widget _buildNotificationSettings(String Function(String) t) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: kCard2,
@@ -292,8 +298,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           _buildSwitchTile(
             icon: Icons.notifications_outlined,
-            title: 'Push Notifications',
-            subtitle: 'Receive push notifications',
+            title: t('push_notifications_title'),
+            subtitle: t('push_notifications_subtitle'),
             value: _notificationsEnabled,
             onChanged: (v) {
               if (!mounted) return;
@@ -304,8 +310,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildDivider(),
           _buildSwitchTile(
             icon: Icons.directions_car_outlined,
-            title: 'Ride Alerts',
-            subtitle: 'Get updates about your rides',
+            title: t('ride_alerts_title'),
+            subtitle: t('ride_alerts_subtitle'),
             value: _rideAlertsEnabled,
             onChanged: (v) {
               if (!mounted) return;
@@ -316,8 +322,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildDivider(),
           _buildSwitchTile(
             icon: Icons.campaign_outlined,
-            title: 'Promotional Alerts',
-            subtitle: 'Offers and deals',
+            title: t('promotional_alerts_title'),
+            subtitle: t('promotional_alerts_subtitle'),
             value: _promotionalAlerts,
             onChanged: (v) {
               if (!mounted) return;
@@ -330,7 +336,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildPreferenceSettings(ThemeService? themeService) {
+  Widget _buildPreferenceSettings(ThemeService? themeService, String Function(String) t) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: kCard2,
@@ -341,8 +347,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           _buildSwitchTile(
             icon: Icons.location_on_outlined,
-            title: 'Location Services',
-            subtitle: 'Allow app to access location',
+            title: t('location_services_title'),
+            subtitle: t('location_services_subtitle'),
             value: _locationEnabled,
             onChanged: (v) {
               if (!mounted) return;
@@ -353,8 +359,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildDivider(),
           _buildSwitchTile(
             icon: Icons.fingerprint,
-            title: 'Biometric Login',
-            subtitle: 'Use fingerprint for quick login',
+            title: t('biometric_login_title'),
+            subtitle: t('biometric_login_subtitle'),
             value: _biometricEnabled,
             onChanged: (v) {
               if (!mounted) return;
@@ -365,21 +371,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildDivider(),
           _buildSwitchTile(
             icon: Icons.dark_mode_outlined,
-            title: 'Dark Mode',
-            subtitle: 'Dark theme is currently active',
+            title: t('dark_mode_title'),
+            subtitle: t('dark_mode_subtitle'),
             value: _darkModeEnabled,
             onChanged: null,
           ),
           if (themeService != null) ...[
             _buildDivider(),
-            _buildThemeTile(themeService),
+            _buildThemeTile(themeService, t),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildThemeTile(ThemeService themeService) {
+  Widget _buildThemeTile(ThemeService themeService, String Function(String) t) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
@@ -398,7 +404,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Theme',
+                  t('theme_title'),
                   style: GoogleFonts.outfit(
                     color: kText,
                     fontSize: 15,
@@ -406,7 +412,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 Text(
-                  'Pick your favourite look',
+                  t('theme_subtitle'),
                   style: GoogleFonts.outfit(
                     color: kMuted,
                     fontSize: 12,
@@ -541,7 +547,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 
 
-  Widget _buildLanguageSettings() {
+  Widget _buildLanguageSettings(String Function(String) t) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: kCard2,
@@ -552,7 +558,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           _buildTapTile(
             icon: Icons.language,
-            title: 'Language',
+            title: t('language_label'),
             subtitle: _selectedLanguage,
             onTap: _showLanguagePicker,
           ),
@@ -847,7 +853,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // Codes match LocalizationService's translation-map keys directly
-  // (en/ta/tg/hi) — see localization_service.dart.
+  // (en/ta/tg/hi/ml) — see localization_service.dart.
   static const List<Map<String, String>> _languages = [
     {
       'code': 'en',
@@ -873,10 +879,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'emoji': 'HI',
       'desc': 'हिन्दी में सब कुछ',
     },
+    {
+      'code': 'ml',
+      'name': 'Malayalam',
+      'emoji': 'ML',
+      'desc': 'എല്ലാം മലയാളത്തിൽ',
+    },
   ];
 
   void _showLanguagePicker() {
     const List<Map<String, String>> langs = _languages;
+    final t = context.read<LocalizationService>().t;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: kCard2,
@@ -906,7 +919,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Icon(Icons.language_rounded, color: kGold, size: 22),
                 const SizedBox(width: 8),
                 Text(
-                  'Language / Mozhi',
+                  t('language_picker_title'),
                   style: GoogleFonts.outfit(
                     color: kText,
                     fontSize: 18,
@@ -917,7 +930,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              'App text style select pannunga',
+              t('language_picker_subtitle'),
               style: GoogleFonts.outfit(color: kMuted, fontSize: 11),
             ),
             const SizedBox(height: 20),
