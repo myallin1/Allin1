@@ -1970,7 +1970,7 @@ Future<void> _checkForUpdates(BuildContext context) async {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
         const SizedBox(height: 8),
-        const SizedBox(
+        SizedBox(
           width: 48, height: 48,
           child: CircularProgressIndicator(
               strokeWidth: 3,
@@ -2155,7 +2155,7 @@ Future<void> _applyPwaUpdate(BuildContext context) async {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
         const SizedBox(height: 8),
-        const SizedBox(
+        SizedBox(
           width: 48, height: 48,
           child: CircularProgressIndicator(
               strokeWidth: 3,
