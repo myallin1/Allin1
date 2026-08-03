@@ -416,9 +416,13 @@ class _PaymentScreenState extends State<PaymentScreen>
     if (!mounted) {
       return;
     }
+    // Keep the dashboard (first route) so back-press from BikeBookingScreen
+    // returns to the dashboard's own tabs/exit-confirm instead of making
+    // BikeBookingScreen the new stack root (which was causing back to hit
+    // an unexpected "Leave the app?" prompt right after payment/rating).
     await Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const BikeBookingScreen()),
-      (route) => false,
+      (route) => route.isFirst,
     );
   }
 
