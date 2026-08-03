@@ -550,12 +550,6 @@ class _CustomerHomeGate extends StatefulWidget {
 class _CustomerHomeGateState extends State<_CustomerHomeGate> {
   String? _lastUid;
 
-  // Same shared design SplashSetupScreen and _IntroGate use — see
-  // branded_loading_screen.dart. This screen's own copy of the design
-  // used to be the ONLY place with this exact look; now it's the
-  // single source of truth for it.
-  Widget _buildLoadingScaffold() => const BrandedLoadingScreen();
-
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
@@ -574,8 +568,20 @@ class _CustomerHomeGateState extends State<_CustomerHomeGate> {
           });
         }
 
+        // FIX (Instant Launch): this used to show a full-screen
+        // BrandedLoadingScreen here while waiting for the FIRST
+        // authStateChanges() emission, and again below while the
+        // Firestore profile-setup check was in flight with no local
+        // cache -- both are network-bound waits that could take a
+        // visible moment on a cold start / PWA resume, during which the
+        // customer saw nothing but a spinner. The Dashboard renders
+        // instantly and optimistically now in both cases; if the
+        // profile-setup check below determines this account genuinely
+        // still needs onboarding, it swaps to ProfileSetupScreen once
+        // that resolves (a one-time, rare-case redirect for brand-new
+        // sign-ups, not something a returning customer will ever see).
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildLoadingScaffold();
+          return const DashboardScreen();
         }
 
         if (!(snapshot.hasData && user != null)) {
@@ -596,10 +602,11 @@ class _CustomerHomeGateState extends State<_CustomerHomeGate> {
                   .doc(user.uid)
                   .get()),
           builder: (context, userSnapshot) {
-            // Only show spinner on genuine first-ever cold start (no cache)
+            // Still resolving (typically only a genuine first-ever cold
+            // start with no cache) -- show the Dashboard, not a spinner.
             if (userSnapshot.connectionState == ConnectionState.waiting &&
                 !userSnapshot.hasData) {
-              return _buildLoadingScaffold();
+              return const DashboardScreen();
             }
 
             final userData = userSnapshot.data?.data() ?? <String, dynamic>{};

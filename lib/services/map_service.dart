@@ -97,9 +97,22 @@ class MapService extends ChangeNotifier {
     }
   }
 
-  Future<void> initialize() async {
-    if (_isInitialized) return;
+  // FIX (Instant Launch): initialize() previously had no in-flight guard,
+  // just an `if (_isInitialized) return` checked once up front. If two
+  // callers invoked it concurrently before the first one finished (e.g.
+  // main()'s background warm-up racing SplashSetupScreen, both of which
+  // call this), the second caller would start a whole second Ola Maps
+  // network availability check (up to another 5s timeout) instead of
+  // just waiting on the first one. Caching the in-flight Future makes
+  // every concurrent caller await the SAME network round-trip.
+  Future<void>? _initFuture;
 
+  Future<void> initialize() {
+    if (_isInitialized) return Future.value();
+    return _initFuture ??= _doInitialize();
+  }
+
+  Future<void> _doInitialize() async {
     // Guarantee .env is loaded before ANY provider is constructed or any
     // API key is read. Idempotent and race-safe, so it is correct no
     // matter which entrypoint reaches initialize() first — this is what
