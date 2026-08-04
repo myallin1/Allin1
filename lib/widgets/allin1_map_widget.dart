@@ -178,12 +178,23 @@ Future<vmt.Style?> _loadOlaVectorStyle() {
 // app launch still re-hit Ola's network API twice (style.json + source
 // TileJSON) before it could render a single (already-cached) tile.
 // Fix: persist the RESOLVED style JSON + per-source tile URL templates
-// (the only two things a fresh vmt.Style needs) to disk via HiveCache
-// with a 7-day TTL. On a cache hit, this function does zero network
-// calls -- it rebuilds the same vmt.Style purely from the cached JSON,
-// which is fast (sync JSON parsing), local, and free.
+// (the only two things a fresh vmt.Style needs) to disk via HiveCache.
+// On a cache hit, this function does zero network calls -- it rebuilds
+// the same vmt.Style purely from the cached JSON, which is fast (sync
+// JSON parsing), local, and free.
+//
+// INFINITE CACHE-FIRST (per Nizam/CTO decision): no expiry timer here on
+// purpose. Ola's style rarely changes, and a TTL only exists to force a
+// re-fetch we don't want -- every unnecessary re-fetch burns Ola API
+// quota for zero user-visible benefit. The policy is simply: if the
+// cache has it, serve it forever, no network, no questions asked; if the
+// cache is empty (fresh install or the user cleared app storage), fetch
+// once and cache it permanently. HiveCache.put() requires a TTL
+// argument, so this uses a 100-year duration as "effectively forever"
+// rather than special-casing HiveCache itself (which other callers still
+// rely on for real, intentional expiry).
 const _kOlaStyleCacheKey = 'ola_vector_style_resolved_v1';
-const _kOlaStyleCacheTtl = Duration(days: 7);
+const _kOlaStyleCacheTtl = Duration(days: 36500);
 
 Future<vmt.Style> _buildOlaStyleManually(String apiKey) async {
   final cached = await HiveCache.get<Map>(_kOlaStyleCacheKey);
@@ -615,14 +626,24 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
                     // reused across ENTIRE APP RESTARTS, not just this
                     // session, and any tile still within fileCacheTtl is
                     // served straight from that store with zero network
-                    // call to Ola. Default was 30 days / 50MB; bumped to
-                    // 180 days / 150MB so a hero/customer's regular
-                    // Erode-area tiles realistically never re-fetch, while
-                    // still bounding worst-case storage if someone
-                    // explores many different cities. logCacheStats is
-                    // debug-only so we can see hit/miss counts locally
-                    // without spamming production consoles.
-                    fileCacheTtl: const Duration(days: 180),
+                    // call to Ola.
+                    //
+                    // INFINITE CACHE-FIRST (per Nizam/CTO decision): no
+                    // expiry timer, on purpose -- Erode's streets don't
+                    // change often enough to justify burning Ola API
+                    // quota on a re-fetch nobody asked for. Policy is
+                    // cache-first, forever: if a tile is already on disk,
+                    // serve it with zero network calls, no matter how
+                    // old; only a fresh install or the user manually
+                    // clearing app storage empties the cache and triggers
+                    // a real fetch. The package's fileCacheTtl parameter
+                    // has no explicit "infinite" value, so this uses a
+                    // 100-year duration as effectively forever. The
+                    // 150MB size cap stays -- that's a storage-footprint
+                    // bound, not an expiry policy, so it still protects
+                    // against unbounded disk growth if someone explores
+                    // many different cities.
+                    fileCacheTtl: const Duration(days: 36500),
                     fileCacheMaximumSizeInBytes: 150 * 1024 * 1024,
                     logCacheStats: kDebugMode,
                   )
