@@ -548,14 +548,22 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   }
 
   // ── Trip Actions ─────────────────────────────────────────────
+  // FIX (Phase 4a, WhatsApp/Uber-model active-ride migration): 'arrived'
+  // used to be a Firestore .update() on every single tap -- billed as a
+  // write PLUS a read on every customer/admin screen with a live
+  // .snapshots() listener open on this doc at that moment. Now writes
+  // straight to RTDB's active_rides/{rideDocId} node instead (same node
+  // _startTrip() below writes to, same one _completeTrip() deletes on
+  // final completion). Firestore's rides doc is untouched until the
+  // trip actually completes.
   Future<void> _arriveTrip() async {
     try {
-      await FirebaseFirestore.instance
-          .collection('rides')
-          .doc(widget.rideDocId)
+      await FirebaseDatabase.instance
+          .ref('active_rides/${widget.rideDocId}')
           .update({
         'status': 'arrived',
-        'arrivedAt': FieldValue.serverTimestamp(),
+        'arrivedAt': ServerValue.timestamp,
+        'updatedAt': ServerValue.timestamp,
       });
       if (mounted) {
         setState(() => _rideStatus = 'arrived');
@@ -594,13 +602,18 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
     }
     setState(() => _verifyingOtp = true);
     try {
-      await FirebaseFirestore.instance
-          .collection('rides')
-          .doc(widget.rideDocId)
+      // FIX (Phase 4a): same migration as _arriveTrip() above --
+      // 'in_progress' is a rapid, mid-ride transition, not a billing
+      // record, so it belongs in RTDB, not Firestore. rideOtpVerifiedAt
+      // moves with it since it's just a timestamp on the same transient
+      // transition, not something admin billing reports read.
+      await FirebaseDatabase.instance
+          .ref('active_rides/${widget.rideDocId}')
           .update({
         'status': 'in_progress',
-        'startedAt': FieldValue.serverTimestamp(),
-        'rideOtpVerifiedAt': FieldValue.serverTimestamp(),
+        'startedAt': ServerValue.timestamp,
+        'rideOtpVerifiedAt': ServerValue.timestamp,
+        'updatedAt': ServerValue.timestamp,
       });
       if (mounted) {
         setState(() => _verifyingOtp = false);
@@ -746,11 +759,43 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       const double commission = 0;
       final double netEarnings = fare;
       const double adminCommission = 0;
+
+      // FIX (Phase 4a): arrivedAt/startedAt now live only in RTDB's
+      // active_rides/{rideDocId} node (see _arriveTrip()/_startTrip()
+      // above) while the ride is in progress, and that node gets
+      // deleted right below once this trip is done -- so this is the
+      // last moment either timestamp is readable. Pull them into the
+      // FINAL Firestore write here so the permanent billing/history
+      // record for this ride still has a complete timeline, exactly as
+      // it did before this migration.
+      final activeRideRef =
+          FirebaseDatabase.instance.ref('active_rides/${widget.rideDocId}');
+      Timestamp? arrivedAt;
+      Timestamp? startedAt;
+      try {
+        final activeRideSnap = await activeRideRef.get();
+        final activeRideData = activeRideSnap.value;
+        if (activeRideData is Map) {
+          final arrivedMs = activeRideData['arrivedAt'] as int?;
+          final startedMs = activeRideData['startedAt'] as int?;
+          if (arrivedMs != null) {
+            arrivedAt = Timestamp.fromMillisecondsSinceEpoch(arrivedMs);
+          }
+          if (startedMs != null) {
+            startedAt = Timestamp.fromMillisecondsSinceEpoch(startedMs);
+          }
+        }
+      } catch (e) {
+        debugPrint('[HeroRideScreen] active_rides read-before-complete failed (non-fatal): $e');
+      }
+
       // Update ride status with real-time distance and final bill
       await rideRef.update({
         'status': 'completed',
         'completedAt': FieldValue.serverTimestamp(),
         'completedBy': user?.uid ?? '',
+        if (arrivedAt != null) 'arrivedAt': arrivedAt,
+        if (startedAt != null) 'startedAt': startedAt,
         'commission': commission,
         'netEarnings': netEarnings,
         'heroEarning': netEarnings,
@@ -769,6 +814,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         if (bikePerKmUsed != null) 'bikePerKmApplied': bikePerKmUsed,
         'paymentStatus': 'pending_collection',
       });
+      unawaited(activeRideRef.remove());
       await _cleanupLiveLocationNode();
 
       // ✅ FIX: Kill the ride notification when ride completes
@@ -835,9 +881,14 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         },
         SetOptions(merge: true),
       );
+      // FIX (Step 1 leftover, found while doing Phase 4a in this same
+      // file): 'status': 'online' here was a Firestore presence write
+      // that survived the earlier WhatsApp-model presence migration —
+      // Firestore no longer tracks hero online/offline at all (RTDB's
+      // online_heroes/{uid} is the only source of truth now). Removed;
+      // isAvailable/activeRideId stay since those aren't presence flags.
       await heroRef.set(
         {
-          'status': 'online',
           'isAvailable': true,
           'activeRideId': null,
           'lastUpdated': FieldValue.serverTimestamp(),
@@ -846,6 +897,12 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       );
       await FirebaseDatabase.instance
           .ref('live_locations/${widget.rideDocId}')
+          .remove();
+      // FIX (Phase 4a): dispute is a terminal outcome too (goes to
+      // Firestore above for admin review), so the transient RTDB status
+      // node has nothing left to track.
+      await FirebaseDatabase.instance
+          .ref('active_rides/${widget.rideDocId}')
           .remove();
       await FirebaseDatabase.instance
           .ref('online_heroes/${user.uid}')
@@ -943,9 +1000,14 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         'archivedAt': FieldValue.serverTimestamp(),
         'archivedForHero': true,
       });
+      // FIX (RTDB Phase 3 Step 1 cleanup leftover, found during Phase 4a
+      // work): this write used to also set 'status': 'online' on the
+      // heroes doc. Presence is no longer sourced from Firestore at all —
+      // online_heroes/{uid} in RTDB is the sole source of truth — so that
+      // field was stale/dead and has been removed here to match the same
+      // fix already applied in _reportPaymentIssue().
       await heroRef.set(
         {
-          'status': 'online',
           'isAvailable': true,
           'activeRideId': null,
           'walletBalance': currentBalance + netEarnings,
@@ -954,6 +1016,16 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
           'lastRideCompletedAt': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),
+      );
+      // FIX (Phase 4a defensive cleanup): _completeTrip() already deletes
+      // active_rides/{rideDocId} in the normal flow, but this method can
+      // be reached via a separate payment-collection path. Removing here
+      // too is idempotent (no-op if already gone) and guarantees no
+      // stale transient-status node survives once payment is settled.
+      unawaited(
+        FirebaseDatabase.instance
+            .ref('active_rides/${widget.rideDocId}')
+            .remove(),
       );
       await FirebaseFirestore.instance.collection('wallet_transactions').add({
         'heroId': user.uid,

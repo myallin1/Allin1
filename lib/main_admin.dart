@@ -170,13 +170,24 @@ class AdminApp extends StatelessWidget {
           secondary: Color(0xFFF5C542),
         ),
       ),
+      // FIX (boot-flicker root cause, mirrors main_customer.dart/
+      // main_hero.dart's fix): no `initialData` here meant EVERY
+      // relaunch — even for an already-signed-in admin — started at
+      // ConnectionState.waiting and mounted a bare CircularProgressIndicator
+      // scaffold (a THIRD, visually distinct loading design) right after
+      // the boot sequence's second runApp(AdminApp()) had already torn
+      // down _BootLoadingApp's BrandedLoadingScreen. Seeding
+      // FirebaseAuth.instance.currentUser (available synchronously once
+      // Firebase is initialized, no network wait) as initialData skips
+      // this mount entirely for a returning admin, and the waiting-state
+      // fallback now reuses BrandedLoadingScreen instead of a different-
+      // looking bare spinner for the rare genuine cold-cache case.
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
+        initialData: FirebaseAuth.instance.currentUser,
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
+            return const BrandedLoadingScreen();
           }
           if (snap.hasData && snap.data != null) {
             return const SuperAdminHomeScreen();

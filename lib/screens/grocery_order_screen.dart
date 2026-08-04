@@ -43,7 +43,14 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
   final _deliveryAddressCtrl = TextEditingController();
   double? _deliveryLat;
   double? _deliveryLng;
-  PlatformFile? _pickedFile;
+  // FIX (per Nizam's DMart-screenshot workflow request): was a single
+  // PlatformFile -- a customer who browses DMart's cart (or any store)
+  // and wants the hero to buy exactly what's shown needs to upload
+  // MULTIPLE screenshots (their cart can span several scroll screens),
+  // not just one. Capped at 10 -- enough for a large cart without
+  // letting an upload balloon into dozens of images.
+  static const int _maxImages = 10;
+  final List<PlatformFile> _pickedFiles = [];
   bool _submitting = false;
 
   @override
@@ -55,23 +62,82 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
 
   bool get _canSubmit =>
       !_submitting &&
-      (_listCtrl.text.trim().isNotEmpty || _pickedFile != null) &&
+      (_listCtrl.text.trim().isNotEmpty || _pickedFiles.isNotEmpty) &&
       _deliveryAddressCtrl.text.trim().isNotEmpty;
 
-  Future<void> _pickImage() async {
+  // NEW (per Nizam/CTO's DMart UX workaround): DMart's own site rejects
+  // Erode as a serviceable pincode -- that's DMart's business/inventory
+  // logic, not something this app can bypass. Rather than let the
+  // customer discover that dead end themselves inside the WebView, this
+  // interstitial explains it up front and gives two pincodes (Coimbatore
+  // 641014, Mumbai 400001) known to pass DMart's own gate, so they can
+  // actually browse the catalog, then points them straight at the
+  // screenshot-upload flow below to complete the order for real.
+  Future<void> _openDmartWithPincodeNotice(BuildContext context) async {
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _kBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text('Before you open DMart', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 16)),
+        content: Text(
+          'DMart does not officially deliver here. To view their catalog, '
+          'please enter Pincode 641014 (Coimbatore) or 400001 (Mumbai) when '
+          'DMart asks for your location. Add items to your cart, take '
+          'screenshots, and upload them in our Send Order section!',
+          style: TextStyle(color: _kMuted, fontSize: 13.5, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text('Cancel', style: TextStyle(color: _kMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: _kGreen),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Got it, Open DMart', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (proceed == true && context.mounted) {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute<void>(builder: (_) => const DmartScreen()),
+      );
+    }
+  }
+
+  Future<void> _pickImages() async {
     try {
-      final result = await FilePicker.platform
-          .pickFiles(type: FileType.image, withData: true);
-      if (result != null && result.files.isNotEmpty) {
-        setState(() => _pickedFile = result.files.first);
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+        allowMultiple: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      setState(() {
+        for (final file in result.files) {
+          if (_pickedFiles.length >= _maxImages) break;
+          _pickedFiles.add(file);
+        }
+      });
+      if (result.files.length > _maxImages && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Only the first $_maxImages images were added.')),
+        );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not pick image: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Could not pick images: $e'), backgroundColor: Colors.red),
         );
       }
     }
+  }
+
+  void _removeImage(int index) {
+    setState(() => _pickedFiles.removeAt(index));
   }
 
   Future<void> _submit() async {
@@ -85,14 +151,25 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
       final service = ServiceRequestService();
       final requestId = service.reserveRequestId();
 
-      String? listImageUrl;
-      if (_pickedFile != null && _pickedFile!.bytes != null) {
-        listImageUrl = await CloudinaryUploadService().uploadImageBytes(
-          _pickedFile!.bytes!,
-          fileName: _pickedFile!.name,
-          folder: 'service_request_images/${user.uid}/$requestId',
-        );
-      }
+      // FIX (multi-image upload, see _pickedFiles comment above):
+      // uploads run concurrently rather than one-at-a-time -- a full
+      // 10-screenshot DMart cart would otherwise take noticeably longer
+      // to submit. `listImageUrl` (singular) is kept alongside the new
+      // `listImageUrls` list purely for backward compatibility with the
+      // existing hero/admin summary code that already checks
+      // `details['listImageUrl']` to show a "📷 Photo list attached"
+      // badge -- both point at the same first image.
+      final uploadService = CloudinaryUploadService();
+      final imagesToUpload = _pickedFiles.where((f) => f.bytes != null).toList();
+      final listImageUrls = await Future.wait(
+        imagesToUpload.map(
+          (file) => uploadService.uploadImageBytes(
+            file.bytes!,
+            fileName: file.name,
+            folder: 'service_request_images/${user.uid}/$requestId',
+          ),
+        ),
+      );
 
       await service.createServiceRequest(
         preGeneratedRequestId: requestId,
@@ -102,7 +179,8 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
         customerPhone: user.phoneNumber ?? '',
         details: {
           'listText': _listCtrl.text.trim(),
-          'listImageUrl': listImageUrl,
+          'listImageUrl': listImageUrls.isNotEmpty ? listImageUrls.first : null,
+          'listImageUrls': listImageUrls,
           'deliveryAddress': _deliveryAddressCtrl.text.trim(),
           if (_deliveryLat != null) 'locationLat': _deliveryLat,
           if (_deliveryLng != null) 'locationLng': _deliveryLng,
@@ -195,41 +273,94 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            Text('Or upload a photo of your list', style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
+            // FIX (multi-image, per Nizam's "screenshot your DMart cart, 1-10
+            // images, hero fulfills manually" workflow): replaced the old
+            // single-file tap-tile with a button that keeps launching the
+            // picker (in `allowMultiple` mode, see _pickImages()) plus a
+            // thumbnail wrap below showing every picked screenshot with its
+            // own remove (x) button, so the customer can review/prune the
+            // whole batch before submitting.
+            Text('Or upload photos of your list (up to $_maxImages)', style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 2),
+            // NEW (per Nizam/CTO's DMart UX workaround): points customers
+            // coming back from the "Store Order" DMart WebView straight at
+            // this uploader, since that's how their DMart cart actually
+            // becomes a real order (see _openDmartWithPincodeNotice above).
+            Text('Upload your DMart cart screenshots here!', style: TextStyle(color: _kGreen, fontSize: 11.5, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             GestureDetector(
-              onTap: _pickImage,
+              onTap: _pickedFiles.length >= _maxImages ? null : _pickImages,
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: _kSurface,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: _pickedFile != null ? _kGreen.withValues(alpha: 0.4) : _kBorder),
+                  border: Border.all(color: _pickedFiles.isNotEmpty ? _kGreen.withValues(alpha: 0.4) : _kBorder),
                 ),
                 child: Row(
                   children: [
                     Icon(
-                      _pickedFile != null ? Icons.check_circle_rounded : Icons.add_a_photo_outlined,
-                      color: _pickedFile != null ? _kGreen : _kPink,
+                      _pickedFiles.isNotEmpty ? Icons.check_circle_rounded : Icons.add_a_photo_outlined,
+                      color: _pickedFiles.isNotEmpty ? _kGreen : _kPink,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        _pickedFile?.name ?? 'Tap to choose an image',
-                        style: TextStyle(color: _pickedFile != null ? _kText : _kMuted, fontSize: 13),
+                        _pickedFiles.isEmpty
+                            ? 'Tap to choose images'
+                            : '${_pickedFiles.length}/$_maxImages image${_pickedFiles.length == 1 ? '' : 's'} selected',
+                        style: TextStyle(color: _pickedFiles.isNotEmpty ? _kText : _kMuted, fontSize: 13),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (_pickedFile != null)
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded, color: _kMuted, size: 18),
-                        onPressed: () => setState(() => _pickedFile = null),
-                      ),
                   ],
                 ),
               ),
             ),
+            if (_pickedFiles.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: List.generate(_pickedFiles.length, (index) {
+                  final file = _pickedFiles[index];
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _kBorder),
+                          image: file.bytes != null
+                              ? DecorationImage(image: MemoryImage(file.bytes!), fit: BoxFit.cover)
+                              : null,
+                          color: _kSurface,
+                        ),
+                        child: file.bytes == null
+                            ? const Icon(Icons.image_outlined, color: _kMuted, size: 20)
+                            : null,
+                      ),
+                      Positioned(
+                        top: -6,
+                        right: -6,
+                        child: GestureDetector(
+                          onTap: () => _removeImage(index),
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: const BoxDecoration(color: _kText, shape: BoxShape.circle),
+                            child: const Icon(Icons.close_rounded, color: Colors.white, size: 14),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ),
+            ],
             const SizedBox(height: 20),
             Text('Delivery location', style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
@@ -302,10 +433,7 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       padding: const EdgeInsets.symmetric(horizontal: 6),
                     ),
-                    onPressed: () => Navigator.push<void>(
-                      context,
-                      MaterialPageRoute<void>(builder: (_) => const DmartScreen()),
-                    ),
+                    onPressed: () => _openDmartWithPincodeNotice(context),
                     icon: const Icon(Icons.storefront_rounded, color: _kGreen, size: 18),
                     label: Text('Store Order', style: GoogleFonts.outfit(color: _kGreen, fontSize: 13, fontWeight: FontWeight.bold)),
                   ),

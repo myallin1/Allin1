@@ -474,8 +474,25 @@ class _HeroSetupGateState extends State<_HeroSetupGate> {
 
   @override
   Widget build(BuildContext context) {
+    // FIX (boot-flicker root cause, mirrors main_customer.dart's fix):
+    // this StreamBuilder used to have no `initialData`, so on EVERY
+    // relaunch — even for an already-signed-in hero — it started at
+    // ConnectionState.waiting and mounted a brand-new HeroPremiumLoader
+    // ('auth-loading') while waiting for authStateChanges()'s first
+    // emission, right after the boot sequence's second runApp(HeroApp())
+    // call had already thrown away and rebuilt the whole tree away from
+    // _BootLoadingApp's BrandedLoadingScreen. Two different-looking full-
+    // screen loaders, back to back, is exactly the "3x animation
+    // flicker" symptom. FirebaseAuth.instance.currentUser is already
+    // available SYNCHRONOUSLY the moment Firebase finishes initializing
+    // (it's restored from the SDK's own persisted session, no network
+    // wait) — seeding it as initialData means a returning hero with an
+    // existing session skips this loading mount entirely and goes
+    // straight to the profile/approval checks below, which already have
+    // their own optimistic-render handling.
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
+      initialData: FirebaseAuth.instance.currentUser,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _buildFadingChild(

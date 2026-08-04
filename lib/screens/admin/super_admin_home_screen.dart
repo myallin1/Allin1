@@ -699,6 +699,28 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
           // and is reached by push, not by swapping this screen's body.
           // App Settings moved to the left drawer (see _buildDrawer) —
           // this Manage section now holds only Taxi & Transportation.
+          const SizedBox(height: 10),
+          // NEW (per Nizam's request): a direct "Grocery Orders" entry
+          // point right on the Overview page, on top of the existing
+          // Grocery bottom-nav tab (index 6) — this is the tab admins
+          // need most now that the DMart-screenshot workflow depends on
+          // them reviewing uploaded cart photos quickly, so it shouldn't
+          // require hunting through the bottom bar. Jumps to the SAME
+          // already-mounted AdminServiceRequestsScreen tab via _goToTab
+          // rather than pushing a second copy of it. Uses the confirmed-
+          // safe FluentEmojiFlat.shopping_cart constant (already in use
+          // elsewhere in this codebase, see dashboard_screen.dart) since
+          // _ManageTile only renders an SVG string icon.
+          _AdminReviewBadgeWrapper(
+            waitingStream: _waitingRequestsStream,
+            child: _ManageTile(
+              label: 'Grocery Orders',
+              subtitle: 'Review DMart cart screenshots, assign heroes',
+              iconSvg: FluentEmojiFlat.shopping_cart,
+              color: _orange,
+              onTap: () => _goToTab(6),
+            ),
+          ),
         ],
       ),
     );

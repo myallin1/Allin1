@@ -483,9 +483,15 @@ class AuthService {
               _heroVehicleCategoryLabel(normalizedVehicleType ?? 'bike'),
           'isEmergencyHelper': true,
           'sosNetworkAcceptedAt': FieldValue.serverTimestamp(),
-          'status': 'offline',
-          'isOnline': false,
-          'isAvailable': true,
+          // FIX (WhatsApp-model presence migration, CTO mandate): removed
+          // 'status'/'isOnline'/'isAvailable' — Firestore no longer
+          // tracks live presence at all. RTDB's online_heroes/{uid} node
+          // (written the moment a hero actually goes online, backed by
+          // onDisconnect()) is now the ONLY source of truth for that.
+          // Writing a starting 'offline'/false value here was harmless on
+          // its own, but kept the door open for exactly the bug this
+          // migration fixes — a Firestore presence field that can go
+          // stale and never self-correct.
           if (!existingHero.exists) 'approvalStatus': 'pending',
           'updatedAt': FieldValue.serverTimestamp(),
         },

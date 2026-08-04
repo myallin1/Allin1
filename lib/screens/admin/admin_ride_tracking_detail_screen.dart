@@ -43,6 +43,23 @@ class _AdminRideTrackingDetailScreenState
   LatLng? _heroLocation;
   late final StreamSubscription<DatabaseEvent> _liveLocationSub;
 
+  // FIX (Phase 4a, WhatsApp/Uber-model active-ride migration): 'arrived'
+  // and 'in_progress' no longer get written to Firestore's rides doc —
+  // hero_ride_screen.dart writes them straight to RTDB's
+  // active_rides/{rideId} node instead, deleting it once the ride
+  // reaches a final state. Null here means "defer to whatever Firestore
+  // status says" (covers both "not arrived yet" and "already completed
+  // and cleaned up").
+  String? _activeRideStatus;
+  // Same "arrivedAt/startedAt moved off Firestore" gap as _activeRideStatus
+  // above -- the timeline below (_timelineRow) used to read these two
+  // straight from the Firestore doc; now they live in the RTDB node
+  // instead (as epoch-millis ServerValue.timestamp, converted to a
+  // Timestamp here so _timelineRow's signature doesn't need to change).
+  Timestamp? _rtdbArrivedAt;
+  Timestamp? _rtdbStartedAt;
+  late final StreamSubscription<DatabaseEvent> _activeRideStatusSub;
+
   @override
   void initState() {
     super.initState();
@@ -61,11 +78,34 @@ class _AdminRideTrackingDetailScreenState
     }, onError: (Object e) {
       debugPrint('live_locations stream error: $e');
     },);
+
+    _activeRideStatusSub = FirebaseDatabase.instance
+        .ref('active_rides/${widget.rideId}')
+        .onValue
+        .listen((event) {
+      if (!mounted) return;
+      final raw = event.snapshot.value;
+      final map = raw is Map ? raw : null;
+      setState(() {
+        _activeRideStatus = map?['status'] as String?;
+        final arrivedMs = map?['arrivedAt'] as int?;
+        final startedMs = map?['startedAt'] as int?;
+        _rtdbArrivedAt = arrivedMs != null
+            ? Timestamp.fromMillisecondsSinceEpoch(arrivedMs)
+            : _rtdbArrivedAt;
+        _rtdbStartedAt = startedMs != null
+            ? Timestamp.fromMillisecondsSinceEpoch(startedMs)
+            : _rtdbStartedAt;
+      });
+    }, onError: (Object e) {
+      debugPrint('active_rides stream error: $e');
+    },);
   }
 
   @override
   void dispose() {
     _liveLocationSub.cancel();
+    _activeRideStatusSub.cancel();
     super.dispose();
   }
 
@@ -186,7 +226,8 @@ class _AdminRideTrackingDetailScreenState
           }
           final d = snapshot.data!.data()!;
 
-          final status = (d['status'] as String?) ?? 'unknown';
+          final status =
+              _activeRideStatus ?? (d['status'] as String?) ?? 'unknown';
           final customerName = (d['customerName'] as String?) ?? 'Customer';
           final customerPhone = (d['customerPhone'] as String?) ?? '';
           final heroName = (d['heroName'] as String?) ?? 'Unassigned';
@@ -500,12 +541,12 @@ class _AdminRideTrackingDetailScreenState
                         ),
                         _timelineRow(
                           'Hero Arrived',
-                          d['arrivedAt'] as Timestamp?,
+                          _rtdbArrivedAt ?? d['arrivedAt'] as Timestamp?,
                           isLast: false,
                         ),
                         _timelineRow(
                           'Trip Started',
-                          d['startedAt'] as Timestamp?,
+                          _rtdbStartedAt ?? d['startedAt'] as Timestamp?,
                           isLast: false,
                         ),
                         _timelineRow(

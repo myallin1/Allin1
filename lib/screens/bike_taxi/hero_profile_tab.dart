@@ -118,9 +118,11 @@ class _HeroProfileTabState extends State<HeroProfileTab>
     }
     setState(() => _loggingOut = true);
     try {
+      // FIX (WhatsApp-model presence migration, CTO mandate): removed
+      // 'isOnline'/'status' from this Firestore write — presence lives
+      // only in RTDB's online_heroes node now (removed below). Kept
+      // activeRideId/lastUpdated since those aren't presence fields.
       await FirebaseFirestore.instance.collection('heroes').doc(user.uid).set({
-        'isOnline': false,
-        'status': 'offline',
         'activeRideId': null,
         'lastUpdated': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true),);

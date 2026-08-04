@@ -24,6 +24,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../utils/service_request_labels.dart';
+import '../../widgets/order_photo_gallery.dart';
 import '../service_request_tracking_screen.dart';
 import 'admin_new_orders_screen.dart' show AssignHeroSheet, requestSummary;
 
@@ -257,6 +258,14 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: _muted, fontSize: 12),),
+              ],
+              // NEW (per Nizam's DMart-cart-screenshot workflow): same
+              // photo evidence shown to the hero, so admin can review it
+              // without opening the tracking screen.
+              if (widget.requestType == 'grocery_order' &&
+                  orderPhotoUrlsFromDetails(details).isNotEmpty) ...[
+                const SizedBox(height: 8),
+                OrderPhotoGallery(imageUrls: orderPhotoUrlsFromDetails(details)),
               ],
               const SizedBox(height: 10),
               Row(

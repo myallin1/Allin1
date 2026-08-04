@@ -114,7 +114,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   bool _statCardsLoading = true;
   DateTime? _statCardsSyncedAt;
 
-  QuerySnapshot? _onlineHeroesSnapshot;
+  // FIX (WhatsApp-model presence migration, CTO mandate): this used to
+  // be a QuerySnapshot from a Firestore `heroes.where('status', whereIn:
+  // ['online', 'on_ride'])` query. Firestore no longer carries any
+  // presence field at all (see hero_home_screen.dart's _syncOnlineStatus
+  // — RTDB's online_heroes/{uid} node, backed by onDisconnect(), is now
+  // the ONLY source of truth for who's online), so this now reads that
+  // RTDB node directly instead. `isAvailable` already encodes the
+  // on_ride/available distinction (see _syncOnlineStatus:
+  // isAvailable = activeRideId.isEmpty), so nothing here needed a
+  // Firestore lookup to begin with.
+  Map<dynamic, dynamic>? _onlineHeroesData;
   bool _onlineHeroesLoading = true;
   DateTime? _onlineHeroesSyncedAt;
 
@@ -173,14 +183,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Future<void> _fetchOnlineHeroes() async {
     if (mounted) setState(() => _onlineHeroesLoading = true);
-    final snap = await FirebaseFirestore.instance
-        .collection('heroes')
-        .where('status', whereIn: ['online', 'on_ride'])
-        .get();
-    DbUsageTracker.instance.recordRead(snap.docs.length);
+    // RTDB reads aren't counted by DbUsageTracker (that instrument only
+    // tracks Firestore) — this is now a single RTDB node read instead of
+    // a Firestore collection query, i.e. strictly cheaper than before,
+    // not just moved.
+    final snap = await FirebaseDatabase.instance.ref('online_heroes').get();
     if (!mounted) return;
     setState(() {
-      _onlineHeroesSnapshot = snap;
+      _onlineHeroesData = snap.exists && snap.value is Map
+          ? Map<dynamic, dynamic>.from(snap.value! as Map)
+          : {};
       _onlineHeroesLoading = false;
       _onlineHeroesSyncedAt = DateTime.now();
     });
@@ -1101,7 +1113,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   // ── Online Heroes Live Feed ────────────────────────────────────
   Widget _buildOnlineHeroes() {
-    final docs = _onlineHeroesSnapshot?.docs ?? [];
+    final entries = _onlineHeroesData?.entries.toList() ?? [];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1115,20 +1127,23 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           textColor: _muted,
         ),
         const SizedBox(height: 10),
-        if (_onlineHeroesLoading && _onlineHeroesSnapshot == null)
+        if (_onlineHeroesLoading && _onlineHeroesData == null)
           const Center(
             child: CircularProgressIndicator(color: _green, strokeWidth: 2),
           )
-        else if (docs.isEmpty)
+        else if (entries.isEmpty)
           _emptyCard('No heroes online right now', '🛵')
         else
           Column(
-              children: docs.map((doc) {
-                final d = doc.data()! as Map<String, dynamic>;
-                final name = d['captainName'] as String? ?? 'Hero';
-                final status = d['status'] as String? ?? 'offline';
-                final rideId = d['activeRideId'] as String? ?? '';
-                final isOnRide = status == 'on_ride';
+              children: entries.map((entry) {
+                final d = Map<dynamic, dynamic>.from(entry.value as Map? ?? {});
+                final name = d['name'] as String? ?? 'Hero';
+                final isAvailable = d['isAvailable'] as bool? ?? true;
+                // "On ride" == not available for a new dispatch. RTDB's
+                // isAvailable already carries this (see _syncOnlineStatus
+                // in hero_home_screen.dart: isAvailable = activeRideId
+                // .isEmpty) — no separate 'status' field needed anymore.
+                final isOnRide = !isAvailable;
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   padding:
@@ -1178,9 +1193,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               ),
                             ),
                             Text(
-                              isOnRide
-                                  ? 'On Ride • ID: ${rideId.substring(0, rideId.length.clamp(0, 8))}...'
-                                  : 'Available',
+                              // NOTE: activeRideId isn't in RTDB's
+                              // online_heroes node (only Firestore's
+                              // heroes doc has it, and that's Step 4 —
+                              // active-order-state migration — not part
+                              // of this presence-only cleanup), so this
+                              // no longer claims to show a ride ID.
+                              isOnRide ? 'On Ride' : 'Available',
                               style: TextStyle(
                                 fontSize: 10,
                                 color: isOnRide ? _orange : _green,

@@ -4,6 +4,7 @@
 // ================================================================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -294,15 +295,41 @@ class _ApprovedHeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final approvedAt = data['approvedAt'] as Timestamp?;
+
+    // FIX (WhatsApp-model presence migration, CTO mandate): this used to
+    // read data['status'] from the Firestore heroes doc — a field that's
+    // no longer written at all (see hero_home_screen.dart's
+    // _syncOnlineStatus and services/auth_service.dart's
+    // completeProfileSetup). RTDB's online_heroes/{uid} node, backed by
+    // onDisconnect(), is now the ONLY source of truth for whether this
+    // hero is currently online, so this card now listens to it live
+    // instead of trusting a Firestore field that would otherwise sit
+    // stale forever.
+    return StreamBuilder<DatabaseEvent>(
+      stream: FirebaseDatabase.instance.ref('online_heroes/$uid').onValue,
+      builder: (context, rtdbSnapshot) {
+        final rawRtdbValue = rtdbSnapshot.data?.snapshot.value;
+        final rtdbMap = rawRtdbValue is Map ? rawRtdbValue : null;
+        final isOnline = rtdbMap != null;
+        final isActiveRide = rtdbMap != null &&
+            (rtdbMap['isAvailable'] as bool? ?? true) == false;
+        return _buildCard(context, isOnline: isOnline, isActiveRide: isActiveRide, approvedAt: approvedAt);
+      },
+    );
+  }
+
+  Widget _buildCard(
+    BuildContext context, {
+    required bool isOnline,
+    required bool isActiveRide,
+    required Timestamp? approvedAt,
+  }) {
     final name = data['captainName'] as String? ?? data['name'] as String? ?? 'Unknown';
     final phone = data['phone'] as String? ?? '';
     final vehicleNumber = data['vehicleNumber'] as String? ?? '';
     final vehicleType = data['vehicleType'] as String? ?? '';
     final email = data['email'] as String? ?? '';
-    final approvedAt = data['approvedAt'] as Timestamp?;
-    final currentStatus = data['status'] as String? ?? 'approved';
-    final isOnline = currentStatus == 'online' || currentStatus == 'on_ride';
-    final isActiveRide = currentStatus == 'on_ride';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),

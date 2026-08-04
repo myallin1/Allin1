@@ -16,6 +16,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/service_request_service.dart';
+import '../../widgets/order_photo_gallery.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -241,6 +242,13 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
               Text(customerPhone, style: const TextStyle(color: _muted, fontSize: 11)),
             const SizedBox(height: 6),
             Text(requestSummary(requestType, details), style: const TextStyle(color: _muted, fontSize: 12)),
+            // NEW (per Nizam's DMart-cart-screenshot workflow): admin
+            // needs the same visual evidence a hero sees, in case admin
+            // ends up assigning/fulfilling this order manually.
+            if (requestType == 'grocery_order' && orderPhotoUrlsFromDetails(details).isNotEmpty) ...[
+              const SizedBox(height: 8),
+              OrderPhotoGallery(imageUrls: orderPhotoUrlsFromDetails(details)),
+            ],
             const SizedBox(height: 10),
             Row(
               children: [

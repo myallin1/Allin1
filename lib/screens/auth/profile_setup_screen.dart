@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../screens/bike_taxi/hero_dashboard_shell.dart';
 import '../../screens/dashboard_screen.dart';
+import '../../screens/hero_pending_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/session_service.dart';
 
@@ -90,12 +92,51 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         return;
       }
 
+      // FIX (CTO-reported bypass: "a Hero managed to bypass the Admin
+      // approval screen and entered the main app"): this used to route
+      // straight to HeroDashboardShell the instant this generic form
+      // was submitted, with NO approval check at all — reachable via
+      // the Google Sign-In "first time" path on LoginScreen (and any
+      // other caller of this shared ProfileSetupScreen) for
+      // preferredRole: UserType.hero, completely bypassing the
+      // approval gate that main_hero.dart's _HeroSetupGate /
+      // HeroLoginScreen otherwise enforce correctly. AuthService
+      // .completeProfileSetup() above already writes heroes/{uid} with
+      // approvalStatus: 'pending' for a brand-new hero doc — this was
+      // just never actually being checked before deciding where to
+      // send them. Now mirrors the exact same server-truth check
+      // _HeroSetupGate uses, so there is exactly ONE source of truth
+      // for "is this hero allowed into the dashboard" no matter which
+      // screen they onboarded through.
+      Widget destination = const DashboardScreen();
+      if (_isHeroSetup) {
+        bool isApproved = false;
+        try {
+          final heroDoc = await FirebaseFirestore.instance
+              .collection('heroes')
+              .doc(user.uid)
+              .get();
+          final approvalStatus = heroDoc.data()?['approvalStatus']
+              ?.toString()
+              .trim()
+              .toLowerCase();
+          isApproved = heroDoc.exists && approvalStatus == 'approved';
+        } catch (e) {
+          debugPrint('[ProfileSetupScreen] approval check failed: $e');
+          // Fail CLOSED, not open — an error here must never be treated
+          // as "approved". Falls through to HeroPendingScreen below.
+        }
+        destination = isApproved
+            ? const HeroDashboardShell()
+            : const HeroPendingScreen();
+      }
+
+      if (!mounted) {
+        return;
+      }
+
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute<void>(
-          builder: (_) => _isHeroSetup
-              ? const HeroDashboardShell()
-              : const DashboardScreen(),
-        ),
+        MaterialPageRoute<void>(builder: (_) => destination),
         (route) => false,
       );
     } catch (error) {

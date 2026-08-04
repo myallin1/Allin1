@@ -195,12 +195,35 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-              Text(
-                'Your key stays on this device. As soon as you save it, Guru AI becomes ready on the home dashboard.',
-                style: GoogleFonts.outfit(
-                  color: const Color(0xFF8A4E72),
-                  fontSize: 12.5,
-                  height: 1.45,
+              // NEW (per Nizam/CTO's "bring your own key" pivot): this
+              // key is the spark that activates the customer's personal
+              // AI superhero — free to get from Groq's own console, kept
+              // securely on-device (flutter_secure_storage, see
+              // AiActivationService), never sent anywhere but Groq's API.
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF1F8),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0x33FF4FA3)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('🦸', style: TextStyle(fontSize: 20)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'This key activates YOUR personal AI superhero — free to generate from Groq\'s console, stored securely on this device, never shared with anyone but Groq\'s own API.',
+                        style: GoogleFonts.outfit(
+                          color: const Color(0xFF8A4E72),
+                          fontSize: 12.5,
+                          height: 1.45,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 20),

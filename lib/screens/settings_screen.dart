@@ -12,10 +12,12 @@ import 'package:hive/hive.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/ai_activation_service.dart';
 import '../services/localization_service.dart';
 import '../services/map_service.dart';
 import '../services/theme_service.dart';
 import '../widgets/server_busy_dialog.dart' show kCallCenterNumberIntl;
+import 'ai_settings_screen.dart';
 
 // Rate App / Share App links — customer app's actual Play Store
 // package name (see android/app/build.gradle.kts customer flavor) and
@@ -249,16 +251,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
             _buildPreferenceSettings(themeService, t),
             const SizedBox(height: 28),
-            // FIX (per Nizam's explicit request): removed the "Guru AI"
-            // settings section here — it let customers paste their OWN
-            // Groq API key directly (a raw key-input TextField in
-            // AiSettingsScreen), which both bypassed and exposed the
-            // intended activation flow (customer WhatsApps a claim ->
-            // we manually add their key server-side, see
-            // rewards_screen.dart's _AiQuizDialog). Nothing about that
-            // manual admin step should ever be visible to customers, and
-            // letting them self-serve their own key defeated the entire
-            // point of it being an admin-controlled reward.
+            // FIX (per Nizam/CTO's "bring your own key" pivot — reverses
+            // the earlier removal noted below): customers now activate
+            // their OWN "AI superhero" by pasting a free Groq API key
+            // here, decentralizing AI cost off Allin1's own admin-
+            // provisioned keys. The old WhatsApp-claim flow in
+            // rewards_screen.dart's _AiQuizDialog still exists for
+            // customers who'd rather not self-serve a key; this is an
+            // additional path, not a replacement.
+            //
+            // (Historical note, kept for context: this section was
+            // previously removed because letting customers self-serve a
+            // key bypassed an admin-controlled reward flow. That's no
+            // longer the product direction — see AiSettingsScreen /
+            // AiActivationService.)
+            _buildSectionHeader('🦸 AI Assistant'),
+            const SizedBox(height: 12),
+            _buildAiAssistantSettings(),
+            const SizedBox(height: 28),
             _buildSectionHeader('🗺️ ${t('map_provider_section')}'),
             const SizedBox(height: 12),
             _buildMapProviderSettings(t),
@@ -449,6 +459,98 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // ── Map Provider Settings ──
+  // NEW (per Nizam/CTO's "bring your own key" pivot): premium entry
+  // point into AiSettingsScreen, styled to stand out from the plain
+  // _buildTapTile rows elsewhere on this page (gradient badge icon,
+  // live activation-status subtitle) since this is meant to read as an
+  // exciting feature, not routine account settings.
+  Widget _buildAiAssistantSettings() {
+    final aiActivation = context.watch<AiActivationService>();
+    final activated = aiActivation.isAiActivated;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute<void>(builder: (_) => const AiSettingsScreen()),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: activated
+                  ? const Color(0x4D00C853)
+                  : const Color(0x4DFF4FA3),
+            ),
+            gradient: LinearGradient(
+              colors: activated
+                  ? [const Color(0x1A00C853), const Color(0x0D00C853)]
+                  : [const Color(0x1AFF4FA3), const Color(0x0DB21FFF)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF4FA3), Color(0xFFB21FFF)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  activated ? Icons.auto_awesome_rounded : Icons.bolt_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'AI Assistant Configuration',
+                      style: GoogleFonts.outfit(
+                        color: kText,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      activated
+                          ? '✅ Your personal AI superhero is active'
+                          : 'Activate your own AI superhero with a free key',
+                      style: GoogleFonts.outfit(
+                        color: activated
+                            ? const Color(0xFF00C853)
+                            : kMuted,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: kMuted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMapProviderSettings(String Function(String) t) {
     return DecoratedBox(
       decoration: BoxDecoration(

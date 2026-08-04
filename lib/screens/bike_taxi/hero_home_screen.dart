@@ -34,6 +34,7 @@ import '../../services/service_request_service.dart';
 import '../../services/update_service.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../../widgets/hero_premium_loader.dart';
+import '../../widgets/order_photo_gallery.dart';
 import '../earn/rewards_hub_screen.dart';
 import '../notifications_screen.dart';
 import 'hero_ride_screen.dart';
@@ -804,6 +805,26 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           lastLogin.month != today.month ||
           lastLogin.year != today.year;
 
+      // FIX (WhatsApp-model presence migration, CTO mandate): this used
+      // to restore _isOnline from Firestore's data['isOnline'] — exactly
+      // the field that could go stale forever on an ungraceful exit
+      // (app killed, crash, connection drop), which is the literal bug
+      // being fixed. RTDB's online_heroes/{uid} node is backed by
+      // onDisconnect(), so checking whether IT still exists is the
+      // correct restore signal: it will already be gone by the time this
+      // runs for any restart that follows an ungraceful exit, and still
+      // present for a same-session resume (e.g. a background/foreground
+      // cycle that never actually lost connection).
+      bool restoredOnline = false;
+      try {
+        final onlineSnap = await FirebaseDatabase.instance
+            .ref('online_heroes/${_user!.uid}')
+            .get();
+        restoredOnline = onlineSnap.exists;
+      } catch (e) {
+        debugPrint('[HeroHomeScreen] online_heroes restore check failed: $e');
+      }
+
       if (mounted) {
         setState(() {
           _commissionRate = rate;
@@ -814,8 +835,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           _heroCity = (data['city'] as String?)?.trim().toLowerCase().isNotEmpty ?? false
               ? (data['city'] as String).trim().toLowerCase()
               : kDefaultCity;
-          // FIX BUG #3: Restore online state from Firestore if captain was online
-          _isOnline = (data['isOnline'] as bool?) ?? false;
+          _isOnline = restoredOnline;
         });
       }
 
@@ -928,18 +948,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         }
       }
 
-      final data = <String, dynamic>{
-        'isOnline': online,
-        'status': online ? 'online' : 'offline',
-        'lastUpdated': FieldValue.serverTimestamp(),
-      };
-
       if (online) {
-        data['isAvailable'] = _activeRideId.isEmpty;
-        data['lastSeen'] = FieldValue.serverTimestamp();
-        data['captainName'] = _captainName;
-        data['vehicleType'] = _normalizeHeroVehicleType(_vehicleType);
-
         // ── RTDB radar write ──
         // On a genuine offline→online transition we force the write and
         // bypass the movement throttle: the hero has just appeared and
@@ -1015,10 +1024,14 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         }
       }
 
-      await FirebaseFirestore.instance
-          .collection('heroes')
-          .doc(_user!.uid)
-          .set(data, SetOptions(merge: true));
+      // FIX (WhatsApp-model presence migration, CTO mandate): this used
+      // to also .set() {isOnline, status, isAvailable, lastSeen,
+      // captainName, vehicleType} into the Firestore heroes doc on every
+      // toggle. Firestore no longer tracks any of that — RTDB's
+      // online_heroes/{uid} node above (backed by onDisconnect()) is now
+      // the ONLY place presence lives, which is exactly what fixes
+      // "heroes showing online even after closing the app": RTDB
+      // self-heals on disconnect, Firestore never could.
       _lastFirestoreStatusWriteAt = now;
 
       if (mounted) {
@@ -1806,6 +1819,19 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             Text('From: $customerName', style: const TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             Text(summary, style: const TextStyle(color: Colors.black54)),
+            // NEW (per Nizam's "screenshot the DMart cart, hero fulfills
+            // manually" workflow — details['listImageUrls']/'listImageUrl'
+            // written by grocery_order_screen.dart): the hero must
+            // actually SEE these screenshots to fulfill the order, not
+            // just a "photo attached" text badge, which is all this
+            // dialog showed before.
+            if (requestType == 'grocery_order' && orderPhotoUrlsFromDetails(details).isNotEmpty) ...[
+              const SizedBox(height: 10),
+              OrderPhotoGallery(
+                imageUrls: orderPhotoUrlsFromDetails(details),
+                label: 'Cart screenshots',
+              ),
+            ],
           ],
         ),
         actions: [
@@ -4893,6 +4919,18 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
               ),
             ],
           ),
+          // NEW (per Nizam's DMart-cart-screenshot workflow): the same
+          // "hero must actually SEE the screenshots" fix as the accept
+          // dialog above, but here in the full task-detail card, since
+          // this is where the hero actually works the order through to
+          // completion (not just the first accept/decline moment).
+          if (widget.requestType == 'grocery_order' && orderPhotoUrlsFromDetails(widget.details).isNotEmpty) ...[
+            const SizedBox(height: 10),
+            OrderPhotoGallery(
+              imageUrls: orderPhotoUrlsFromDetails(widget.details),
+              label: 'Cart screenshots',
+            ),
+          ],
           if (widget.status != 'completed') _buildNavigateRow(),
           if (widget.estimatedAmount != null && widget.status != 'completed') ...[
             const SizedBox(height: 6),

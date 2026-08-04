@@ -49,6 +49,19 @@ void main() async {
         options: DefaultFirebaseOptions.currentPlatform,
       );
       DbUsageTracker.instance.init('seller');
+      // NOTE (boot-flicker audit, per Nizam's request to mirror the fix
+      // across all 4 apps): unlike main_customer.dart/main_hero.dart/
+      // main_admin.dart, SellerApp's root route goes straight to
+      // LoginScreen ('/') with no auth-stream gate at the app root at
+      // all — there's no second loading widget mounted after this
+      // runApp() swap to collapse here. The only two screens painted
+      // during a seller cold boot are the pre-Firebase _BootLoadingApp
+      // (BrandedLoadingScreen) and then LoginScreen itself — already a
+      // single continuous mount, nothing to fix structurally. (Separately
+      // worth knowing: a seller with an existing Firebase Auth session
+      // still sees the login FORM on every relaunch instead of skipping
+      // straight to SellerDashboardScreen — a real UX gap, but a
+      // different issue from the boot flicker asked about here.)
       runApp(const SellerApp());
     },
   );

@@ -288,6 +288,18 @@ void main() async {
       // function body) already catches and reports uncaught errors here,
       // so the plain try/catch below covers exactly the same cases
       // without adding a second zone layer.
+      // FIX (boot-flicker root cause, task #108 follow-up): resolved
+      // here, BEFORE runApp(CustomerApp(...)) below, instead of inside
+      // _IntroGate's own initState() after the widget tree already
+      // swapped over. A SharedPreferences read is a fast local
+      // round-trip (not network) — doing it here costs a few
+      // milliseconds added to the SAME already-in-flight boot phase 1
+      // that's opening Hive boxes anyway, instead of forcing a THIRD
+      // widget (the old _IntroGate's loading fallback) to mount after
+      // runApp() just to wait for this exact same read.
+      var showIntro = false;
+      var showWelcome = false;
+
       try {
         await Hive.initFlutter();
         await CacheService().initCritical();
@@ -305,6 +317,10 @@ void main() async {
             statusBarIconBrightness: Brightness.light,
           ),
         );
+
+        final flags = await _resolveIntroFlags();
+        showIntro = flags.showIntro;
+        showWelcome = flags.showWelcome;
       } catch (error, stack) {
         debugPrint('Boot phase 1 error: $error\n$stack');
         if (AnalyticsService.isInitialized) {
@@ -312,7 +328,7 @@ void main() async {
         }
       }
 
-      runApp(const CustomerApp());
+      runApp(CustomerApp(showIntro: showIntro, showWelcome: showWelcome));
 
       // Everything non-essential to the first frame runs here instead of
       // blocking runApp(): analytics, the deferred Hive boxes, the API
@@ -329,6 +345,42 @@ void main() async {
       unawaited(_listenForSharedLocations());
     },
   );
+}
+
+/// Reads (and, on first-ever launch, sets) the two "have they seen this
+/// already" SharedPreferences flags that decide whether _IntroGate shows
+/// the intro video and/or the language/sign-in welcome screen. Split out
+/// of the old _IntroGateState.checkFirstLaunch() unchanged in behavior —
+/// only WHEN it runs changed (see the boot-flicker fix comment above its
+/// call site, and on _IntroGate itself, for why).
+({bool showIntro, bool showWelcome}) _introFlagsResult(bool seenIntro, bool seenWelcome) =>
+    (showIntro: !seenIntro, showWelcome: !seenWelcome);
+
+Future<({bool showIntro, bool showWelcome})> _resolveIntroFlags() async {
+  const seenIntroKey = 'has_seen_intro_video_v1';
+  const seenWelcomeKey = 'has_seen_welcome_v1';
+  try {
+    final prefs = await SharedPreferences.getInstance();
+
+    final seenIntro = prefs.getBool(seenIntroKey) ?? false;
+    if (!seenIntro) {
+      await prefs.setBool(seenIntroKey, true);
+    }
+
+    // Tracked separately from the video. They were introduced at
+    // different times, so a customer who already has the intro flag set
+    // from an earlier version should still be offered the language/
+    // sign-in screen once.
+    final seenWelcome = prefs.getBool(seenWelcomeKey) ?? false;
+    if (!seenWelcome) {
+      await prefs.setBool(seenWelcomeKey, true);
+    }
+
+    return _introFlagsResult(seenIntro, seenWelcome);
+  } catch (e) {
+    debugPrint('[main_customer] intro-flags check failed: $e');
+    return _introFlagsResult(true, true); // seen=true -> show=false, safest default
+  }
 }
 
 // ── BOOT PHASE 2: everything that can wait for the first frame ──
@@ -474,7 +526,14 @@ Future<void> _restoreActiveRideIfNeeded() async {
 }
 
 class CustomerApp extends StatelessWidget {
-  const CustomerApp({super.key});
+  // FIX (boot-flicker root cause): resolved once in main()'s boot phase
+  // 1 (see _resolveIntroFlags()), before this widget is ever built, so
+  // _IntroGate below never needs an async gap / loading placeholder of
+  // its own. See _IntroGate's comment for the full story.
+  final bool showIntro;
+  final bool showWelcome;
+
+  const CustomerApp({required this.showIntro, required this.showWelcome, super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -515,7 +574,7 @@ class CustomerApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           theme: themeService.currentTheme,
           themeMode: ThemeMode.light,
-          home: const _IntroGate(),
+          home: _IntroGate(showIntro: showIntro, showWelcome: showWelcome),
           routes: {
             '/login': (_) => const CustomerLoginScreen(),
             '/dashboard': (_) => const DashboardScreen(),
@@ -544,82 +603,48 @@ class CustomerApp extends StatelessWidget {
 }
 
 // ================================================================
-// First-launch intro video gate. Shows IntroVideoScreen exactly once
-// per customer (shared_preferences flag), then never again — every
-// launch after that goes straight to the normal splash → home flow.
-// The "still checking" placeholder (a very fast local read, not
-// network) uses the same BrandedLoadingScreen as everything else, so
-// there's no 4th different-looking flash on screen while it resolves.
+// First-launch intro video gate.
+//
+// FIX (task #108 follow-up, "3x animation flicker" root cause): this
+// used to be a StatefulWidget that itself awaited SharedPreferences
+// inside initState() and showed ANOTHER fresh BrandedLoadingScreen
+// while that resolved (see the comment that used to be here about "no
+// 4th different-looking flash" — the flash it was talking about
+// avoiding was a visual-design difference, not the flicker itself).
+// The real problem: that async gap happened INSIDE _IntroGate, which
+// only exists after the boot sequence's second runApp(CustomerApp())
+// call has already thrown away and rebuilt the entire widget tree from
+// _BootLoadingApp. So a full cold boot painted BrandedLoadingScreen
+// TWICE as two completely separate Elements — once as _BootLoadingApp
+// pre-Firebase, once again here post-runApp() — and Flutter genuinely
+// tears down/repaints the whole screen at that runApp() swap, which is
+// what reads as a restart/flicker even though the two screens look
+// pixel-identical.
+//
+// Fixed by resolving showIntro/showWelcome in main()'s boot phase 1
+// (see _resolveIntroFlags()) BEFORE the second runApp() ever fires, and
+// threading the two already-known booleans down through CustomerApp
+// into this now-plain StatelessWidget. There is no async gap left in
+// this widget at all, so it can never show a loading placeholder of
+// its own — the ONLY loading screen in the entire cold-boot path is
+// _BootLoadingApp, painted exactly once.
 // ================================================================
-class _IntroGate extends StatefulWidget {
-  const _IntroGate();
+class _IntroGate extends StatelessWidget {
+  final bool showIntro;
+  final bool showWelcome;
 
-  @override
-  State<_IntroGate> createState() => _IntroGateState();
-}
-
-class _IntroGateState extends State<_IntroGate> {
-  static const String _seenIntroKey = 'has_seen_intro_video_v1';
-  static const String _seenWelcomeKey = 'has_seen_welcome_v1';
-
-  bool? _showIntro; // null while the shared_preferences check is in flight
-  bool _showWelcome = false;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_checkFirstLaunch());
-  }
-
-  Future<void> _checkFirstLaunch() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-
-      final seenIntro = prefs.getBool(_seenIntroKey) ?? false;
-      if (!seenIntro) {
-        await prefs.setBool(_seenIntroKey, true);
-      }
-
-      // Tracked separately from the video. They were introduced at
-      // different times, so a customer who already has the intro flag
-      // set from an earlier version should still be offered the
-      // language/sign-in screen once.
-      final seenWelcome = prefs.getBool(_seenWelcomeKey) ?? false;
-      if (!seenWelcome) {
-        await prefs.setBool(_seenWelcomeKey, true);
-      }
-
-      if (mounted) {
-        setState(() {
-          _showIntro = !seenIntro;
-          _showWelcome = !seenWelcome;
-        });
-      }
-    } catch (e) {
-      debugPrint('[IntroGate] first-launch check failed: $e');
-      if (mounted) {
-        setState(() {
-          _showIntro = false;
-          _showWelcome = false;
-        });
-      }
-    }
-  }
+  const _IntroGate({required this.showIntro, required this.showWelcome});
 
   @override
   Widget build(BuildContext context) {
-    if (_showIntro == null) {
-      return const BrandedLoadingScreen();
-    }
-
     // First launch runs the whole sequence:
     //   intro video -> welcome (language + sign-in) -> splash -> home
     // Every launch after that goes straight to splash -> home.
     const home = SplashSetupScreen(nextScreen: _CustomerHomeGate());
     final afterIntro =
-        _showWelcome ? const WelcomeScreen(next: home) : home;
+        showWelcome ? const WelcomeScreen(next: home) : home;
 
-    if (_showIntro ?? false) {
+    if (showIntro) {
       return IntroVideoScreen(next: afterIntro);
     }
     return afterIntro;

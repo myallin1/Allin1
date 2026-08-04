@@ -63,6 +63,19 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   }
 
   String _rideStatus = 'arriving';
+  // FIX (Phase 4a, WhatsApp/Uber-model active-ride migration): 'arrived'
+  // and 'in_progress' no longer get written to Firestore's rides doc at
+  // all — hero_ride_screen.dart writes them straight to RTDB's
+  // active_rides/{rideDocId} node now (see _listenActiveRideStatus
+  // below), so Firestore's status field jumps straight from whatever it
+  // was at creation to 'completed'/'paid'/'dispute'/'cancelled'. These
+  // two fields let the effective _rideStatus combine both sources
+  // correctly: RTDB wins while the active_rides node exists (it holds
+  // the CURRENT truth for an in-flight ride), Firestore's status wins
+  // once that node is gone (deleted by the hero the moment the ride
+  // reaches a final state — see _cleanupActiveRideStatusNode below).
+  String _firestoreRideStatus = 'arriving';
+  String? _activeRideRtdbStatus;
   bool _completed = false;
   String? _paymentStatus;
   double? _captainLat;
@@ -87,6 +100,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   StreamSubscription<DatabaseEvent>? _captainLocationSub;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
       _rideDocSubscription;
+  StreamSubscription<DatabaseEvent>? _activeRideStatusSub;
   final MapController _trackingMapController = MapController();
   bool _trackingMapReady = false;
   bool _pendingTrackingFit = false;
@@ -170,38 +184,6 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       return LatLng(widget.ride.pickupLatitude!, widget.ride.pickupLongitude!);
     }
     return null;
-  }
-
-  ({double lat, double lng})? _extractHeroCoordinates(
-      Map<String, dynamic> data,) {
-    final rawLoc = data['currentLocation'];
-    if (rawLoc is Map) {
-      final loc = Map<String, dynamic>.from(rawLoc);
-      final nestedLat = (loc['latitude'] ??
-          loc['lat'] ??
-          data['latitude'] ??
-          data['lat']) as num?;
-      final nestedLng = (loc['longitude'] ??
-          loc['lng'] ??
-          data['longitude'] ??
-          data['lng']) as num?;
-      if (nestedLat != null && nestedLng != null) {
-        return (lat: nestedLat.toDouble(), lng: nestedLng.toDouble());
-      }
-    }
-
-    final flatLat = (data['captainLat'] ??
-        data['heroLat'] ??
-        data['latitude'] ??
-        data['lat']) as num?;
-    final flatLng = (data['captainLng'] ??
-        data['heroLng'] ??
-        data['longitude'] ??
-        data['lng']) as num?;
-    if (flatLat == null || flatLng == null) {
-      return null;
-    }
-    return (lat: flatLat.toDouble(), lng: flatLng.toDouble());
   }
 
   String _normalizeHeroVehicleType(String? value) {
@@ -582,6 +564,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     _rideOtp = generateLocalOtp(widget.rideDocId); 
     
     _rideStatus = widget.ride.status ?? _rideStatus;
+    _firestoreRideStatus = _rideStatus;
     _captainName = widget.ride.heroName;
     _captainBike = widget.ride.heroVehicleNumber;
     _captainPhone = widget.ride.heroPhone;
@@ -590,6 +573,39 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       _finalFare = widget.ride.estimatedFare?.toDouble();
     }
     _bindRideDocument();
+    _listenActiveRideStatus();
+  }
+
+  // FIX (Phase 4a): live-streams the hero's transient ride-status writes
+  // (arrived/in_progress) straight from RTDB's active_rides/{rideDocId}
+  // node instead of Firestore — see the _firestoreRideStatus/
+  // _activeRideRtdbStatus comment above for why both sources exist and
+  // how they combine. When the node is missing entirely (ride not yet
+  // arrived, or already completed and cleaned up), this defers to
+  // whatever Firestore's _firestoreRideStatus already says.
+  void _listenActiveRideStatus() {
+    if (widget.rideDocId.isEmpty) {
+      return;
+    }
+    _activeRideStatusSub = FirebaseDatabase.instance
+        .ref('active_rides/${widget.rideDocId}')
+        .onValue
+        .listen((event) {
+      if (!mounted) {
+        return;
+      }
+      final raw = event.snapshot.value;
+      final rtdbStatus = raw is Map ? raw['status'] as String? : null;
+      if (_activeRideRtdbStatus == rtdbStatus) {
+        return;
+      }
+      setState(() {
+        _activeRideRtdbStatus = rtdbStatus;
+        _rideStatus = rtdbStatus ?? _firestoreRideStatus;
+      });
+    }, onError: (Object e) {
+      debugPrint('[RideTrackingScreen] active_rides listener error: $e');
+    });
   }
 
   @override
@@ -628,6 +644,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     WidgetsBinding.instance.removeObserver(this);
     _rideDocSubscription?.cancel();
     _captainLocationSub?.cancel();
+    _activeRideStatusSub?.cancel();
     _disposeMoveAnimation();
     super.dispose();
   }
@@ -781,6 +798,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     if (currentCustomerUid == null || rideCustomerId != currentCustomerUid) {
       _rideDocSubscription?.cancel();
       _captainLocationSub?.cancel();
+      _activeRideStatusSub?.cancel();
       setState(() {
         _rideErrorMessage = 'This ride is not linked to your account.';
         _isRideLoading = false;
@@ -844,7 +862,8 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     }
 
     setState(() {
-      _rideStatus = nextStatus;
+      _firestoreRideStatus = nextStatus;
+      _rideStatus = _activeRideRtdbStatus ?? nextStatus;
       _paymentStatus = nextPaymentStatus;
       _lockedFare = nextLockedFare;
       _finalFare = nextFinalFare;
