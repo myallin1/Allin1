@@ -20,6 +20,17 @@
 //    customer, the whole screen becomes a beautiful "Unlock your Super
 //    Hero" screen instructing them to contact Admin Support, instead of
 //    showing (or gating inline inside) the chat itself.
+// 5. Voice Intent Parsing + Auto-Navigation (per Nizam's explicit
+//    follow-up): a Pro customer's voice command is no longer just sent
+//    to the AI as text. VoiceBookingIntentService parses it locally for
+//    a service keyword (Bike/Auto/Cab/Parcel/Mini Truck/Lorry/SOS) and a
+//    destination phrase, resolves the destination via the same
+//    MapService search pipeline the booking screen's own address search
+//    uses, then this screen pushes BikeBookingScreen directly with that
+//    category + destination pre-filled (or SosScreen for SOS) — the
+//    customer lands one tap from confirming, no manual re-typing. Only
+//    utterances with no recognizable service keyword fall back to the
+//    normal AI text reply.
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -31,7 +42,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/ai_activation_service.dart';
 import '../services/guru_api_service.dart';
+import '../services/voice_booking_intent_service.dart';
 import '../widgets/server_busy_dialog.dart' show kCallCenterNumberIntl;
+import 'bike_taxi/bike_booking_screen.dart';
+import 'sos_screen.dart';
 
 // ---- Dark, glowing "Super Hero" palette ---------------------------------
 const Color _bg = Color(0xFF0B0B12);
@@ -75,10 +89,15 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<_GuruMessage> _messages = <_GuruMessage>[];
   final stt.SpeechToText _speech = stt.SpeechToText();
+  final VoiceBookingIntentService _voiceIntent = VoiceBookingIntentService();
 
   bool _isTyping = false;
   bool _isListening = false;
   bool _speechReady = false;
+  // Guards against a stray extra speech_to_text onResult firing after
+  // we've already actioned the finalResult once (dispatched an intent or
+  // sent a fallback chat message) for this listening session.
+  bool _voiceResultHandled = false;
 
   @override
   void dispose() {
@@ -177,7 +196,10 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
       return;
     }
 
-    setState(() => _isListening = true);
+    setState(() {
+      _isListening = true;
+      _voiceResultHandled = false;
+    });
     unawaited(
       _speech.listen(
         onResult: (result) {
@@ -185,15 +207,103 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
           _inputController.selection = TextSelection.collapsed(
             offset: _inputController.text.length,
           );
-          if (result.finalResult && result.recognizedWords.trim().isNotEmpty) {
+          if (result.finalResult &&
+              result.recognizedWords.trim().isNotEmpty &&
+              !_voiceResultHandled) {
+            _voiceResultHandled = true;
             setState(() => _isListening = false);
-            unawaited(
-              _sendMessage('🎙 Voice order: ${result.recognizedWords.trim()}'),
-            );
+            unawaited(_handleVoiceUtterance(result.recognizedWords.trim()));
           }
         },
         listenFor: const Duration(seconds: 20),
         pauseFor: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  // Execute the action, don't just describe it: parse the transcribed
+  // utterance for a service + destination and, when recognized, push the
+  // real booking screen with everything pre-filled — falling back to a
+  // normal AI chat reply only when no service keyword is understood at
+  // all. See voice_booking_intent_service.dart for the parsing rules.
+  Future<void> _handleVoiceUtterance(String utterance) async {
+    final intent = _voiceIntent.parse(utterance);
+    if (intent == null) {
+      // Nothing service-shaped in there — treat it as a normal question.
+      unawaited(_sendMessage('🎙 $utterance'));
+      return;
+    }
+
+    if (intent.service == VoiceService.sos) {
+      _showVoiceToast('Opening SOS...');
+      unawaited(
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const SosScreen()),
+        ),
+      );
+      return;
+    }
+
+    if (intent.destinationQuery == null) {
+      // Heard a service ("book an auto") but no destination at all —
+      // still take the customer straight to that service's booking
+      // screen rather than making them repeat themselves in text.
+      _showVoiceToast('Opening ${intent.displayName} booking...');
+      unawaited(
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => BikeBookingScreen(initialCategory: intent.categoryKey),
+          ),
+        ),
+      );
+      return;
+    }
+
+    _showVoiceToast('Finding "${intent.destinationQuery}"...');
+    final resolved = await _voiceIntent.resolve(intent);
+    if (!mounted) return;
+
+    if (resolved.destination == null) {
+      // Recognized the service but couldn't geocode the spoken place —
+      // don't silently fail; open the booking screen with the category
+      // already selected so the customer only has to type/search the
+      // destination once, and say plainly why.
+      _showVoiceToast(
+        'Couldn\'t find "${intent.destinationQuery}" — opening ${intent.displayName} so you can search it.',
+      );
+      unawaited(
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => BikeBookingScreen(initialCategory: intent.categoryKey),
+          ),
+        ),
+      );
+      return;
+    }
+
+    _showVoiceToast(
+      'Opening ${intent.displayName} to ${resolved.destination!['name'] ?? intent.destinationQuery}...',
+    );
+    unawaited(
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => BikeBookingScreen(
+            initialCategory: intent.categoryKey,
+            initialDropLocation: resolved.destination,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showVoiceToast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: _surfaceElevated,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
       ),
     );
   }

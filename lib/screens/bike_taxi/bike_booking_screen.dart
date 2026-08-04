@@ -285,7 +285,22 @@ class _DummyVehicleState {
 }
 
 class BikeBookingScreen extends StatefulWidget {
-  const BikeBookingScreen({super.key});
+  const BikeBookingScreen({
+    super.key,
+    this.initialCategory,
+    this.initialDropLocation,
+  });
+
+  // Voice-to-Order (MyAllin1 Super Hero, Pro tier — see
+  // voice_booking_intent_service.dart): when the AI parses a spoken
+  // command like "Book an auto to Erode Railway Station", it pushes this
+  // screen with the recognized category and a resolved destination
+  // (already geocoded via MapService().search(...)) pre-filled, so the
+  // customer lands one tap away from confirming instead of typing
+  // everything again. Both are optional and purely additive — every
+  // existing caller that omits them behaves exactly as before.
+  final String? initialCategory;
+  final Map<String, dynamic>? initialDropLocation;
 
   @override
   State<BikeBookingScreen> createState() => _BikeBookingScreenState();
@@ -390,6 +405,25 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     _initLocationTracking();
     unawaited(_restoreActiveRideIfNeeded());
     unawaited(_loadRecentPlaces());
+
+    // Voice-to-Order pre-fill (see BikeBookingScreen's doc comment above).
+    // Applied directly in initState, before the first frame — these are
+    // plain field/text-controller writes, not map-dependent, so no need
+    // to wait for _mainMapReady/_searchMapReady.
+    final initialCategory = widget.initialCategory;
+    if (initialCategory != null &&
+        RideModel.defaultFares.containsKey(initialCategory)) {
+      _selectedCategory = initialCategory;
+    }
+    final initialDrop = widget.initialDropLocation;
+    if (initialDrop != null &&
+        initialDrop['lat'] is num &&
+        initialDrop['lng'] is num) {
+      _dropLocation = initialDrop;
+      _dropController.text = initialDrop['name'] as String? ??
+          initialDrop['full'] as String? ??
+          '';
+    }
     Timer(const Duration(seconds: 1), () {
       if (!mounted) return;
       _ensureDummyTrafficInitialized();
