@@ -16,6 +16,23 @@ import 'services/db_usage_tracker.dart';
 import 'services/localization_service.dart';
 import 'services/session_service.dart';
 import 'services/theme_service.dart';
+import 'widgets/branded_loading_screen.dart';
+
+// FIX (Nizam's "jet-speed startup" request, task #108, same fix as
+// main_customer.dart/main_hero.dart): paint this instantly, before
+// Firebase even starts, so Flutter's first frame fires in milliseconds
+// instead of after a Firebase network round-trip.
+class _BootLoadingApp extends StatelessWidget {
+  const _BootLoadingApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: BrandedLoadingScreen(),
+    );
+  }
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +44,7 @@ void main() async {
       options.tracesSampleRate = 1.0;
     },
     appRunner: () async {
+      runApp(const _BootLoadingApp());
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );

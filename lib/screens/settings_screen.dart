@@ -77,14 +77,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isLoading = true;
 
   // Settings state
+  //
+  // FIX (Nizam's request: remove unwanted/dead buttons from Settings):
+  // three tiles removed from this screen entirely --
+  //   - Biometric Login: local_auth is not a dependency anywhere in
+  //     pubspec.yaml, so this switch saved a Hive flag nothing else ever
+  //     read. There is no biometric login anywhere in the app.
+  //   - Dark Mode: was `onChanged: null` (permanently on, un-tappable) --
+  //     dead weight now that the real Theme picker right below it
+  //     already gives 5 actual switchable themes. A toggle a customer
+  //     can see but can never change just reads as broken.
+  //   - Currency: INR/USD/EUR picker whose value (`_selectedCurrency`)
+  //     was never read anywhere else in the codebase -- every price in
+  //     every screen is hardcoded to INR (this is an Erode-only app).
+  //     Picking "USD" here changed nothing.
   bool _notificationsEnabled = true;
   bool _rideAlertsEnabled = true;
   bool _promotionalAlerts = false;
-  final bool _darkModeEnabled = true; // App is already dark
   bool _locationEnabled = true;
-  bool _biometricEnabled = false;
   String _selectedLanguage = 'English';
-  String _selectedCurrency = 'INR (₹)';
 
   @override
   void initState() {
@@ -135,13 +146,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadSettings() async {
     try {
       final box = _settingsBox;
-      final currency = box.get('currency', defaultValue: 'INR (₹)') as String;
       final notifications =
           box.get('notifications', defaultValue: true) as bool;
       final rideAlerts = box.get('rideAlerts', defaultValue: true) as bool;
       final promotions = box.get('promotions', defaultValue: false) as bool;
       final location = box.get('location', defaultValue: true) as bool;
-      final biometric = box.get('biometric', defaultValue: false) as bool;
 
       if (!mounted) return;
       // Language now reads from the real, app-wide LocalizationService
@@ -152,12 +161,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final languageCode = context.read<LocalizationService>().languageCode;
       setState(() {
         _selectedLanguage = _getLanguageNameFromCode(languageCode);
-        _selectedCurrency = currency;
         _notificationsEnabled = notifications;
         _rideAlertsEnabled = rideAlerts;
         _promotionalAlerts = promotions;
         _locationEnabled = location;
-        _biometricEnabled = biometric;
       });
     } catch (e) {
       debugPrint('❌ Load settings error: $e');
@@ -356,26 +363,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _saveSetting('location', v);
             },
           ),
-          _buildDivider(),
-          _buildSwitchTile(
-            icon: Icons.fingerprint,
-            title: t('biometric_login_title'),
-            subtitle: t('biometric_login_subtitle'),
-            value: _biometricEnabled,
-            onChanged: (v) {
-              if (!mounted) return;
-              setState(() => _biometricEnabled = v);
-              _saveSetting('biometric', v);
-            },
-          ),
-          _buildDivider(),
-          _buildSwitchTile(
-            icon: Icons.dark_mode_outlined,
-            title: t('dark_mode_title'),
-            subtitle: t('dark_mode_subtitle'),
-            value: _darkModeEnabled,
-            onChanged: null,
-          ),
           if (themeService != null) ...[
             _buildDivider(),
             _buildThemeTile(themeService, t),
@@ -561,13 +548,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: t('language_label'),
             subtitle: _selectedLanguage,
             onTap: _showLanguagePicker,
-          ),
-          _buildDivider(),
-          _buildTapTile(
-            icon: Icons.currency_exchange,
-            title: 'Currency',
-            subtitle: _selectedCurrency,
-            onTap: _showCurrencyPicker,
           ),
         ],
       ),
@@ -1061,70 +1041,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  void _showCurrencyPicker() {
-    final t = context.read<LocalizationService>().t;
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: kCard2,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              t('select_currency_title'),
-              style: GoogleFonts.outfit(
-                color: kText,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildCurrencyOption(ctx, 'INR (₹)', t('currency_inr_name')),
-            _buildCurrencyOption(ctx, r'USD ($)', t('currency_usd_name')),
-            _buildCurrencyOption(ctx, 'EUR (€)', t('currency_eur_name')),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCurrencyOption(BuildContext ctx, String currency, String name) {
-    final isSelected = _selectedCurrency == currency;
-    return ListTile(
-      onTap: () {
-        if (!mounted) return;
-        setState(() => _selectedCurrency = currency);
-        _saveSetting('currency', currency);
-        Navigator.of(ctx).pop();
-      },
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: isSelected ? kGold.withValues(alpha: 0.1) : kCard,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Center(
-          child: Text(
-            currency.split(' ')[0],
-            style: GoogleFonts.outfit(
-              color: isSelected ? kGold : kMuted,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-      ),
-      title: Text(name, style: GoogleFonts.outfit(color: kText)),
-      trailing:
-          isSelected ? const Icon(Icons.check_circle, color: kGold) : null,
     );
   }
 

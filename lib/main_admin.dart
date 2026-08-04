@@ -22,6 +22,23 @@ import 'services/db_usage_tracker.dart';
 import 'services/localization_service.dart';
 import 'services/session_service.dart';
 import 'services/theme_service.dart';
+import 'widgets/branded_loading_screen.dart';
+
+// FIX (Nizam's "jet-speed startup" request, task #108, same fix as
+// main_customer.dart/main_hero.dart/main_seller.dart): paint this
+// instantly, before Hive/Firebase even start, so Flutter's first frame
+// fires in milliseconds instead of after a Firebase network round-trip.
+class _BootLoadingApp extends StatelessWidget {
+  const _BootLoadingApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: BrandedLoadingScreen(),
+    );
+  }
+}
 
 void main() {
   FlutterError.onError = (details) {
@@ -47,6 +64,8 @@ void main() {
     },
     appRunner: () async {
       WidgetsFlutterBinding.ensureInitialized();
+
+      runApp(const _BootLoadingApp());
 
       // SessionService.saveSession() opens a Hive box directly (not via
       // HiveCache's guarded wrapper), which throws "You need to

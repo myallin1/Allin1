@@ -25,6 +25,7 @@ import 'services/hero_web_audio_service.dart';
 import 'services/localization_service.dart';
 import 'services/map_service.dart';
 import 'services/theme_service.dart';
+import 'widgets/branded_loading_screen.dart';
 import 'widgets/hero_premium_loader.dart';
 
 String? _rideIdFromPushData(Map<String, dynamic> data) {
@@ -76,6 +77,25 @@ Future<void> _ensureFirebaseInitialized() async {
 // error, no retry, just a permanently blank/black tab. Deliberately
 // tiny/dependency-free here (no theming service, no providers) since
 // those aren't initialized yet at this point in boot.
+// FIX (Nizam's "jet-speed startup" request, task #108, same fix as
+// main_customer.dart): paint this instantly, before Firebase/Hive start,
+// so Flutter's first frame fires in milliseconds instead of after a
+// Firebase network round-trip -- that wait was the actual cause of the
+// "app takes a while to open with some animation running" symptom.
+// Reuses BrandedLoadingScreen (already dependency-free, no Provider
+// needed) rather than inventing a hero-specific one.
+class _BootLoadingApp extends StatelessWidget {
+  const _BootLoadingApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: BrandedLoadingScreen(),
+    );
+  }
+}
+
 class _BootFailedApp extends StatelessWidget {
   final VoidCallback onRetry;
   const _BootFailedApp({required this.onRetry});
@@ -278,6 +298,10 @@ void main() async {
       options.tracesSampleRate = 1.0;
     },
     appRunner: () async {
+      // FIX (task #108, jet-speed startup): see _BootLoadingApp's comment
+      // above -- this must run before anything Firebase/Hive-related.
+      runApp(const _BootLoadingApp());
+
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
       // FIX (black/white-screen-stuck audit, per Nizam's request): retry

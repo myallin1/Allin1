@@ -96,6 +96,41 @@ Future<void> _ensureFirebaseInitialized() async {
   }
 }
 
+// FIX (Nizam's "jet-speed startup" request, task #108): previously
+// nothing painted at all until Firebase.initializeApp() + its retry loop
+// + Hive boot phase 1 all finished -- a genuine network round-trip
+// (Firebase init can hit the network, and is documented above as prone
+// to "transient blip" failures on weak Erode connections) that blocked
+// Flutter's very first frame. Flutter's `flutter-first-frame` web event
+// (see web/index.html) only fires once something actually paints, so
+// the customer sat on the JS splash's cycling status text the entire
+// time -- which is what read as "3 animations before the app opens" on
+// every single launch, not just the first.
+//
+// Fix: paint THIS tiny, dependency-free screen immediately (no Firebase,
+// no providers, nothing it needs isn't available the instant the Dart
+// VM boots) via an early runApp() call, before Firebase/Hive even start.
+// That fires flutter-first-frame right away and swaps out the JS splash
+// for this -- which looks IDENTICAL to BrandedLoadingScreen (same design
+// as the JS splash by design, see branded_loading_screen.dart's own
+// comment), so the customer never perceives a "swap" at all, just one
+// continuous screen. Once Firebase/Hive phase 1 finish in the
+// background, a second runApp(CustomerApp()) call below replaces this
+// with the real app -- calling runApp() a second time is a normal,
+// already-used pattern here (see _BootFailedApp below, which did this
+// on the failure path before this fix existed).
+class _BootLoadingApp extends StatelessWidget {
+  const _BootLoadingApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: BrandedLoadingScreen(),
+    );
+  }
+}
+
 // FIX (black/white-screen-stuck audit, per Nizam's request): the
 // fallback shown when Firebase can't be reached even after retries —
 // previously this scenario just left the tab blank with no runApp() at
@@ -172,6 +207,17 @@ void main() async {
     },
     appRunner: () async {
       WidgetsFlutterBinding.ensureInitialized();
+
+      // FIX (task #108, jet-speed startup): paint something -- anything
+      // -- as the very first statement after the binding is ready, before
+      // Firebase or Hive have even started. This is what actually kills
+      // the "3 animations on every open" symptom: Flutter's first frame
+      // now happens in milliseconds instead of after a Firebase network
+      // round-trip, so the web JS splash (web/index.html) swaps out for
+      // this near-instantly instead of sitting there for however long
+      // Firebase takes. See _BootLoadingApp's comment above for why this
+      // is safe to do a second runApp() over, below.
+      runApp(const _BootLoadingApp());
 
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
