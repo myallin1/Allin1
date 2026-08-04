@@ -320,6 +320,25 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
                   tileProvider: _DynamicTileProvider(_mapService),
                   userAgentPackageName: 'com.allin1.superapp',
                   maxZoom: 18,
+                  // FIX (blank-map-tile audit, per Nizam's report): tile
+                  // load failures used to be completely silent -- OSM's
+                  // public tile.openstreetmap.org server can 403/429 a
+                  // request with no visible error anywhere (Flutter's
+                  // image pipeline just swallows it), leaving the map
+                  // area permanently blank with zero feedback. This
+                  // surfaces genuine tile failures to MapService so the
+                  // existing "Allin1 map loading..." error overlay
+                  // (gated on hasUiError) actually appears instead of a
+                  // dead blank screen, and gives us a debug log to
+                  // confirm whether OSM is actually rate-limiting us.
+                  errorTileCallback: (tile, error, stackTrace) {
+                    debugPrint(
+                      '[Allin1MapWidget] Tile load FAILED provider='
+                      '${_mapService.currentProvider.name} '
+                      'coords=${tile.coordinates} error=$error',
+                    );
+                    _mapService.markFailure();
+                  },
                 ),
                 if (widget.routes.isNotEmpty)
                   PolylineLayer(
@@ -492,6 +511,23 @@ class _DynamicTileProvider extends TileProvider {
 
   _DynamicTileProvider(this.mapService);
 
+  // FIX (blank-map-tile audit, per Nizam's report): requests to
+  // tile.openstreetmap.org (which is what every tile URL currently
+  // resolves to -- see OlaMapsProvider.getTileUrl()/OSMProvider) went
+  // out via a bare `NetworkImage(url)` with NO headers at all. Because a
+  // custom TileProvider is supplied here, flutter_map's own mechanism
+  // that turns TileLayer.userAgentPackageName into a real `User-Agent`
+  // header never runs (that only happens inside flutter_map's built-in
+  // NetworkTileProvider) -- so despite userAgentPackageName being set
+  // above, tile requests were actually going out with no identifying
+  // header at all. OSM's tile usage policy explicitly blocks/rate-limits
+  // exactly this pattern (see operations.osmfoundation.org/policies/tiles),
+  // which is the most likely reason the map area goes blank with no
+  // error: OSM silently drops/403s unidentified high-volume requests.
+  static const Map<String, String> _tileHeaders = {
+    'User-Agent': 'Allin1SuperApp/1.0 (Erode Tamil Nadu; contact via app)',
+  };
+
   @override
   ImageProvider getImage(TileCoordinates coordinates, TileLayer options) {
     try {
@@ -503,7 +539,7 @@ class _DynamicTileProvider extends TileProvider {
       debugPrint(
         '[Allin1MapWidget] Loading tile provider=${mapService.currentProvider.name} url=$url',
       );
-      return NetworkImage(url);
+      return NetworkImage(url, headers: _tileHeaders);
     } catch (e) {
       debugPrint('[Allin1MapWidget] Tile URL generation failed: $e');
       mapService.markFailure();
