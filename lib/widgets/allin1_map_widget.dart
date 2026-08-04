@@ -103,9 +103,30 @@ Future<vmt.Style?>? _olaVectorStyleFuture;
 
 Future<vmt.Style?> _loadOlaVectorStyle() {
   return _olaVectorStyleFuture ??= () async {
+    // REGRESSION FIX (per Nizam's report: Ola never opens, every session,
+    // even once the key is confirmed present) -- this used to check
+    // ApiConfig.olaMapsApiKey immediately on the very first call. On web
+    // especially, dotenv is still loading at that exact moment (same race
+    // _initializeMapService() below already guards against with this same
+    // wait loop), so the key read as empty, vectorStyleUriFor() returned
+    // null, and because this Future is cached at module level, that
+    // "no key yet" result got permanently frozen in as "Ola failed" for
+    // the rest of the session -- every later map screen kept rendering
+    // OSM even after the key had long since loaded. Wait for it first.
+    const maxWaitMs = 3000;
+    const stepMs = 100;
+    var waited = 0;
+    while (ApiConfig.olaMapsApiKey.isEmpty && waited < maxWaitMs) {
+      await Future<void>.delayed(const Duration(milliseconds: stepMs));
+      waited += stepMs;
+    }
+
     final uri = OlaMapsProvider.vectorStyleUriFor(ApiConfig.olaMapsApiKey);
     if (uri == null) {
-      debugPrint('[Allin1MapWidget] Ola vector style skipped (no valid key)');
+      debugPrint(
+        '[Allin1MapWidget] Ola vector style skipped (no valid key after '
+        '${waited}ms wait)',
+      );
       return null;
     }
     try {
