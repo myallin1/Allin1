@@ -7,10 +7,12 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:colorful_iconify_flutter/icons/fluent_emoji_flat.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -53,6 +55,18 @@ class _ServiceCategory {
   final IconData icon3;
   final Color color;
 
+  // FIX (Nizam's "modernize icons" request): a colorful FluentEmojiFlat
+  // SVG string, same icon family the rest of the app's main UI already
+  // uses (see dashboard_screen.dart's electronics preview row and
+  // category tiles). Optional/nullable rather than replacing icon/icon2/
+  // icon3 outright -- only categories where a matching FluentEmojiFlat
+  // constant is ALREADY confirmed in use elsewhere in this exact
+  // codebase get one, so this can't silently reference a name that
+  // doesn't exist in the vendored icon set. Categories without a
+  // confirmed match keep their existing (still perfectly modern, just
+  // monochrome) Material _rounded icon trio unchanged.
+  final String? emoji;
+
   const _ServiceCategory({
     required this.id,
     required this.title,
@@ -61,6 +75,7 @@ class _ServiceCategory {
     required this.icon2,
     required this.icon3,
     required this.color,
+    this.emoji,
   });
 }
 
@@ -73,6 +88,7 @@ const _categories = [
     icon2: Icons.phonelink_setup_rounded,
     icon3: Icons.phone_android_rounded,
     color: _kPink,
+    emoji: FluentEmojiFlat.mobile_phone,
   ),
   _ServiceCategory(
     id: 'laptop',
@@ -82,6 +98,7 @@ const _categories = [
     icon2: Icons.laptop_chromebook_rounded,
     icon3: Icons.memory_rounded,
     color: _kBlue,
+    emoji: FluentEmojiFlat.laptop,
   ),
   _ServiceCategory(
     id: 'pc',
@@ -91,6 +108,7 @@ const _categories = [
     icon2: Icons.computer_rounded,
     icon3: Icons.developer_board_rounded,
     color: _kPurple,
+    emoji: FluentEmojiFlat.desktop_computer,
   ),
   _ServiceCategory(
     id: 'cctv',
@@ -100,6 +118,7 @@ const _categories = [
     icon2: Icons.camera_outdoor_rounded,
     icon3: Icons.monitor_rounded,
     color: _kTeal,
+    emoji: FluentEmojiFlat.video_camera,
   ),
   _ServiceCategory(
     id: 'hometheatre',
@@ -118,6 +137,7 @@ const _categories = [
     icon2: Icons.cast_rounded,
     icon3: Icons.settings_input_antenna_rounded,
     color: _kGold,
+    emoji: FluentEmojiFlat.television,
   ),
   _ServiceCategory(
     id: 'gadgets',
@@ -127,6 +147,27 @@ const _categories = [
     icon2: Icons.tablet_rounded,
     icon3: Icons.watch_rounded,
     color: _kGreen,
+  ),
+  // NEW (per Nizam/CTO's approved feature batch): AC + Fridge service
+  // booking tiles.
+  _ServiceCategory(
+    id: 'ac_service',
+    title: 'AC Service',
+    subtitle: 'Installation · Gas Refill · Repair',
+    icon: Icons.ac_unit_rounded,
+    icon2: Icons.thermostat_rounded,
+    icon3: Icons.hvac_rounded,
+    color: _kBlue,
+    emoji: FluentEmojiFlat.snowflake,
+  ),
+  _ServiceCategory(
+    id: 'fridge_service',
+    title: 'Fridge Service',
+    subtitle: 'Repair · Gas Refill · Maintenance',
+    icon: Icons.kitchen_rounded,
+    icon2: Icons.ac_unit_rounded,
+    icon3: Icons.build_rounded,
+    color: _kTeal,
   ),
 ];
 
@@ -648,19 +689,27 @@ class _CategoryTileState extends State<_CategoryTile>
                     ),],
                   ),
                   padding: const EdgeInsets.all(12),
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 500),
-                    transitionBuilder: (child, anim) => ScaleTransition(
-                      scale: CurvedAnimation(
-                          parent: anim, curve: Curves.elasticOut,),
-                      child: FadeTransition(opacity: anim, child: child),
-                    ),
-                    child: Icon(
-                      _currentIcon,
-                      key: ValueKey<int>(_iconIndex),
-                      size: 32, color: cat.color,
-                    ),
-                  ),
+                  // FIX (Nizam's "modernize icons" request): categories
+                  // with a confirmed FluentEmojiFlat match (the colorful
+                  // icon family the rest of the app's main UI already
+                  // uses) show that single static icon instead of the
+                  // old monochrome 3-icon cycling animation. Categories
+                  // without one keep the original animation unchanged.
+                  child: cat.emoji != null
+                      ? SvgPicture.string(cat.emoji!, width: 32, height: 32)
+                      : AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 500),
+                          transitionBuilder: (child, anim) => ScaleTransition(
+                            scale: CurvedAnimation(
+                                parent: anim, curve: Curves.elasticOut,),
+                            child: FadeTransition(opacity: anim, child: child),
+                          ),
+                          child: Icon(
+                            _currentIcon,
+                            key: ValueKey<int>(_iconIndex),
+                            size: 32, color: cat.color,
+                          ),
+                        ),
                 ),
               ),
             ),
@@ -855,7 +904,9 @@ class _CategoryModalState extends State<_CategoryModal> {
                       color: Colors.white.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Icon(cat.icon, color: Colors.white, size: 28),
+                    child: cat.emoji != null
+                        ? SvgPicture.string(cat.emoji!, width: 28, height: 28)
+                        : Icon(cat.icon, color: Colors.white, size: 28),
                   ),
                   const SizedBox(width: 14),
                   Expanded(child: Column(
@@ -950,7 +1001,9 @@ class _CategoryModalState extends State<_CategoryModal> {
                             color: cat.color.withValues(alpha: 0.25),),
                       ),
                       child: Row(children: [
-                        Icon(cat.icon, color: cat.color, size: 18),
+                        cat.emoji != null
+                            ? SvgPicture.string(cat.emoji!, width: 18, height: 18)
+                            : Icon(cat.icon, color: cat.color, size: 18),
                         const SizedBox(width: 8),
                         Text('Service: ${cat.title}',
                             style: GoogleFonts.outfit(

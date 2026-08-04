@@ -550,8 +550,11 @@ class _DashboardScreenState extends State<DashboardScreen>
     _navigate(const NjTechBroadbandWebView());
   }
 
+  // FIX (per Nizam/CTO's approved feature batch): Puncture Service direct
+  // contact number set to the CTO-provided number (was a different,
+  // incorrect number before this).
   Future<void> _callPuncture() async {
-    final uri = Uri.parse('tel:+919843269091');
+    final uri = Uri.parse('tel:+919843262951');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }

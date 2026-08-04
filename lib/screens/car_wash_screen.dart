@@ -17,9 +17,11 @@ const Color _kMuted    = Color(0xFF9999BB);
 const Color _kGold     = Color(0xFFFFBB00);
 const Color _kGreen    = Color(0xFF00C853);
 
-const String _phone    = '+918681869091';
-const String _telUri   = 'tel:+918681869091';
-const String _waUri    = 'https://wa.me/918681869091';
+// FIX (per Nizam/CTO's approved feature batch): Car Services direct
+// contact number set to the CTO-provided number for Call + WhatsApp.
+const String _phone    = '+919092031090';
+const String _telUri   = 'tel:+919092031090';
+const String _waUri    = 'https://wa.me/919092031090';
 
 // ── Service data ─────────────────────────────────────────────────
 const _services = [

@@ -17,6 +17,7 @@ import '../services/cloudinary_upload_service.dart';
 import '../services/service_request_service.dart';
 import '../widgets/location_capture_field.dart';
 import '../widgets/server_busy_dialog.dart';
+import 'dmart_screen.dart';
 import 'grocery_order_status_screen.dart';
 import 'service_request_tracking_screen.dart';
 
@@ -174,6 +175,47 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
                     ),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            // NEW (per Nizam/CTO's approved feature batch): DMart's
+            // e-menu, embedded in-app (see dmart_screen.dart). Added
+            // alongside the existing custom-list-for-hero flow below,
+            // not replacing it -- per Nizam's explicit choice, this
+            // stays an additional option.
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const DmartScreen()),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: _kPink.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: _kPink.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Text('🏬', style: TextStyle(fontSize: 32)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Order from DMart', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 14)),
+                            const SizedBox(height: 2),
+                            const Text('Browse DMart\'s full grocery menu right here in the app.', style: TextStyle(color: _kMuted, fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: _kPink),
+                    ],
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 24),

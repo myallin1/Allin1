@@ -93,6 +93,11 @@ dependencies:
   video_player:
   carousel_slider:
   sentry_flutter: ^8.14.2
+  # Native (Android/iOS) embedded WebView for the in-app DMart e-menu
+  # screen -- has no web implementation, so dmart_screen.dart switches
+  # to a real <iframe> on web instead (see dmart_embedded_view_web.dart).
+  # Run `flutter pub get` after this change before building.
+  webview_flutter: ^4.7.0
 
 dev_dependencies:
   build_runner: ^2.4.8
