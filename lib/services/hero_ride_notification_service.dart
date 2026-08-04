@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -106,7 +105,7 @@ class HeroRideNotificationService {
         android: AndroidSounds.alarm, 
         ios: IosSounds.alarm,
         looping: looping,
-        volume: 1.0,
+        volume: 1,
         asAlarm: true,
       );
     } catch (e) {
@@ -193,8 +192,6 @@ class HeroRideNotificationService {
         fullScreenIntent: true,
         ongoing: showDetails,
         autoCancel: !showDetails,
-        playSound: true,
-        enableVibration: true,
         // 0ms delay, vibrate 1sec, pause 0.5sec, vibrate 1sec, pause 0.5sec, vibrate 1sec
         vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
         ticker: ticker,

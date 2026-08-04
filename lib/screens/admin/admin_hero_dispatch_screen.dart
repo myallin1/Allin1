@@ -167,9 +167,9 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
       return;
     }
     setState(() {
-      _selectedHeroId = (hero['heroId'] as String?);
-      _selectedHeroName = (hero['name'] as String?);
-      _selectedHeroPhone = (hero['phone'] as String?);
+      _selectedHeroId = hero['heroId'] as String?;
+      _selectedHeroName = hero['name'] as String?;
+      _selectedHeroPhone = hero['phone'] as String?;
       _selectedHeroLocation = LatLng((hero['lat'] as num).toDouble(), (hero['lng'] as num).toDouble());
     });
 
@@ -198,12 +198,12 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: _pink.withOpacity(0.2),
+                      color: _pink.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: Center(
                       child: Text(
-                        _selectedHeroName?.isNotEmpty == true
+                        _selectedHeroName?.isNotEmpty ?? false
                             ? _selectedHeroName![0].toUpperCase()
                             : 'H',
                         style: const TextStyle(color: _pink, fontSize: 18, fontWeight: FontWeight.bold),
@@ -383,9 +383,9 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
             margin: const EdgeInsets.only(right: 12),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: _green.withOpacity(0.2),
+              color: _green.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _green.withOpacity(0.4)),
+              border: Border.all(color: _green.withValues(alpha: 0.4)),
             ),
             child: Row(
               children: [
@@ -400,9 +400,7 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _onlineHeroes.isEmpty
-              ? const Center(child: Text('No heroes online', style: TextStyle(color: _muted)))
-              : ListView.builder(
+          if (_onlineHeroes.isEmpty) const Center(child: Text('No heroes online', style: TextStyle(color: _muted))) else ListView.builder(
                   padding: const EdgeInsets.all(8),
                   itemCount: _onlineHeroes.length,
                   itemBuilder: (ctx, i) {
@@ -416,7 +414,7 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
                       child: ListTile(
                         onTap: () => _selectHero(hero),
                         leading: CircleAvatar(
-                          backgroundColor: isAvailable ? _green.withOpacity(0.2) : _red.withOpacity(0.2),
+                          backgroundColor: isAvailable ? _green.withValues(alpha: 0.2) : _red.withValues(alpha: 0.2),
                           child: Text(
                             ((hero['name'] as String?) ?? 'H')[0].toUpperCase(),
                             style: TextStyle(color: isAvailable ? _green : _red),
@@ -430,7 +428,7 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
                         trailing: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: isAvailable ? _green.withOpacity(0.2) : _red.withOpacity(0.2),
+                            color: isAvailable ? _green.withValues(alpha: 0.2) : _red.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -442,9 +440,7 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
                     );
                   },
                 ),
-          _onlineHeroes.isEmpty
-              ? const Center(child: Text('Loading heroes...', style: TextStyle(color: _muted)))
-              : Container(
+          if (_onlineHeroes.isEmpty) const Center(child: Text('Loading heroes...', style: TextStyle(color: _muted))) else Container(
                   margin: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
@@ -460,7 +456,7 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
                           point: LatLng((hero['lat'] as num).toDouble(), (hero['lng'] as num).toDouble()),
                           label: (hero['name'] as String?) ?? 'Hero',
                           icon: Icons.person_pin_circle_rounded,
-                          color: (hero['isAvailable'] as bool?) == true ? _green : _red,
+                          color: (hero['isAvailable'] as bool?) ?? false ? _green : _red,
                         );
                       }).toList(),
                       onMarkerTap: (index) => _selectHero(_onlineHeroes[index]),

@@ -1,4 +1,4 @@
-﻿// lib/main_customer.dart
+// lib/main_customer.dart
 // Erode Super App - CUSTOMER PWA Entry Point
 // Fixed: back button logout + routing + geolocator web crash
 
@@ -41,7 +41,6 @@ import 'services/hive_cache.dart';
 import 'services/local_sync_service.dart';
 import 'services/localization_service.dart';
 import 'services/map_service.dart';
-import 'services/session_service.dart';
 // receive_sharing_intent is Android/iOS only and has no web
 // implementation, so importing it unconditionally broke `flutter build
 // web`. Switch the implementation at compile time instead: web gets the
@@ -213,7 +212,7 @@ void main() async {
       }
       if (!firebaseReady) {
         debugPrint('[main_customer] Fatal: Firebase init failed after retries: $lastFirebaseError');
-        runApp(_BootFailedApp(onRetry: main));
+        runApp(const _BootFailedApp(onRetry: main));
         return;
       }
 
@@ -574,7 +573,7 @@ class _IntroGateState extends State<_IntroGate> {
     final afterIntro =
         _showWelcome ? const WelcomeScreen(next: home) : home;
 
-    if (_showIntro == true) {
+    if (_showIntro ?? false) {
       return IntroVideoScreen(next: afterIntro);
     }
     return afterIntro;
@@ -641,7 +640,7 @@ class _CustomerHomeGateState extends State<_CustomerHomeGate> {
               .catchError((_) => FirebaseFirestore.instance
                   .collection('users')
                   .doc(user.uid)
-                  .get()),
+                  .get(),),
           builder: (context, userSnapshot) {
             // Still resolving (typically only a genuine first-ever cold
             // start with no cache) -- show the Dashboard, not a spinner.
@@ -660,7 +659,7 @@ class _CustomerHomeGateState extends State<_CustomerHomeGate> {
 
             final child = needsSetup
                 ? const ProfileSetupScreen(
-                    preferredRole: UserType.customer,
+                    
                   )
                 : const DashboardScreen();
 

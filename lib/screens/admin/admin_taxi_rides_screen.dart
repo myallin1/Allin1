@@ -325,7 +325,7 @@ class AdminTaxiRidesScreen extends StatelessWidget {
       return;
     }
 
-    final raw = snapshot.value as Map<dynamic, dynamic>;
+    final raw = snapshot.value! as Map<dynamic, dynamic>;
     final heroes = <Map<String, String>>[];
     raw.forEach((key, value) {
       if (value is Map && value['isAvailable'] != false) {
@@ -488,7 +488,7 @@ class AdminTaxiRidesScreen extends StatelessWidget {
                 } catch (e) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('❌ Error: ${e.toString()}'), backgroundColor: Color(0xFFFF5252)),
+                      SnackBar(content: Text('❌ Error: ${e.toString()}'), backgroundColor: const Color(0xFFFF5252)),
                     );
                   }
                 } finally {

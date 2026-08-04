@@ -207,10 +207,7 @@ class WalletRechargeRequestModel {
   const WalletRechargeRequestModel({
     required this.id,
     required this.heroId,
-    this.heroName,
-    required this.amount,
-    required this.upiRefNumber,
-    required this.screenshotUrl,
+    required this.amount, required this.upiRefNumber, required this.screenshotUrl, this.heroName,
     this.status = WalletRechargeStatus.pending,
     this.requestedAt,
     this.reviewedAt,

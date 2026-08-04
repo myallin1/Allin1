@@ -101,7 +101,6 @@ class _AdminFoodOrdersScreenState extends State<AdminFoodOrdersScreen> {
               lastSyncedAt: _syncedAt,
               loading: _loading,
               onRefresh: _fetch,
-              accentColor: _pink,
               textColor: _muted,
             ),
             const SizedBox(height: 12),
@@ -140,7 +139,7 @@ class _AdminFoodOrdersScreenState extends State<AdminFoodOrdersScreen> {
     String shopLabel;
     String itemsLabel;
     if (requestType == 'catalog_food_order') {
-      shopLabel = (details['sellerName'] as String?)?.trim().isNotEmpty == true
+      shopLabel = (details['sellerName'] as String?)?.trim().isNotEmpty ?? false
           ? details['sellerName'] as String
           : 'Shop order';
       final items = (details['items'] as List<dynamic>?) ?? [];
@@ -169,7 +168,7 @@ class _AdminFoodOrdersScreenState extends State<AdminFoodOrdersScreen> {
                 child: Text(shopLabel,
                     style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 14),
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
+                    overflow: TextOverflow.ellipsis,),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

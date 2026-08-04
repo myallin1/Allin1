@@ -10,6 +10,7 @@
 // the actual order + payment, then hands the customer back into our
 // existing CustomFoodOrderScreen for pickup + delivery by an Allin1
 // hero. New shops only need to be added to kPartnerShops.
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -130,5 +131,15 @@ class _HubTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('label', label));
+    properties.add(StringProperty('subtitle', subtitle));
+    properties.add(DiagnosticsProperty<IconData>('icon', icon));
+    properties.add(IterableProperty<Color>('gradient', gradient));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }

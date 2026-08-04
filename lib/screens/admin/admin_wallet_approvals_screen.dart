@@ -85,7 +85,7 @@ class _AdminWalletApprovalsScreenState
           children: [
             Text(
               'This will remove ₹${request.amount.toStringAsFixed(0)} from '
-              '${request.heroName ?? request.heroId}\'s wallet and flag them for review.',
+              "${request.heroName ?? request.heroId}'s wallet and flag them for review.",
               style: GoogleFonts.outfit(color: _muted, fontSize: 13),
             ),
             const SizedBox(height: 12),
@@ -110,7 +110,7 @@ class _AdminWalletApprovalsScreenState
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             child: Text('Reject & Claw Back',
-                style: GoogleFonts.outfit(color: _red, fontWeight: FontWeight.w800)),
+                style: GoogleFonts.outfit(color: _red, fontWeight: FontWeight.w800),),
           ),
         ],
       ),
@@ -213,7 +213,7 @@ class _AdminWalletApprovalsScreenState
             children: [
               Expanded(
                 child: Text(
-                  request.heroName?.isNotEmpty == true
+                  request.heroName?.isNotEmpty ?? false
                       ? request.heroName!
                       : 'Hero ${request.heroId.substring(0, 6)}',
                   style: GoogleFonts.outfit(

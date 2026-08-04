@@ -18,40 +18,39 @@ import 'package:provider/provider.dart';
 import 'package:scratcher/scratcher.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../services/pwa_cache_platform_stub.dart'
-    if (dart.library.html) '../services/pwa_cache_platform_web.dart';
 import '../config/city_config.dart';
 import '../services/app_update_checker.dart';
 import '../services/city_service.dart';
+import '../services/hive_cache.dart';
+import '../services/local_sync_service.dart';
 import '../services/localization_service.dart';
 import '../services/location_service.dart';
+import '../services/prefs_cache.dart';
+import '../services/pwa_cache_platform_stub.dart'
+    if (dart.library.html) '../services/pwa_cache_platform_web.dart';
 import '../services/theme_service.dart';
 import '../services/update_service.dart';
 import '../services/web_version_checker.dart';
-
 import '../widgets/banner_slider.dart';
 import '../widgets/coach_mark_overlay.dart';
+import '../widgets/promo_overlay.dart';
 import 'bike_taxi/bike_booking_screen.dart';
-import 'food_hub_screen.dart';
-import 'hero_booking_screen.dart';
 import 'car_wash_screen.dart';
 import 'coming_soon_screen.dart';
 import 'construction_screen.dart';
+import 'food_hub_screen.dart';
 import 'grocery_order_screen.dart';
-import 'printing_service_screen.dart';
 import 'guru_chat_screen.dart';
+import 'hero_booking_screen.dart';
 import 'nj_tech_service_screen.dart';
 import 'nj_tech_store_screen.dart';
 import 'play_zone_screen.dart';
+import 'printing_service_screen.dart';
 import 'profile_screen.dart';
 import 'rewards_screen.dart';
-import '../widgets/promo_overlay.dart';
 import 'ride_history_screen.dart';
 import 'settings_screen.dart';
 import 'sos_screen.dart';
-import '../services/local_sync_service.dart';
-import '../services/hive_cache.dart';
-import '../services/prefs_cache.dart';
 
 // ── Brand Colors ─────────────────────────────────────────────────
 // NOTE: these used to be `const` — hardcoded to the pink&white palette no
@@ -520,7 +519,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           .set({
             'njCoinsBackup': currentCoins,
             'lastCoinsBackupAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+          }, SetOptions(merge: true),);
 
       // Explicit ttl — see _dailyKeyTtl. Given a 48h ttl the `>= 24 hours`
       // check above stays the single source of truth for backup cadence,
@@ -545,7 +544,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   void _navigate(Widget screen) => Navigator.push<void>(
-    context, MaterialPageRoute<void>(builder: (_) => screen));
+    context, MaterialPageRoute<void>(builder: (_) => screen),);
 
   Future<void> _launchBroadband() async {
     _navigate(const NjTechBroadbandWebView());
@@ -619,18 +618,18 @@ class _DashboardScreenState extends State<DashboardScreen>
             backgroundColor: kBg,
             title: Text(t('exit_app_title'),
                 style: GoogleFonts.outfit(
-                    color: kText, fontWeight: FontWeight.w700)),
+                    color: kText, fontWeight: FontWeight.w700,),),
             content: Text(t('exit_app_body'),
-                style: GoogleFonts.outfit(color: kMuted)),
+                style: GoogleFonts.outfit(color: kMuted),),
             actions: [
               TextButton(onPressed: () => Navigator.pop(context, false),
-                  child: Text(t('no_label'), style: TextStyle(color: kPink))),
+                  child: Text(t('no_label'), style: TextStyle(color: kPink)),),
               TextButton(onPressed: () => Navigator.pop(context, true),
-                  child: Text(t('yes_label'), style: TextStyle(color: kRed))),
+                  child: Text(t('yes_label'), style: TextStyle(color: kRed)),),
             ],
           ),
         );
-        if (exit == true && context.mounted) SystemNavigator.pop();
+        if ((exit ?? false) && context.mounted) SystemNavigator.pop();
       },
       child: Scaffold(
         key: _scaffoldKey,
@@ -649,23 +648,15 @@ class _DashboardScreenState extends State<DashboardScreen>
                     userStream: const Stream.empty(),
                   ),
                 ),
-                _visitedTabs.contains(1)
-                    ? KeepAliveTab(
+                if (_visitedTabs.contains(1)) KeepAliveTab(
                         child: RewardsScreen(
                           promoOffers: _promoOffers!,
                           onClaimPromo: _claimPromo,
                         ),
-                      )
-                    : const SizedBox.shrink(),
-                _visitedTabs.contains(2)
-                    ? const KeepAliveTab(child: PlayZoneScreen())
-                    : const SizedBox.shrink(),
-                _visitedTabs.contains(3)
-                    ? const KeepAliveTab(child: GuruChatScreen())
-                    : const SizedBox.shrink(),
-                _visitedTabs.contains(4)
-                    ? const KeepAliveTab(child: SosScreen())
-                    : const SizedBox.shrink(),
+                      ) else const SizedBox.shrink(),
+                if (_visitedTabs.contains(2)) const KeepAliveTab(child: PlayZoneScreen()) else const SizedBox.shrink(),
+                if (_visitedTabs.contains(3)) const KeepAliveTab(child: GuruChatScreen()) else const SizedBox.shrink(),
+                if (_visitedTabs.contains(4)) const KeepAliveTab(child: SosScreen()) else const SizedBox.shrink(),
               ],
           ),
         ],
@@ -739,7 +730,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               } else {
                 unawaited(_applyNativeAppUpdate(context));
               }
-            }
+            },
           ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -784,19 +775,19 @@ class _DashboardScreenState extends State<DashboardScreen>
       {'icon': Icons.smart_toy_rounded,      'label': t('nav_guru_label')},
       {'icon': Icons.shield_rounded,         'label': t('nav_safety_label')},
     ];
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: kBg,
-        border: Border(top: BorderSide(color: kBorder, width: 1)),
+        border: Border(top: BorderSide(color: kBorder)),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 16, offset: const Offset(0, -4))],
+            blurRadius: 16, offset: const Offset(0, -4),),],
       ),
       child: SafeArea(
         child: Row(
           children: List.generate(items.length, (i) {
             final active = _navIndex == i;
             final icon  = items[i]['icon']  as IconData?;
-            final label = items[i]['label'] as String;
+            final label = items[i]['label']! as String;
             return Expanded(
               child: InkWell(
                 key: _navTabKeys[i],
@@ -804,15 +795,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    icon != null
-                        ? Icon(icon, color: active ? kPink : kMuted, size: 24)
-                        : _A1BadgeIcon(active: active),
+                    if (icon != null) Icon(icon, color: active ? kPink : kMuted, size: 24) else _A1BadgeIcon(active: active),
                     const SizedBox(height: 3),
                     Text(label, style: TextStyle(
                         fontSize: 9.5,
                         color: active ? kPink : kMuted,
-                        fontWeight: active ? FontWeight.w700 : FontWeight.w400)),
-                  ]),
+                        fontWeight: active ? FontWeight.w700 : FontWeight.w400,),),
+                  ],),
                 ),
               ),
             );
@@ -856,6 +845,12 @@ class _A1BadgeIcon extends StatelessWidget {
       ),
     );
   }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<bool>('active', active));
+  }
 }
 
 // ================================================================
@@ -866,6 +861,12 @@ class _FloatingGuruBot extends StatefulWidget {
   const _FloatingGuruBot({required this.onTap});
   @override
   State<_FloatingGuruBot> createState() => _FloatingGuruBotState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+  }
 }
 
 class _FloatingGuruBotState extends State<_FloatingGuruBot> {
@@ -893,7 +894,7 @@ class _FloatingGuruBotState extends State<_FloatingGuruBot> {
               border: Border.all(color: kPink.withValues(alpha: 0.35), width: 2),
               boxShadow: [BoxShadow(
                   color: kPink.withValues(alpha: 0.25),
-                  blurRadius: 16, spreadRadius: 2)],
+                  blurRadius: 16, spreadRadius: 2,),],
             ),
             child: Center(
               child: Image.asset(
@@ -908,13 +909,13 @@ class _FloatingGuruBotState extends State<_FloatingGuruBot> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
               decoration: BoxDecoration(
-                color: kGreen, borderRadius: BorderRadius.circular(8)),
+                color: kGreen, borderRadius: BorderRadius.circular(8),),
               child: Text('FREE', style: GoogleFonts.outfit(
                   color: Colors.white, fontSize: 7,
-                  fontWeight: FontWeight.w800)),
+                  fontWeight: FontWeight.w800,),),
             ),
           ),
-        ]),
+        ],),
       ),
     );
   }
@@ -928,6 +929,12 @@ class _FloatingGiftBox extends StatefulWidget {
   const _FloatingGiftBox({required this.onTap});
   @override
   State<_FloatingGiftBox> createState() => _FloatingGiftBoxState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+  }
 }
 
 class _FloatingGiftBoxState extends State<_FloatingGiftBox>
@@ -939,10 +946,10 @@ class _FloatingGiftBoxState extends State<_FloatingGiftBox>
   void initState() {
     super.initState();
     _glow = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1200))
+        vsync: this, duration: const Duration(milliseconds: 1200),)
       ..repeat(reverse: true);
     _pulse = Tween<double>(begin: 0.85, end: 1.08).animate(
-        CurvedAnimation(parent: _glow, curve: Curves.easeInOut));
+        CurvedAnimation(parent: _glow, curve: Curves.easeInOut),);
   }
 
   @override
@@ -962,13 +969,13 @@ class _FloatingGiftBoxState extends State<_FloatingGiftBox>
               shape: BoxShape.circle,
               gradient: const RadialGradient(colors: [
                 Color(0xFFFFDD00), Color(0xFFFF9800),
-              ]),
+              ],),
               boxShadow: [
                 BoxShadow(
                     color: const Color(0xFFFFBB00)
                         .withValues(alpha: 0.5 + 0.35 * _pulse.value),
                     blurRadius: 22,
-                    spreadRadius: 4),
+                    spreadRadius: 4,),
               ],
             ),
             child: const Center(
@@ -1007,7 +1014,7 @@ class _HomeTab extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(context.watch<LocalizationService>().t('what_need_today'),
               style: GoogleFonts.outfit(
-                  fontSize: 17, fontWeight: FontWeight.w800, color: kText)),
+                  fontSize: 17, fontWeight: FontWeight.w800, color: kText,),),
         ),
         const SizedBox(height: 12),
         
@@ -1044,7 +1051,7 @@ class _HomeTab extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 100),
-      ]),
+      ],),
     );
   }
 
@@ -1644,14 +1651,14 @@ class _HomeTab extends StatelessWidget {
     return GestureDetector(
       onTap: () => Navigator.push<void>(context,
           MaterialPageRoute<void>(
-              builder: (_) => const ComingSoonScreen(role: 'Erode Fresh'))),
+              builder: (_) => const ComingSoonScreen(role: 'Erode Fresh'),),),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [kGreen.withValues(alpha: 0.08),
-                kGreen.withValues(alpha: 0.03)],
+                kGreen.withValues(alpha: 0.03),],
             begin: Alignment.topLeft, end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
@@ -1672,25 +1679,25 @@ class _HomeTab extends StatelessWidget {
             Row(children: [
               Text(t('featured_shop_badge'),
                   style: TextStyle(color: kGold, fontSize: 10,
-                      fontWeight: FontWeight.w700)),
+                      fontWeight: FontWeight.w700,),),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
-                  color: kGreen, borderRadius: BorderRadius.circular(6)),
+                  color: kGreen, borderRadius: BorderRadius.circular(6),),
                 child: Text(t('shop_open_label'), style: const TextStyle(
                     color: Colors.white, fontSize: 9,
-                    fontWeight: FontWeight.w700)),
+                    fontWeight: FontWeight.w700,),),
               ),
-            ]),
+            ],),
             const SizedBox(height: 2),
             Text(t('erode_fresh_name'), style: GoogleFonts.outfit(
-                color: kText, fontSize: 15, fontWeight: FontWeight.w800)),
+                color: kText, fontSize: 15, fontWeight: FontWeight.w800,),),
             Text(t('erode_fresh_subtitle'),
-                style: TextStyle(color: kMuted, fontSize: 11)),
-          ])),
+                style: TextStyle(color: kMuted, fontSize: 11),),
+          ],),),
           Icon(Icons.chevron_right_rounded, color: kMuted),
-        ]),
+        ],),
       ),
     );
   }
@@ -1701,7 +1708,7 @@ class _HomeTab extends StatelessWidget {
     return Column(children: [
       GestureDetector(
         onTap: () => Navigator.push<void>(context,
-            MaterialPageRoute<void>(builder: (_) => const BikeBookingScreen())),
+            MaterialPageRoute<void>(builder: (_) => const BikeBookingScreen()),),
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -1720,26 +1727,26 @@ class _HomeTab extends StatelessWidget {
               // doesn't otherwise need here.
               Text(t('promo_free_ride_title'),
                   style: GoogleFonts.outfit(
-                      color: kPink, fontSize: 13, fontWeight: FontWeight.w700)),
+                      color: kPink, fontSize: 13, fontWeight: FontWeight.w700,),),
               const SizedBox(height: 2),
               Text(t('promo_free_ride_subtitle'),
                   style: GoogleFonts.outfit(
-                      color: Colors.white60, fontSize: 10)),
-            ])),
+                      color: Colors.white60, fontSize: 10,),),
+            ],),),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: kPink, borderRadius: BorderRadius.circular(10)),
+                color: kPink, borderRadius: BorderRadius.circular(10),),
               child: Text(t('promo_book_label'), style: GoogleFonts.outfit(
                   color: Colors.white, fontSize: 11,
-                  fontWeight: FontWeight.w700)),
+                  fontWeight: FontWeight.w700,),),
             ),
-          ]),
+          ],),
         ),
       ),
       GestureDetector(
         onTap: () => Navigator.push<void>(context,
-            MaterialPageRoute<void>(builder: (_) => const GuruChatScreen())),
+            MaterialPageRoute<void>(builder: (_) => const GuruChatScreen()),),
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -1771,11 +1778,11 @@ class _HomeTab extends StatelessWidget {
                 Text(t('promo_guru_title'),
                     style: GoogleFonts.outfit(
                         color: kText, fontSize: 12,
-                        fontWeight: FontWeight.w700)),
+                        fontWeight: FontWeight.w700,),),
                 const SizedBox(width: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 2),
+                      horizontal: 6, vertical: 2,),
                   decoration: BoxDecoration(
                     color: kPurple.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(6),
@@ -1783,18 +1790,26 @@ class _HomeTab extends StatelessWidget {
                   ),
                   child: Text(t('promo_guru_badge'), style: TextStyle(
                       color: kPurple, fontSize: 8,
-                      fontWeight: FontWeight.w800)),
+                      fontWeight: FontWeight.w800,),),
                 ),
-              ]),
+              ],),
               const SizedBox(height: 2),
               Text(t('promo_guru_subtitle'),
-                  style: TextStyle(color: kMuted, fontSize: 10)),
-            ])),
+                  style: TextStyle(color: kMuted, fontSize: 10),),
+            ],),),
             Icon(Icons.chevron_right_rounded, color: kMuted),
-          ]),
+          ],),
         ),
       ),
-    ]);
+    ],);
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(ObjectFlagProperty<void Function(String)>.has('onTileTap', onTileTap));
+    properties.add(DiagnosticsProperty<User?>('user', user));
+    properties.add(DiagnosticsProperty<Stream<DocumentSnapshot<Object?>>>('userStream', userStream));
   }
 }
 
@@ -1834,7 +1849,7 @@ class _ProfileDrawer extends StatelessWidget {
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : 'G',
                   style: const TextStyle(color: Colors.white,
-                      fontWeight: FontWeight.w900, fontSize: 24),
+                      fontWeight: FontWeight.w900, fontSize: 24,),
                 ),
               ),
               const SizedBox(width: 14),
@@ -1842,13 +1857,13 @@ class _ProfileDrawer extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(name, style: GoogleFonts.outfit(
                     color: Colors.white, fontSize: 16,
-                    fontWeight: FontWeight.w800),
-                    overflow: TextOverflow.ellipsis),
+                    fontWeight: FontWeight.w800,),
+                    overflow: TextOverflow.ellipsis,),
                 const SizedBox(height: 3),
                 Text(phone, style: const TextStyle(
-                    color: Colors.white70, fontSize: 12)),
-              ])),
-            ]),
+                    color: Colors.white70, fontSize: 12,),),
+              ],),),
+            ],),
           ),
 
           // Drawer Menu Items
@@ -1857,14 +1872,14 @@ class _ProfileDrawer extends StatelessWidget {
               const SizedBox(height: 10),
 
               _drawerItem(context, Icons.person_outline_rounded,
-                  t('drawer_my_profile'), () => onNavigate(const ProfileScreen())),
+                  t('drawer_my_profile'), () => onNavigate(const ProfileScreen()),),
 
               // Activity (Replaces standard history)
               _drawerItem(context, Icons.local_activity_outlined,
-                  t('drawer_activity'), () => onNavigate(const RideHistoryScreen())),
+                  t('drawer_activity'), () => onNavigate(const RideHistoryScreen()),),
 
               _drawerItem(context, Icons.settings_outlined,
-                  t('drawer_settings'), () => onNavigate(const SettingsScreen())),
+                  t('drawer_settings'), () => onNavigate(const SettingsScreen()),),
 
               _drawerItem(context, Icons.support_agent_rounded,
                   t('drawer_help_whatsapp'), () async {
@@ -1901,7 +1916,7 @@ class _ProfileDrawer extends StatelessWidget {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [kPurple, Color(0xFF5A50C8)],
+                        colors: [kPurple, const Color(0xFF5A50C8)],
                         begin: Alignment.topLeft, end: Alignment.bottomRight,
                       ),
                       borderRadius: BorderRadius.circular(16),
@@ -1942,34 +1957,41 @@ class _ProfileDrawer extends StatelessWidget {
                 await HiveCache.clearAll();
                 await PrefsCache.clearAll();
                 await FirebaseAuth.instance.signOut();
-              }, color: kRed),
-            ]),
+              }, color: kRed,),
+            ],),
           ),
 
           // Version Info at bottom
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
             child: Text(t('app_version_footer'),
-              style: TextStyle(color: kMuted.withValues(alpha: 0.5), fontSize: 10, fontWeight: FontWeight.bold)
+              style: TextStyle(color: kMuted.withValues(alpha: 0.5), fontSize: 10, fontWeight: FontWeight.bold),
             ),
           ),
-        ]),
+        ],),
       ),
     );
   }
 
   Widget _drawerItem(BuildContext context, IconData icon,
-      String title, VoidCallback onTap, {Color? color}) {
+      String title, VoidCallback onTap, {Color? color,}) {
     final c = color ?? kPink;
     return ListTile(
       onTap: () { Navigator.pop(context); onTap(); },
       leading: Icon(icon, color: c, size: 20),
       title: Text(title, style: TextStyle(
-          color: c, fontSize: 13, fontWeight: FontWeight.w600)),
+          color: c, fontSize: 13, fontWeight: FontWeight.w600,),),
       trailing: Icon(Icons.chevron_right_rounded,
-          color: c.withValues(alpha: 0.5), size: 18),
+          color: c.withValues(alpha: 0.5), size: 18,),
       dense: true,
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<User?>('user', user));
+    properties.add(ObjectFlagProperty<void Function(Widget)>.has('onNavigate', onNavigate));
   }
 }
 
@@ -1995,15 +2017,15 @@ Future<void> _checkForUpdates(BuildContext context) async {
           width: 48, height: 48,
           child: CircularProgressIndicator(
               strokeWidth: 3,
-              valueColor: AlwaysStoppedAnimation<Color>(kPink)),
+              valueColor: AlwaysStoppedAnimation<Color>(kPink),),
         ),
         const SizedBox(height: 20),
         Text(msg,
             textAlign: TextAlign.center,
             style: GoogleFonts.outfit(
                 color: Colors.white, fontSize: 14,
-                fontWeight: FontWeight.w600)),
-      ]),
+                fontWeight: FontWeight.w600,),),
+      ],),
     ),
   );
 
@@ -2031,15 +2053,15 @@ Future<void> _checkForUpdates(BuildContext context) async {
           Text(t('up_to_date_title'),
               style: GoogleFonts.outfit(
                   color: Colors.white, fontSize: 16,
-                  fontWeight: FontWeight.w800)),
-        ]),
+                  fontWeight: FontWeight.w800,),),
+        ],),
         content: Text(
           t('up_to_date_body'),
           style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13),
         ),
         actions: [
           TextButton(
-            onPressed: () => navigator.pop(),
+            onPressed: navigator.pop,
             child: Text(t('got_it_label'), style: TextStyle(color: kPink)),
           ),
         ],
@@ -2182,15 +2204,15 @@ Future<void> _applyPwaUpdate(BuildContext context) async {
           width: 48, height: 48,
           child: CircularProgressIndicator(
               strokeWidth: 3,
-              valueColor: AlwaysStoppedAnimation<Color>(kPink)),
+              valueColor: AlwaysStoppedAnimation<Color>(kPink),),
         ),
         const SizedBox(height: 20),
         Text(t('app_updating_msg'),
             textAlign: TextAlign.center,
             style: GoogleFonts.outfit(
                 color: Colors.white, fontSize: 14,
-                fontWeight: FontWeight.w600)),
-      ]),
+                fontWeight: FontWeight.w600,),),
+      ],),
     ),
   );
 
@@ -2297,12 +2319,12 @@ void _showApkSheet(BuildContext context) {
         Container(width: 40, height: 4,
             decoration: BoxDecoration(
                 color: Colors.white24,
-                borderRadius: BorderRadius.circular(2))),
+                borderRadius: BorderRadius.circular(2),),),
         const SizedBox(height: 16),
         Text(t('apk_sheet_title'),
             style: GoogleFonts.outfit(
                 color: Colors.white, fontSize: 15,
-                fontWeight: FontWeight.w800)),
+                fontWeight: FontWeight.w800,),),
         const SizedBox(height: 20),
         // FIX: these used to point at customer_app.apk / hero_app.apk
         // (v1.0.0-pinned) — neither filename was ever actually uploaded
@@ -2327,9 +2349,9 @@ void _showApkSheet(BuildContext context) {
         GestureDetector(
           onTap: () => Navigator.pop(context),
           child: Text(t('dismiss_label'),
-              style: const TextStyle(color: Colors.white38, fontSize: 12)),
+              style: const TextStyle(color: Colors.white38, fontSize: 12),),
         ),
-      ]),
+      ],),
     ),
   );
 }
@@ -2338,7 +2360,7 @@ Widget _apkBtn({
     required BuildContext context,
     required String label,
     required List<Color> gradient,
-    required String url}) {
+    required String url,}) {
   return GestureDetector(
     onTap: () async {
       // FIX (root cause of "tap Download App and nothing happens — the
@@ -2376,7 +2398,7 @@ Widget _apkBtn({
       child: Center(child: Text(label,
           style: GoogleFonts.outfit(
               color: Colors.white, fontSize: 14,
-              fontWeight: FontWeight.w700))),
+              fontWeight: FontWeight.w700,),),),
     ),
   );
 }
@@ -2425,7 +2447,7 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
         backgroundColor: kNJDark,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: Colors.white, size: 20),
+              color: Colors.white, size: 20,),
           onPressed: () => Navigator.pop(context),
         ),
         title: Row(children: [
@@ -2442,10 +2464,10 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
               Text('erodefiber.net',
                   style: GoogleFonts.outfit(
                       color: Colors.white, fontSize: 13,
-                      fontWeight: FontWeight.w600)),
-            ]),
+                      fontWeight: FontWeight.w600,),),
+            ],),
           ),
-        ]),
+        ],),
         actions: [
           IconButton(
             icon: Icon(Icons.refresh_rounded, color: kPink),
@@ -2461,8 +2483,8 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
                 const SizedBox(height: 20),
                 Text(t('opening_erode_fiber_msg'),
                     style: GoogleFonts.outfit(
-                        color: Colors.white70, fontSize: 14)),
-              ])
+                        color: Colors.white70, fontSize: 14,),),
+              ],)
             : _launched
                 ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                     const Text('🌐', style: TextStyle(fontSize: 56)),
@@ -2470,49 +2492,49 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
                     Text(t('erode_fiber_open_title'),
                         style: GoogleFonts.outfit(
                             color: Colors.white,
-                            fontSize: 20, fontWeight: FontWeight.w800)),
+                            fontSize: 20, fontWeight: FontWeight.w800,),),
                     const SizedBox(height: 8),
                     Text(t('erode_fiber_open_subtitle'),
                         style: GoogleFonts.outfit(
-                            color: Colors.white54, fontSize: 13)),
+                            color: Colors.white54, fontSize: 13,),),
                     const SizedBox(height: 28),
                     GestureDetector(
                       onTap: () => Navigator.pop(context),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 32, vertical: 14),
+                            horizontal: 32, vertical: 14,),
                         decoration: BoxDecoration(
                           color: kPink,
                           borderRadius: BorderRadius.circular(14),
                           boxShadow: [BoxShadow(
                               color: kPink.withValues(alpha: 0.4),
-                              blurRadius: 12)],
+                              blurRadius: 12,),],
                         ),
                         child: Text(t('back_to_dashboard_label'),
                             style: GoogleFonts.outfit(
                                 color: Colors.white, fontSize: 14,
-                                fontWeight: FontWeight.w700)),
+                                fontWeight: FontWeight.w700,),),
                       ),
                     ),
-                  ])
+                  ],)
                 : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                     const Icon(Icons.wifi_off_rounded,
-                        color: Colors.white38, size: 56),
+                        color: Colors.white38, size: 56,),
                     const SizedBox(height: 16),
                     Text(t('could_not_open_inapp_title'),
                         style: GoogleFonts.outfit(
                             color: Colors.white, fontSize: 18,
-                            fontWeight: FontWeight.w700)),
+                            fontWeight: FontWeight.w700,),),
                     const SizedBox(height: 8),
                     Text(t('check_internet_retry_subtitle'),
                         style: GoogleFonts.outfit(
-                            color: Colors.white54, fontSize: 13)),
+                            color: Colors.white54, fontSize: 13,),),
                     const SizedBox(height: 20),
                     GestureDetector(
                       onTap: _openInApp,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 28, vertical: 12),
+                            horizontal: 28, vertical: 12,),
                         decoration: BoxDecoration(
                           color: kPink,
                           borderRadius: BorderRadius.circular(12),
@@ -2520,10 +2542,10 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
                         child: Text(t('try_again_label'),
                             style: GoogleFonts.outfit(
                                 color: Colors.white,
-                                fontWeight: FontWeight.w700)),
+                                fontWeight: FontWeight.w700,),),
                       ),
                     ),
-                  ]),
+                  ],),
       ),
     );
   }
@@ -2563,7 +2585,7 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
         borderRadius: BorderRadius.circular(28),
         border: Border.all(color: kGold.withValues(alpha: 0.4), width: 1.5),
         boxShadow: [BoxShadow(
-            color: kGold.withValues(alpha: 0.2), blurRadius: 30)],
+            color: kGold.withValues(alpha: 0.2), blurRadius: 30,),],
       ),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Padding(
@@ -2579,7 +2601,7 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
               child: Text(t('daily_scratch_badge'),
                   style: GoogleFonts.outfit(
                       color: kGold, fontSize: 10, fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5)),
+                      letterSpacing: 0.5,),),
             ),
             const Spacer(),
             GestureDetector(
@@ -2591,13 +2613,13 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.close_rounded,
-                    color: Colors.white54, size: 18),
+                    color: Colors.white54, size: 18,),
               ),
             ),
-          ]),
+          ],),
         ),
         Text(t('scratch_reveal_hint'),
-            style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13)),
+            style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13),),
         const SizedBox(height: 16),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -2606,7 +2628,7 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
             threshold: 45,
             color: const Color(0xFFD4AF37),
             onThreshold: () => setState(() => _revealed = true),
-            onChange: (double v) => setState(() => _progress = v),
+            onChange: (v) => setState(() => _progress = v),
             child: Container(
               height: 180,
               decoration: BoxDecoration(
@@ -2619,19 +2641,19 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
               child: Center(
                 child: Column(mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                  Text(emoji, style: const TextStyle(fontSize: 52)),
+                  const Text(emoji, style: TextStyle(fontSize: 52)),
                   const SizedBox(height: 10),
                   Text(title,
                       textAlign: TextAlign.center,
                       style: GoogleFonts.outfit(
                           color: kPink, fontSize: 22,
-                          fontWeight: FontWeight.w900)),
+                          fontWeight: FontWeight.w900,),),
                   const SizedBox(height: 6),
                   Text(subtitle,
                       textAlign: TextAlign.center,
                       style: GoogleFonts.outfit(
-                          color: Colors.white70, fontSize: 13)),
-                ]),
+                          color: Colors.white70, fontSize: 13,),),
+                ],),
               ),
             ),
           ),
@@ -2645,7 +2667,7 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
               value: _progress / 100,
               backgroundColor: Colors.white12,
               valueColor: AlwaysStoppedAnimation<Color>(
-                  _revealed ? kGreen : kGold),
+                  _revealed ? kGreen : kGold,),
               minHeight: 4,
             ),
           ),
@@ -2654,7 +2676,7 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
         Text(_revealed ? t('scratch_revealed_label') : t('scratch_keep_going_label'),
             style: GoogleFonts.outfit(
                 color: _revealed ? kGreen : Colors.white38,
-                fontSize: 11, fontWeight: FontWeight.w600)),
+                fontSize: 11, fontWeight: FontWeight.w600,),),
         const SizedBox(height: 16),
         if (_revealed)
           Padding(
@@ -2670,19 +2692,19 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [BoxShadow(
                         color: kGold.withValues(alpha: 0.4),
-                        blurRadius: 10)],
+                        blurRadius: 10,),],
                   ),
                   child: Center(child: Text(t('call_to_claim_label'),
                       style: GoogleFonts.outfit(
                           color: Colors.black,
-                          fontSize: 15, fontWeight: FontWeight.w800))),
+                          fontSize: 15, fontWeight: FontWeight.w800,),),),
                 ),
               ),
             ),
           )
         else
           const SizedBox(height: 20),
-      ]),
+      ],),
     );
   }
 }
@@ -2695,6 +2717,12 @@ class _GlowingUpdateButton extends StatefulWidget {
   const _GlowingUpdateButton({required this.onTap});
   @override
   State<_GlowingUpdateButton> createState() => _GlowingUpdateButtonState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+  }
 }
 class _GlowingUpdateButtonState extends State<_GlowingUpdateButton> with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
@@ -2703,7 +2731,7 @@ class _GlowingUpdateButtonState extends State<_GlowingUpdateButton> with SingleT
   void initState() {
     super.initState();
     _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat(reverse: true);
-    _glow = Tween<double>(begin: 2.0, end: 8.0).animate(_ctrl);
+    _glow = Tween<double>(begin: 2, end: 8).animate(_ctrl);
   }
   @override
   void dispose() { _ctrl.dispose(); super.dispose(); }
@@ -2722,7 +2750,7 @@ class _GlowingUpdateButtonState extends State<_GlowingUpdateButton> with SingleT
               color: kGold,
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
-                BoxShadow(color: kGold.withValues(alpha: 0.6), blurRadius: _glow.value, spreadRadius: _glow.value / 2)
+                BoxShadow(color: kGold.withValues(alpha: 0.6), blurRadius: _glow.value, spreadRadius: _glow.value / 2),
               ],
             ),
             child: Row(
@@ -2735,7 +2763,7 @@ class _GlowingUpdateButtonState extends State<_GlowingUpdateButton> with SingleT
             ),
           ),
         );
-      }
+      },
     );
   }
 }
@@ -2745,7 +2773,7 @@ class _GlowingUpdateButtonState extends State<_GlowingUpdateButton> with SingleT
 // ================================================================
 class KeepAliveTab extends StatefulWidget {
   final Widget child;
-  const KeepAliveTab({super.key, required this.child});
+  const KeepAliveTab({required this.child, super.key});
   @override
   State<KeepAliveTab> createState() => _KeepAliveTabState();
 }
@@ -2806,7 +2834,7 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
       'category_services_slide',
     ];
     return List.generate(_slideCount, (i) =>
-        _CategorySlideData(title: t(titleKeys[i]), icons: _slideIcons[i]));
+        _CategorySlideData(title: t(titleKeys[i]), icons: _slideIcons[i]),);
   }
 
   @override
@@ -2895,6 +2923,12 @@ class _IconMarquee extends StatefulWidget {
   const _IconMarquee({required this.icons});
   @override
   State<_IconMarquee> createState() => _IconMarqueeState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(IterableProperty<String>('icons', icons));
+  }
 }
 
 class _IconMarqueeState extends State<_IconMarquee> with SingleTickerProviderStateMixin {

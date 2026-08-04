@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
@@ -130,7 +131,6 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
       final seller = SellerModel(
         id: uid,
         name: _nameController.text.trim(),
-        category: 'food',
         subCategory: _selectedSubCategory,
         hotelType: _selectedHotelType,
         address: _addressController.text.trim(),
@@ -139,7 +139,6 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
         city: _detectedCity!,
         phone: _phoneController.text.trim(),
         isOpen: false,
-        estimatedPrepTimeMin: 20,
         // FIX (per Nizam/CTO's explicit request — seller approval gate):
         // sellers used to go live to customers the instant they finished
         // onboarding ('active' immediately). With a franchise model
@@ -407,7 +406,7 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
                   onTap: () => setState(() => _selectedSubCategory = cat.key),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
+                        horizontal: 16, vertical: 10,),
                     decoration: BoxDecoration(
                       color: isSelected ? _teal : _card2,
                       borderRadius: BorderRadius.circular(20),
@@ -527,9 +526,7 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
               ),
               child: Row(
                 children: [
-                  _detectingLocation
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _teal))
-                      : Icon(_detectedCity != null ? Icons.check_circle_rounded : Icons.my_location_rounded, color: _teal, size: 18),
+                  if (_detectingLocation) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _teal)) else Icon(_detectedCity != null ? Icons.check_circle_rounded : Icons.my_location_rounded, color: _teal, size: 18),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -666,5 +663,16 @@ class _TypeTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('label', label));
+    properties.add(StringProperty('title', title));
+    properties.add(StringProperty('subtitle', subtitle));
+    properties.add(DiagnosticsProperty<IconData>('icon', icon));
+    properties.add(DiagnosticsProperty<bool>('isSelected', isSelected));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }

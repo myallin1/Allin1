@@ -8,6 +8,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -169,23 +170,23 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
       {'icon': Icons.grid_view_rounded, 'label': 'Book'},
       {'icon': Icons.timeline_rounded, 'label': 'Status'},
     ];
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: _kBg,
-        border: const Border(top: BorderSide(color: _kBorder, width: 1)),
+        border: const Border(top: BorderSide(color: _kBorder)),
         boxShadow: [
           BoxShadow(
               color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 16,
-              offset: const Offset(0, -4)),
+              offset: const Offset(0, -4),),
         ],
       ),
       child: SafeArea(
         child: Row(
           children: List.generate(items.length, (i) {
             final active = _tabIndex == i;
-            final icon = items[i]['icon'] as IconData;
-            final label = items[i]['label'] as String;
+            final icon = items[i]['icon']! as IconData;
+            final label = items[i]['label']! as String;
             return Expanded(
               child: InkWell(
                 onTap: () => setState(() => _tabIndex = i),
@@ -199,8 +200,8 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
                             fontSize: 9.5,
                             color: active ? _kPink : _kMuted,
                             fontWeight:
-                                active ? FontWeight.w700 : FontWeight.w400)),
-                  ]),
+                                active ? FontWeight.w700 : FontWeight.w400,),),
+                  ],),
                 ),
               ),
             );
@@ -282,7 +283,7 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
                   style: GoogleFonts.outfit(
                       color: _kText,
                       fontSize: 22,
-                      fontWeight: FontWeight.w900)),
+                      fontWeight: FontWeight.w900,),),
             ),
           ),
           SliverPadding(
@@ -302,11 +303,11 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
       backgroundColor: _kNJDark,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back_ios_new_rounded,
-            color: Colors.white, size: 20),
+            color: Colors.white, size: 20,),
         onPressed: () => Navigator.pop(context),
       ),
       flexibleSpace: FlexibleSpaceBar(
-        background: Container(
+        background: DecoratedBox(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               colors: [_kNJDark, _kNJDark2, Color(0xFF3D1560)],
@@ -324,24 +325,24 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
                   Row(children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
+                          horizontal: 8, vertical: 3,),
                       decoration: BoxDecoration(
                         color: _kPink.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                            color: _kPink.withValues(alpha: 0.5)),
+                            color: _kPink.withValues(alpha: 0.5),),
                       ),
                       child: Text('NJ TECH',
                           style: GoogleFonts.outfit(
                               color: _kPink,
                               fontSize: 9,
                               fontWeight: FontWeight.w900,
-                              letterSpacing: 1.2)),
+                              letterSpacing: 1.2,),),
                     ),
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
+                          horizontal: 8, vertical: 3,),
                       decoration: BoxDecoration(
                         color: _kGreen.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(6),
@@ -350,28 +351,28 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
                         Container(
                           width: 5, height: 5,
                           decoration: const BoxDecoration(
-                              color: _kGreen, shape: BoxShape.circle),
+                              color: _kGreen, shape: BoxShape.circle,),
                         ),
                         const SizedBox(width: 4),
                         Text('Open Now',
                             style: GoogleFonts.outfit(
                                 color: _kGreen,
                                 fontSize: 9,
-                                fontWeight: FontWeight.w700)),
-                      ]),
+                                fontWeight: FontWeight.w700,),),
+                      ],),
                     ),
-                  ]),
+                  ],),
                   const SizedBox(height: 8),
                   Text('All In One\nElectronic Services',
                       style: GoogleFonts.outfit(
                           color: Colors.white,
                           fontSize: 22,
                           fontWeight: FontWeight.w900,
-                          height: 1.2)),
+                          height: 1.2,),),
                   const SizedBox(height: 4),
                   Text('Erode · Sales · Service · Installation',
                       style: GoogleFonts.outfit(
-                          color: Colors.white54, fontSize: 11)),
+                          color: Colors.white54, fontSize: 11,),),
                 ],
               ),
             ),
@@ -401,7 +402,7 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
       children: [
         Text('My Enquiries',
             style: GoogleFonts.outfit(
-                color: _kText, fontSize: 16, fontWeight: FontWeight.w800)),
+                color: _kText, fontSize: 16, fontWeight: FontWeight.w800,),),
         const SizedBox(height: 12),
         _EnquiriesList(customerId: user.uid),
       ],
@@ -432,7 +433,7 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
             borderRadius: BorderRadius.circular(14),
           ),
           child: const Icon(Icons.electric_bolt_rounded,
-              color: _kPink, size: 26),
+              color: _kPink, size: 26,),
         ),
         const SizedBox(width: 14),
         Expanded(child: Column(
@@ -440,13 +441,13 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
           Text('Free Diagnosis for First Visit!',
               style: GoogleFonts.outfit(
                   color: _kText, fontSize: 13,
-                  fontWeight: FontWeight.w800)),
+                  fontWeight: FontWeight.w800,),),
           const SizedBox(height: 2),
           Text('Tap any category to book or send an enquiry',
               style: GoogleFonts.outfit(
-                  color: _kMuted, fontSize: 11)),
-        ])),
-      ]),
+                  color: _kMuted, fontSize: 11,),),
+        ],),),
+      ],),
     );
   }
 
@@ -468,7 +469,7 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('Why NJ Tech?',
             style: GoogleFonts.outfit(
-                fontSize: 15, fontWeight: FontWeight.w800, color: _kText)),
+                fontSize: 15, fontWeight: FontWeight.w800, color: _kText,),),
         const SizedBox(height: 12),
         GridView.count(
           crossAxisCount: 2,
@@ -484,11 +485,11 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
               child: Text(p.$3,
                   style: GoogleFonts.outfit(
                       fontSize: 11, fontWeight: FontWeight.w600,
-                      color: _kText)),
+                      color: _kText,),),
             ),
-          ])).toList(),
+          ],),).toList(),
         ),
-      ]),
+      ],),
     );
   }
 
@@ -524,19 +525,19 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
             Text('Call Us Directly',
                 style: GoogleFonts.outfit(
                     color: Colors.white, fontSize: 14,
-                    fontWeight: FontWeight.w800)),
+                    fontWeight: FontWeight.w800,),),
             Text('+91 95978 79191 · Mon–Sat 9am–8pm',
                 style: GoogleFonts.outfit(
-                    color: Colors.white54, fontSize: 10)),
-          ])),
+                    color: Colors.white54, fontSize: 10,),),
+          ],),),
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: _kPink, borderRadius: BorderRadius.circular(12)),
+              color: _kPink, borderRadius: BorderRadius.circular(12),),
             child: const Icon(Icons.arrow_forward_rounded,
-                color: Colors.white, size: 18),
+                color: Colors.white, size: 18,),
           ),
-        ]),
+        ],),
       ),
     );
   }
@@ -562,6 +563,13 @@ class _CategoryTile extends StatefulWidget {
 
   @override
   State<_CategoryTile> createState() => _CategoryTileState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<_ServiceCategory>('category', category));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+  }
 }
 
 class _CategoryTileState extends State<_CategoryTile>
@@ -573,7 +581,7 @@ class _CategoryTileState extends State<_CategoryTile>
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-        vsync: this, duration: const Duration(seconds: 3))
+        vsync: this, duration: const Duration(seconds: 3),)
       ..repeat();
     _ctrl.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
@@ -610,7 +618,7 @@ class _CategoryTileState extends State<_CategoryTile>
           boxShadow: [BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8, offset: const Offset(0, 3),
-          )],
+          ),],
         ),
         padding: const EdgeInsets.only(top: 10, left: 6, right: 6, bottom: 6),
         child: Stack(children: [
@@ -637,14 +645,14 @@ class _CategoryTileState extends State<_CategoryTile>
                     boxShadow: [BoxShadow(
                       color: cat.color.withValues(alpha: 0.3),
                       blurRadius: 12, spreadRadius: 2,
-                    )],
+                    ),],
                   ),
                   padding: const EdgeInsets.all(12),
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 500),
                     transitionBuilder: (child, anim) => ScaleTransition(
                       scale: CurvedAnimation(
-                          parent: anim, curve: Curves.elasticOut),
+                          parent: anim, curve: Curves.elasticOut,),
                       child: FadeTransition(opacity: anim, child: child),
                     ),
                     child: Icon(
@@ -656,14 +664,14 @@ class _CategoryTileState extends State<_CategoryTile>
                 ),
               ),
             ),
-          ]),
+          ],),
           // Tap hint arrow
           Positioned(
             bottom: 0, right: 0,
             child: Icon(Icons.arrow_forward_ios_rounded,
-                size: 10, color: cat.color.withValues(alpha: 0.5)),
+                size: 10, color: cat.color.withValues(alpha: 0.5),),
           ),
-        ]),
+        ],),
       ),
     );
   }
@@ -678,6 +686,12 @@ class _CategoryModal extends StatefulWidget {
 
   @override
   State<_CategoryModal> createState() => _CategoryModalState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<_ServiceCategory>('category', category));
+  }
 }
 
 class _CategoryModalState extends State<_CategoryModal> {
@@ -793,7 +807,7 @@ class _CategoryModalState extends State<_CategoryModal> {
 
     return Container(
       margin: EdgeInsets.only(
-          left: 12, right: 12, top: 60, bottom: bottom + 12),
+          left: 12, right: 12, top: 60, bottom: bottom + 12,),
       decoration: BoxDecoration(
         color: _kBg,
         borderRadius: BorderRadius.circular(28),
@@ -849,11 +863,11 @@ class _CategoryModalState extends State<_CategoryModal> {
                     Text(cat.title,
                         style: GoogleFonts.outfit(
                             color: Colors.white, fontSize: 20,
-                            fontWeight: FontWeight.w900)),
+                            fontWeight: FontWeight.w900,),),
                     Text(cat.subtitle,
                         style: GoogleFonts.outfit(
-                            color: Colors.white70, fontSize: 11)),
-                  ])),
+                            color: Colors.white70, fontSize: 11,),),
+                  ],),),
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
                     child: Container(
@@ -863,11 +877,11 @@ class _CategoryModalState extends State<_CategoryModal> {
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.close_rounded,
-                          color: Colors.white70, size: 18),
+                          color: Colors.white70, size: 18,),
                     ),
                   ),
-                ]),
-              ]),
+                ],),
+              ],),
             ),
 
             Padding(
@@ -882,24 +896,24 @@ class _CategoryModalState extends State<_CategoryModal> {
                     padding: const EdgeInsets.symmetric(vertical: 15),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                          colors: [_kGreen, Color(0xFF009624)]),
+                          colors: [_kGreen, Color(0xFF009624)],),
                       borderRadius: BorderRadius.circular(14),
                       boxShadow: [BoxShadow(
                         color: _kGreen.withValues(alpha: 0.35),
                         blurRadius: 14, offset: const Offset(0, 5),
-                      )],
+                      ),],
                     ),
                     child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                       const Icon(Icons.phone_rounded,
-                          color: Colors.white, size: 20),
+                          color: Colors.white, size: 20,),
                       const SizedBox(width: 10),
                       Text('Call for Enquiry / Booking',
                           style: GoogleFonts.outfit(
                               color: Colors.white, fontSize: 14,
-                              fontWeight: FontWeight.w800)),
-                    ]),
+                              fontWeight: FontWeight.w800,),),
+                    ],),
                   ),
                 ),
 
@@ -912,10 +926,10 @@ class _CategoryModalState extends State<_CategoryModal> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Text('or send an enquiry',
                         style: GoogleFonts.outfit(
-                            color: _kMuted, fontSize: 11)),
+                            color: _kMuted, fontSize: 11,),),
                   ),
                   const Expanded(child: Divider(color: _kBorder)),
-                ]),
+                ],),
 
                 const SizedBox(height: 16),
 
@@ -928,12 +942,12 @@ class _CategoryModalState extends State<_CategoryModal> {
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
+                          horizontal: 14, vertical: 12,),
                       decoration: BoxDecoration(
                         color: cat.color.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                            color: cat.color.withValues(alpha: 0.25)),
+                            color: cat.color.withValues(alpha: 0.25),),
                       ),
                       child: Row(children: [
                         Icon(cat.icon, color: cat.color, size: 18),
@@ -941,11 +955,11 @@ class _CategoryModalState extends State<_CategoryModal> {
                         Text('Service: ${cat.title}',
                             style: GoogleFonts.outfit(
                                 color: cat.color, fontSize: 13,
-                                fontWeight: FontWeight.w700)),
+                                fontWeight: FontWeight.w700,),),
                         const Spacer(),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                              horizontal: 6, vertical: 2,),
                           decoration: BoxDecoration(
                             color: cat.color.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(6),
@@ -953,9 +967,9 @@ class _CategoryModalState extends State<_CategoryModal> {
                           child: Text('Auto',
                               style: GoogleFonts.outfit(
                                   color: cat.color, fontSize: 8,
-                                  fontWeight: FontWeight.w800)),
+                                  fontWeight: FontWeight.w800,),),
                         ),
-                      ]),
+                      ],),
                     ),
 
                     const SizedBox(height: 12),
@@ -996,15 +1010,15 @@ class _CategoryModalState extends State<_CategoryModal> {
                       controller: _issueCtrl,
                       maxLines: 3,
                       style: GoogleFonts.outfit(
-                          color: _kText, fontSize: 14),
+                          color: _kText, fontSize: 14,),
                       decoration: InputDecoration(
                         hintText: 'Describe your issue or service needed...',
                         hintStyle: GoogleFonts.outfit(
-                            color: _kMuted, fontSize: 13),
+                            color: _kMuted, fontSize: 13,),
                         prefixIcon: const Padding(
                           padding: EdgeInsets.only(bottom: 40),
                           child: Icon(Icons.edit_note_rounded,
-                              color: _kMuted, size: 20),
+                              color: _kMuted, size: 20,),
                         ),
                         filled: true,
                         fillColor: _kSurface,
@@ -1015,10 +1029,10 @@ class _CategoryModalState extends State<_CategoryModal> {
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(
-                              color: cat.color.withValues(alpha: 0.5)),
+                              color: cat.color.withValues(alpha: 0.5),),
                         ),
                         contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 14),
+                            horizontal: 14, vertical: 14,),
                       ),
                       validator: (v) => (v?.trim().isEmpty ?? true)
                           ? 'Please describe your issue' : null,
@@ -1091,33 +1105,33 @@ class _CategoryModalState extends State<_CategoryModal> {
                             const SizedBox(
                               width: 20, height: 20,
                               child: CircularProgressIndicator(
-                                  color: Colors.white, strokeWidth: 2),
+                                  color: Colors.white, strokeWidth: 2,),
                             )
                           else ...[
                             const Icon(Icons.send_rounded,
-                                color: Colors.white, size: 20),
+                                color: Colors.white, size: 20,),
                             const SizedBox(width: 10),
                             Text('Send Enquiry',
                                 style: GoogleFonts.outfit(
                                     color: Colors.white, fontSize: 14,
-                                    fontWeight: FontWeight.w800)),
+                                    fontWeight: FontWeight.w800,),),
                           ],
-                        ]),
+                        ],),
                       ),
                     ),
 
                     const SizedBox(height: 8),
                     Text(
-                      'Track your request\'s progress right after submitting',
+                      "Track your request's progress right after submitting",
                       textAlign: TextAlign.center,
                       style: GoogleFonts.outfit(
-                          color: _kMuted, fontSize: 10),
+                          color: _kMuted, fontSize: 10,),
                     ),
-                  ]),
+                  ],),
                 ),
-              ]),
+              ],),
             ),
-          ]),
+          ],),
         ),
       ),
     );
@@ -1170,10 +1184,21 @@ class _FormField extends StatelessWidget {
           borderSide: const BorderSide(color: _kRed),
         ),
         contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14, vertical: 14),
+            horizontal: 14, vertical: 14,),
       ),
       validator: validator,
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<TextEditingController>('controller', controller));
+    properties.add(StringProperty('hint', hint));
+    properties.add(DiagnosticsProperty<IconData>('icon', icon));
+    properties.add(DiagnosticsProperty<TextInputType?>('keyboardType', keyboardType));
+    properties.add(IterableProperty<TextInputFormatter>('inputFormatters', inputFormatters));
+    properties.add(ObjectFlagProperty<String? Function(String?)?>.has('validator', validator));
   }
 }
 
@@ -1190,6 +1215,12 @@ class _EnquiriesList extends StatefulWidget {
 
   @override
   State<_EnquiriesList> createState() => _EnquiriesListState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('customerId', customerId));
+  }
 }
 
 class _EnquiriesListState extends State<_EnquiriesList> {
@@ -1226,12 +1257,12 @@ class _EnquiriesListState extends State<_EnquiriesList> {
           return const Padding(
             padding: EdgeInsets.symmetric(vertical: 20),
             child: Center(
-                child: CircularProgressIndicator(color: _kPink, strokeWidth: 2)),
+                child: CircularProgressIndicator(color: _kPink, strokeWidth: 2),),
           );
         }
         if (snapshot.hasError) {
           return const Text('Could not load your enquiries.',
-              style: TextStyle(color: _kMuted, fontSize: 12));
+              style: TextStyle(color: _kMuted, fontSize: 12),);
         }
         final docs = snapshot.data ?? [];
         if (docs.isEmpty) {
@@ -1269,6 +1300,12 @@ class _EnquiryCardRouter extends StatefulWidget {
 
   @override
   State<_EnquiryCardRouter> createState() => _EnquiryCardRouterState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<QueryDocumentSnapshot<Map<String, dynamic>>>('doc', doc));
+  }
 }
 
 class _EnquiryCardRouterState extends State<_EnquiryCardRouter> {
@@ -1305,7 +1342,7 @@ class _EnquiryCardRouterState extends State<_EnquiryCardRouter> {
           // the cache write below hasn't finished) — cache it now so
           // future opens skip Firestore entirely for this request.
           unawaited(ServiceRequestCacheService()
-              .cacheCompletedRequest(widget.doc.id, _withMillis(initialData)));
+              .cacheCompletedRequest(widget.doc.id, _withMillis(initialData)),);
           return _EnquiryCardView(
             requestId: widget.doc.id,
             data: initialData,
@@ -1331,6 +1368,13 @@ class _LiveEnquiryCard extends StatefulWidget {
 
   @override
   State<_LiveEnquiryCard> createState() => _LiveEnquiryCardState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestId', requestId));
+    properties.add(DiagnosticsProperty<Map<String, dynamic>>('initialData', initialData));
+  }
 }
 
 class _LiveEnquiryCardState extends State<_LiveEnquiryCard> {
@@ -1353,7 +1397,7 @@ class _LiveEnquiryCardState extends State<_LiveEnquiryCard> {
           // completion — the same moment triggers both the UI update
           // (this StreamBuilder rebuild) and the local Hive write.
           unawaited(ServiceRequestCacheService()
-              .cacheCompletedRequest(widget.requestId, _withMillis(data)));
+              .cacheCompletedRequest(widget.requestId, _withMillis(data)),);
         }
 
         return _EnquiryCardView(
@@ -1418,7 +1462,7 @@ class _EnquiryCardView extends StatelessWidget {
                         ? categoryLabel
                         : 'Electronics enquiry',
                     style: GoogleFonts.outfit(
-                        color: _kText, fontSize: 14, fontWeight: FontWeight.w700),
+                        color: _kText, fontSize: 14, fontWeight: FontWeight.w700,),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1444,13 +1488,21 @@ class _EnquiryCardView extends StatelessWidget {
               child: Text(
                 statusLabel,
                 style: TextStyle(
-                    color: statusColor, fontSize: 11, fontWeight: FontWeight.w700),
+                    color: statusColor, fontSize: 11, fontWeight: FontWeight.w700,),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestId', requestId));
+    properties.add(DiagnosticsProperty<Map<String, dynamic>>('data', data));
+    properties.add(DiagnosticsProperty<bool>('fromCache', fromCache));
   }
 }
 

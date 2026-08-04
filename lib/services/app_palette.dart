@@ -64,7 +64,7 @@ const Color kRed     = Color(0xFFFF5252);
 void syncAppPalette(BuildContext context) {
   ThemeService ts;
   try {
-    ts = Provider.of<ThemeService>(context, listen: true);
+    ts = Provider.of<ThemeService>(context);
   } catch (_) {
     return;
   }

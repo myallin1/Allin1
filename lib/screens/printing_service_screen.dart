@@ -11,6 +11,7 @@
 // ================================================================
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -104,7 +105,7 @@ class _PrintingServiceScreenState extends State<PrintingServiceScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text('Allin1 Designing and Printing',
-            style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 16)),
+            style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 16),),
         centerTitle: true,
       ),
       body: SafeArea(
@@ -112,7 +113,7 @@ class _PrintingServiceScreenState extends State<PrintingServiceScreen> {
           children: [
             const SizedBox(height: 12),
             Text('What we print for you',
-                style: GoogleFonts.outfit(color: _kMuted, fontSize: 13, fontWeight: FontWeight.w600)),
+                style: GoogleFonts.outfit(color: _kMuted, fontSize: 13, fontWeight: FontWeight.w600),),
             const SizedBox(height: 14),
             SizedBox(
               height: 220,
@@ -146,10 +147,10 @@ class _PrintingServiceScreenState extends State<PrintingServiceScreen> {
               child: Column(
                 children: [
                   Text('Ready to order? Reach us directly:',
-                      style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
+                      style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700),),
                   const SizedBox(height: 6),
                   Text(_kPhoneNumber,
-                      style: GoogleFonts.outfit(color: _kPink, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                      style: GoogleFonts.outfit(color: _kPink, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 1),),
                   const SizedBox(height: 16),
                   Row(
                     children: [
@@ -164,7 +165,7 @@ class _PrintingServiceScreenState extends State<PrintingServiceScreen> {
                             onPressed: _launchCall,
                             icon: const Icon(Icons.call_rounded, color: Colors.white, size: 20),
                             label: Text('Call Now',
-                                style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+                                style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold),),
                           ),
                         ),
                       ),
@@ -180,7 +181,7 @@ class _PrintingServiceScreenState extends State<PrintingServiceScreen> {
                             onPressed: _launchWhatsApp,
                             icon: const Icon(Icons.chat_rounded, color: Colors.white, size: 20),
                             label: Text('WhatsApp',
-                                style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+                                style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold),),
                           ),
                         ),
                       ),
@@ -251,5 +252,11 @@ class _CategoryCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<_PrintCategory>('category', category));
   }
 }

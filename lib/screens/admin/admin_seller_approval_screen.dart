@@ -8,6 +8,7 @@
 // ================================================================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -156,7 +157,7 @@ class _AdminSellerApprovalScreenState extends State<AdminSellerApprovalScreen> {
   }
 
   Future<void> _callSeller(String phone) async {
-    final digits = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    final digits = phone.replaceAll(RegExp('[^0-9+]'), '');
     if (digits.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -491,6 +492,12 @@ class _MenuItemsPreview extends StatelessWidget {
       },
     );
   }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('sellerId', sellerId));
+  }
 }
 
 // ── Seller Approval Card ──────────────────────────────────────────
@@ -640,5 +647,16 @@ class _SellerApprovalCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('sellerId', sellerId));
+    properties.add(DiagnosticsProperty<Map<String, dynamic>>('data', data));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onView', onView));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onApprove', onApprove));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onReject', onReject));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onCall', onCall));
   }
 }

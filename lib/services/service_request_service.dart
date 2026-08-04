@@ -142,7 +142,7 @@ class ServiceRequestService {
         await rtdb.FirebaseDatabase.instance.ref('online_heroes').get();
     if (!snap.exists || snap.value is! Map) return;
 
-    final heroes = Map<dynamic, dynamic>.from(snap.value as Map);
+    final heroes = Map<dynamic, dynamic>.from(snap.value! as Map);
     final futures = <Future<void>>[];
 
     heroes.forEach((heroId, heroDataRaw) {
@@ -151,7 +151,7 @@ class ServiceRequestService {
       final isAvailable = (heroData['isAvailable'] as bool?) ?? false;
       if (!isAvailable) return;
 
-      final heroCity = (heroData['city'] as String?)?.trim().toLowerCase().isNotEmpty == true
+      final heroCity = (heroData['city'] as String?)?.trim().toLowerCase().isNotEmpty ?? false
           ? (heroData['city'] as String).trim().toLowerCase()
           : kDefaultCity;
       if (heroCity != requestCity) return;
@@ -186,7 +186,7 @@ class ServiceRequestService {
     final requestRef = rtdb.FirebaseDatabase.instance
         .ref('active_service_requests/$requestId');
 
-    final transResult = await requestRef.runTransaction((Object? currentData) {
+    final transResult = await requestRef.runTransaction((currentData) {
       if (currentData == null) {
         // Optimistic local cache run. NEVER abort here — the server
         // will re-run this against the real data.
@@ -252,7 +252,7 @@ class ServiceRequestService {
       final onlineSnap =
           await rtdb.FirebaseDatabase.instance.ref('online_heroes').get();
       if (onlineSnap.exists && onlineSnap.value is Map) {
-        final heroes = Map<dynamic, dynamic>.from(onlineSnap.value as Map);
+        final heroes = Map<dynamic, dynamic>.from(onlineSnap.value! as Map);
         final sweepFutures = <Future<void>>[];
         for (final otherHeroId in heroes.keys) {
           if (otherHeroId == heroId) continue; // already removed above

@@ -11,6 +11,7 @@
 // Usage: build a List<CoachMarkStep> (each optionally anchored to a
 // GlobalKey on a real widget), then call:
 //   showCoachMarkTour(context, steps: [...], onFinish: () {...});
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -165,6 +166,16 @@ class _CoachMarkFrame extends StatelessWidget {
       ],
     );
   }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<CoachMarkStep>('step', step));
+    properties.add(IntProperty('stepNumber', stepNumber));
+    properties.add(IntProperty('totalSteps', totalSteps));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onNext', onNext));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onSkip', onSkip));
+  }
 }
 
 class _CoachMarkCard extends StatelessWidget {
@@ -249,6 +260,17 @@ class _CoachMarkCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<CoachMarkStep>('step', step));
+    properties.add(IntProperty('stepNumber', stepNumber));
+    properties.add(IntProperty('totalSteps', totalSteps));
+    properties.add(DiagnosticsProperty<bool>('isLast', isLast));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onNext', onNext));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onSkip', onSkip));
   }
 }
 

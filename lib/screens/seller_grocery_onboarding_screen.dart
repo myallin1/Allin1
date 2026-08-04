@@ -68,11 +68,10 @@ class _SellerGroceryOnboardingScreenState
         category: 'grocery',
         subCategory: '',
         address: _addressController.text.trim(),
-        latitude: 0.0,
-        longitude: 0.0,
+        latitude: 0,
+        longitude: 0,
         phone: _phoneController.text.trim(),
         isOpen: false,
-        status: 'active',
         createdAt: now,
         updatedAt: now,
         businessVertical: 'grocery',
@@ -190,7 +189,7 @@ class _SellerGroceryOnboardingScreenState
                       : Text(
                           'Save & Continue',
                           style: GoogleFonts.outfit(
-                              fontSize: 16, fontWeight: FontWeight.w600),
+                              fontSize: 16, fontWeight: FontWeight.w600,),
                         ),
                 ),
               ),
@@ -222,7 +221,7 @@ class _SellerGroceryOnboardingScreenState
         children: [
           Text(label,
               style: GoogleFonts.outfit(
-                  color: _text, fontSize: 14, fontWeight: FontWeight.w600)),
+                  color: _text, fontSize: 14, fontWeight: FontWeight.w600,),),
           const SizedBox(height: 10),
           TextFormField(
             controller: controller,

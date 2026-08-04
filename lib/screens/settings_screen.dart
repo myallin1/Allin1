@@ -46,7 +46,7 @@ const Color kRed    = Color(0xFFE05555);
 void _syncSettingsPalette(BuildContext context) {
   ThemeService ts;
   try {
-    ts = Provider.of<ThemeService>(context, listen: true);
+    ts = Provider.of<ThemeService>(context);
   } catch (_) {
     return;
   }
@@ -211,7 +211,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (_isLoading) {
       return Scaffold(
         backgroundColor: kSurface,
-        body: Center(child: CircularProgressIndicator(color: kGold)),
+        body: const Center(child: CircularProgressIndicator(color: kGold)),
       );
     }
 
@@ -675,7 +675,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _shareApp() async {
     const message =
-        'Try myallin1 — Erode\'s own super app for bike taxi, food, grocery & more, all in one place!\n$kCustomerAppShareUrl';
+        "Try myallin1 — Erode's own super app for bike taxi, food, grocery & more, all in one place!\n$kCustomerAppShareUrl";
     await Clipboard.setData(const ClipboardData(text: message));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -917,7 +917,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             Row(
               children: [
-                Icon(Icons.language_rounded, color: kGold, size: 22),
+                const Icon(Icons.language_rounded, color: kGold, size: 22),
                 const SizedBox(width: 8),
                 Text(
                   t('language_picker_title'),
@@ -1015,7 +1015,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       if (isSel)
-                        Icon(
+                        const Icon(
                           Icons.check_circle_rounded,
                           color: kGold,
                           size: 22,
@@ -1124,7 +1124,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       title: Text(name, style: GoogleFonts.outfit(color: kText)),
       trailing:
-          isSelected ? Icon(Icons.check_circle, color: kGold) : null,
+          isSelected ? const Icon(Icons.check_circle, color: kGold) : null,
     );
   }
 

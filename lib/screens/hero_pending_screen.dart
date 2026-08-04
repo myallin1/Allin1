@@ -55,7 +55,7 @@ const Color kRed    = Color(0xFFE0245E);
 void _syncHeroPendingPalette(BuildContext context) {
   ThemeService ts;
   try {
-    ts = Provider.of<ThemeService>(context, listen: true);
+    ts = Provider.of<ThemeService>(context);
   } catch (_) {
     return;
   }
@@ -181,7 +181,7 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
         unawaited(_showApprovalStatusNotification(
           approved: false,
           reason: data['reason'] as String?,
-        ));
+        ),);
       }
     });
   }
@@ -243,7 +243,7 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
         _triggerNavigation(() async {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
+              const SnackBar(
                 content: Text('Account rejected or blocked. Contact Admin.'),
                 backgroundColor: kRed,
                 behavior: SnackBarBehavior.floating,
@@ -388,7 +388,7 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: _isApproved
-                          ? [kGreen, Color(0xFF00873C)]
+                          ? [kGreen, const Color(0xFF00873C)]
                           : [kPurple, kPurple2],
                     ),
                     borderRadius: BorderRadius.circular(40),

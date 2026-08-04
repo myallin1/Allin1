@@ -618,7 +618,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                 child: Image.memory(photo.bytes!, width: 36, height: 36, fit: BoxFit.cover),
               )
             else
-              Icon(Icons.add_a_photo_outlined, color: _muted, size: 20),
+              const Icon(Icons.add_a_photo_outlined, color: _muted, size: 20),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -700,12 +700,12 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
         if (_isSubmitting)
           Positioned.fill(
             child: AbsorbPointer(
-              child: Container(
+              child: ColoredBox(
                 color: Colors.black.withValues(alpha: 0.45),
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 28, vertical: 24),
+                        horizontal: 28, vertical: 24,),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(18),
@@ -844,9 +844,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                   ),
                   child: Row(
                     children: [
-                      _detectingCity
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _njPink))
-                          : Icon(_selectedCity != null ? Icons.check_circle_rounded : Icons.my_location_rounded, color: _njPink, size: 18),
+                      if (_detectingCity) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _njPink)) else Icon(_selectedCity != null ? Icons.check_circle_rounded : Icons.my_location_rounded, color: _njPink, size: 18),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -871,7 +869,6 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                 controller: _preferredLocationController,
                 label: 'Preferred Work Area (e.g. Perundurai, Bhavani Road)',
                 icon: Icons.location_on_rounded,
-                textCapitalization: TextCapitalization.words,
                 validator: (_) => null,
               ),
               const SizedBox(height: 4),
@@ -1086,7 +1083,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                           width: 22,
                           height: 22,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2.5, color: Colors.white),
+                              strokeWidth: 2.5, color: Colors.white,),
                         )
                       : Text(
                           'Submit Registration →',

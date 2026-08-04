@@ -18,10 +18,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/fare_rates.dart';
 import '../../models/ride_model.dart';
+import '../../services/hero_ride_notification_service.dart';
 import '../../services/hero_usage_accumulator_service.dart';
 import '../../services/hero_wallet_service.dart';
 import '../../services/map_service.dart';
-import '../../services/hero_ride_notification_service.dart';
 import '../../utils/otp_utils.dart';
 import '../../widgets/allin1_map_widget.dart';
 
@@ -196,7 +196,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
     // ✅ FIX: Cancel notification if screen closes abruptly
     if (widget.rideDocId.isNotEmpty && _rideStatus != 'paid') {
       unawaited(
-        HeroRideNotificationService.cancelRideNotification(widget.rideDocId)
+        HeroRideNotificationService.cancelRideNotification(widget.rideDocId),
       );
     }
 
@@ -584,11 +584,11 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
     final enteredOtp = _otpController.text.trim();
     if (_rideOtpCode.isNotEmpty && enteredOtp != _rideOtpCode) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('❌ Incorrect OTP, please ask the customer to confirm'),
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('❌ Incorrect OTP, please ask the customer to confirm'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
-        ));
+        ),);
       }
       return;
     }

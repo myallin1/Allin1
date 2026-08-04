@@ -41,7 +41,7 @@ const Color kGold   = Color(0xFFF5C542);
 void _syncLoginPalette(BuildContext context) {
   ThemeService ts;
   try {
-    ts = Provider.of<ThemeService>(context, listen: true);
+    ts = Provider.of<ThemeService>(context);
   } catch (_) {
     return;
   }
@@ -627,7 +627,7 @@ class _LoginScreenState extends State<LoginScreen>
             // ── Google Sign-In Button ────────────────────────
             if (_loading)
               Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
+                padding: const EdgeInsets.symmetric(vertical: 16),
                 child: CircularProgressIndicator(color: kPurple),
               )
             else
@@ -635,12 +635,12 @@ class _LoginScreenState extends State<LoginScreen>
 
             // ── Divider ──────────────────────────────────────
             Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
+              padding: const EdgeInsets.symmetric(vertical: 16),
               child: Row(
                 children: [
                   Expanded(child: Divider(color: kBorder)),
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Text(
                       'or',
                       style: TextStyle(fontSize: 12, color: kMuted),

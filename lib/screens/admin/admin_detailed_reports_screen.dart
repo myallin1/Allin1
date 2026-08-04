@@ -171,10 +171,10 @@ class AdminDetailedReportsScreen extends StatelessWidget {
                 children: [
                   Text(label,
                       style: GoogleFonts.outfit(
-                          color: _text, fontSize: 14, fontWeight: FontWeight.w700)),
+                          color: _text, fontSize: 14, fontWeight: FontWeight.w700,),),
                   const SizedBox(height: 2),
                   Text(subtitle,
-                      style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
+                      style: GoogleFonts.outfit(color: _muted, fontSize: 11),),
                 ],
               ),
             ),

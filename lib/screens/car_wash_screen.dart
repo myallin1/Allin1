@@ -3,6 +3,7 @@
 // Premium NJ Tech Pink Dark Theme — May 2026
 // ================================================================
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -106,7 +107,7 @@ class CarWashScreen extends StatelessWidget {
       backgroundColor: _kDark,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back_ios_new_rounded,
-            color: Colors.white, size: 20),
+            color: Colors.white, size: 20,),
         onPressed: () => Navigator.pop(context),
       ),
       flexibleSpace: FlexibleSpaceBar(
@@ -119,12 +120,12 @@ class CarWashScreen extends StatelessWidget {
                 style: GoogleFonts.outfit(
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
-                    color: Colors.white)),
+                    color: Colors.white,),),
             Text('Water Wash 🚗',
                 style: GoogleFonts.outfit(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: _kPink)),
+                    color: _kPink,),),
           ],
         ),
         background: Stack(
@@ -158,7 +159,7 @@ class CarWashScreen extends StatelessWidget {
                   boxShadow: [
                     BoxShadow(
                       color: _kPink.withValues(alpha: 0.3),
-                      blurRadius: 40, spreadRadius: 10),
+                      blurRadius: 40, spreadRadius: 10,),
                   ],
                 ),
               ),
@@ -184,11 +185,11 @@ class _ServiceCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: _kCard,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _kPink.withValues(alpha: 0.18), width: 1),
+        border: Border.all(color: _kPink.withValues(alpha: 0.18)),
         boxShadow: [
           BoxShadow(
               color: _kPink.withValues(alpha: 0.08),
-              blurRadius: 20, offset: const Offset(0, 6)),
+              blurRadius: 20, offset: const Offset(0, 6),),
         ],
       ),
       child: Column(
@@ -212,12 +213,12 @@ class _ServiceCard extends StatelessWidget {
                           color: _kDark2,
                           child: const Center(
                               child: CircularProgressIndicator(
-                                  color: _kPink, strokeWidth: 2))),
+                                  color: _kPink, strokeWidth: 2,),),),
                   errorBuilder: (_, __, ___) => Container(
                     height: 190, color: _kDark2,
                     child: const Center(
                         child: Icon(Icons.local_car_wash_rounded,
-                            color: _kPink, size: 48))),
+                            color: _kPink, size: 48,),),),
                 ),
               ),
               // Badge
@@ -225,13 +226,13 @@ class _ServiceCard extends StatelessWidget {
                 top: 12, left: 12,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 5),
+                      horizontal: 10, vertical: 5,),
                   decoration: BoxDecoration(
                     color: service.badgeColor,
                     borderRadius: BorderRadius.circular(8),
                     boxShadow: [
                       BoxShadow(color: service.badgeColor.withValues(alpha: 0.4),
-                          blurRadius: 8)
+                          blurRadius: 8,),
                     ],
                   ),
                   child: Text(service.badge,
@@ -239,7 +240,7 @@ class _ServiceCard extends StatelessWidget {
                           color: Colors.white,
                           fontSize: 9,
                           fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5)),
+                          letterSpacing: 0.5,),),
                 ),
               ),
               // Price tag
@@ -247,18 +248,18 @@ class _ServiceCard extends StatelessWidget {
                 top: 12, right: 12,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
+                      horizontal: 12, vertical: 6,),
                   decoration: BoxDecoration(
                     color: _kDark.withValues(alpha: 0.85),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                        color: _kPink.withValues(alpha: 0.5)),
+                        color: _kPink.withValues(alpha: 0.5),),
                   ),
                   child: Text(service.price,
                       style: GoogleFonts.outfit(
                           color: _kPink,
                           fontSize: 13,
-                          fontWeight: FontWeight.w800)),
+                          fontWeight: FontWeight.w800,),),
                 ),
               ),
               // Bottom image gradient
@@ -291,30 +292,30 @@ class _ServiceCard extends StatelessWidget {
                     style: GoogleFonts.outfit(
                         color: Colors.white,
                         fontSize: 18,
-                        fontWeight: FontWeight.w800)),
+                        fontWeight: FontWeight.w800,),),
                 const SizedBox(height: 4),
                 Text(service.subtitle,
-                    style: TextStyle(
-                        color: _kMuted, fontSize: 12, height: 1.4)),
+                    style: const TextStyle(
+                        color: _kMuted, fontSize: 12, height: 1.4,),),
                 const SizedBox(height: 12),
                 // Feature chips
                 Wrap(
                   spacing: 6, runSpacing: 6,
                   children: service.features.map((f) => Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
+                        horizontal: 10, vertical: 4,),
                     decoration: BoxDecoration(
                       color: _kPink.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                          color: _kPink.withValues(alpha: 0.3)),
+                          color: _kPink.withValues(alpha: 0.3),),
                     ),
                     child: Text(f,
-                        style: TextStyle(
+                        style: const TextStyle(
                             color: _kPink,
                             fontSize: 10,
-                            fontWeight: FontWeight.w600)),
-                  )).toList(),
+                            fontWeight: FontWeight.w600,),),
+                  ),).toList(),
                 ),
                 const SizedBox(height: 16),
                 // ── Action buttons ────────────────────────────
@@ -334,13 +335,19 @@ class _ServiceCard extends StatelessWidget {
                       onTap: () => _launch(_waUri),
                     ),
                   ),
-                ]),
+                ],),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<_CarService>('service', service));
   }
 }
 
@@ -352,7 +359,7 @@ class _ActionButton extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
   const _ActionButton(
-      {required this.label, required this.color, required this.onTap});
+      {required this.label, required this.color, required this.onTap,});
 
   @override
   Widget build(BuildContext context) {
@@ -366,7 +373,7 @@ class _ActionButton extends StatelessWidget {
           boxShadow: [
             BoxShadow(
                 color: color.withValues(alpha: 0.35),
-                blurRadius: 12, offset: const Offset(0, 4)),
+                blurRadius: 12, offset: const Offset(0, 4),),
           ],
         ),
         child: Center(
@@ -374,10 +381,18 @@ class _ActionButton extends StatelessWidget {
               style: GoogleFonts.outfit(
                   color: Colors.white,
                   fontSize: 13,
-                  fontWeight: FontWeight.w700)),
+                  fontWeight: FontWeight.w700,),),
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('label', label));
+    properties.add(ColorProperty('color', color));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }
 
@@ -386,13 +401,13 @@ class _BottomContactBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(
-          16, 12, 16, 12 + MediaQuery.paddingOf(context).bottom),
+          16, 12, 16, 12 + MediaQuery.paddingOf(context).bottom,),
       decoration: BoxDecoration(
         color: _kCard,
         border: Border(top: BorderSide(color: _kPink.withValues(alpha: 0.2))),
         boxShadow: [
           BoxShadow(color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 20, offset: const Offset(0, -4)),
+              blurRadius: 20, offset: const Offset(0, -4),),
         ],
       ),
       child: Row(children: [
@@ -401,9 +416,9 @@ class _BottomContactBar extends StatelessWidget {
         Column(crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min, children: [
           Text('Book Now', style: GoogleFonts.outfit(
-              color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
-          Text(_phone, style: TextStyle(color: _kMuted, fontSize: 10)),
-        ]),
+              color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700,),),
+          const Text(_phone, style: TextStyle(color: _kMuted, fontSize: 10)),
+        ],),
         const Spacer(),
         GestureDetector(
           onTap: () => _launch(_telUri),
@@ -413,11 +428,11 @@ class _BottomContactBar extends StatelessWidget {
               color: _kPink,
               borderRadius: BorderRadius.circular(12),
               boxShadow: [BoxShadow(
-                  color: _kPink.withValues(alpha: 0.4), blurRadius: 10)],
+                  color: _kPink.withValues(alpha: 0.4), blurRadius: 10,),],
             ),
             child: Text('📞  Call', style: GoogleFonts.outfit(
                 color: Colors.white, fontSize: 13,
-                fontWeight: FontWeight.w700)),
+                fontWeight: FontWeight.w700,),),
           ),
         ),
         const SizedBox(width: 8),
@@ -430,14 +445,14 @@ class _BottomContactBar extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               boxShadow: [BoxShadow(
                   color: const Color(0xFF25D366).withValues(alpha: 0.4),
-                  blurRadius: 10)],
+                  blurRadius: 10,),],
             ),
             child: Text('💬  WA', style: GoogleFonts.outfit(
                 color: Colors.white, fontSize: 13,
-                fontWeight: FontWeight.w700)),
+                fontWeight: FontWeight.w700,),),
           ),
         ),
-      ]),
+      ],),
     );
   }
 }

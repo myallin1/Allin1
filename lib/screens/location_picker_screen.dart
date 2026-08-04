@@ -14,6 +14,7 @@
 // ================================================================
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart' show MapController;
 import 'package:google_fonts/google_fonts.dart';
@@ -52,6 +53,13 @@ class LocationPickerScreen extends StatefulWidget {
 
   @override
   State<LocationPickerScreen> createState() => _LocationPickerScreenState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<LatLng?>('initialCenter', initialCenter));
+    properties.add(StringProperty('title', title));
+  }
 }
 
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
@@ -82,7 +90,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       // No starting point given — open on the customer's own location
       // rather than a hardcoded city centre, so the pin usually starts
       // within a street or two of where they mean.
-      unawaited(_jumpToCurrentLocation(moveMap: true));
+      unawaited(_jumpToCurrentLocation());
     }
   }
 
@@ -231,7 +239,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                     backgroundColor: Colors.white,
                     foregroundColor: _kPink,
                     onPressed:
-                        _locating ? null : () => _jumpToCurrentLocation(),
+                        _locating ? null : _jumpToCurrentLocation,
                     child: _locating
                         ? const SizedBox(
                             width: 16,

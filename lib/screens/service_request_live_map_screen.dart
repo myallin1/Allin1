@@ -16,6 +16,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart' as rtdb;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
@@ -31,11 +32,17 @@ const Color _kGreen = Color(0xFF00C853);
 
 class ServiceRequestLiveMapScreen extends StatefulWidget {
   final String requestId;
-  const ServiceRequestLiveMapScreen({super.key, required this.requestId});
+  const ServiceRequestLiveMapScreen({required this.requestId, super.key});
 
   @override
   State<ServiceRequestLiveMapScreen> createState() =>
       _ServiceRequestLiveMapScreenState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestId', requestId));
+  }
 }
 
 class _ServiceRequestLiveMapScreenState
@@ -159,7 +166,7 @@ class _ServiceRequestLiveMapScreenState
                 padding: EdgeInsets.all(24),
                 child: Text(
                   'No location details were saved for this task, so a '
-                  'map view isn\'t available. Check the task details '
+                  "map view isn't available. Check the task details "
                   'above for the addresses instead.',
                   style: TextStyle(color: _kMuted, fontSize: 13),
                   textAlign: TextAlign.center,
@@ -211,7 +218,7 @@ class _ServiceRequestLiveMapScreenState
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'Your Hero\'s live location will appear here '
+                            "Your Hero's live location will appear here "
                             'once they start the task.',
                             style: GoogleFonts.outfit(
                                 color: _kText,

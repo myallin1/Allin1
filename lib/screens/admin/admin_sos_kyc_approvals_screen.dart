@@ -68,7 +68,7 @@ class _AdminSosKycApprovalsScreenState extends State<AdminSosKycApprovalsScreen>
             const Text('🆘', style: TextStyle(fontSize: 18)),
             const SizedBox(width: 8),
             Text('Cus SOS Approval',
-                style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800, fontSize: 17)),
+                style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800, fontSize: 17),),
           ],
         ),
         bottom: PreferredSize(
@@ -92,7 +92,7 @@ class _AdminSosKycApprovalsScreenState extends State<AdminSosKycApprovalsScreen>
                     const Text('⚠️', style: TextStyle(fontSize: 56)),
                     const SizedBox(height: 16),
                     Text('Error loading pending SOS requests',
-                        style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600, color: _red)),
+                        style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600, color: _red),),
                     const SizedBox(height: 8),
                     Text('${snap.error}', style: const TextStyle(color: _muted, fontSize: 12), textAlign: TextAlign.center),
                     const SizedBox(height: 16),
@@ -123,7 +123,7 @@ class _AdminSosKycApprovalsScreenState extends State<AdminSosKycApprovalsScreen>
                   const Text('✅', style: TextStyle(fontSize: 56)),
                   const SizedBox(height: 16),
                   Text('No pending SOS verification requests',
-                      style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600, color: _text)),
+                      style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600, color: _text),),
                 ],
               ),
             );
@@ -150,7 +150,7 @@ class _AdminSosKycApprovalsScreenState extends State<AdminSosKycApprovalsScreen>
   }
 
   Future<void> _callCustomer(String phone) async {
-    final digits = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    final digits = phone.replaceAll(RegExp('[^0-9+]'), '');
     if (digits.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -209,7 +209,7 @@ class _AdminSosKycApprovalsScreenState extends State<AdminSosKycApprovalsScreen>
               // photo and compare it against what was typed, right
               // there, instead of a separate photo grid at the bottom.
               Text('Proof Verification',
-                  style: GoogleFonts.outfit(color: _muted, fontSize: 11, fontWeight: FontWeight.w700)),
+                  style: GoogleFonts.outfit(color: _muted, fontSize: 11, fontWeight: FontWeight.w700),),
               const SizedBox(height: 8),
               _detailRowWithPhoto('Aadhaar', aadhaarNumber, data['aadhaarDocUrl'] as String?),
               _detailRowWithPhoto('PAN', panNumber, data['panDocUrl'] as String?),
@@ -262,10 +262,10 @@ class _AdminSosKycApprovalsScreenState extends State<AdminSosKycApprovalsScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label,
-                    style: const TextStyle(fontSize: 11, color: _muted, fontWeight: FontWeight.w600)),
+                    style: const TextStyle(fontSize: 11, color: _muted, fontWeight: FontWeight.w600),),
                 const SizedBox(height: 2),
                 Text(value.isNotEmpty ? value : 'N/A',
-                    style: const TextStyle(fontSize: 13, color: _text, fontWeight: FontWeight.w700)),
+                    style: const TextStyle(fontSize: 13, color: _text, fontWeight: FontWeight.w700),),
               ],
             ),
           ),
@@ -307,7 +307,7 @@ class _AdminSosKycApprovalsScreenState extends State<AdminSosKycApprovalsScreen>
           children: [
             SizedBox(
                 width: 90,
-                child: Text(label, style: const TextStyle(fontSize: 11, color: _muted, fontWeight: FontWeight.w600))),
+                child: Text(label, style: const TextStyle(fontSize: 11, color: _muted, fontWeight: FontWeight.w600)),),
             Expanded(child: Text(value, style: const TextStyle(fontSize: 12, color: _text))),
           ],
         ),
@@ -460,7 +460,7 @@ class _SosKycApprovalCard extends StatelessWidget {
                 ),
                 child: Center(
                   child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
-                      style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.w800)),
+                      style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.w800),),
                 ),
               ),
               const SizedBox(width: 12),
@@ -483,7 +483,7 @@ class _SosKycApprovalCard extends StatelessWidget {
                 ),
               if (submittedAt != null)
                 Text('${submittedAt.toDate().day}/${submittedAt.toDate().month}',
-                    style: const TextStyle(fontSize: 10, color: _muted)),
+                    style: const TextStyle(fontSize: 10, color: _muted),),
             ],
           ),
           if (address.isNotEmpty) ...[

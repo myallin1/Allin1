@@ -148,7 +148,7 @@ class AdminRideTrackingScreen extends StatelessWidget {
                     ),
                   ),
                   leading: CircleAvatar(
-                    backgroundColor: _statusColor(status).withOpacity(0.2),
+                    backgroundColor: _statusColor(status).withValues(alpha: 0.2),
                     child: Icon(
                       Icons.two_wheeler_rounded,
                       color: _statusColor(status),
@@ -189,7 +189,7 @@ class AdminRideTrackingScreen extends StatelessWidget {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: _statusColor(status).withOpacity(0.2),
+                          color: _statusColor(status).withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(

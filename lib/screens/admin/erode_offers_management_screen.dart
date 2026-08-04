@@ -9,6 +9,7 @@
 // here reflects immediately in the customer Rewards screen.
 // ================================================================
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 const Color _bg = Color(0xFF0F0B14);
@@ -91,7 +92,7 @@ class _OfferAdminCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _pink.withOpacity(0.18)),
+        border: Border.all(color: _pink.withValues(alpha: 0.18)),
       ),
       child: Row(
         children: [
@@ -124,7 +125,7 @@ class _OfferAdminCard extends StatelessWidget {
           ),
           Switch(
             value: active,
-            activeColor: _pink,
+            activeThumbColor: _pink,
             onChanged: (v) => FirebaseFirestore.instance.collection('erode_offers').doc(offerId).update({'active': v}),
           ),
           IconButton(
@@ -140,7 +141,7 @@ class _OfferAdminCard extends StatelessWidget {
     );
   }
 
-  String _formatValidTill(dynamic validTill) {
+  String _formatValidTill(validTill) {
     if (validTill is Timestamp) {
       final d = validTill.toDate();
       return 'Valid till ${d.day}/${d.month}/${d.year}';
@@ -169,6 +170,13 @@ class _OfferAdminCard extends StatelessWidget {
       ),
     );
   }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('offerId', offerId));
+    properties.add(DiagnosticsProperty<Map<String, dynamic>>('data', data));
+  }
 }
 
 class _OfferFormDialog extends StatefulWidget {
@@ -179,6 +187,13 @@ class _OfferFormDialog extends StatefulWidget {
 
   @override
   State<_OfferFormDialog> createState() => _OfferFormDialogState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('offerId', offerId));
+    properties.add(DiagnosticsProperty<Map<String, dynamic>?>('existing', existing));
+  }
 }
 
 class _OfferFormDialogState extends State<_OfferFormDialog> {
@@ -284,7 +299,7 @@ class _OfferFormDialogState extends State<_OfferFormDialog> {
         decoration: InputDecoration(
           labelText: label,
           labelStyle: const TextStyle(color: Colors.white54),
-          enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.2))),
+          enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2))),
           focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: _pink)),
         ),
       ),

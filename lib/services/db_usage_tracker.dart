@@ -117,7 +117,7 @@ class DbUsageTracker {
         'reads': FieldValue.increment(reads),
         'writes': FieldValue.increment(writes),
         'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true),);
     } catch (e) {
       // Swallow — this is a best-effort monitor, must never crash or
       // block the app it's instrumenting.

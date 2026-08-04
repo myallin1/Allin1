@@ -148,7 +148,7 @@ class _HeroSosScreenState extends State<HeroSosScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to send SOS: $e'),
-            backgroundColor: Color(0xFFB00020),
+            backgroundColor: const Color(0xFFB00020),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -160,7 +160,7 @@ class _HeroSosScreenState extends State<HeroSosScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [Color(0xFFFFF7FB), Color(0xFFFFEEF6), Color(0xFFFFFFFF)],
@@ -198,14 +198,14 @@ class _HeroSosScreenState extends State<HeroSosScreen> {
                 child: Container(
                   width: 200,
                   height: 200,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: const LinearGradient(
+                    gradient: LinearGradient(
                       colors: [Color(0xFFFF5252), Color(0xFFB00020)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    boxShadow: const [
+                    boxShadow: [
                       BoxShadow(
                         color: Color(0x4AFF5252),
                         blurRadius: 30,

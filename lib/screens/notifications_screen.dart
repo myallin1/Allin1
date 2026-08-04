@@ -35,7 +35,7 @@ const Color kRed    = Color(0xFFE05555);
 void _syncNotificationsPalette(BuildContext context) {
   ThemeService ts;
   try {
-    ts = Provider.of<ThemeService>(context, listen: true);
+    ts = Provider.of<ThemeService>(context);
   } catch (_) {
     return;
   }
@@ -125,7 +125,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   .snapshots(),
               builder: (ctx, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(
+                  return const Center(
                     child: CircularProgressIndicator(color: kGold),
                   );
                 }
@@ -320,7 +320,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                     child: Row(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Padding(
+                                        const Padding(
                                           padding: EdgeInsets.only(top: 4),
                                           child: Icon(
                                             Icons.check_circle_rounded,
@@ -477,7 +477,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   Container(
                     width: 8,
                     height: 8,
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: kGold,
                       shape: BoxShape.circle,
                     ),
@@ -603,7 +603,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                           color: kGold.withValues(alpha: 0.18),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.auto_awesome_rounded,
                           color: kGold,
                           size: 20,

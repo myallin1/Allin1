@@ -18,6 +18,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -52,6 +53,13 @@ class AdminServiceRequestsScreen extends StatefulWidget {
   @override
   State<AdminServiceRequestsScreen> createState() =>
       _AdminServiceRequestsScreenState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestType', requestType));
+    properties.add(StringProperty('title', title));
+  }
 }
 
 class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
@@ -151,7 +159,7 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
       appBar: AppBar(
         backgroundColor: _surface,
         title: Text(widget.title,
-            style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800)),
+            style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800),),
         actions: [
           Container(
             margin: const EdgeInsets.only(right: 12),
@@ -163,13 +171,13 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
             ),
             child: Text('${_requests.length} Total',
                 style: const TextStyle(
-                    color: _pink, fontSize: 12, fontWeight: FontWeight.bold)),
+                    color: _pink, fontSize: 12, fontWeight: FontWeight.bold,),),
           ),
         ],
       ),
       body: _requests.isEmpty
           ? const Center(
-              child: Text('No requests yet', style: TextStyle(color: _muted)))
+              child: Text('No requests yet', style: TextStyle(color: _muted)),)
           : ListView.builder(
               padding: const EdgeInsets.all(12),
               itemCount: _requests.length,
@@ -196,7 +204,7 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: const BorderSide(color: _border)),
+          side: const BorderSide(color: _border),),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         // Tap anywhere on the card → the same graphical step tracker
@@ -211,21 +219,21 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                        horizontal: 8, vertical: 4,),
                     decoration: BoxDecoration(
                         color: statusColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8)),
+                        borderRadius: BorderRadius.circular(8),),
                     child: Text(statusLabel,
                         style: TextStyle(
                             color: statusColor,
                             fontSize: 10,
-                            fontWeight: FontWeight.bold)),
+                            fontWeight: FontWeight.bold,),),
                   ),
                   const Spacer(),
                   IconButton(
                     onPressed: () => _call(customerPhone),
                     icon: const Icon(Icons.call_rounded,
-                        color: _green, size: 20),
+                        color: _green, size: 20,),
                   ),
                 ],
               ),
@@ -234,21 +242,21 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
                   style: const TextStyle(
                       color: _text,
                       fontWeight: FontWeight.w700,
-                      fontSize: 14)),
+                      fontSize: 14,),),
               if (customerPhone.isNotEmpty)
                 Text(customerPhone,
-                    style: const TextStyle(color: _muted, fontSize: 11)),
+                    style: const TextStyle(color: _muted, fontSize: 11),),
               if (assignedHeroName != null && assignedHeroName.isNotEmpty) ...[
                 const SizedBox(height: 2),
                 Text('Hero: $assignedHeroName',
-                    style: const TextStyle(color: _muted, fontSize: 11)),
+                    style: const TextStyle(color: _muted, fontSize: 11),),
               ],
               if (summary.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text(summary,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: _muted, fontSize: 12)),
+                    style: const TextStyle(color: _muted, fontSize: 12),),
               ],
               const SizedBox(height: 10),
               Row(
@@ -262,7 +270,7 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
                         child: const Text('Assign to Hero',
                             style: TextStyle(
                                 color: Colors.white,
-                                fontWeight: FontWeight.bold)),
+                                fontWeight: FontWeight.bold,),),
                       ),
                     )
                   else

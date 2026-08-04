@@ -103,7 +103,7 @@ class _SellerElectronicsDashboardScreenState
                   const Text('💻', style: TextStyle(fontSize: 40)),
                   const SizedBox(height: 12),
                   Text(
-                    'You\'re registered — no catalog setup needed',
+                    "You're registered — no catalog setup needed",
                     style: GoogleFonts.outfit(
                       color: _text,
                       fontSize: 18,
@@ -114,7 +114,7 @@ class _SellerElectronicsDashboardScreenState
                   Text(
                     'Electronics on Allin1 works as repair/service bookings — '
                     'a customer requests a repair or install through NJ Tech '
-                    'Store, and any available hero handles it. There\'s no '
+                    "Store, and any available hero handles it. There's no "
                     'product catalog to manage on your end — your '
                     'registration just helps us list your shop as a nearby '
                     'option.',
@@ -148,9 +148,9 @@ class _SellerElectronicsDashboardScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label,
-                    style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
+                    style: GoogleFonts.outfit(color: _muted, fontSize: 11),),
                 Text(value.isEmpty ? '—' : value,
-                    style: GoogleFonts.outfit(color: _text, fontSize: 14)),
+                    style: GoogleFonts.outfit(color: _text, fontSize: 14),),
               ],
             ),
           ),

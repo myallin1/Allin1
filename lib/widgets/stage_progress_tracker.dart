@@ -13,14 +13,13 @@
 // display widget driven by `stages` + `currentIndex`, so it can be
 // reused by any future stage-based tracking UI in this app.
 // ================================================================
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class StageProgressTracker extends StatelessWidget {
   const StageProgressTracker({
-    super.key,
-    required this.stages,
-    required this.currentIndex,
+    required this.stages, required this.currentIndex, super.key,
     this.stageSubtitles,
     this.accentColor = const Color(0xFFFF4FA3),
     this.completedColor = const Color(0xFF00C853),
@@ -161,5 +160,19 @@ class StageProgressTracker extends StatelessWidget {
         );
       }),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(IterableProperty<String>('stages', stages));
+    properties.add(IntProperty('currentIndex', currentIndex));
+    properties.add(IterableProperty<String?>('stageSubtitles', stageSubtitles));
+    properties.add(ColorProperty('accentColor', accentColor));
+    properties.add(ColorProperty('completedColor', completedColor));
+    properties.add(ColorProperty('mutedColor', mutedColor));
+    properties.add(ColorProperty('borderColor', borderColor));
+    properties.add(ColorProperty('textColor', textColor));
+    properties.add(DiagnosticsProperty<bool>('compact', compact));
   }
 }

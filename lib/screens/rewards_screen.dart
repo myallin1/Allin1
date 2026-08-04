@@ -9,12 +9,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/db_usage_tracker.dart';
-import '../widgets/promo_overlay.dart';
 import '../widgets/banner_slider.dart';
+import '../widgets/promo_overlay.dart';
 import '../widgets/server_busy_dialog.dart' show kCallCenterNumberIntl;
 import '../widgets/soundbox_easter_egg_overlay.dart';
-import 'guru_chat_screen.dart';
 import 'erode_offers_section.dart';
+import 'guru_chat_screen.dart';
 
 const Color _paytmBlue = Color(0xFF00BAF2);
 const Color _paytmDarkBlue = Color(0xFF002970);
@@ -92,7 +92,7 @@ class _RewardsScreenState extends State<RewardsScreen>
           .collection('users')
           .doc(user.uid)
           .get();
-      DbUsageTracker.instance.recordRead(1);
+      DbUsageTracker.instance.recordRead();
       final data = snap.data() ?? <String, dynamic>{};
       final rewardsV2 = (data['rewardsV2'] as Map<String, dynamic>?) ?? {};
 
@@ -190,7 +190,7 @@ class _RewardsScreenState extends State<RewardsScreen>
                 border: Border.all(color: _paytmBlue.withValues(alpha: 0.35), width: 2),
                 boxShadow: [BoxShadow(
                     color: _paytmBlue.withValues(alpha: 0.25),
-                    blurRadius: 16, spreadRadius: 2)],
+                    blurRadius: 16, spreadRadius: 2,),],
               ),
               child: ClipOval(
                 child: Image.asset(
@@ -334,7 +334,7 @@ class _RewardsScreenState extends State<RewardsScreen>
         badgeLabel: 'AI QUIZ',
         title: _aiQuizClaimed ? 'Guru AI subscription claimed!' : 'AI Quiz: Win 1-Year Guru AI',
         subtitle: _aiQuizClaimed
-            ? 'We\'ll activate your subscription shortly after your WhatsApp message.'
+            ? "We'll activate your subscription shortly after your WhatsApp message."
             : 'Answer 1 simple AI general-knowledge question to unlock a free 1-year Guru AI subscription — one-time only.',
         icon: Icons.psychology_alt_rounded,
         claimedIcon: Icons.verified_rounded,
@@ -468,7 +468,7 @@ class _QuizRewardCard extends StatelessWidget {
                             claimed ? 'CLAIMED' : badgeLabel,
                             style: GoogleFonts.outfit(
                               color: Colors.white, fontSize: 10.5,
-                              fontWeight: FontWeight.w900, letterSpacing: 1.0,
+                              fontWeight: FontWeight.w900, letterSpacing: 1,
                             ),
                           ),
                         ),
@@ -515,6 +515,9 @@ class _QuizRewardCard extends StatelessWidget {
     properties.add(StringProperty('title', title));
     properties.add(StringProperty('subtitle', subtitle));
     properties.add(StringProperty('ctaLabel', ctaLabel));
+    properties.add(DiagnosticsProperty<IconData>('icon', icon));
+    properties.add(DiagnosticsProperty<IconData>('claimedIcon', claimedIcon));
+    properties.add(IterableProperty<Color>('gradient', gradient));
   }
 }
 
@@ -567,7 +570,7 @@ class _PaytmQuizDialogState extends State<_PaytmQuizDialog> {
           'paytmCouponCode': code,
           'paytmClaimedAt': FieldValue.serverTimestamp(),
         },
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true),);
       if (!mounted) return;
       setState(() {
         _couponCode = code;
@@ -763,7 +766,7 @@ class _AiQuizDialogState extends State<_AiQuizDialog> {
             'aiQuizClaimed': true,
             'aiClaimedAt': FieldValue.serverTimestamp(),
           },
-        }, SetOptions(merge: true));
+        }, SetOptions(merge: true),);
       }
     } catch (e) {
       debugPrint('[RewardsScreen] AI quiz WhatsApp claim failed: $e');
@@ -885,7 +888,7 @@ class _AiQuizDialogState extends State<_AiQuizDialog> {
         Text('🎉 1-Year Guru AI Subscription! 🎉', textAlign: TextAlign.center, style: GoogleFonts.outfit(color: _rewardInk, fontSize: 19, height: 1.15, fontWeight: FontWeight.w900)),
         const SizedBox(height: 8),
         Text(
-          'Tap below to message us on WhatsApp — we\'ll activate your subscription shortly after.',
+          "Tap below to message us on WhatsApp — we'll activate your subscription shortly after.",
           textAlign: TextAlign.center,
           style: GoogleFonts.outfit(color: _rewardInk.withValues(alpha: 0.64), fontSize: 13, height: 1.35, fontWeight: FontWeight.w600),
         ),

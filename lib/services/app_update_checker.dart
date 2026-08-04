@@ -102,12 +102,12 @@ class AppUpdateChecker {
   }
 
   List<int>? _parseVersion(String raw) {
-    final cleaned = raw.trim().replaceFirst(RegExp(r'^[vV]'), '');
+    final cleaned = raw.trim().replaceFirst(RegExp('^[vV]'), '');
     if (cleaned.isEmpty) return null;
     final parts = cleaned.split('.');
     final nums = <int>[];
     for (final p in parts) {
-      final digitsOnly = p.replaceAll(RegExp(r'[^0-9]'), '');
+      final digitsOnly = p.replaceAll(RegExp('[^0-9]'), '');
       if (digitsOnly.isEmpty) return null;
       final n = int.tryParse(digitsOnly);
       if (n == null) return null;

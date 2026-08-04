@@ -35,7 +35,7 @@ const Color kGold   = Color(0xFFF5C542);
 void _syncRideHistoryPalette(BuildContext context) {
   ThemeService ts;
   try {
-    ts = Provider.of<ThemeService>(context, listen: true);
+    ts = Provider.of<ThemeService>(context);
   } catch (_) {
     return;
   }
@@ -190,7 +190,7 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
                 backgroundColor: kSurface,
                 onRefresh: () => _loadRideHistory(forceRefresh: true),
                 child: _loading
-                    ? Center(
+                    ? const Center(
                         child: CircularProgressIndicator(color: kGold),
                       )
                     : _error != null
@@ -291,7 +291,7 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.error_outline, size: 44, color: kOrange),
+                  const Icon(Icons.error_outline, size: 44, color: kOrange),
                   const SizedBox(height: 14),
                   Text(
                     message,
@@ -385,7 +385,7 @@ class _RideHistoryCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 '₹${fare.toInt()}',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
                   color: kGold,
@@ -400,7 +400,7 @@ class _RideHistoryCard extends StatelessWidget {
                 width: 8,
                 height: 8,
                 decoration:
-                    BoxDecoration(color: kGreen, shape: BoxShape.circle),
+                    const BoxDecoration(color: kGreen, shape: BoxShape.circle),
               ),
               const SizedBox(width: 8),
               Expanded(

@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -17,12 +18,12 @@ import '../../config/fare_rates.dart';
 import '../../config/ride_catalog.dart';
 import '../../models/ride_model.dart';
 import '../../services/category_gateway_service.dart';
+import '../../services/city_service.dart';
 import '../../services/localization_service.dart';
 import '../../services/location_service.dart';
 import '../../services/map_service.dart';
 import '../../services/recent_places_service.dart';
 import '../../services/session_service.dart';
-import '../../services/city_service.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../../widgets/server_busy_dialog.dart';
 import '../../widgets/vehicle_selection_bottom_sheet.dart';
@@ -304,6 +305,13 @@ class BikeBookingScreen extends StatefulWidget {
 
   @override
   State<BikeBookingScreen> createState() => _BikeBookingScreenState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('initialCategory', initialCategory));
+    properties.add(DiagnosticsProperty<Map<String, dynamic>?>('initialDropLocation', initialDropLocation));
+  }
 }
 
 class _BikeBookingScreenState extends State<BikeBookingScreen>
@@ -480,7 +488,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Leave the app?',
-            style: TextStyle(fontWeight: FontWeight.w700)),
+            style: TextStyle(fontWeight: FontWeight.w700),),
         content: const Text('Close Allin1?'),
         actions: [
           TextButton(
@@ -494,7 +502,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         ],
       ),
     );
-    if (exit == true && mounted) {
+    if ((exit ?? false) && mounted) {
       SystemNavigator.pop();
     }
   }
@@ -629,7 +637,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
           'status': 'cancelled',
           'cancelledBy': 'system',
           'cancelledAt': FieldValue.serverTimestamp(),
-        }));
+        }),);
       }
       if (!mounted) {
         return;
@@ -1163,7 +1171,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         if (pos != null && mounted) {
           _updateUserLocation(LatLng(pos.latitude, pos.longitude));
         }
-      }));
+      }),);
       return;
     }
 
@@ -2061,7 +2069,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
            'recipientPhone': recipientPhone,
        }).then((_) {
          debugPrint('🔥 [RIDE CREATION] Firestore document created successfully! Doc ID: ${rideRef.id}');
-       }).catchError((dynamic e) {
+       }).catchError((e) {
          debugPrint('[BikeBookingScreen] Background ride creation failed: $e');
          if (mounted) {
            showServerBusyDialog(context);
@@ -2078,7 +2086,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
             existingRideDocId: rideRef.id,
           ),
         ),
-      ));
+      ),);
     } catch (e) {
       debugPrint('🔥 [RIDE CREATION ERROR] Crashed with: $e');
       if (mounted) {
@@ -2855,7 +2863,6 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
             : null,
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
@@ -3545,7 +3552,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                     ),
                   ),
                   child: _isContinuingRide
-                      ? SizedBox(
+                      ? const SizedBox(
                           height: 16,
                           width: 16,
                           child: CircularProgressIndicator(

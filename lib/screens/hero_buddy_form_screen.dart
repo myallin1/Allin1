@@ -34,7 +34,7 @@ class _HeroBuddyFormScreenState extends State<HeroBuddyFormScreen> {
   Future<void> _placeOrder() async {
     if (_taskControllers.first.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter at least one task!')));
+          const SnackBar(content: Text('Please enter at least one task!')),);
       return;
     }
     setState(() => _isSearching = true);
@@ -53,7 +53,7 @@ class _HeroBuddyFormScreenState extends State<HeroBuddyFormScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: _coBorder)),
         title: Text('Heroes are Busy! ⏳', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w800)),
         content: Text('All our local heroes are currently busy. Please try again or call our booking center directly for manual assignment.',
-            style: GoogleFonts.outfit(color: Colors.white70, fontSize: 14)),
+            style: GoogleFonts.outfit(color: Colors.white70, fontSize: 14),),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Try Again', style: TextStyle(color: Colors.white54))),
           ElevatedButton.icon(
@@ -65,7 +65,7 @@ class _HeroBuddyFormScreenState extends State<HeroBuddyFormScreen> {
             },
             icon: const Icon(Icons.support_agent_rounded, color: Colors.white, size: 18),
             label: Text('Call Center', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
-          )
+          ),
         ],
       ),
     );
@@ -73,7 +73,7 @@ class _HeroBuddyFormScreenState extends State<HeroBuddyFormScreen> {
 
   @override
   void dispose() {
-    for (var c in _taskControllers) { c.dispose(); }
+    for (final c in _taskControllers) { c.dispose(); }
     _instructionCtrl.dispose();
     super.dispose();
   }
@@ -125,7 +125,7 @@ class _HeroBuddyFormScreenState extends State<HeroBuddyFormScreen> {
                 const SizedBox(height: 10),
                 Text('Upload reference picture (Optional)', style: GoogleFonts.outfit(color: Colors.white54)),
                 const SizedBox(height: 12),
-                ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.white12), onPressed: () {}, child: const Text('Choose Image', style: TextStyle(color: Colors.white)))
+                ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.white12), onPressed: () {}, child: const Text('Choose Image', style: TextStyle(color: Colors.white))),
               ],
             ),
           ),
@@ -145,7 +145,7 @@ class _HeroBuddyFormScreenState extends State<HeroBuddyFormScreen> {
           Container(width: 32, height: 32, alignment: Alignment.center, decoration: BoxDecoration(color: _coSurface, shape: BoxShape.circle, border: Border.all(color: _coBorder)), child: Text('${index + 1}', style: const TextStyle(color: _coPink, fontWeight: FontWeight.bold))),
           const SizedBox(width: 12),
           Expanded(child: TextField(controller: ctrl, style: const TextStyle(color: Colors.white), decoration: _inputDeco('Type item/task... (e.g., Get 2 Tea)'))),
-          if (_taskControllers.length > 1) IconButton(icon: const Icon(Icons.remove_circle_outline, color: Colors.white38), onPressed: () => _removeTaskField(index))
+          if (_taskControllers.length > 1) IconButton(icon: const Icon(Icons.remove_circle_outline, color: Colors.white38), onPressed: () => _removeTaskField(index)),
         ],
       ),
     );
@@ -160,7 +160,7 @@ class _HeroBuddyFormScreenState extends State<HeroBuddyFormScreen> {
         child: Row(
           children: [
             Expanded(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Delivery Fee: ₹30', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)), Text('Within 3KM limit', style: GoogleFonts.outfit(color: Colors.white54, fontSize: 11))])),
-            ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: _coPink, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), onPressed: _placeOrder, child: Text('Place Order', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w800)))
+            ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: _coPink, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), onPressed: _placeOrder, child: Text('Place Order', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w800))),
           ],
         ),
       ),

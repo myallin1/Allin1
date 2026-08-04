@@ -368,7 +368,7 @@ class MapService extends ChangeNotifier {
   }
 
   double _haversineDistance(LatLng p1, LatLng p2) {
-     const double r = 6371000.0;
+     const double r = 6371000;
      final double dLat = (p2.latitude - p1.latitude) * (math.pi / 180.0);
      final double dLon = (p2.longitude - p1.longitude) * (math.pi / 180.0);
      final double a = math.sin(dLat / 2) * math.sin(dLat / 2) +

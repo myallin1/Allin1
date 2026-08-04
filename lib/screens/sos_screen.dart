@@ -321,11 +321,11 @@ class _SosScreenState extends State<SosScreen> {
           const SizedBox(height: 14),
           Text(title,
               textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(color: _navy, fontSize: 18, fontWeight: FontWeight.w900)),
+              style: GoogleFonts.outfit(color: _navy, fontSize: 18, fontWeight: FontWeight.w900),),
           const SizedBox(height: 8),
           Text(message,
               textAlign: TextAlign.center,
-              style: GoogleFonts.notoSansTamil(color: const Color(0xFF7A4B63), fontSize: 13, height: 1.4)),
+              style: GoogleFonts.notoSansTamil(color: const Color(0xFF7A4B63), fontSize: 13, height: 1.4),),
           if (actionLabel != null) ...[
             const SizedBox(height: 18),
             SizedBox(
@@ -333,13 +333,13 @@ class _SosScreenState extends State<SosScreen> {
               height: 50,
               child: ElevatedButton(
                 onPressed: () => Navigator.push(context,
-                    MaterialPageRoute<void>(builder: (_) => const SosKycVerificationScreen())),
+                    MaterialPageRoute<void>(builder: (_) => const SosKycVerificationScreen()),),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _pink,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
                 child: Text(actionLabel,
-                    style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700)),
+                    style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700),),
               ),
             ),
           ],

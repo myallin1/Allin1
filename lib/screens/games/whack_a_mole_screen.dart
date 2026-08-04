@@ -166,7 +166,7 @@ class _WhackAMoleScreenState extends State<WhackAMoleScreen> {
                                   color: const Color(0xFF3E2723),
                                   shape: BoxShape.circle,
                                   boxShadow: [
-                                    BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 6, offset: const Offset(0, 3)),
+                                    BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 6, offset: const Offset(0, 3)),
                                   ],
                                 ),
                                 alignment: Alignment.center,
@@ -188,8 +188,8 @@ class _WhackAMoleScreenState extends State<WhackAMoleScreen> {
                           },
                         ),
                         if (!_running)
-                          Container(
-                            color: _bg.withOpacity(0.9),
+                          ColoredBox(
+                            color: _bg.withValues(alpha: 0.9),
                             child: Center(
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(

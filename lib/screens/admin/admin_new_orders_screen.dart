@@ -10,6 +10,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -180,7 +181,7 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
         ],
       ),
       body: totalCount == 0
-          ? Center(child: Text('No orders awaiting review', style: TextStyle(color: _muted)))
+          ? const Center(child: Text('No orders awaiting review', style: TextStyle(color: _muted)))
           : ListView(
               padding: const EdgeInsets.all(12),
               children: [
@@ -400,6 +401,13 @@ class AssignHeroSheet extends StatefulWidget {
 
   @override
   State<AssignHeroSheet> createState() => AssignHeroSheetState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestId', requestId));
+    properties.add(StringProperty('customerName', customerName));
+  }
 }
 
 class AssignHeroSheetState extends State<AssignHeroSheet> {
@@ -497,7 +505,7 @@ class AssignHeroSheetState extends State<AssignHeroSheet> {
           const SizedBox(height: 12),
           TextField(
             controller: _estimateCtrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: false),
+            keyboardType: const TextInputType.numberWithOptions(),
             style: const TextStyle(color: _text),
             decoration: const InputDecoration(
               labelText: 'Estimated amount (optional)',
@@ -553,13 +561,18 @@ class ServiceRequestManualStatusControl extends StatefulWidget {
   final String requestId;
   final String currentStatus;
   const ServiceRequestManualStatusControl({
-    super.key,
-    required this.requestId,
-    required this.currentStatus,
+    required this.requestId, required this.currentStatus, super.key,
   });
 
   @override
   State<ServiceRequestManualStatusControl> createState() => _ServiceRequestManualStatusControlState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestId', requestId));
+    properties.add(StringProperty('currentStatus', currentStatus));
+  }
 }
 
 class _ServiceRequestManualStatusControlState extends State<ServiceRequestManualStatusControl> {

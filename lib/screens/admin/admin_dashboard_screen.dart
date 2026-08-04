@@ -9,24 +9,25 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/db_usage_tracker.dart';
 import '../../widgets/manual_refresh_header.dart';
-import 'ads_management_screen.dart';
-import 'admin_hero_dispatch_screen.dart';
 import 'admin_detailed_reports_screen.dart';
+import 'admin_hero_dispatch_screen.dart';
 import 'admin_new_orders_screen.dart';
 import 'admin_ride_tracking_screen.dart';
+import 'admin_seller_approval_screen.dart';
+import 'ads_management_screen.dart';
 import 'approved_heroes_screen.dart';
 import 'commission_settings_screen.dart';
 import 'credentials_admin_screen.dart';
 import 'customer_rides_screen.dart';
 import 'fare_management_screen.dart';
 import 'hero_approvals_screen.dart';
-import 'admin_seller_approval_screen.dart';
 
 // ── Theme ──────────────────────────────────────────────────────
 const Color _bg = Color(0xFF0A0A1A);
@@ -202,8 +203,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Future<void> _showUtrDialog(String rideDocId, String customerName, double amount) async {
-    final TextEditingController _utrController = TextEditingController();
-    bool _isLoading = false;
+    final TextEditingController utrController = TextEditingController();
+    bool isLoading = false;
 
     await showDialog<void>(
       context: context,
@@ -224,7 +225,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ),
               const SizedBox(height: 16),
               TextField(
-                controller: _utrController,
+                controller: utrController,
                 keyboardType: TextInputType.text,
                 style: const TextStyle(color: Color(0xFFEEEEF5)),
                 decoration: InputDecoration(
@@ -245,15 +246,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00C853)),
-              onPressed: _isLoading ? null : () async {
-                final utr = _utrController.text.trim();
+              onPressed: isLoading ? null : () async {
+                final utr = utrController.text.trim();
                 if (utr.isEmpty || utr.length < 6) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('⚠️ Enter a valid UTR number (min 6 chars)'), backgroundColor: Color(0xFFFF5252)),
                   );
                   return;
                 }
-                setDialogState(() => _isLoading = true);
+                setDialogState(() => isLoading = true);
                 try {
                   await FirebaseFirestore.instance.collection('rides').doc(rideDocId).update({
                     'paymentStatus': 'confirmed',
@@ -270,14 +271,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 } catch (e) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('❌ Error: ${e.toString()}'), backgroundColor: Color(0xFFFF5252)),
+                      SnackBar(content: Text('❌ Error: ${e.toString()}'), backgroundColor: const Color(0xFFFF5252)),
                     );
                   }
                 } finally {
-                  setDialogState(() => _isLoading = false);
+                  setDialogState(() => isLoading = false);
                 }
               },
-              child: _isLoading
+              child: isLoading
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                   : const Text('Confirm Payment ✅', style: TextStyle(color: Colors.white)),
             ),
@@ -914,16 +915,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return InkWell(
       borderRadius: BorderRadius.circular(14),
       onTap: () => Navigator.push(context,
-          MaterialPageRoute<void>(builder: (_) => const AdminDetailedReportsScreen())),
+          MaterialPageRoute<void>(builder: (_) => const AdminDetailedReportsScreen()),),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: const Color(0xFF1A1A2A),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _green.withOpacity(0.3)),
+          border: Border.all(color: _green.withValues(alpha: 0.3)),
           boxShadow: [
-            BoxShadow(color: _green.withOpacity(0.1), blurRadius: 8, spreadRadius: 1),
+            BoxShadow(color: _green.withValues(alpha: 0.1), blurRadius: 8, spreadRadius: 1),
           ],
         ),
         child: Row(
@@ -932,7 +933,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: _green.withOpacity(0.15),
+                color: _green.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.query_stats_rounded, color: _green, size: 22),
@@ -943,10 +944,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('DB & Detailed Report',
-                      style: TextStyle(color: _text, fontSize: 14, fontWeight: FontWeight.w700)),
+                      style: TextStyle(color: _text, fontSize: 14, fontWeight: FontWeight.w700),),
                   SizedBox(height: 2),
                   Text('Usage billing, location demand, DB usage — deep-read warning before opening',
-                      style: TextStyle(color: _muted, fontSize: 11)),
+                      style: TextStyle(color: _muted, fontSize: 11),),
                 ],
               ),
             ),
@@ -1740,7 +1741,7 @@ class _MoreSheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(count > 9 ? '9+' : '$count',
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),),
                   );
                 },
               ),
@@ -1778,7 +1779,7 @@ class _MoreSheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(count > 9 ? '9+' : '$count',
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),),
                   );
                 },
               ),
@@ -1880,7 +1881,7 @@ class _MoreSheet extends StatelessWidget {
             color: _muted,
             fontSize: 11,
             fontWeight: FontWeight.w800,
-            letterSpacing: 1.0,
+            letterSpacing: 1,
           ),
         ),
       );
@@ -1911,5 +1912,14 @@ class _MoreSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<Stream<QuerySnapshot<Object?>>>('pendingHeroApprovalsStream', pendingHeroApprovalsStream));
+    properties.add(DiagnosticsProperty<Stream<QuerySnapshot<Object?>>>('pendingSellerApprovalsStream', pendingSellerApprovalsStream));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTopUp', onTopUp));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onDownloadApp', onDownloadApp));
   }
 }

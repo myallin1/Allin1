@@ -8,12 +8,13 @@
 // does not need to be touched — it still just does
 // `const PlayZoneScreen()`.
 // ================================================================
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'games/coin_tap_screen.dart';
 import 'games/game_2048_screen.dart';
 import 'games/memory_match_screen.dart';
-import 'games/coin_tap_screen.dart';
 import 'games/whack_a_mole_screen.dart';
 
 const Color _bg = Color(0xFFFFF6FA);
@@ -78,13 +79,13 @@ class PlayZoneScreen extends StatelessWidget {
                   children: [
                     Text('NJ TECH',
                         style: GoogleFonts.outfit(
-                            color: Colors.white70, fontWeight: FontWeight.w700, fontSize: 12, letterSpacing: 1.2)),
+                            color: Colors.white70, fontWeight: FontWeight.w700, fontSize: 12, letterSpacing: 1.2,),),
                     const SizedBox(height: 4),
                     Text('Game Zone',
-                        style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 26)),
+                        style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 26),),
                     const SizedBox(height: 6),
                     Text('Pick a game and have some fun!',
-                        style: GoogleFonts.outfit(color: Colors.white.withOpacity(0.9), fontSize: 13, fontWeight: FontWeight.w600)),
+                        style: GoogleFonts.outfit(color: Colors.white.withValues(alpha: 0.9), fontSize: 13, fontWeight: FontWeight.w600),),
                   ],
                 ),
               ),
@@ -144,7 +145,7 @@ class _GameTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(18),
           border: Border.all(color: const Color(0x22B21FFF)),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
           ],
         ),
         child: Column(
@@ -172,5 +173,11 @@ class _GameTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<_GameInfo>('game', game));
   }
 }

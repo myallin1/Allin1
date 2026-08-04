@@ -38,10 +38,10 @@ const String kCloudinaryCloudName = 'qx5zvm4w';
 const String kCloudinaryUploadPreset = 'Myallin1-preset';
 
 class CloudinaryUploadService {
+  factory CloudinaryUploadService() => _instance;
   CloudinaryUploadService._internal();
   static final CloudinaryUploadService _instance =
       CloudinaryUploadService._internal();
-  factory CloudinaryUploadService() => _instance;
 
   bool get isConfigured =>
       kCloudinaryCloudName != 'YOUR_CLOUD_NAME' &&
@@ -156,7 +156,7 @@ class CloudinaryUploadService {
     final request = http.MultipartRequest('POST', uri)
       ..fields['upload_preset'] = kCloudinaryUploadPreset
       ..files.add(
-          http.MultipartFile.fromBytes('file', compressed, filename: fileName));
+          http.MultipartFile.fromBytes('file', compressed, filename: fileName),);
 
     if (folder != null && folder.isNotEmpty) {
       request.fields['folder'] = folder;

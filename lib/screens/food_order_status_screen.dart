@@ -15,6 +15,7 @@
 // ================================================================
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -94,7 +95,7 @@ class FoodOrderStatusScreen extends StatelessWidget {
                           const SizedBox(height: 6),
                           Text('Orders you place will show up here with live status.',
                               textAlign: TextAlign.center,
-                              style: GoogleFonts.outfit(color: _kMuted, fontSize: 13)),
+                              style: GoogleFonts.outfit(color: _kMuted, fontSize: 13),),
                         ],
                       ),
                     ),
@@ -131,7 +132,7 @@ class _FoodOrderStatusCard extends StatelessWidget {
     String title;
     String subtitle;
     if (requestType == 'catalog_food_order') {
-      title = (details['sellerName'] as String?)?.trim().isNotEmpty == true
+      title = (details['sellerName'] as String?)?.trim().isNotEmpty ?? false
           ? details['sellerName'] as String
           : 'Shop order';
       final items = (details['items'] as List<dynamic>?) ?? [];
@@ -173,7 +174,7 @@ class _FoodOrderStatusCard extends StatelessWidget {
                   Text(title,
                       style: GoogleFonts.outfit(color: _kText, fontSize: 14, fontWeight: FontWeight.w700),
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
+                      overflow: TextOverflow.ellipsis,),
                   if (subtitle.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(subtitle, style: const TextStyle(color: _kMuted, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
@@ -194,5 +195,11 @@ class _FoodOrderStatusCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<QueryDocumentSnapshot<Map<String, dynamic>>>('doc', doc));
   }
 }

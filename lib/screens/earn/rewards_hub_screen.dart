@@ -1450,25 +1450,25 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
             child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
               Text('🎮 Quick Wins', style: GoogleFonts.outfit(
-                  fontSize: 15, color: _text, fontWeight: FontWeight.w800)),
+                  fontSize: 15, color: _text, fontWeight: FontWeight.w800,),),
               Text('Fast coins while waiting for rides',
-                  style: GoogleFonts.outfit(fontSize: 10, color: _muted)),
-            ]),
+                  style: GoogleFonts.outfit(fontSize: 10, color: _muted),),
+            ],),
           ),
           ..._funTasks.map(_buildFunCard),
           const SizedBox(height: 24),
           _rewardsSectionHeader('🪙 Paytm Scratchcards',
-              'Win real cashback every day!', _gold),
+              'Win real cashback every day!', _gold,),
           const SizedBox(height: 10),
           _buildPaytmScratchSection(),
           const SizedBox(height: 24),
           _rewardsSectionHeader('🎁 Accessories Gift Cards',
-              'Exclusive NJ Tech goodies & vouchers', _purple),
+              'Exclusive NJ Tech goodies & vouchers', _purple,),
           const SizedBox(height: 10),
           _buildAccessoriesGiftSection(),
           const SizedBox(height: 24),
           _rewardsSectionHeader('🧠 30-Days Quiz Challenge',
-              'Answer daily — climb the leaderboard!', _orange),
+              'Answer daily — climb the leaderboard!', _orange,),
           const SizedBox(height: 10),
           _buildQuizSection(),
           const SizedBox(height: 20),
@@ -1932,9 +1932,9 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
   Widget _rewardsSectionHeader(String title, String sub, Color color) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(title, style: GoogleFonts.outfit(
-            fontSize: 15, color: _text, fontWeight: FontWeight.w800)),
+            fontSize: 15, color: _text, fontWeight: FontWeight.w800,),),
         Text(sub, style: GoogleFonts.outfit(fontSize: 10, color: _muted)),
-      ]);
+      ],);
 
   // ── Paytm Scratch Cards ──────────────────────────────────────
   Widget _buildPaytmScratchSection() {
@@ -1960,7 +1960,7 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
               Text(emoji, style: const TextStyle(fontSize: 28)),
               const SizedBox(height: 6),
               Text(amount, style: GoogleFonts.outfit(
-                  color: col, fontSize: 12, fontWeight: FontWeight.w800)),
+                  color: col, fontSize: 12, fontWeight: FontWeight.w800,),),
               const SizedBox(height: 2),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1969,13 +1969,13 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(tag, style: TextStyle(
-                    color: col, fontSize: 8, fontWeight: FontWeight.w700)),
+                    color: col, fontSize: 8, fontWeight: FontWeight.w700,),),
               ),
-            ]),
+            ],),
           ),
         ),
       );
-    }).toList());
+    }).toList(),);
   }
 
   // ── Accessories Gift Cards ────────────────────────────────────
@@ -2012,12 +2012,12 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                 Text(name, style: GoogleFonts.outfit(
-                    color: _text, fontSize: 11, fontWeight: FontWeight.w700),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                    color: _text, fontSize: 11, fontWeight: FontWeight.w700,),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,),
                 Text(card, style: TextStyle(
-                    color: col, fontSize: 9, fontWeight: FontWeight.w600)),
-              ])),
-            ]),
+                    color: col, fontSize: 9, fontWeight: FontWeight.w600,),),
+              ],),),
+            ],),
           ),
         );
       }).toList(),
@@ -2047,32 +2047,32 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
           Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(level, style: GoogleFonts.outfit(
-                color: _text, fontSize: 13, fontWeight: FontWeight.w800)),
-            Text(days, style: TextStyle(color: _muted, fontSize: 11)),
-          ])),
+                color: _text, fontSize: 13, fontWeight: FontWeight.w800,),),
+            Text(days, style: const TextStyle(color: _muted, fontSize: 11)),
+          ],),),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text('🪙 $reward', style: GoogleFonts.outfit(
-                color: col, fontSize: 11, fontWeight: FontWeight.w800)),
+                color: col, fontSize: 11, fontWeight: FontWeight.w800,),),
             const SizedBox(height: 4),
             GestureDetector(
               onTap: () => _snack('Quiz for $level starts soon! 🧠', col),
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 5),
+                    horizontal: 12, vertical: 5,),
                 decoration: BoxDecoration(
                   color: col,
                   borderRadius: BorderRadius.circular(8),
                   boxShadow: [BoxShadow(
-                      color: col.withValues(alpha: 0.35), blurRadius: 6)],
+                      color: col.withValues(alpha: 0.35), blurRadius: 6,),],
                 ),
                 child: Text('Play Now', style: GoogleFonts.outfit(
                     color: Colors.black, fontSize: 10,
-                    fontWeight: FontWeight.w800)),
+                    fontWeight: FontWeight.w800,),),
               ),
             ),
-          ]),
-        ]),
+          ],),
+        ],),
       );
-    }).toList());
+    }).toList(),);
   }
 }

@@ -201,7 +201,7 @@ class _AdminDbUsageScreenState extends State<AdminDbUsageScreen> {
     final picked = await showDatePicker(
       context: context,
       initialDate: _pickedDay,
-      firstDate: DateTime(2025, 1, 1),
+      firstDate: DateTime(2025),
       lastDate: DateTime.now(),
     );
     if (picked != null) {
@@ -275,7 +275,7 @@ class _AdminDbUsageScreenState extends State<AdminDbUsageScreen> {
                           a == 'all' ? 'All apps' : _labelFor(a),
                           style: GoogleFonts.outfit(color: _text),
                         ),
-                      ))
+                      ),)
                   .toList(),
               onChanged: (v) {
                 if (v == null) return;
@@ -305,8 +305,8 @@ class _AdminDbUsageScreenState extends State<AdminDbUsageScreen> {
                         .map((r) => DropdownMenuItem(
                               value: r,
                               child: Text(_rangeLabel(r),
-                                  style: GoogleFonts.outfit(color: _text)),
-                            ))
+                                  style: GoogleFonts.outfit(color: _text),),
+                            ),)
                         .toList(),
                     onChanged: (v) {
                       if (v == null) return;
@@ -334,10 +334,10 @@ class _AdminDbUsageScreenState extends State<AdminDbUsageScreen> {
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
+                              strokeWidth: 2, color: Colors.white,),
                         )
                       : const Text('Generate',
-                          style: TextStyle(color: Colors.white)),
+                          style: TextStyle(color: Colors.white),),
                 ),
               ],
             ),
@@ -402,7 +402,7 @@ class _AdminDbUsageScreenState extends State<AdminDbUsageScreen> {
             child: Text(
               _labelFor(row.app),
               style: GoogleFonts.outfit(
-                  color: _text, fontSize: 14, fontWeight: FontWeight.w600),
+                  color: _text, fontSize: 14, fontWeight: FontWeight.w600,),
             ),
           ),
           Column(
@@ -411,7 +411,7 @@ class _AdminDbUsageScreenState extends State<AdminDbUsageScreen> {
               Text(
                 '$total total',
                 style: GoogleFonts.outfit(
-                    color: _pinkLight, fontSize: 13, fontWeight: FontWeight.w700),
+                    color: _pinkLight, fontSize: 13, fontWeight: FontWeight.w700,),
               ),
               Text(
                 '${row.reads} reads · ${row.writes} writes',

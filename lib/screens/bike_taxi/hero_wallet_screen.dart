@@ -14,6 +14,7 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -358,6 +359,12 @@ class _RechargeSheet extends StatefulWidget {
 
   @override
   State<_RechargeSheet> createState() => _RechargeSheetState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('heroId', heroId));
+  }
 }
 
 class _RechargeSheetState extends State<_RechargeSheet> {
@@ -502,7 +509,7 @@ class _RechargeSheetState extends State<_RechargeSheet> {
                     .map((a) => ActionChip(
                           label: Text('₹$a'),
                           onPressed: () => _amountCtrl.text = a.toString(),
-                        ))
+                        ),)
                     .toList(),
               ),
               const SizedBox(height: 12),

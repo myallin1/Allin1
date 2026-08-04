@@ -5,14 +5,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_navigator.dart';
-import 'firebase_options.dart';
 import 'config/api_config.dart';
+import 'firebase_options.dart';
 import 'screens/bike_taxi/hero_dashboard_shell.dart';
 import 'screens/hero_login_screen.dart';
 import 'screens/hero_pending_screen.dart';
@@ -25,7 +26,6 @@ import 'services/localization_service.dart';
 import 'services/map_service.dart';
 import 'services/theme_service.dart';
 import 'widgets/hero_premium_loader.dart';
-import 'package:flutter/foundation.dart';
 
 String? _rideIdFromPushData(Map<String, dynamic> data) {
   for (final key in const <String>[
@@ -112,6 +112,12 @@ class _BootFailedApp extends StatelessWidget {
       ),
     );
   }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onRetry', onRetry));
+  }
 }
 
 // ── Global RTDB Hero Ping Listener (Auth-Aware) ──────────────────
@@ -122,7 +128,7 @@ StreamSubscription<User?>? _authSub;
 
 void _initGlobalHeroPingListener() {
   _authSub?.cancel();
-  _authSub = FirebaseAuth.instance.authStateChanges().listen((User? user) {
+  _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
     _globalHeroPingSub?.cancel(); // Clear existing listener
     _globalServicePingSub?.cancel();
 
@@ -139,7 +145,7 @@ void _initGlobalHeroPingListener() {
         .onChildAdded
         .listen((event) async {
       final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
-      final requestId = event.snapshot.key as String? ?? '';
+      final requestId = event.snapshot.key ?? '';
       if (pingData == null || requestId.isEmpty) return;
 
       // Expiry check
@@ -177,7 +183,7 @@ void _initGlobalHeroPingListener() {
       }
     }, onError: (Object e) {
       debugPrint('[GlobalPing] RTDB listener error: $e');
-    });
+    },);
 
     // ── Broadcast Order System — parallel ping channel ────────────
     // Same wake/notification mechanism as hero_pings, generic text.
@@ -190,7 +196,7 @@ void _initGlobalHeroPingListener() {
         .onChildAdded
         .listen((event) async {
       final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
-      final requestId = event.snapshot.key as String? ?? '';
+      final requestId = event.snapshot.key ?? '';
       if (pingData == null || requestId.isEmpty) return;
 
       final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
@@ -216,7 +222,6 @@ void _initGlobalHeroPingListener() {
             playAlertTone: false,
             showDetails: false,
             title: 'New Service Request',
-            channelName: 'Hero Ride Alerts',
             channelDescription:
                 'Lock-screen ride and service-request alerts with ACCEPT action and ringtone.',
             ticker: 'New service request assigned',
@@ -229,7 +234,7 @@ void _initGlobalHeroPingListener() {
       }
     }, onError: (Object e) {
       debugPrint('[GlobalServicePing] RTDB listener error: $e');
-    });
+    },);
   });
 }
 
@@ -297,7 +302,7 @@ void main() async {
       }
       if (!firebaseReady) {
         debugPrint('[main_hero] Fatal: Firebase init failed after retries: $lastFirebaseError');
-        runApp(_BootFailedApp(onRetry: main));
+        runApp(const _BootFailedApp(onRetry: main));
         return;
       }
       DbUsageTracker.instance.init('hero');
@@ -559,7 +564,7 @@ class _HeroSetupGateState extends State<_HeroSetupGate> {
                     .trim()
                     .toLowerCase();
                 final isApproved =
-                    heroDoc?.exists == true && approvalStatus == 'approved';
+                    (heroDoc?.exists ?? false) && approvalStatus == 'approved';
 
                 if (!isApproved) {
                   return _buildFadingChild(

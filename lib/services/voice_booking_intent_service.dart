@@ -188,11 +188,11 @@ class VoiceBookingIntentService {
 
   static const List<String> _yesWords = [
     'yes', 'yeah', 'yep', 'yup', 'correct', 'right', 'confirm', 'confirmed',
-    'sure', 'ok', 'okay', 'go ahead', 'book it', 'that\'s right',
+    'sure', 'ok', 'okay', 'go ahead', 'book it', "that's right",
   ];
   static const List<String> _noWords = [
     'no', 'nope', 'nah', 'wrong', 'incorrect', 'cancel', 'not that',
-    'that\'s wrong', 'different',
+    "that's wrong", 'different',
   ];
 
   /// Interactive Disambiguation (per Nizam's request): classifies a

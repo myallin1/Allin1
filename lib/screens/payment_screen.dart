@@ -233,7 +233,7 @@ class _PaymentScreenState extends State<PaymentScreen>
           }
         }, onError: (Object e) {
           debugPrint('[PaymentScreen] Ride status listener error: $e');
-        });
+        },);
   }
 
   Future<void> _loadWalletBalance() async {

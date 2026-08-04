@@ -190,7 +190,7 @@ class OlaMapsProvider extends MapProvider {
     }
   }
 
-  List<dynamic> _extractPlaceList(dynamic data) {
+  List<dynamic> _extractPlaceList(data) {
     if (data is List) return data;
     if (data is! Map) return const [];
 
@@ -213,7 +213,7 @@ class OlaMapsProvider extends MapProvider {
   }
 
   Map<String, dynamic>? _parsePlaceResult(
-    dynamic item, {
+    item, {
     LatLng? fallbackPoint,
   }) {
     if (item is! Map) return null;
@@ -235,7 +235,7 @@ class OlaMapsProvider extends MapProvider {
     };
   }
 
-  String? _extractDisplayText(dynamic item) {
+  String? _extractDisplayText(item) {
     if (item is! Map) return null;
 
     for (final key in const <String>[
@@ -264,7 +264,7 @@ class OlaMapsProvider extends MapProvider {
     return null;
   }
 
-  String? _extractPrimaryText(dynamic item) {
+  String? _extractPrimaryText(item) {
     if (item is! Map) return null;
     for (final key in const <String>['name', 'main_text', 'title']) {
       final value = item[key]?.toString().trim();
@@ -283,7 +283,7 @@ class OlaMapsProvider extends MapProvider {
     return null;
   }
 
-  double? _extractLatitude(dynamic item) {
+  double? _extractLatitude(item) {
     if (item is! Map) return null;
     final coordinates = item['geometry']?['coordinates'];
     return _asDouble(item['lat']) ??
@@ -293,7 +293,7 @@ class OlaMapsProvider extends MapProvider {
         _asDouble(_coordinateAt(coordinates, 1));
   }
 
-  double? _extractLongitude(dynamic item) {
+  double? _extractLongitude(item) {
     if (item is! Map) return null;
     final coordinates = item['geometry']?['coordinates'];
     return _asDouble(item['lng']) ??
@@ -306,14 +306,14 @@ class OlaMapsProvider extends MapProvider {
         _asDouble(_coordinateAt(coordinates, 0));
   }
 
-  dynamic _coordinateAt(dynamic coordinates, int index) {
+  dynamic _coordinateAt(coordinates, int index) {
     if (coordinates is List && coordinates.length > index) {
       return coordinates[index];
     }
     return null;
   }
 
-  double? _asDouble(dynamic value) {
+  double? _asDouble(value) {
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value.trim());
     return null;

@@ -17,9 +17,9 @@ import 'package:hive_flutter/hive_flutter.dart';
 /// Map<String, dynamic> of primitives (String/num), which Hive stores
 /// natively without a @HiveType model.
 class RecentPlacesService {
+  factory RecentPlacesService() => instance;
   RecentPlacesService._();
   static final RecentPlacesService instance = RecentPlacesService._();
-  factory RecentPlacesService() => instance;
 
   static const _boxName = 'recent_places';
   static const _itemsKey = 'items';
@@ -49,7 +49,7 @@ class RecentPlacesService {
       }
       return raw
           .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
+          .map(Map<String, dynamic>.from)
           .toList();
     } catch (e) {
       debugPrint('[RecentPlacesService] read error: $e');

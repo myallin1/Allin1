@@ -22,10 +22,10 @@
 // ================================================================
 
 class HeroUsageAccumulatorService {
+  factory HeroUsageAccumulatorService() => _instance;
   HeroUsageAccumulatorService._internal();
   static final HeroUsageAccumulatorService _instance =
       HeroUsageAccumulatorService._internal();
-  factory HeroUsageAccumulatorService() => _instance;
 
   DateTime? _sessionStartedAt;
   int _ridesHandledSinceFlush = 0;

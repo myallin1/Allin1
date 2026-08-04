@@ -293,7 +293,7 @@ class _HeroProfileTabState extends State<HeroProfileTab>
                            width: double.infinity,
                            child: ElevatedButton.icon(
                              style: ElevatedButton.styleFrom(
-                               backgroundColor: Color(0xFF6C63FF),
+                               backgroundColor: const Color(0xFF6C63FF),
                                foregroundColor: Colors.white,
                                padding: const EdgeInsets.symmetric(vertical: 12),
                                shape: RoundedRectangleBorder(

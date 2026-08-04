@@ -20,6 +20,7 @@
 // design decision).
 // ================================================================
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -37,11 +38,17 @@ const Color _kBorder = Color(0xFFEEEEF5);
 
 class ServiceRequestPaymentScreen extends StatefulWidget {
   final String requestId;
-  const ServiceRequestPaymentScreen({super.key, required this.requestId});
+  const ServiceRequestPaymentScreen({required this.requestId, super.key});
 
   @override
   State<ServiceRequestPaymentScreen> createState() =>
       _ServiceRequestPaymentScreenState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestId', requestId));
+  }
 }
 
 class _ServiceRequestPaymentScreenState
@@ -174,7 +181,6 @@ class _ServiceRequestPaymentScreenState
                       const SizedBox(height: 8),
                       AnimatedMeterFare(
                         value: amount,
-                        fractionDigits: 0,
                         style: GoogleFonts.outfit(
                             color: _kText,
                             fontSize: 40,
@@ -241,7 +247,7 @@ class _ServiceRequestPaymentScreenState
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          "No? Pick how you actually paid below.",
+                          'No? Pick how you actually paid below.',
                           style: GoogleFonts.outfit(
                               color: _kMuted, fontSize: 11,),
                         ),

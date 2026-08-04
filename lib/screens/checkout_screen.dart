@@ -63,7 +63,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   double get _total => _subtotal + _deliveryFee + _platformFee;
 
   // ── Payment Processing ───────────────────────────────────
-  int _coinsToUse = 0;
+  final int _coinsToUse = 0;
 
   Future<bool> _canRedeemCoins(int requestedCoins) async {
     if (requestedCoins <= 0) return true;

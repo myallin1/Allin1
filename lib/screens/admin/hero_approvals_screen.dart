@@ -193,7 +193,7 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
   // a call button that dials whatever phone number the hero themselves
   // typed at registration (not a placeholder admin number).
   Future<void> _callHero(String phone) async {
-    final digits = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    final digits = phone.replaceAll(RegExp('[^0-9+]'), '');
     if (digits.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -278,7 +278,7 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
               // off the photo and compare it against what was typed,
               // right there, without scrolling back and forth.
               Text('Proof Verification',
-                  style: GoogleFonts.outfit(color: _muted, fontSize: 11, fontWeight: FontWeight.w700)),
+                  style: GoogleFonts.outfit(color: _muted, fontSize: 11, fontWeight: FontWeight.w700),),
               const SizedBox(height: 8),
               _detailRowWithPhoto('Aadhaar', aadhaarNumber, data['aadhaarDocUrl'] as String?),
               _detailRowWithPhoto('PAN', panNumber, data['panDocUrl'] as String?),
@@ -346,10 +346,10 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label,
-                    style: const TextStyle(fontSize: 11, color: _muted, fontWeight: FontWeight.w600)),
+                    style: const TextStyle(fontSize: 11, color: _muted, fontWeight: FontWeight.w600),),
                 const SizedBox(height: 2),
                 Text(value.isNotEmpty ? value : 'N/A',
-                    style: const TextStyle(fontSize: 13, color: _text, fontWeight: FontWeight.w700)),
+                    style: const TextStyle(fontSize: 13, color: _text, fontWeight: FontWeight.w700),),
               ],
             ),
           ),

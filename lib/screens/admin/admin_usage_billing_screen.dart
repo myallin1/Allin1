@@ -86,7 +86,7 @@ class _AdminUsageBillingScreenState extends State<AdminUsageBillingScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to generate report: $e'),
-              backgroundColor: const Color(0xFFFF5252)),
+              backgroundColor: const Color(0xFFFF5252),),
         );
       }
     } finally {
@@ -145,7 +145,7 @@ class _AdminUsageBillingScreenState extends State<AdminUsageBillingScreen> {
         backgroundColor: _surface,
         elevation: 0,
         title: Text('Usage Billing Report',
-            style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w600)),
+            style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w600),),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
@@ -159,7 +159,7 @@ class _AdminUsageBillingScreenState extends State<AdminUsageBillingScreen> {
                     onPressed: _pickMonth,
                     icon: const Icon(Icons.calendar_month, color: _teal),
                     label: Text(monthLabel,
-                        style: GoogleFonts.outfit(color: _text)),
+                        style: GoogleFonts.outfit(color: _text),),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: _border),
                       padding: const EdgeInsets.symmetric(vertical: 14),
@@ -172,17 +172,17 @@ class _AdminUsageBillingScreenState extends State<AdminUsageBillingScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _teal,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 14),
+                        horizontal: 20, vertical: 14,),
                   ),
                   child: _isLoading
                       ? const SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
+                              strokeWidth: 2, color: Colors.white,),
                         )
                       : const Text('Generate',
-                          style: TextStyle(color: Colors.white)),
+                          style: TextStyle(color: Colors.white),),
                 ),
               ],
             ),
@@ -222,7 +222,7 @@ class _AdminUsageBillingScreenState extends State<AdminUsageBillingScreen> {
         padding: const EdgeInsets.only(bottom: 10),
         child: Text(title,
             style: GoogleFonts.outfit(
-                color: _gold, fontSize: 15, fontWeight: FontWeight.w700)),
+                color: _gold, fontSize: 15, fontWeight: FontWeight.w700,),),
       );
 
   Widget _emptyRow(String text) => Padding(
@@ -243,11 +243,11 @@ class _AdminUsageBillingScreenState extends State<AdminUsageBillingScreen> {
         children: [
           Expanded(
             child: Text(row.name,
-                style: GoogleFonts.outfit(color: _text, fontSize: 14)),
+                style: GoogleFonts.outfit(color: _text, fontSize: 14),),
           ),
           Text('${row.count} $unit',
               style: GoogleFonts.outfit(
-                  color: _tealLight, fontSize: 13, fontWeight: FontWeight.w700)),
+                  color: _tealLight, fontSize: 13, fontWeight: FontWeight.w700,),),
         ],
       ),
     );

@@ -162,7 +162,7 @@ class LocationLinkParser {
   /// Google Maps place URLs embed the name as a path segment:
   /// .../maps/place/Erode+Bus+Stand/@11.34,77.71,17z/
   static String? _placeName(String text) {
-    final match = RegExp(r'/place/([^/@]+)').firstMatch(text);
+    final match = RegExp('/place/([^/@]+)').firstMatch(text);
     final raw = match?.group(1);
     if (raw == null || raw.isEmpty) return null;
     try {

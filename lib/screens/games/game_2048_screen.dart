@@ -83,7 +83,7 @@ class _Game2048ScreenState extends State<Game2048Screen> {
   }
 
   bool _move(String direction) {
-    final before = _grid.map((r) => List<int>.from(r)).toList();
+    final before = _grid.map(List<int>.from).toList();
 
     List<List<int>> rotate(List<List<int>> g) {
       final rotated = List.generate(_size, (_) => List.filled(_size, 0));

@@ -545,6 +545,12 @@ class _CartBottomSheet extends StatefulWidget {
 
   @override
   State<_CartBottomSheet> createState() => _CartBottomSheetState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<CartService>('cart', cart));
+  }
 }
 
 class _CartBottomSheetState extends State<_CartBottomSheet> {
@@ -578,7 +584,7 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
                 'price': item.price,
                 'quantity': item.quantity,
                 'total': item.total,
-              })
+              },)
           .toList();
 
       final requestId = await ServiceRequestService().createServiceRequest(
@@ -726,7 +732,7 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
                             width: 22,
                             height: 22,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2.5, color: Colors.black),
+                                strokeWidth: 2.5, color: Colors.black,),
                           )
                         : const Text(
                             'Proceed to Checkout',

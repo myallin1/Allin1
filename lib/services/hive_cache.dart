@@ -28,7 +28,7 @@ class HiveCache {
     return await Hive.openBox(_boxName);
   }
 
-  static Future<void> put(String key, dynamic value, {Duration ttl = const Duration(minutes: 30)}) async {
+  static Future<void> put(String key, value, {Duration ttl = const Duration(minutes: 30)}) async {
     try {
       final box = await _box();
       await box.put(key, {

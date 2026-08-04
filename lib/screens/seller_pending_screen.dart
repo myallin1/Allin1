@@ -18,6 +18,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -50,6 +51,14 @@ class SellerPendingScreen extends StatefulWidget {
 
   @override
   State<SellerPendingScreen> createState() => _SellerPendingScreenState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('sellerId', sellerId));
+    properties.add(StringProperty('sellerName', sellerName));
+    properties.add(StringProperty('categoryName', categoryName));
+  }
 }
 
 class _SellerPendingScreenState extends State<SellerPendingScreen> {
@@ -233,7 +242,7 @@ class _SellerPendingScreenState extends State<SellerPendingScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          "This screen updates itself — no need to reopen the app once approved.",
+                          'This screen updates itself — no need to reopen the app once approved.',
                           style: GoogleFonts.outfit(color: _muted, fontSize: 11.5),
                         ),
                       ),

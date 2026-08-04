@@ -193,11 +193,11 @@ class _BouncingSoundboxOverlayState extends State<_BouncingSoundboxOverlay>
                       color: const Color(0x66FF4FA3),
                       width: 1.4,
                     ),
-                    boxShadow: [
+                    boxShadow: const [
                       BoxShadow(
-                        color: const Color(0x38FF4FA3),
+                        color: Color(0x38FF4FA3),
                         blurRadius: 14,
-                        offset: const Offset(0, 8),
+                        offset: Offset(0, 8),
                       ),
                     ],
                   ),

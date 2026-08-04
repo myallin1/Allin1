@@ -70,7 +70,7 @@ class _SosKycVerificationScreenState extends State<SosKycVerificationScreen> {
   Future<void> _pickDob() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime(2000, 1, 1),
+      initialDate: DateTime(2000),
       firstDate: DateTime(1940),
       lastDate: DateTime.now(),
     );
@@ -197,7 +197,7 @@ class _SosKycVerificationScreenState extends State<SosKycVerificationScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: _text),
         title: Text('Verify KYC to Activate SOS',
-            style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 16)),
+            style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 16),),
       ),
       body: Stack(
         children: [
@@ -236,7 +236,7 @@ class _SosKycVerificationScreenState extends State<SosKycVerificationScreen> {
                 _field(controller: _addressController, label: 'Address', maxLines: 2),
                 const SizedBox(height: 20),
                 Text('Documents (number + photo, all required)',
-                    style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 14)),
+                    style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 14),),
                 const SizedBox(height: 4),
                 Text(
                   'Type the number exactly as printed — admin checks it against your photo.',
@@ -250,17 +250,17 @@ class _SosKycVerificationScreenState extends State<SosKycVerificationScreen> {
                 _field(controller: _aadhaarNumberController, label: 'Aadhaar Number'),
                 const SizedBox(height: 8),
                 _docPickerRow('Aadhaar photo', _aadhaarPhoto, () => _pickDocPhoto('aadhaar'),
-                    onClear: () => setState(() => _aadhaarPhoto = null)),
+                    onClear: () => setState(() => _aadhaarPhoto = null),),
                 const SizedBox(height: 16),
                 _field(controller: _panNumberController, label: 'PAN Number'),
                 const SizedBox(height: 8),
                 _docPickerRow('PAN photo', _panPhoto, () => _pickDocPhoto('pan'),
-                    onClear: () => setState(() => _panPhoto = null)),
+                    onClear: () => setState(() => _panPhoto = null),),
                 const SizedBox(height: 16),
                 _field(controller: _licenseNumberController, label: 'License Number'),
                 const SizedBox(height: 8),
                 _docPickerRow('License photo', _licensePhoto, () => _pickDocPhoto('license'),
-                    onClear: () => setState(() => _licensePhoto = null)),
+                    onClear: () => setState(() => _licensePhoto = null),),
                 const SizedBox(height: 28),
                 SizedBox(
                   width: double.infinity,
@@ -272,7 +272,7 @@ class _SosKycVerificationScreenState extends State<SosKycVerificationScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
                     child: Text('Submit for Verification',
-                        style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700)),
+                        style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700),),
                   ),
                 ),
               ],
@@ -281,7 +281,7 @@ class _SosKycVerificationScreenState extends State<SosKycVerificationScreen> {
           if (_isSubmitting)
             Positioned.fill(
               child: AbsorbPointer(
-                child: Container(
+                child: ColoredBox(
                   color: Colors.black.withValues(alpha: 0.4),
                   child: const Center(child: CircularProgressIndicator(color: _pink)),
                 ),
@@ -339,7 +339,7 @@ class _SosKycVerificationScreenState extends State<SosKycVerificationScreen> {
       child: Row(
         children: [
           Icon(file != null ? Icons.check_circle_rounded : Icons.upload_file_rounded,
-              color: file != null ? _green : _pink, size: 20),
+              color: file != null ? _green : _pink, size: 20,),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

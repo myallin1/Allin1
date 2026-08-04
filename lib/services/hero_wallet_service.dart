@@ -49,9 +49,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/hero_wallet_model.dart';
 
 class HeroWalletService {
+  factory HeroWalletService() => _instance;
   HeroWalletService._internal();
   static final HeroWalletService _instance = HeroWalletService._internal();
-  factory HeroWalletService() => _instance;
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -86,7 +86,7 @@ class HeroWalletService {
         .snapshots()
         .map((snap) => snap.docs
             .map((d) => HeroWalletTransactionModel.fromFirestore(d.data(), d.id))
-            .toList());
+            .toList(),);
   }
 
   /// Submits a recharge request AND immediately credits the hero's
@@ -96,10 +96,7 @@ class HeroWalletService {
   /// [rejectRechargeRequest] below) that exactly reverses this credit.
   Future<void> submitRechargeRequest({
     required String heroId,
-    String? heroName,
-    required double amount,
-    required String upiRefNumber,
-    required String screenshotUrl,
+    required double amount, required String upiRefNumber, required String screenshotUrl, String? heroName,
   }) async {
     if (amount <= 0) {
       throw ArgumentError('Recharge amount must be positive');
@@ -167,7 +164,7 @@ class HeroWalletService {
   // observed Firestore/RTDB cost per hero -- they are the entire
   // pricing model now, replacing RiderCommission for heroes.
   static const double ratePerActiveMinute = 0.05; // ₹ per online minute
-  static const double ratePerRideHandled = 2.0; // ₹ per completed ride
+  static const double ratePerRideHandled = 2; // ₹ per completed ride
 
   /// Called by the Hero App at two batched points ONLY -- a ride
   /// completing, or the hero going Offline (see
@@ -350,7 +347,7 @@ class HeroWalletService {
         .snapshots()
         .map((snap) => snap.docs
             .map((d) => WalletRechargeRequestModel.fromFirestore(
-                d.data(), d.id))
-            .toList());
+                d.data(), d.id,),)
+            .toList(),);
   }
 }

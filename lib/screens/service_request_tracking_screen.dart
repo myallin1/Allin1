@@ -8,6 +8,7 @@
 // hero's app or an admin manual override.
 // ================================================================
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -30,9 +31,7 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
   final String requestId;
   final String requestType;
   const ServiceRequestTrackingScreen({
-    super.key,
-    required this.requestId,
-    required this.requestType,
+    required this.requestId, required this.requestType, super.key,
   });
 
   @override
@@ -134,6 +133,13 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
       ),
     );
   }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestId', requestId));
+    properties.add(StringProperty('requestType', requestType));
+  }
 }
 
 class _StatusStepper extends StatelessWidget {
@@ -185,6 +191,13 @@ class _StatusStepper extends StatelessWidget {
       }),
     );
   }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(IterableProperty<String>('labels', labels));
+    properties.add(IntProperty('currentIndex', currentIndex));
+  }
 }
 
 class _StepCircle extends StatelessWidget {
@@ -219,5 +232,12 @@ class _StepCircle extends StatelessWidget {
         border: Border.all(color: _kBorder, width: 2),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<bool>('isCompleted', isCompleted));
+    properties.add(DiagnosticsProperty<bool>('isCurrent', isCurrent));
   }
 }

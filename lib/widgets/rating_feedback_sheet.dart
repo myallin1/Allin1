@@ -27,16 +27,23 @@ class RatingFeedbackSheet extends StatefulWidget {
   final ValueChanged<int> onSubmitted;
 
   const RatingFeedbackSheet({
-    super.key,
-    required this.completionCollection,
-    required this.docId,
+    required this.completionCollection, required this.docId, required this.onSubmitted, super.key,
     this.rateeCollection,
     this.rateeId,
-    required this.onSubmitted,
   });
 
   @override
   State<RatingFeedbackSheet> createState() => _RatingFeedbackSheetState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('completionCollection', completionCollection));
+    properties.add(StringProperty('docId', docId));
+    properties.add(StringProperty('rateeCollection', rateeCollection));
+    properties.add(StringProperty('rateeId', rateeId));
+    properties.add(ObjectFlagProperty<ValueChanged<int>>.has('onSubmitted', onSubmitted));
+  }
 }
 
 class _RatingFeedbackSheetState extends State<RatingFeedbackSheet> {
@@ -67,7 +74,7 @@ class _RatingFeedbackSheetState extends State<RatingFeedbackSheet> {
         'ratedAt': FieldValue.serverTimestamp(),
         if (_feedbackCtrl.text.trim().isNotEmpty)
           'customerFeedback': _feedbackCtrl.text.trim(),
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true),);
 
       final rateeCollection = widget.rateeCollection;
       final rateeId = widget.rateeId;

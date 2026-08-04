@@ -111,7 +111,7 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
       unawaited(Future.delayed(
         const Duration(seconds: kServiceRequestPingExpirySeconds),
         () => ServiceRequestService().markTimeoutIfStillPending(requestId),
-      ));
+      ),);
 
       if (!mounted) return;
       await Navigator.pushReplacement(

@@ -123,7 +123,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute<void>(
-              builder: (_) => const SellerVerticalPickerScreen()),
+              builder: (_) => const SellerVerticalPickerScreen(),),
         );
         return;
       }
@@ -139,7 +139,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute<void>(
-              builder: (_) => const SellerGroceryDashboardScreen()),
+              builder: (_) => const SellerGroceryDashboardScreen(),),
         );
         return;
       }
@@ -147,7 +147,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute<void>(
-              builder: (_) => const SellerElectronicsDashboardScreen()),
+              builder: (_) => const SellerElectronicsDashboardScreen(),),
         );
         return;
       }
@@ -191,7 +191,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
 
   void _listenToOrders(String sellerId) {
     _ordersSub = _service.listenToIncomingOrders(sellerId).listen(
-      (List<FoodOrderModel> orders) {
+      (orders) {
         if (mounted) {
           setState(() => _activeOrders = orders);
         }
@@ -214,7 +214,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
           'hero_assigned',
           'in_progress',
           'nearing_completion',
-        ])
+        ],)
         .snapshots()
         .listen((snap) {
       if (mounted) {
@@ -222,7 +222,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
       }
     }, onError: (Object e) {
       debugPrint('[SellerDashboard] Catalog orders listener error: $e');
-    });
+    },);
   }
 
   Future<void> _loadMenuItemCount(String sellerId) async {
@@ -324,7 +324,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                     const Icon(Icons.wifi_off_rounded, color: _muted, size: 40),
                     const SizedBox(height: 12),
                     Text('Taking longer than usual to load your shop.',
-                        style: GoogleFonts.outfit(color: _text, fontSize: 13)),
+                        style: GoogleFonts.outfit(color: _text, fontSize: 13),),
                     const SizedBox(height: 16),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(backgroundColor: _teal),
@@ -361,7 +361,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
           builder: (_) => AlertDialog(
             backgroundColor: _bg,
             title: const Text('Leave the app?',
-                style: TextStyle(fontWeight: FontWeight.w700)),
+                style: TextStyle(fontWeight: FontWeight.w700),),
             content: const Text('Close Allin1 Seller?'),
             actions: [
               TextButton(
@@ -375,7 +375,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
             ],
           ),
         );
-        if (exit == true && context.mounted) SystemNavigator.pop();
+        if ((exit ?? false) && context.mounted) SystemNavigator.pop();
       },
       child: Scaffold(
       backgroundColor: _bg,
@@ -631,7 +631,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
             child: Column(
               children: [
                 Icon(Icons.inbox_outlined,
-                    size: 48, color: _muted.withValues(alpha: 0.5)),
+                    size: 48, color: _muted.withValues(alpha: 0.5),),
                 const SizedBox(height: 12),
                 Text(
                   'No incoming orders',
@@ -697,7 +697,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(customerName,
-                  style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13)),
+                  style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13),),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
@@ -705,7 +705,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(status,
-                    style: GoogleFonts.outfit(color: _orange, fontSize: 10, fontWeight: FontWeight.w700)),
+                    style: GoogleFonts.outfit(color: _orange, fontSize: 10, fontWeight: FontWeight.w700),),
               ),
             ],
           ),
@@ -718,7 +718,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
               ),
           const SizedBox(height: 6),
           Text('₹${subtotal.toStringAsFixed(0)}',
-              style: GoogleFonts.outfit(color: _gold, fontWeight: FontWeight.w800, fontSize: 14)),
+              style: GoogleFonts.outfit(color: _gold, fontWeight: FontWeight.w800, fontSize: 14),),
         ],
       ),
     );
@@ -791,7 +791,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          '${(item.quantity ?? 1)}x ${(item.name ?? 'Unknown')}',
+                          '${item.quantity ?? 1}x ${item.name ?? 'Unknown'}',
                           style:
                               GoogleFonts.outfit(color: _muted, fontSize: 13),
                         ),

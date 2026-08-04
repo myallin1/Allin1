@@ -23,10 +23,10 @@ import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 class ServiceRequestCacheService {
+  factory ServiceRequestCacheService() => instance;
   ServiceRequestCacheService._();
   static final ServiceRequestCacheService instance =
       ServiceRequestCacheService._();
-  factory ServiceRequestCacheService() => instance;
 
   static const _boxName = 'completed_service_requests';
 
@@ -83,9 +83,9 @@ class ServiceRequestCacheService {
       final box = await _box();
       final entries = box.values
           .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
+          .map(Map<String, dynamic>.from)
           .where((e) =>
-              requestType == null || e['requestType'] == requestType)
+              requestType == null || e['requestType'] == requestType,)
           .toList();
       entries.sort((a, b) {
         final aTime = (a['createdAtMs'] as int?) ?? 0;
@@ -128,7 +128,7 @@ class ServiceRequestCacheService {
     return result;
   }
 
-  dynamic _sanitizeValue(dynamic value) {
+  dynamic _sanitizeValue(value) {
     if (value is Map) {
       final map = <String, dynamic>{};
       value.forEach((k, v) {

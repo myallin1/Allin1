@@ -118,7 +118,7 @@ class _MemoryMatchScreenState extends State<MemoryMatchScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: Text('You matched them all!', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, color: _navy)),
         content: Text('Moves: $_moves\nTime: ${_formatTime(_seconds)}',
-            style: GoogleFonts.outfit(color: _muted)),
+            style: GoogleFonts.outfit(color: _muted),),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
           ElevatedButton(
@@ -190,14 +190,14 @@ class _MemoryMatchScreenState extends State<MemoryMatchScreen> {
                               : const LinearGradient(colors: [_pink, _purple]),
                           borderRadius: BorderRadius.circular(14),
                           boxShadow: [
-                            BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 6, offset: const Offset(0, 3)),
+                            BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 6, offset: const Offset(0, 3)),
                           ],
                         ),
                         alignment: Alignment.center,
                         child: show
                             ? Icon(_cards[index], color: _navy, size: 28)
                             : Text('NJ',
-                                style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14)),
+                                style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14),),
                       ),
                     );
                   },

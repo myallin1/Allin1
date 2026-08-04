@@ -19,7 +19,6 @@ const String kCallCenterNumberIntl = '918681869091'; // for wa.me (needs country
 Future<void> showServerBusyDialog(BuildContext context) {
   return showDialog<void>(
     context: context,
-    barrierDismissible: true,
     builder: (dialogContext) => const _ServerBusyDialogContent(),
   );
 }
@@ -97,7 +96,7 @@ class _ServerBusyDialogContent extends StatelessWidget {
               // FIX (per Nizam's request): replaced the mixed
               // Tamil+English text with plain English, consistent with
               // the rest of the app's dialogs.
-              'Our server is busy right now and your booking couldn\'t go through.\nPlease contact our call center — we\'ll help you right away.',
+              "Our server is busy right now and your booking couldn't go through.\nPlease contact our call center — we'll help you right away.",
               textAlign: TextAlign.center,
               style: GoogleFonts.outfit(fontSize: 13.5, color: const Color(0xFF6B6B80), height: 1.5),
             ),

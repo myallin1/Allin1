@@ -49,11 +49,9 @@ class _HeroDashboardShellState extends State<HeroDashboardShell> {
 
   List<Widget> get _tabs => <Widget>[
         const HeroHomeScreen(embedded: true),
-        _visitedTabs.contains(1)
-            ? const HeroHistoryScreen()
-            : _placeholder.first,
-        _visitedTabs.contains(2) ? const HeroProfileTab() : _placeholder.first,
-        _visitedTabs.contains(3) ? const HeroSosScreen() : _placeholder.first,
+        if (_visitedTabs.contains(1)) const HeroHistoryScreen() else _placeholder.first,
+        if (_visitedTabs.contains(2)) const HeroProfileTab() else _placeholder.first,
+        if (_visitedTabs.contains(3)) const HeroSosScreen() else _placeholder.first,
       ];
 
   Widget _inactiveIcon(IconData icon) {
@@ -116,7 +114,7 @@ class _HeroDashboardShellState extends State<HeroDashboardShell> {
       builder: (_) => AlertDialog(
         backgroundColor: _surface,
         title: const Text('Leave the app?',
-            style: TextStyle(fontWeight: FontWeight.w700)),
+            style: TextStyle(fontWeight: FontWeight.w700),),
         content: const Text('Close Allin1 Hero?'),
         actions: [
           TextButton(
@@ -130,7 +128,7 @@ class _HeroDashboardShellState extends State<HeroDashboardShell> {
         ],
       ),
     );
-    return exit == true;
+    return exit ?? false;
   }
 
   @override

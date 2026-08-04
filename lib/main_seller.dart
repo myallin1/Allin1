@@ -86,7 +86,7 @@ class SellerApp extends StatelessWidget {
       },
       onGenerateRoute: (settings) {
         if (settings.name == '/seller-menu-setup') {
-          final sellerId = settings.arguments as String;
+          final sellerId = settings.arguments! as String;
           // FIX (per Nizam's request): every seller authors their own
           // custom dishes now — see seller_dashboard_screen.dart and
           // seller_onboarding_screen.dart for the same change.

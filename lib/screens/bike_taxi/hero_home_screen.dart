@@ -114,7 +114,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
   // Cached stats — loaded once per session in _loadHeroData()
   int _totalRides = 0;
-  double _totalEarnings = 0.0;
+  double _totalEarnings = 0;
   bool _statsLoaded = false;
 
   // ── SOS Emergency state ──────────────────────────────────────
@@ -769,7 +769,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           .collection('heroes')
           .doc(_user!.uid)
           .get();
-      DbUsageTracker.instance.recordRead(1);
+      DbUsageTracker.instance.recordRead();
       final data = doc.data() ?? {};
       String vehicleType =
           (data['vehicleType'] as String?)?.trim().isNotEmpty ?? false
@@ -780,7 +780,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             .collection('users')
             .doc(_user!.uid)
             .get();
-        DbUsageTracker.instance.recordRead(1);
+        DbUsageTracker.instance.recordRead();
         final userVehicle = userDoc.data()?['vehicleType'] as String?;
         if (userVehicle != null && userVehicle.trim().isNotEmpty) {
           vehicleType = userVehicle.trim();
@@ -811,7 +811,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           _firstLoginToday = isFirstToday;
           _waiverCompleted = rate <= 0.0;
           _vehicleType = vehicleType;
-          _heroCity = (data['city'] as String?)?.trim().toLowerCase().isNotEmpty == true
+          _heroCity = (data['city'] as String?)?.trim().toLowerCase().isNotEmpty ?? false
               ? (data['city'] as String).trim().toLowerCase()
               : kDefaultCity;
           // FIX BUG #3: Restore online state from Firestore if captain was online
@@ -841,7 +841,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           DbUsageTracker.instance.recordRead(ridesSnap.docs.length);
           double earn = 0;
           for (final d in ridesSnap.docs) {
-            earn += ((d.data())['fare'] as num? ?? 0).toDouble();
+            earn += (d.data()['fare'] as num? ?? 0).toDouble();
           }
           if (mounted) {
             setState(() {
@@ -864,7 +864,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           {'last_login_date': FieldValue.serverTimestamp()},
           SetOptions(merge: true),
         );
-        DbUsageTracker.instance.recordWrite(1);
+        DbUsageTracker.instance.recordWrite();
       }
     } catch (e) {
       debugPrint('Hero data load error: $e');
@@ -1137,7 +1137,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
     // Listen to location stream to keep _latestPosition fresh
     _globalLocationSub = LocationService().getLocationStream(
-      highAccuracy: false, // radar mode — battery efficient
+      
     ).listen(
       (position) {
         _latestPosition = position;
@@ -1566,7 +1566,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       if (_isShowingRideDialog) return;
 
       final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
-      final requestId = event.snapshot.key as String? ?? '';
+      final requestId = event.snapshot.key ?? '';
       if (pingData == null || requestId.isEmpty) return;
 
       final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
@@ -1617,8 +1617,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         try {
           HeroRideNotificationService.showRideAssigned(
             rideId: requestId,
-            data: Map<String, dynamic>.from(pingData as Map<dynamic, dynamic>),
-            playAlertTone: true,
+            data: Map<String, dynamic>.from(pingData),
           );
         } catch (e) {
           debugPrint('[HeroHomeScreen] Ringtone error: $e');
@@ -1626,10 +1625,10 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       }
 
       _showRideRequestDialog(
-          requestId, Map<String, dynamic>.from(pingData as Map<dynamic, dynamic>));
+          requestId, Map<String, dynamic>.from(pingData),);
     }, onError: (Object e) {
       debugPrint('[HeroHomeScreen] RTDB ping listener error: $e');
-    });
+    },);
   }
 
   // ================================================================
@@ -1664,7 +1663,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       if (_isShowingServiceDialog) return;
 
       final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
-      final requestId = event.snapshot.key as String? ?? '';
+      final requestId = event.snapshot.key ?? '';
       if (pingData == null || requestId.isEmpty) return;
 
       final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
@@ -1695,7 +1694,6 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           HeroRideNotificationService.showRideAssigned(
             rideId: requestId,
             data: Map<String, dynamic>.from(pingData),
-            playAlertTone: true,
             title: 'New Service Request',
             channelDescription:
                 'Lock-screen ride and service-request alerts with ACCEPT action and ringtone.',
@@ -1710,7 +1708,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       _showServiceRequestDialog(requestId, Map<String, dynamic>.from(pingData));
     }, onError: (Object e) {
       debugPrint('[HeroHomeScreen] RTDB service ping listener error: $e');
-    });
+    },);
   }
 
   void _showServiceRequestDialog(String requestId, Map<String, dynamic> data) {
@@ -1924,7 +1922,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       // dialog side against _acceptRide's internal Navigator.push.
       onAccept: (id, data, dlgCtx) =>
           _acceptRide(id, data, dialogContext: dlgCtx),
-      onReject: (id) => _rejectRide(id),
+      onReject: _rejectRide,
     );
   }
 
@@ -2066,7 +2064,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   // Accept a ride from Firestore — DISPATCH v2.0
   Future<void> _acceptRide(
       String requestId, Map<String, dynamic> pingData,
-      {BuildContext? dialogContext}) async {
+      {BuildContext? dialogContext,}) async {
     if (_user == null) return;
     setState(() => _accepting = true);
     debugPrint('[HeroHomeScreen] Accepting ride via RTDB: $requestId');
@@ -2103,7 +2101,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       // ── P0 FIX 1: Atomic RTDB transaction — only ONE hero can win ──
       final requestRef =
           FirebaseDatabase.instance.ref('active_ride_requests/$requestId');
-      final transResult = await requestRef.runTransaction((Object? currentData) {
+      final transResult = await requestRef.runTransaction((currentData) {
         if (currentData == null) {
           // Optimistic local cache run. NEVER abort here!
           // Return intended data so the server compares it and returns the real data.
@@ -2172,7 +2170,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           final onlineSnap =
               await FirebaseDatabase.instance.ref('online_heroes').get();
           if (onlineSnap.exists && onlineSnap.value is Map) {
-            final heroes = Map<dynamic, dynamic>.from(onlineSnap.value as Map);
+            final heroes = Map<dynamic, dynamic>.from(onlineSnap.value! as Map);
             final sweepFutures = <Future<void>>[];
             for (final otherHeroId in heroes.keys) {
               if (otherHeroId == uid) continue; // already removed above
@@ -2270,7 +2268,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             context,
             MaterialPageRoute<void>(
                 builder: (_) =>
-                    CaptainRideScreen(ride: rideModel, rideDocId: firestoreDocId)));
+                    CaptainRideScreen(ride: rideModel, rideDocId: firestoreDocId),),);
       }
     } catch (e) {
       debugPrint('[HeroHomeScreen] Accept ride error: $e');
@@ -3019,7 +3017,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'SOS sent! NJ Tech team and nearby customers have been alerted.'),
+              'SOS sent! NJ Tech team and nearby customers have been alerted.',),
           backgroundColor: Color(0xFF00C853),
           behavior: SnackBarBehavior.floating,
         ),
@@ -3639,7 +3637,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                   // FIX-B1: Use the cached stream object. Passing the same
                   // Stream instance on every build() means StreamBuilder never
                   // resets to ConnectionState.waiting on GPS-tick setStates.
-                  stream: Stream<QuerySnapshot<Map<String, dynamic>>>.empty(),
+                  stream: const Stream<QuerySnapshot<Map<String, dynamic>>>.empty(),
                   builder: (context, snap) {
                     // T2 FIX: The full-screen HeroPremiumLoader was blocking
                     // the ride list even when rides were available.
@@ -3652,19 +3650,19 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                       Future.delayed(const Duration(seconds: 4), () {
                         if (!mounted || !_isOnline) return;
                         debugPrint(
-                            '[HeroHomeScreen] Stream error — auto-retrying: ${snap.error}');
+                            '[HeroHomeScreen] Stream error — auto-retrying: ${snap.error}',);
                         setState(() {});
                       });
-                      return Center(
+                      return const Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.wifi_off_rounded,
-                                color: _red, size: 32),
-                            const SizedBox(height: 8),
+                            Icon(Icons.wifi_off_rounded,
+                                color: _red, size: 32,),
+                            SizedBox(height: 8),
                             Text(
                               'Connection error — retrying...',
-                              style: const TextStyle(color: _red, fontSize: 12),
+                              style: TextStyle(color: _red, fontSize: 12),
                             ),
                           ],
                         ),
@@ -3687,13 +3685,12 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                               children: [
                                 // Base layer: Map showing the service zone
                                 FlutterMap(
-                                  options: MapOptions(
+                                  options: const MapOptions(
                                     initialCenter: _erodeBusStandCenter,
-                                    initialZoom: 13,
                                     minZoom: 10,
                                     maxZoom: 18,
                                     interactionOptions: InteractionOptions(
-                                        flags: InteractiveFlag.none),
+                                        flags: InteractiveFlag.none,),
                                   ),
                                   children: [
                                     TileLayer(
@@ -3702,16 +3699,16 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                                       userAgentPackageName:
                                           'com.allin1.superapp',
                                     ),
-                                    CircleLayer(circles: [
+                                    const CircleLayer(circles: [
                                       CircleMarker(
                                         point: _erodeBusStandCenter,
                                         radius: 5000,
                                         useRadiusInMeter: true,
-                                        color: const Color(0x08FF4FA3),
-                                        borderColor: const Color(0x40FF4FA3),
+                                        color: Color(0x08FF4FA3),
+                                        borderColor: Color(0x40FF4FA3),
                                         borderStrokeWidth: 2,
                                       ),
-                                    ]),
+                                    ],),
                                   ],
                                 ),
                                 // Radar animation calibrated to match service zone circle
@@ -4525,7 +4522,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 // list's own stream re-queries.
 class HeroTaskDetailScreen extends StatelessWidget {
   final String requestId;
-  const HeroTaskDetailScreen({super.key, required this.requestId});
+  const HeroTaskDetailScreen({required this.requestId, super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -4586,6 +4583,12 @@ class HeroTaskDetailScreen extends StatelessWidget {
       ),
     );
   }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestId', requestId));
+  }
 }
 
 // ================================================================
@@ -4633,6 +4636,20 @@ class _ServiceRequestStatusCard extends StatefulWidget {
 
   @override
   State<_ServiceRequestStatusCard> createState() => _ServiceRequestStatusCardState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestId', requestId));
+    properties.add(StringProperty('requestType', requestType));
+    properties.add(StringProperty('status', status));
+    properties.add(StringProperty('customerName', customerName));
+    properties.add(DoubleProperty('estimatedAmount', estimatedAmount));
+    properties.add(DoubleProperty('finalAmount', finalAmount));
+    properties.add(StringProperty('paymentStatus', paymentStatus));
+    properties.add(DiagnosticsProperty<bool?>('estimateApprovedByCustomer', estimateApprovedByCustomer));
+    properties.add(DiagnosticsProperty<Map<String, dynamic>>('details', details));
+  }
 }
 
 class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
@@ -4753,7 +4770,7 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
       // Already approved (customer said yes to a previously-entered
       // estimate) — proceed straight to Start, no re-prompt.
       if (widget.estimatedAmount != null &&
-          widget.estimateApprovedByCustomer == true) {
+          (widget.estimateApprovedByCustomer ?? false)) {
         setState(() => _updating = true);
         try {
           await ServiceRequestService().advanceStatus(widget.requestId, newStatus);
@@ -5165,7 +5182,7 @@ Future<double?> _promptForAmount(
           TextField(
             controller: controller,
             autofocus: true,
-            keyboardType: const TextInputType.numberWithOptions(decimal: false),
+            keyboardType: const TextInputType.numberWithOptions(),
             decoration: const InputDecoration(
               prefixText: '₹ ',
               border: OutlineInputBorder(),
@@ -5261,6 +5278,12 @@ class _HeroRadarVisual extends StatefulWidget {
 
   @override
   State<_HeroRadarVisual> createState() => _HeroRadarVisualState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DoubleProperty('size', size));
+  }
 }
 
 class _HeroRadarVisualState extends State<_HeroRadarVisual>
@@ -5394,10 +5417,9 @@ class _RadarPainter extends CustomPainter {
     // ── Sweeping sector (transparent gradient arc) ─────────────
     final sweepPaint = Paint()
       ..shader = SweepGradient(
-        center: Alignment.center,
-        colors: [
-          const Color(0x00FF4FA3),
-          const Color(0x30FF4FA3),
+        colors: const [
+          Color(0x00FF4FA3),
+          Color(0x30FF4FA3),
         ],
         startAngle: sweepAngle - 0.9,
         endAngle: sweepAngle,
@@ -5917,7 +5939,7 @@ class _HeroSoundboxPromoButton extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(
-        DiagnosticsProperty<AnimationController>('controller', controller));
+        DiagnosticsProperty<AnimationController>('controller', controller),);
     properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }
@@ -5926,7 +5948,7 @@ class _PingCountdownDialog extends StatefulWidget {
   final String requestId;
   final Map<String, dynamic> pingData;
   final Function(String requestId, Map<String, dynamic> pingData,
-      BuildContext dialogContext) onAccept;
+      BuildContext dialogContext,) onAccept;
   final Function(String requestId) onReject;
   const _PingCountdownDialog({
     required this.requestId,
@@ -5936,6 +5958,15 @@ class _PingCountdownDialog extends StatefulWidget {
   });
   @override
   State<_PingCountdownDialog> createState() => _PingCountdownDialogState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestId', requestId));
+    properties.add(DiagnosticsProperty<Map<String, dynamic>>('pingData', pingData));
+    properties.add(ObjectFlagProperty<Function(String requestId, Map<String, dynamic> pingData, BuildContext dialogContext)>.has('onAccept', onAccept));
+    properties.add(ObjectFlagProperty<Function(String requestId)>.has('onReject', onReject));
+  }
 }
 
 class _PingCountdownDialogState extends State<_PingCountdownDialog> {
@@ -6008,9 +6039,9 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
       ),
       titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 0),
       contentPadding: const EdgeInsets.fromLTRB(24, 18, 24, 10),
-      title: const Text('\U0001f680 New Ride Request',
+      title: const Text('U0001f680 New Ride Request',
           style:
-              TextStyle(color: Color(0xFFFF4FA3), fontWeight: FontWeight.w800)),
+              TextStyle(color: Color(0xFFFF4FA3), fontWeight: FontWeight.w800),),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -6021,9 +6052,9 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
             decoration: BoxDecoration(
                 color: const Color(0xFF1A1A2E),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0x26FF4FA3))),
+                border: Border.all(color: const Color(0x26FF4FA3)),),
             child: Row(children: [
-              const Text('\U0001f7e2', style: TextStyle(fontSize: 14)),
+              const Text('U0001f7e2', style: TextStyle(fontSize: 14)),
               const SizedBox(width: 10),
               Expanded(
                   child: Column(
@@ -6033,16 +6064,16 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
                       style: TextStyle(
                           color: Color(0xFF8F5A78),
                           fontSize: 10,
-                          fontWeight: FontWeight.w700)),
+                          fontWeight: FontWeight.w700,),),
                   const SizedBox(height: 4),
                   Text(pickup,
                       style: const TextStyle(
                           color: Colors.white,
                           fontSize: 13,
-                          fontWeight: FontWeight.w700)),
+                          fontWeight: FontWeight.w700,),),
                 ],
-              )),
-            ]),
+              ),),
+            ],),
           ),
           const SizedBox(height: 8),
           Container(
@@ -6051,9 +6082,9 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
             decoration: BoxDecoration(
                 color: const Color(0xFF1A1A2E),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0x26FF4FA3))),
+                border: Border.all(color: const Color(0x26FF4FA3)),),
             child: Row(children: [
-              const Text('\U0001f534', style: TextStyle(fontSize: 14)),
+              const Text('U0001f534', style: TextStyle(fontSize: 14)),
               const SizedBox(width: 10),
               Expanded(
                   child: Column(
@@ -6063,16 +6094,16 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
                       style: TextStyle(
                           color: Color(0xFF8F5A78),
                           fontSize: 10,
-                          fontWeight: FontWeight.w700)),
+                          fontWeight: FontWeight.w700,),),
                   const SizedBox(height: 4),
                   Text(drop,
                       style: const TextStyle(
                           color: Colors.white,
                           fontSize: 13,
-                          fontWeight: FontWeight.w700)),
+                          fontWeight: FontWeight.w700,),),
                 ],
-              )),
-            ]),
+              ),),
+            ],),
           ),
           const SizedBox(height: 12),
           Container(
@@ -6084,7 +6115,7 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
               border: Border.all(
                   color: tipAmount > 0
                       ? const Color(0xFF00A86B).withValues(alpha: 0.45)
-                      : const Color(0x26FF4FA3)),
+                      : const Color(0x26FF4FA3),),
             ),
             child: Row(children: [
               Expanded(
@@ -6095,19 +6126,19 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
                         style: TextStyle(
                             color: Color(0xFF8F5A78),
                             fontSize: 10,
-                            fontWeight: FontWeight.w700)),
+                            fontWeight: FontWeight.w700,),),
                     const SizedBox(height: 2),
                     Text('\u{20b9}${estimatedFare.toStringAsFixed(0)}',
                         style: const TextStyle(
                             color: Color(0xFFFF4FA3),
                             fontSize: 16,
-                            fontWeight: FontWeight.w900)),
+                            fontWeight: FontWeight.w900,),),
                   ],
                 ),
               ),
               if (tipAmount > 0) ...[
                 const Text('  +  ',
-                    style: TextStyle(color: Color(0xFF8F5A78), fontSize: 11)),
+                    style: TextStyle(color: Color(0xFF8F5A78), fontSize: 11),),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -6116,13 +6147,13 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
                           style: TextStyle(
                               color: Color(0xFF8F5A78),
                               fontSize: 10,
-                              fontWeight: FontWeight.w700)),
+                              fontWeight: FontWeight.w700,),),
                       const SizedBox(height: 2),
                       Text('\u{20b9}${tipAmount.toStringAsFixed(0)}',
                           style: const TextStyle(
                               color: Color(0xFFFFBB00),
                               fontSize: 16,
-                              fontWeight: FontWeight.w900)),
+                              fontWeight: FontWeight.w900,),),
                     ],
                   ),
                 ),
@@ -6131,7 +6162,7 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
                   style: TextStyle(
                       color: Color(0xFF8F5A78),
                       fontSize: 13,
-                      fontWeight: FontWeight.w800)),
+                      fontWeight: FontWeight.w800,),),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -6140,17 +6171,17 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
                         style: TextStyle(
                             color: Color(0xFF8F5A78),
                             fontSize: 10,
-                            fontWeight: FontWeight.w700)),
+                            fontWeight: FontWeight.w700,),),
                     const SizedBox(height: 2),
                     Text('\u{20b9}${boostedFare.toStringAsFixed(0)}',
                         style: const TextStyle(
                             color: Color(0xFF00A86B),
                             fontSize: 16,
-                            fontWeight: FontWeight.w900)),
+                            fontWeight: FontWeight.w900,),),
                   ],
                 ),
               ),
-            ]),
+            ],),
           ),
           const SizedBox(height: 12),
           Center(
@@ -6158,7 +6189,7 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
                 style: const TextStyle(
                     color: Color(0xFFFF5252),
                     fontSize: 13,
-                    fontWeight: FontWeight.w700)),
+                    fontWeight: FontWeight.w700,),),
           ),
         ],
       ),
@@ -6170,15 +6201,15 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
                   foregroundColor: const Color(0xFFFF5252),
                   side: const BorderSide(color: Color(0x40FF5252)),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(vertical: 14)),
+                      borderRadius: BorderRadius.circular(14),),
+                  padding: const EdgeInsets.symmetric(vertical: 14),),
               onPressed: () {
                 _countdownTimer?.cancel();
                 widget.onReject(widget.requestId);
                 Navigator.pop(context);
               },
               child: const Text('REJECT',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11)),
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11),),
             ),
           ),
           const SizedBox(width: 8),
@@ -6188,15 +6219,15 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
                   foregroundColor: const Color(0xFF8F5A78),
                   side: const BorderSide(color: Color(0x338F5A78)),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(vertical: 14)),
+                      borderRadius: BorderRadius.circular(14),),
+                  padding: const EdgeInsets.symmetric(vertical: 14),),
               onPressed: () {
                 _countdownTimer?.cancel();
                 widget.onReject(widget.requestId);
                 Navigator.pop(context);
               },
               child: const Text('SKIP',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11)),
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11),),
             ),
           ),
           const SizedBox(width: 12),
@@ -6205,13 +6236,13 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                    colors: [Color(0xFFFF4FA3), Color(0xFFFF9AC8)]),
+                    colors: [Color(0xFFFF4FA3), Color(0xFFFF9AC8)],),
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: const [
                   BoxShadow(
                       color: Color(0x40FF4FA3),
                       blurRadius: 16,
-                      offset: Offset(0, 6))
+                      offset: Offset(0, 6),),
                 ],
               ),
               child: ElevatedButton(
@@ -6219,8 +6250,8 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
                     backgroundColor: Colors.transparent,
                     shadowColor: Colors.transparent,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                    padding: const EdgeInsets.symmetric(vertical: 14)),
+                        borderRadius: BorderRadius.circular(14),),
+                    padding: const EdgeInsets.symmetric(vertical: 14),),
                 onPressed: _isAccepting
                     ? null
                     : () async {
@@ -6250,7 +6281,7 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
                           // dialog-pop) never runs, so this dialog stays
                           // open and only resets its own accepting state.
                           await (widget.onAccept(
-                                  widget.requestId, data, context)
+                                  widget.requestId, data, context,)
                               as Future<void>)
                               .timeout(const Duration(seconds: 12));
                         } on TimeoutException {
@@ -6273,11 +6304,11 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
                           if (mounted) {
                             setState(() => _isAccepting = false);
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text(
+                              const SnackBar(
+                                content: Text(
                                   'Failed to accept ride — please try again.',
                                 ),
-                                backgroundColor: const Color(0xFFE05555),
+                                backgroundColor: Color(0xFFE05555),
                               ),
                             );
                           }
@@ -6300,11 +6331,11 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
                         style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w900,
-                            fontSize: 15)),
+                            fontSize: 15,),),
               ),
             ),
           ),
-        ]),
+        ],),
       ],
     );
   }

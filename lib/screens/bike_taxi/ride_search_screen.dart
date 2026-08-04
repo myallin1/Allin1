@@ -81,7 +81,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   String _captainPhone = '';
   String _captainModel = '';
   double _captainRating = 0;
-  int _captainTrips = 0;
+  final int _captainTrips = 0;
   int _captainEta = 5;
   String _rideOtp = '----';
   bool _heroAcceptedOverlayShown = false;
@@ -208,9 +208,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
 
       print('[RideSearch] RTDB returned ${onlineData.length} online hero entries');
 
-      const double rangeKm = 3.0;
-      const double earthRadius = 6371.0;
-      final double latDelta = rangeKm / earthRadius * (180.0 / pi);
+      const double rangeKm = 3;
+      const double earthRadius = 6371;
+      const double latDelta = rangeKm / earthRadius * (180.0 / pi);
       final double lngDelta = rangeKm / earthRadius * (180.0 / pi) /
           (pickupLat.abs() > 89.0 ? 1.0 : cos(pickupLat * pi / 180.0));
 
@@ -255,7 +255,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
           continue;
         }
 
-        final heroCity = (data['city'] as String?)?.trim().toLowerCase().isNotEmpty == true
+        final heroCity = (data['city'] as String?)?.trim().toLowerCase().isNotEmpty ?? false
             ? (data['city'] as String).trim().toLowerCase()
             : kDefaultCity;
         if (heroCity != rideCity) {
@@ -269,7 +269,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         // ── SMART MODE LOGIC: Parcel requests go to BOTH Parcel and Bike heroes ──
         bool categoryMatch = false;
         if (requestedCategory == 'parcel') {
-          categoryMatch = (heroCategory == 'parcel' || heroCategory == 'bike');
+          categoryMatch = heroCategory == 'parcel' || heroCategory == 'bike';
           if (categoryMatch && heroCategory == 'bike') {
             debugPrint('🔥 [SMART MODE] Hero $heroId matched via bike-fallback for parcel request');
           }
@@ -708,7 +708,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
               point: LatLng(lat, lng),
               icon: Icons.electric_bike_rounded,
               label: (value['name'] as String?) ?? 'Hero',
-            ));
+            ),);
           }
         }
       });
@@ -717,7 +717,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       debugPrint(
         '[RideSearchScreen] online_heroes listener error (non-fatal): $error',
       );
-    });
+    },);
   }
 
   double _haversineDistance(LatLng point1, LatLng point2) {
@@ -954,7 +954,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
                             child: Container(
                               width: 60, height: 60,
                               decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: _accent, width: 2),
-                                boxShadow: [BoxShadow(color: _accent.withValues(alpha: 0.4), blurRadius: 16)]),
+                                boxShadow: [BoxShadow(color: _accent.withValues(alpha: 0.4), blurRadius: 16)],),
                               child: const Center(child: Text('🏍️', style: TextStyle(fontSize: 28))),
                             ),
                           ),
@@ -963,7 +963,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Text(_searchTimedOut ? 'Heroes are busy now!' : 'Finding Nearby Hero', style: TextStyle(fontSize: 18, color: _text, fontWeight: FontWeight.w700)),
+                  Text(_searchTimedOut ? 'Heroes are busy now!' : 'Finding Nearby Hero', style: const TextStyle(fontSize: 18, color: _text, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 6),
                   Text(
                     _searchTimedOut
@@ -995,7 +995,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
                       ),
                       child: Column(
                         children: [
-                          Text('⭐ VIP Booking', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _accent)),
+                          const Text('⭐ VIP Booking', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _accent)),
                           const SizedBox(height: 4),
                           const Text(
                             'Call center will assign a Hero for you right away.',
@@ -1187,7 +1187,7 @@ class _ActiveRideSheet extends StatelessWidget {
                   label: const Text('Call'),
                   style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFFF4FA3),
                     side: const BorderSide(color: Color(0x33FF4FA3)), padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1199,7 +1199,7 @@ class _ActiveRideSheet extends StatelessWidget {
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4FA3), foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    shadowColor: const Color(0x40FF4FA3), elevation: 8),
+                    shadowColor: const Color(0x40FF4FA3), elevation: 8,),
                 ),
               ),
             ],
@@ -1207,6 +1207,19 @@ class _ActiveRideSheet extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('heroName', heroName));
+    properties.add(StringProperty('bikeModel', bikeModel));
+    properties.add(StringProperty('vehicleNumber', vehicleNumber));
+    properties.add(IntProperty('etaMinutes', etaMinutes));
+    properties.add(DoubleProperty('rating', rating));
+    properties.add(StringProperty('rideOtp', rideOtp));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onCallHero', onCallHero));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTrackRide', onTrackRide));
   }
 }
 
@@ -1222,8 +1235,8 @@ class _RadarPainter extends CustomPainter {
     final paint = Paint()..color = const Color(0x20FF4FA3)..style = PaintingStyle.fill;
     canvas.drawCircle(center, radius, paint);
     final sweepPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [const Color(0x30FF4FA3), const Color(0x00FF4FA3)],
+      ..shader = const RadialGradient(
+        colors: [Color(0x30FF4FA3), Color(0x00FF4FA3)],
         stops: [0.0, 1.0],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
     canvas.drawArc(Rect.fromCircle(center: center, radius: radius), -pi / 2, 2 * pi * progress, true, sweepPaint);
@@ -1311,7 +1324,7 @@ class _DecorativeRadarVehiclesState extends State<_DecorativeRadarVehicles>
         baseAngle: angle,
         radiusFraction: 0.35 + rnd.nextDouble() * 0.55,
         phase: rnd.nextDouble() * 2 * pi,
-      ));
+      ),);
     }
     return specs;
   }

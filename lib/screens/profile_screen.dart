@@ -31,7 +31,7 @@ const Color kRed    = Color(0xFFE05555);
 void _syncProfilePalette(BuildContext context) {
   ThemeService ts;
   try {
-    ts = Provider.of<ThemeService>(context, listen: true);
+    ts = Provider.of<ThemeService>(context);
   } catch (_) {
     return;
   }
@@ -186,7 +186,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 width: 100,
                 height: 100,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
+                  gradient: const LinearGradient(
                     colors: [kGold, Color(0xFFD4961A)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -263,7 +263,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           Row(
             children: [
-              Icon(Icons.person_outline, color: kGold, size: 20),
+              const Icon(Icons.person_outline, color: kGold, size: 20),
               const SizedBox(width: 8),
               Text(
                 'Personal Information',
@@ -367,11 +367,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: kGold, width: 1.5),
+          borderSide: const BorderSide(color: kGold, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: kRed),
+          borderSide: const BorderSide(color: kRed),
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),

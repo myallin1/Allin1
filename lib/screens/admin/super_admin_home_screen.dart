@@ -90,7 +90,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
     _alertSub = _waitingRequestsStream.listen(_onWaitingRequestsChanged,
         onError: (Object e) {
       debugPrint('[SuperAdminHome] Alert listener error: $e');
-    });
+    },);
     _sosAlertsStream = FirebaseFirestore.instance
         .collection('sos_alerts')
         .where('status', isEqualTo: 'active')
@@ -155,7 +155,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: _purple.withOpacity(0.4)),
+          side: BorderSide(color: _purple.withValues(alpha: 0.4)),
         ),
       ),
     );
@@ -231,7 +231,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: _bg,
         title: const Text('Leave the app?',
-            style: TextStyle(fontWeight: FontWeight.w700)),
+            style: TextStyle(fontWeight: FontWeight.w700),),
         content: const Text('Close Allin1 Admin?'),
         actions: [
           TextButton(
@@ -245,7 +245,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
         ],
       ),
     );
-    return exit == true;
+    return exit ?? false;
   }
 
   @override
@@ -266,34 +266,26 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
           index: _tabIndex,
           children: [
             _buildOverviewTab(context),
-            _visitedTabs.contains(1)
-                ? AdminServiceRequestsScreen(
-                    key: const ValueKey('hero_tab'),
+            if (_visitedTabs.contains(1)) const AdminServiceRequestsScreen(
+                    key: ValueKey('hero_tab'),
                     requestType: 'hero_booking',
                     title: 'Hero Booking Status',
-                  )
-                : const SizedBox.shrink(),
-            _visitedTabs.contains(2)
-                ? AdminServiceRequestsScreen(
-                    key: const ValueKey('electronics_tab'),
+                  ) else const SizedBox.shrink(),
+            if (_visitedTabs.contains(2)) const AdminServiceRequestsScreen(
+                    key: ValueKey('electronics_tab'),
                     requestType: 'electronics_service',
                     title: 'Electronics Booking',
-                  )
-                : const SizedBox.shrink(),
+                  ) else const SizedBox.shrink(),
             // NEW (per Nizam's request): 4th tab — one-time customer SOS
             // KYC verification queue. Same lazy-mount pattern as Hero/
             // Electronics above (only mounts, and only starts its
             // listener, once the admin actually taps this tab).
-            _visitedTabs.contains(3)
-                ? const AdminSosKycApprovalsScreen(key: ValueKey('cus_sos_tab'))
-                : const SizedBox.shrink(),
+            if (_visitedTabs.contains(3)) const AdminSosKycApprovalsScreen(key: ValueKey('cus_sos_tab')) else const SizedBox.shrink(),
             // NEW (per Nizam's request): 5th tab — Food Orders. Same
             // lazy-mount pattern as every other tab here (only builds,
             // and only fires its first manual fetch, once the admin
             // actually taps this tab).
-            _visitedTabs.contains(4)
-                ? const AdminFoodOrdersScreen(key: ValueKey('food_orders_tab'))
-                : const SizedBox.shrink(),
+            if (_visitedTabs.contains(4)) const AdminFoodOrdersScreen(key: ValueKey('food_orders_tab')) else const SizedBox.shrink(),
           ],
         ),
       ),
@@ -366,15 +358,15 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
         isFoodOrders: true,
       ),
     ];
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: _surface,
-        border: Border(top: BorderSide(color: _purple.withOpacity(0.15))),
+        border: Border(top: BorderSide(color: _purple.withValues(alpha: 0.15))),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.15),
+              color: Colors.black.withValues(alpha: 0.15),
               blurRadius: 16,
-              offset: const Offset(0, -4)),
+              offset: const Offset(0, -4),),
         ],
       ),
       child: SafeArea(
@@ -399,10 +391,10 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                             opacity: active ? 1.0 : 0.55,
                             child: item.isSos
                                 ? Icon(Icons.sos_rounded,
-                                    color: active ? _gold : _text.withOpacity(0.55), size: 22)
+                                    color: active ? _gold : _text.withValues(alpha: 0.55), size: 22,)
                                 : item.isFoodOrders
                                     ? Icon(Icons.restaurant_menu_rounded,
-                                        color: active ? _gold : _text.withOpacity(0.55), size: 22)
+                                        color: active ? _gold : _text.withValues(alpha: 0.55), size: 22,)
                                     : SvgPicture.string(item.icon),
                           ),
                         ),
@@ -412,7 +404,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                             right: -8,
                             child: _NavWaitingDot(
                                 requestType: item.requestType!,
-                                waitingStream: _waitingRequestsStream),
+                                waitingStream: _waitingRequestsStream,),
                           ),
                         if (item.isSos)
                           const Positioned(
@@ -426,10 +418,10 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                     Text(item.label,
                         style: TextStyle(
                             fontSize: 9.5,
-                            color: active ? _gold : _text.withOpacity(0.55),
+                            color: active ? _gold : _text.withValues(alpha: 0.55),
                             fontWeight:
-                                active ? FontWeight.w700 : FontWeight.w400)),
-                  ]),
+                                active ? FontWeight.w700 : FontWeight.w400,),),
+                  ],),
                 ),
               ),
             );
@@ -462,10 +454,10 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.white.withOpacity(0.28)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFFF1744).withOpacity(0.45),
+                color: const Color(0xFFFF1744).withValues(alpha: 0.45),
                 blurRadius: 24,
                 spreadRadius: 2,
                 offset: const Offset(0, 8),
@@ -539,22 +531,22 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
       decoration: BoxDecoration(
         color: _surface,
         border: Border(
-          bottom: BorderSide(color: _purple.withOpacity(0.2)),
+          bottom: BorderSide(color: _purple.withValues(alpha: 0.2)),
         ),
       ),
       child: Row(
         children: [
           IconButton(
             onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-            icon: Icon(Icons.menu_rounded, color: _text.withOpacity(0.7)),
+            icon: Icon(Icons.menu_rounded, color: _text.withValues(alpha: 0.7)),
             tooltip: 'Settings menu',
           ),
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: _purple.withOpacity(0.15),
+              color: _purple.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _purple.withOpacity(0.3)),
+              border: Border.all(color: _purple.withValues(alpha: 0.3)),
             ),
             child: const Icon(Icons.lock, color: _purple, size: 22),
           ),
@@ -576,7 +568,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 Text(
                   'NJ TECH Admin Portal',
                   style: TextStyle(
-                    color: _text.withOpacity(0.55),
+                    color: _text.withValues(alpha: 0.55),
                     fontSize: 13,
                     letterSpacing: 0.2,
                   ),
@@ -588,7 +580,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
             onPressed: () {},
             icon: Icon(
               Icons.notifications_outlined,
-              color: _text.withOpacity(0.6),
+              color: _text.withValues(alpha: 0.6),
             ),
           ),
         ],
@@ -625,7 +617,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
           Text(
             'MANAGE',
             style: TextStyle(
-              color: _text.withOpacity(0.5),
+              color: _text.withValues(alpha: 0.5),
               fontSize: 11,
               fontWeight: FontWeight.w800,
               letterSpacing: 1.2,
@@ -671,8 +663,8 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
               child: Text(
                 'Settings',
                 style: TextStyle(
@@ -682,13 +674,13 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 ),
               ),
             ),
-            Divider(color: _purple.withOpacity(0.15), height: 1),
+            Divider(color: _purple.withValues(alpha: 0.15), height: 1),
             const SizedBox(height: 8),
             ListTile(
-              leading: Icon(Icons.settings_outlined, color: _gold),
-              title: Text('App Settings', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              leading: const Icon(Icons.settings_outlined, color: _gold),
+              title: const Text('App Settings', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
               subtitle: Text('Commission, fares, ads, credentials',
-                  style: TextStyle(color: _text.withOpacity(0.5), fontSize: 11)),
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
@@ -699,9 +691,9 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.local_offer_outlined, color: Color(0xFFFF4FA3)),
-              title: Text('Erode Offers', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              title: const Text('Erode Offers', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
               subtitle: Text('Manage shop offers shown to customers',
-                  style: TextStyle(color: _text.withOpacity(0.5), fontSize: 11)),
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
@@ -712,7 +704,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.update_rounded, color: _purple),
-              title: Text('Check for Updates', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              title: const Text('Check for Updates', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushReplacement(
@@ -724,7 +716,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
             ListTile(
               leading: const Icon(Icons.logout_rounded, color: Color(0xFFFF5252)),
               title: const Text('Logout',
-                  style: TextStyle(color: Color(0xFFFF5252), fontWeight: FontWeight.w600)),
+                  style: TextStyle(color: Color(0xFFFF5252), fontWeight: FontWeight.w600),),
               onTap: () {
                 Navigator.pop(context);
                 _logout(context);
@@ -735,7 +727,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
               padding: const EdgeInsets.all(20),
               child: Text(
                 'v1.0.0',
-                style: TextStyle(color: _text.withOpacity(0.3), fontSize: 12, letterSpacing: 0.5),
+                style: TextStyle(color: _text.withValues(alpha: 0.3), fontSize: 12, letterSpacing: 0.5),
               ),
             ),
           ],
@@ -768,8 +760,7 @@ class _ManageTile extends StatelessWidget {
     required this.iconSvg,
     required this.color,
     required this.onTap,
-    this.requestType,
-  });
+  }) : requestType = null;
 
   static const Color _text = Color(0xFFEEEEF5);
   static const Color _muted = Color(0xFF9999BB);
@@ -782,10 +773,10 @@ class _ManageTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF1A1A2A),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             blurRadius: 8,
             spreadRadius: 1,
           ),
@@ -798,7 +789,7 @@ class _ManageTile extends StatelessWidget {
             height: 48,
             padding: const EdgeInsets.all(9),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
+              color: color.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
             child: SvgPicture.string(iconSvg),
@@ -829,12 +820,23 @@ class _ManageTile extends StatelessWidget {
           if (requestType != null) _WaitingBadge(requestType: requestType!),
           const SizedBox(width: 8),
           Icon(Icons.arrow_forward_ios_rounded,
-              color: color.withOpacity(0.6), size: 16),
+              color: color.withValues(alpha: 0.6), size: 16,),
         ],
       ),
     );
 
     return GestureDetector(onTap: onTap, child: content);
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('label', label));
+    properties.add(StringProperty('subtitle', subtitle));
+    properties.add(StringProperty('iconSvg', iconSvg));
+    properties.add(ColorProperty('color', color));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+    properties.add(StringProperty('requestType', requestType));
   }
 }
 
@@ -868,11 +870,18 @@ class _NavWaitingDot extends StatelessWidget {
             count > 9 ? '9+' : '$count',
             textAlign: TextAlign.center,
             style: const TextStyle(
-                color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800),
+                color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800,),
           ),
         );
       },
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestType', requestType));
+    properties.add(DiagnosticsProperty<Stream<QuerySnapshot<Map<String, dynamic>>>>('waitingStream', waitingStream));
   }
 }
 
@@ -951,6 +960,12 @@ class _WaitingBadge extends StatelessWidget {
       },
     );
   }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestType', requestType));
+  }
 }
 
 // ── Admin-visibility gap fix: live count badge for escalated Hero
@@ -1008,5 +1023,11 @@ class _AdminReviewBadgeWrapper extends StatelessWidget {
         );
       },
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<Stream<QuerySnapshot<Map<String, dynamic>>>>('waitingStream', waitingStream));
   }
 }

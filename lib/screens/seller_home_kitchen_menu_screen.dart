@@ -22,6 +22,7 @@ import 'dart:async';
 
 import 'package:colorful_iconify_flutter/icons/fluent_emoji_flat.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -69,6 +70,14 @@ class SellerHomeKitchenMenuScreen extends StatefulWidget {
   @override
   State<SellerHomeKitchenMenuScreen> createState() =>
       _SellerHomeKitchenMenuScreenState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('sellerId', sellerId));
+    properties.add(StringProperty('title', title));
+    properties.add(StringProperty('categoryName', categoryName));
+  }
 }
 
 class _SellerHomeKitchenMenuScreenState
@@ -117,7 +126,7 @@ class _SellerHomeKitchenMenuScreenState
       builder: (_) => AlertDialog(
         backgroundColor: _card,
         title: Text('Delete "${item.name}"?',
-            style: GoogleFonts.outfit(color: _text)),
+            style: GoogleFonts.outfit(color: _text),),
         content: Text(
           'This dish will be removed from your menu permanently.',
           style: GoogleFonts.outfit(color: _muted),
@@ -148,7 +157,7 @@ class _SellerHomeKitchenMenuScreenState
   Future<void> _openEditor({MenuItemModel? existing}) async {
     if (existing == null && _items.length >= kMaxHomeKitchenItems) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
             'Max $kMaxHomeKitchenItems dishes reached. Delete one to add a new dish.',
           ),
@@ -227,7 +236,7 @@ class _SellerHomeKitchenMenuScreenState
       floatingActionButton: canAddMore
           ? FloatingActionButton.extended(
               backgroundColor: _teal,
-              onPressed: () => _openEditor(),
+              onPressed: _openEditor,
               icon: const Icon(Icons.add_a_photo_outlined, color: Colors.white),
               label: Text(
                 'Add Dish',
@@ -316,7 +325,7 @@ class _SellerHomeKitchenMenuScreenState
                 Text(
                   item.name,
                   style: GoogleFonts.outfit(
-                      color: _text, fontSize: 15, fontWeight: FontWeight.w600),
+                      color: _text, fontSize: 15, fontWeight: FontWeight.w600,),
                 ),
                 if ((item.description ?? '').isNotEmpty) ...[
                   const SizedBox(height: 2),
@@ -331,7 +340,7 @@ class _SellerHomeKitchenMenuScreenState
                 Text(
                   '₹${item.price.toStringAsFixed(0)}',
                   style: GoogleFonts.outfit(
-                      color: _tealLight, fontSize: 14, fontWeight: FontWeight.w700),
+                      color: _tealLight, fontSize: 14, fontWeight: FontWeight.w700,),
                 ),
               ],
             ),
@@ -340,7 +349,7 @@ class _SellerHomeKitchenMenuScreenState
             children: [
               Switch(
                 value: item.isAvailable,
-                activeColor: _teal,
+                activeThumbColor: _teal,
                 onChanged: (_) => _toggleAvailable(item),
               ),
               Row(
@@ -393,6 +402,15 @@ class _DishEditorSheet extends StatefulWidget {
 
   @override
   State<_DishEditorSheet> createState() => _DishEditorSheetState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('sellerId', sellerId));
+    properties.add(DiagnosticsProperty<FoodSellerService>('service', service));
+    properties.add(DiagnosticsProperty<MenuItemModel?>('existing', existing));
+    properties.add(StringProperty('categoryName', categoryName));
+  }
 }
 
 class _DishEditorSheetState extends State<_DishEditorSheet> {
@@ -477,7 +495,6 @@ class _DishEditorSheetState extends State<_DishEditorSheet> {
           description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
           price: price,
           isVeg: _isVeg,
-          isAvailable: true,
           imageUrl: imageUrl,
           categoryName: widget.categoryName,
           createdAt: DateTime.now(),
@@ -540,7 +557,7 @@ class _DishEditorSheetState extends State<_DishEditorSheet> {
               Text(
                 widget.existing == null ? 'Add a Dish' : 'Edit Dish',
                 style: GoogleFonts.outfit(
-                    color: _text, fontSize: 18, fontWeight: FontWeight.w700),
+                    color: _text, fontSize: 18, fontWeight: FontWeight.w700,),
               ),
               const SizedBox(height: 16),
               GestureDetector(
@@ -604,7 +621,7 @@ class _DishEditorSheetState extends State<_DishEditorSheet> {
                           width: 22,
                           height: 22,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2.5, color: Colors.white),
+                              strokeWidth: 2.5, color: Colors.white,),
                         )
                       : Text(
                           widget.existing == null ? 'Add Dish' : 'Save Changes',
@@ -645,7 +662,7 @@ class _DishEditorSheetState extends State<_DishEditorSheet> {
   }
 
   Widget _buildTextField(TextEditingController ctrl, String hint,
-      {int maxLines = 1, TextInputType? keyboardType}) {
+      {int maxLines = 1, TextInputType? keyboardType,}) {
     return TextField(
       controller: ctrl,
       maxLines: maxLines,

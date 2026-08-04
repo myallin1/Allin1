@@ -14,6 +14,7 @@
 // If nothing imports FloatingCompanion, this file can be deleted
 // outright in a future cleanup pass.
 // ================================================================
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class FloatingCompanion extends StatelessWidget {
@@ -23,4 +24,10 @@ class FloatingCompanion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const SizedBox.shrink();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(ObjectFlagProperty<VoidCallback?>.has('onTap', onTap));
+  }
 }

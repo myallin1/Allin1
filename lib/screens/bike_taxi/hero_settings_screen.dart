@@ -201,7 +201,7 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
   }
 
   Widget _buildNotificationSettings() {
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(20),
@@ -221,7 +221,7 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
             title: 'All Notifications',
             subtitle: 'Enable all push notifications',
             value: _notificationsEnabled,
-             onChanged: (bool val) {
+             onChanged: (val) {
                setState(() => _notificationsEnabled = val);
                _saveSetting('hero_notifications_enabled', val);
              },
@@ -232,7 +232,7 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
             title: 'Ride Alerts',
             subtitle: 'Sound + vibration for new rides',
             value: _rideAlertsEnabled,
-            onChanged: (bool val) {
+            onChanged: (val) {
               setState(() => _rideAlertsEnabled = val);
               _saveSetting('hero_ride_alerts_enabled', val);
             },
@@ -278,13 +278,13 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
       trailing: Switch(
         value: value,
         onChanged: onChanged,
-        activeColor: _pink,
+        activeThumbColor: _pink,
       ),
     );
   }
 
   Widget _buildMapProviderSettings() {
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(20),
@@ -312,7 +312,7 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
     return RadioListTile<String>(
       value: providerName,
       groupValue: _selectedMapProvider,
-       onChanged: (String? val) {
+       onChanged: (val) {
          if (val != null) {
            _switchMapProvider(val);
          }
@@ -344,8 +344,8 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
         ),
       ),
       secondary: isSelected
-          ? Icon(Icons.check_circle_rounded, color: _pink, size: 20)
-          : Icon(Icons.circle_outlined, color: _muted, size: 20),
+          ? const Icon(Icons.check_circle_rounded, color: _pink, size: 20)
+          : const Icon(Icons.circle_outlined, color: _muted, size: 20),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
     );
   }
@@ -355,7 +355,7 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
     // from elsewhere (e.g. another screen using the same
     // LocalizationService instance).
     final currentCode = context.watch<LocalizationService>().languageCode;
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(20),
@@ -387,7 +387,7 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
     return RadioListTile<String>(
       value: code,
       groupValue: currentCode,
-      onChanged: (String? val) {
+      onChanged: (val) {
         if (val != null) {
           unawaited(context.read<LocalizationService>().setLanguage(val));
         }
@@ -401,8 +401,8 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
         ),
       ),
       secondary: isSelected
-          ? Icon(Icons.check_circle_rounded, color: _pink, size: 20)
-          : Icon(Icons.circle_outlined, color: _muted, size: 20),
+          ? const Icon(Icons.check_circle_rounded, color: _pink, size: 20)
+          : const Icon(Icons.circle_outlined, color: _muted, size: 20),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
     );
   }
@@ -418,7 +418,7 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
   Widget _buildThemeSettings() {
     // Reactive: rebuilds automatically when the theme changes.
     final currentKey = context.watch<ThemeService>().themeKey;
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(20),
@@ -447,7 +447,7 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
     return RadioListTile<String>(
       value: key,
       groupValue: currentKey,
-      onChanged: (String? val) {
+      onChanged: (val) {
         if (val != null) {
           unawaited(context.read<ThemeService>().setTheme(val));
         }
@@ -461,8 +461,8 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
         ),
       ),
       secondary: isSelected
-          ? Icon(Icons.check_circle_rounded, color: _pink, size: 20)
-          : Icon(Icons.circle_outlined, color: _muted, size: 20),
+          ? const Icon(Icons.check_circle_rounded, color: _pink, size: 20)
+          : const Icon(Icons.circle_outlined, color: _muted, size: 20),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
     );
   }

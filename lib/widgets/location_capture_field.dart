@@ -13,6 +13,7 @@
 // every order form can capture a real, navigable pickup/delivery point
 // the same way.
 // ================================================================
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -27,15 +28,22 @@ class LocationCaptureField extends StatefulWidget {
   final Color accentColor;
 
   const LocationCaptureField({
-    super.key,
-    required this.addressController,
-    required this.onLocationPicked,
+    required this.addressController, required this.onLocationPicked, super.key,
     this.pickerTitle = 'Select location',
     this.accentColor = const Color(0xFFFF4FA3),
   });
 
   @override
   State<LocationCaptureField> createState() => _LocationCaptureFieldState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<TextEditingController>('addressController', addressController));
+    properties.add(StringProperty('pickerTitle', pickerTitle));
+    properties.add(ObjectFlagProperty<void Function(double lat, double lng)>.has('onLocationPicked', onLocationPicked));
+    properties.add(ColorProperty('accentColor', accentColor));
+  }
 }
 
 class _LocationCaptureFieldState extends State<LocationCaptureField> {
@@ -60,7 +68,7 @@ class _LocationCaptureFieldState extends State<LocationCaptureField> {
       }
       final point = LatLng(position.latitude, position.longitude);
       final reverse = await MapService().reverseGeocode(point);
-      final address = (reverse?['name'] as String?)?.trim().isNotEmpty == true
+      final address = (reverse?['name'] as String?)?.trim().isNotEmpty ?? false
           ? reverse!['name'] as String
           : (reverse?['address'] as String?) ?? 'Current location';
       if (!mounted) return;

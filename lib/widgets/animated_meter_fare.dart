@@ -14,6 +14,7 @@
 // existing Firestore listener). It does not fetch anything itself.
 // ================================================================
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class AnimatedMeterFare extends StatefulWidget {
@@ -45,6 +46,16 @@ class AnimatedMeterFare extends StatefulWidget {
 
   @override
   State<AnimatedMeterFare> createState() => _AnimatedMeterFareState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DoubleProperty('value', value));
+    properties.add(DiagnosticsProperty<TextStyle?>('style', style));
+    properties.add(DiagnosticsProperty<Duration>('duration', duration));
+    properties.add(StringProperty('prefix', prefix));
+    properties.add(IntProperty('fractionDigits', fractionDigits));
+  }
 }
 
 class _AnimatedMeterFareState extends State<AnimatedMeterFare>

@@ -104,7 +104,7 @@ class _SellerGroceryDashboardScreenState
                   const Text('🛒', style: TextStyle(fontSize: 40)),
                   const SizedBox(height: 12),
                   Text(
-                    'You\'re registered — no menu setup needed',
+                    "You're registered — no menu setup needed",
                     style: GoogleFonts.outfit(
                       color: _text,
                       fontSize: 18,
@@ -116,7 +116,7 @@ class _SellerGroceryDashboardScreenState
                     'Grocery orders on Allin1 work as a broadcast request — '
                     'a customer types or photographs their shopping list, and '
                     'any available hero picks it up and shops for them. '
-                    'There\'s no digital catalog to manage on your end — your '
+                    "There's no digital catalog to manage on your end — your "
                     'registration just helps us list your store as a nearby '
                     'option.',
                     style: GoogleFonts.outfit(color: _muted, fontSize: 13),
@@ -149,9 +149,9 @@ class _SellerGroceryDashboardScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label,
-                    style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
+                    style: GoogleFonts.outfit(color: _muted, fontSize: 11),),
                 Text(value.isEmpty ? '—' : value,
-                    style: GoogleFonts.outfit(color: _text, fontSize: 14)),
+                    style: GoogleFonts.outfit(color: _text, fontSize: 14),),
               ],
             ),
           ),

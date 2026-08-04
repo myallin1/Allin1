@@ -15,12 +15,13 @@
 // Grocery and Electronics are NEW and intentionally minimal right now
 // — see the onboarding/dashboard screens for those verticals for why.
 // ================================================================
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'seller_onboarding_screen.dart';
-import 'seller_grocery_onboarding_screen.dart';
 import 'seller_electronics_onboarding_screen.dart';
+import 'seller_grocery_onboarding_screen.dart';
+import 'seller_onboarding_screen.dart';
 
 const Color _bg = Color(0xFF08080F);
 const Color _card = Color(0xFF141420);
@@ -161,10 +162,19 @@ class _VerticalTile extends StatelessWidget {
               ),
             ),
             const Icon(Icons.arrow_forward_ios_rounded,
-                color: _tealLight, size: 16),
+                color: _tealLight, size: 16,),
           ],
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('emoji', emoji));
+    properties.add(StringProperty('title', title));
+    properties.add(StringProperty('subtitle', subtitle));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }

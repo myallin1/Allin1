@@ -12,6 +12,7 @@
 // pipeline (writes to service_requests, gets picked up by a nearby
 // bike hero) — with the shop name pre-filled so the customer only has
 // to describe what they ordered + confirm their delivery address.
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -58,14 +59,14 @@ const List<PartnerShop> kPartnerShops = [
   ),
   PartnerShop(
     name: 'KFC',
-    subtitle: 'Finger lickin\' good',
+    subtitle: "Finger lickin' good",
     logoText: 'KFC',
     orderUrl: 'https://online.kfc.co.in',
     gradient: [Color(0xFFC8102E), Color(0xFF8E0B20)],
   ),
   PartnerShop(
     name: 'Taj Hotel',
-    subtitle: 'Erode\'s premium dining',
+    subtitle: "Erode's premium dining",
     logoText: 'TAJ',
     orderUrl: 'https://www.tajhotels.com',
     gradient: [Color(0xFF8A6D3B), Color(0xFF5C4626)],
@@ -88,7 +89,7 @@ const List<PartnerShop> kPartnerShops = [
 
 class PartnerShopOrderScreen extends StatelessWidget {
   final PartnerShop shop;
-  const PartnerShopOrderScreen({super.key, required this.shop});
+  const PartnerShopOrderScreen({required this.shop, super.key});
 
   Future<void> _openShopSite(BuildContext context) async {
     final uri = Uri.parse(shop.orderUrl);
@@ -154,7 +155,7 @@ class PartnerShopOrderScreen extends StatelessWidget {
               const SizedBox(height: 24),
               Text('How this works', style: GoogleFonts.outfit(color: _kText, fontSize: 16, fontWeight: FontWeight.w800)),
               const SizedBox(height: 12),
-              _stepTile(1, 'Tap below to open ${shop.name}\'s own ordering site and place your order there (pay directly to them).'),
+              _stepTile(1, "Tap below to open ${shop.name}'s own ordering site and place your order there (pay directly to them)."),
               _stepTile(2, 'Once your order is confirmed, come back here and tell us your delivery address.'),
               _stepTile(3, 'One of our nearby Allin1 heroes will pick it up from ${shop.name} and deliver it to you.'),
               const Spacer(),
@@ -177,7 +178,7 @@ class PartnerShopOrderScreen extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
-                child: const Text('✅  I\'ve Ordered — Book Pickup & Delivery', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5)),
+                child: const Text("✅  I've Ordered — Book Pickup & Delivery", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5)),
               ),
             ],
           ),
@@ -204,5 +205,11 @@ class PartnerShopOrderScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<PartnerShop>('shop', shop));
   }
 }

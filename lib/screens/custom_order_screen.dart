@@ -80,7 +80,7 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
       unawaited(Future.delayed(
         const Duration(seconds: kServiceRequestPingExpirySeconds),
         () => ServiceRequestService().markTimeoutIfStillPending(requestId),
-      ));
+      ),);
 
       if (!mounted) return;
       await Navigator.pushReplacement(
@@ -163,7 +163,7 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
             ),
             const SizedBox(height: 20),
             Text('Delivery location (optional but recommended)',
-                style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
+                style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700),),
             const SizedBox(height: 8),
             TextField(
               controller: _deliveryAddressCtrl,
@@ -181,7 +181,6 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
             LocationCaptureField(
               addressController: _deliveryAddressCtrl,
               pickerTitle: 'Delivery location',
-              accentColor: _kPink,
               onLocationPicked: (lat, lng) {
                 setState(() {
                   _deliveryLat = lat;

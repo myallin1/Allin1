@@ -8,6 +8,7 @@
 // love with erode" screen) — this makes it look like ONE continuous
 // screen instead of several different ones flashing by in sequence.
 // ================================================================
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class BrandedLoadingScreen extends StatelessWidget {
@@ -86,5 +87,11 @@ class BrandedLoadingScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('statusText', statusText));
   }
 }

@@ -122,7 +122,7 @@ class _AdminLocationDemandScreenState
           children: [
             Text(
               'What customers are actually searching for in Erode — use '
-              'this alongside heroes\' preferred work areas to spot '
+              "this alongside heroes' preferred work areas to spot "
               'coverage gaps.',
               style: GoogleFonts.outfit(color: _muted, fontSize: 12),
             ),
@@ -146,8 +146,8 @@ class _AdminLocationDemandScreenState
                         .map((d) => DropdownMenuItem(
                               value: d,
                               child: Text('Last $d days',
-                                  style: GoogleFonts.outfit(color: _text)),
-                            ))
+                                  style: GoogleFonts.outfit(color: _text),),
+                            ),)
                         .toList(),
                     onChanged: (v) {
                       if (v == null) return;
@@ -171,10 +171,10 @@ class _AdminLocationDemandScreenState
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
+                              strokeWidth: 2, color: Colors.white,),
                         )
                       : const Text('Generate',
-                          style: TextStyle(color: Colors.white)),
+                          style: TextStyle(color: Colors.white),),
                 ),
               ],
             ),

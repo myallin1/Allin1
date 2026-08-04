@@ -7,7 +7,10 @@
 // to all online + available heroes, then hands off to the shared
 // tracking screen.
 // ================================================================
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard;
 import 'package:google_fonts/google_fonts.dart';
@@ -15,15 +18,13 @@ import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
-import 'dart:async';
-
 import '../services/location_service.dart';
 import '../services/map_service.dart';
-import '../widgets/server_busy_dialog.dart';
-import '../services/shared_location_inbox.dart';
 import '../services/service_request_service.dart';
+import '../services/shared_location_inbox.dart';
 import '../utils/location_link_parser.dart';
 import '../utils/service_request_labels.dart';
+import '../widgets/server_busy_dialog.dart';
 import 'hero_booking_status_screen.dart';
 import 'hero_booking_tracking_screen.dart';
 import 'location_picker_screen.dart';
@@ -49,6 +50,12 @@ class HeroBookingScreen extends StatefulWidget {
 
   @override
   State<HeroBookingScreen> createState() => _HeroBookingScreenState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('initialCategory', initialCategory));
+  }
 }
 
 class _HeroBookingScreenState extends State<HeroBookingScreen> {
@@ -424,7 +431,6 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
           // needs, and using the wrong one is a large part of why
           // recognition was coming back wrong or truncated.
           listenMode: stt.ListenMode.dictation,
-          partialResults: true,
           // Bounded session. With both of these left null the recogniser
           // runs open-ended and Android may silently restart it, which
           // is where the repeated text came from.
@@ -520,7 +526,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
       unawaited(Future.delayed(
         const Duration(seconds: kServiceRequestPingExpirySeconds),
         () => ServiceRequestService().markTimeoutIfStillPending(requestId),
-      ));
+      ),);
 
       if (!mounted) return;
       // Was ServiceRequestTrackingScreen (the older, generic 4-category
@@ -581,7 +587,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                       children: [
                         Text('Hire a Hero for anything', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 14)),
                         const SizedBox(height: 2),
-                        const Text('Errands, deliveries, help with tasks — describe it and we\'ll send the nearest available Hero.', style: TextStyle(color: _kMuted, fontSize: 11)),
+                        const Text("Errands, deliveries, help with tasks — describe it and we'll send the nearest available Hero.", style: TextStyle(color: _kMuted, fontSize: 11)),
                       ],
                     ),
                   ),
@@ -1293,13 +1299,11 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            busy
-                ? const SizedBox(
+            if (busy) const SizedBox(
                     width: 13,
                     height: 13,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: _kPink,),)
-                : Icon(icon, color: _kPink, size: 14),
+                        strokeWidth: 2, color: _kPink,),) else Icon(icon, color: _kPink, size: 14),
             const SizedBox(width: 6),
             Text(label,
                 style: GoogleFonts.outfit(
@@ -1371,7 +1375,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
               padding: const EdgeInsets.symmetric(vertical: 4),
               itemCount: suggestions.length,
               separatorBuilder: (_, __) =>
-                  Divider(height: 1, color: _kBorder),
+                  const Divider(height: 1, color: _kBorder),
               itemBuilder: (context, i) {
                 final s = suggestions[i];
                 return ListTile(
@@ -1473,6 +1477,12 @@ class _HeroTaskIdeasMarquee extends StatefulWidget {
 
   @override
   State<_HeroTaskIdeasMarquee> createState() => _HeroTaskIdeasMarqueeState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(ObjectFlagProperty<void Function(String categoryKey)>.has('onSelect', onSelect));
+  }
 }
 
 class _HeroTaskIdeasMarqueeState extends State<_HeroTaskIdeasMarquee> {
@@ -1544,7 +1554,7 @@ class _HeroTaskIdeasMarqueeState extends State<_HeroTaskIdeasMarquee> {
                     idea['label']!,
                     textAlign: TextAlign.center,
                     style: GoogleFonts.outfit(
-                        color: _kText, fontSize: 11, fontWeight: FontWeight.w700),
+                        color: _kText, fontSize: 11, fontWeight: FontWeight.w700,),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),

@@ -21,10 +21,10 @@ class FareRates {
   FareRates._();
 
   // ── Bike (day/night split — confirmed pricing) ────────────────
-  static const double bikeBaseFare = 25.0;
-  static const double bikeBaseDistanceKm = 1.0;
-  static const double bikePerKmDay = 7.0;
-  static const double bikePerKmNight = 9.0;
+  static const double bikeBaseFare = 25;
+  static const double bikeBaseDistanceKm = 1;
+  static const double bikePerKmDay = 7;
+  static const double bikePerKmNight = 9;
 
   /// Day window: 06:00 (inclusive) to 22:00 (exclusive), Asia/Kolkata.
   static const int _dayStartHour = 6;

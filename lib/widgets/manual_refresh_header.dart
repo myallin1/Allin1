@@ -10,6 +10,7 @@
 // tracking, chat) are intentionally NOT converted to this pattern —
 // only browse/overview/report screens.
 // ================================================================
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class ManualRefreshHeader extends StatelessWidget {
@@ -21,10 +22,7 @@ class ManualRefreshHeader extends StatelessWidget {
   final String? label;
 
   const ManualRefreshHeader({
-    super.key,
-    required this.lastSyncedAt,
-    required this.loading,
-    required this.onRefresh,
+    required this.lastSyncedAt, required this.loading, required this.onRefresh, super.key,
     this.accentColor = const Color(0xFFFF4FA3),
     this.textColor = Colors.white70,
     this.label,
@@ -59,8 +57,8 @@ class ManualRefreshHeader extends StatelessWidget {
             height: 30,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: accentColor.withOpacity(0.14),
-              border: Border.all(color: accentColor.withOpacity(0.4)),
+              color: accentColor.withValues(alpha: 0.14),
+              border: Border.all(color: accentColor.withValues(alpha: 0.4)),
             ),
             child: loading
                 ? Padding(
@@ -72,5 +70,16 @@ class ManualRefreshHeader extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<DateTime?>('lastSyncedAt', lastSyncedAt));
+    properties.add(DiagnosticsProperty<bool>('loading', loading));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onRefresh', onRefresh));
+    properties.add(ColorProperty('accentColor', accentColor));
+    properties.add(ColorProperty('textColor', textColor));
+    properties.add(StringProperty('label', label));
   }
 }

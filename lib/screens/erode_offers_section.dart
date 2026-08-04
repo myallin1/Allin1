@@ -8,6 +8,7 @@
 // Google Maps in street-view mode at the shop's coordinates.
 // ================================================================
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -107,7 +108,7 @@ class ErodeOffersSection extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: _offerPink.withOpacity(0.15)),
+        border: Border.all(color: _offerPink.withValues(alpha: 0.15)),
       ),
       child: Column(
         children: [
@@ -153,9 +154,9 @@ class _OfferCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: _offerPink.withOpacity(0.18)),
+          border: Border.all(color: _offerPink.withValues(alpha: 0.18)),
           boxShadow: [
-            BoxShadow(color: _offerPink.withOpacity(0.10), blurRadius: 16, offset: const Offset(0, 8)),
+            BoxShadow(color: _offerPink.withValues(alpha: 0.10), blurRadius: 16, offset: const Offset(0, 8)),
           ],
         ),
         child: Row(
@@ -203,7 +204,7 @@ class _OfferCard extends StatelessWidget {
     );
   }
 
-  String _formatValidTill(dynamic validTill) {
+  String _formatValidTill(validTill) {
     if (validTill is Timestamp) {
       final d = validTill.toDate();
       return 'Valid till ${d.day}/${d.month}/${d.year}';
@@ -213,13 +214,20 @@ class _OfferCard extends StatelessWidget {
     }
     return 'Limited period offer';
   }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('offerId', offerId));
+    properties.add(DiagnosticsProperty<Map<String, dynamic>>('data', data));
+  }
 }
 
 class OfferDetailScreen extends StatelessWidget {
   final String offerId;
   final Map<String, dynamic> data;
 
-  const OfferDetailScreen({super.key, required this.offerId, required this.data});
+  const OfferDetailScreen({required this.offerId, required this.data, super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -262,7 +270,7 @@ class OfferDetailScreen extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
@@ -315,7 +323,7 @@ class OfferDetailScreen extends StatelessWidget {
     );
   }
 
-  String _formatValidTillFull(dynamic validTill) {
+  String _formatValidTillFull(validTill) {
     if (validTill is Timestamp) {
       final d = validTill.toDate();
       return '${d.day}/${d.month}/${d.year}';
@@ -331,7 +339,7 @@ class OfferDetailScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _offerPink.withOpacity(0.15)),
+        border: Border.all(color: _offerPink.withValues(alpha: 0.15)),
       ),
       child: Row(
         children: [
@@ -384,10 +392,17 @@ class OfferDetailScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _launchStreetView(dynamic lat, dynamic lng) async {
+  Future<void> _launchStreetView(lat, lng) async {
     final uri = Uri.parse('https://www.google.com/maps?layer=c&cbll=$lat,$lng');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('offerId', offerId));
+    properties.add(DiagnosticsProperty<Map<String, dynamic>>('data', data));
   }
 }

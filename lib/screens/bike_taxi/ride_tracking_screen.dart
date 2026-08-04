@@ -124,7 +124,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Leave the app?',
-            style: TextStyle(fontWeight: FontWeight.w700)),
+            style: TextStyle(fontWeight: FontWeight.w700),),
         content: const Text('Close Allin1?'),
         actions: [
           TextButton(
@@ -138,7 +138,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
         ],
       ),
     );
-    if (exit == true && mounted) {
+    if ((exit ?? false) && mounted) {
       SystemNavigator.pop();
     }
   }

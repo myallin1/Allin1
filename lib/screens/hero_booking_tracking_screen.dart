@@ -15,6 +15,7 @@
 // ================================================================
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -310,8 +311,8 @@ class HeroBookingTrackingScreen extends StatelessWidget {
                       ),
                       if (needsEstimateApproval)
                         _EstimateApprovalCard(
-                          requestId: active!.id,
-                          amount: estimatedAmount!,
+                          requestId: active.id,
+                          amount: estimatedAmount,
                         ),
                       if (needsPayment)
                         Padding(
@@ -365,7 +366,7 @@ class HeroBookingTrackingScreen extends StatelessWidget {
                               const SizedBox(height: 10),
                               RatingFeedbackSheet(
                                 completionCollection: 'service_requests',
-                                docId: active!.id,
+                                docId: active.id,
                                 rateeCollection:
                                     assignedHeroId != null ? 'heroes' : null,
                                 rateeId: assignedHeroId,
@@ -492,11 +493,6 @@ class HeroBookingTrackingScreen extends StatelessWidget {
                         stages: labels,
                         currentIndex: currentIndex,
                         stageSubtitles: subtitles,
-                        accentColor: _kPink,
-                        completedColor: _kGreen,
-                        mutedColor: _kMuted,
-                        borderColor: _kBorder,
-                        textColor: _kText,
                         compact: true,
                       ),
                       // Cancellable only up through 'hero_assigned' (index
@@ -605,6 +601,12 @@ class HeroBookingTrackingScreen extends StatelessWidget {
       ),
     );
   }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestId', requestId));
+  }
 }
 
 // ── Customer-approval-of-estimate card ────────────────────────────
@@ -620,6 +622,13 @@ class _EstimateApprovalCard extends StatefulWidget {
 
   @override
   State<_EstimateApprovalCard> createState() => _EstimateApprovalCardState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('requestId', requestId));
+    properties.add(DoubleProperty('amount', amount));
+  }
 }
 
 class _EstimateApprovalCardState extends State<_EstimateApprovalCard> {
