@@ -504,6 +504,27 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
                     theme: _olaStyle!.theme,
                     sprites: _olaStyle!.sprites,
                     tileProviders: _olaStyle!.providers,
+                    // AGGRESSIVE PERSISTENT CACHE (per Nizam's cost-control
+                    // request -- we're on Ola's free tier): the package
+                    // already ships a real persistent byte-cache under the
+                    // hood -- IndexedDB via idb_shim on Web/PWA
+                    // (lib/src/cache/byte_storage_idb.dart), the device
+                    // filesystem on Android/iOS
+                    // (lib/src/cache/byte_storage_io.dart) -- keyed by tile
+                    // coordinate + source, so a tile fetched once is
+                    // reused across ENTIRE APP RESTARTS, not just this
+                    // session, and any tile still within fileCacheTtl is
+                    // served straight from that store with zero network
+                    // call to Ola. Default was 30 days / 50MB; bumped to
+                    // 180 days / 150MB so a hero/customer's regular
+                    // Erode-area tiles realistically never re-fetch, while
+                    // still bounding worst-case storage if someone
+                    // explores many different cities. logCacheStats is
+                    // debug-only so we can see hit/miss counts locally
+                    // without spamming production consoles.
+                    fileCacheTtl: const Duration(days: 180),
+                    fileCacheMaximumSizeInBytes: 150 * 1024 * 1024,
+                    logCacheStats: kDebugMode,
                   )
                 else
                   TileLayer(
