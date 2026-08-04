@@ -39,6 +39,13 @@ dependencies:
   # requires the experimental flutter_gpu renderer + Flutter's `main` dev
   # channel and is explicitly documented as not for production.
   vector_map_tiles: ^9.0.0-beta.8
+  # Already a transitive dep of vector_map_tiles 9.0.0-beta.8 (which pins
+  # ^6.0.0) -- declared directly too because allin1_map_widget.dart now
+  # calls vector_tile_renderer's ThemeReader() itself (see the
+  # _buildOlaStyleManually() comment for why: Ola's style JSON doesn't
+  # support vmt.StyleReader's built-in {key}-token substitution, so we
+  # build the Style by hand and only reuse this package's theme parser).
+  vector_tile_renderer: ^6.0.0
   flutter_markdown: ^0.6.22
   flutter_ringtone_player: ^4.0.0+4
   flutter_secure_storage: ^10.0.0

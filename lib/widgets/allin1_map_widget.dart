@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -11,8 +12,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart' as vmt;
+import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vtr;
 
 import '../config/api_config.dart';
 import '../services/map_service.dart';
@@ -121,7 +124,8 @@ Future<vmt.Style?> _loadOlaVectorStyle() {
       waited += stepMs;
     }
 
-    final uri = OlaMapsProvider.vectorStyleUriFor(ApiConfig.olaMapsApiKey);
+    final key = ApiConfig.olaMapsApiKey.trim();
+    final uri = OlaMapsProvider.vectorStyleUriFor(key);
     if (uri == null) {
       debugPrint(
         '[Allin1MapWidget] Ola vector style skipped (no valid key after '
@@ -130,10 +134,7 @@ Future<vmt.Style?> _loadOlaVectorStyle() {
       return null;
     }
     try {
-      final style = await vmt.StyleReader(
-        uri: uri,
-        apiKey: ApiConfig.olaMapsApiKey.trim(),
-      ).read();
+      final style = await _buildOlaStyleManually(key);
       debugPrint('[Allin1MapWidget] Ola vector style loaded OK');
       return style;
     } catch (e) {
@@ -143,6 +144,109 @@ Future<vmt.Style?> _loadOlaVectorStyle() {
       return null;
     }
   }();
+}
+
+// REGRESSION FIX (per Nizam's console screenshot: 401 Unauthorized on
+// https://api.olamaps.io/tiles/vector/v1/data/planet.json, no query string
+// at all): vmt.StyleReader's built-in api-key injection only replaces a
+// LITERAL "{key}" placeholder token inside URLs -- that's a convention some
+// providers (Stadia Maps, MapTiler) bake into their style.json responses so
+// this package can substitute the caller's key. Ola's style.json does NOT
+// contain that token in its `sources` entries (confirmed by reading
+// StyleReader's actual source on pub.dev/GitHub for this exact package
+// version) -- so every nested source/tile request StyleReader made after
+// the initial (correctly-keyed) style.json fetch went out with NO api_key
+// at all, and Ola correctly 401'd them.
+//
+// Fix: don't use vmt.StyleReader for Ola. Fetch + walk the style JSON
+// ourselves, appending `?api_key=...` (or `&api_key=...`) to every source
+// URL we actually use, exactly matching Ola's own documented query-param
+// auth convention -- then hand the theme JSON to vector_tile_renderer's
+// ThemeReader (the same class StyleReader itself delegates to) and build
+// TileProviders by hand. Sprites are intentionally skipped here (Ola's
+// style has no `{key}`-token sprite URLs either, and base map rendering --
+// roads, water, land, labels via device fonts -- doesn't depend on them);
+// can be added later if POI icons are needed.
+Future<vmt.Style> _buildOlaStyleManually(String apiKey) async {
+  final styleUri = Uri.parse(
+    'https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json',
+  ).replace(queryParameters: {'api_key': apiKey});
+
+  final styleResp =
+      await http.get(styleUri).timeout(const Duration(seconds: 10));
+  if (styleResp.statusCode != 200) {
+    throw 'Ola style fetch failed: HTTP ${styleResp.statusCode}';
+  }
+  final styleJson = json.decode(styleResp.body);
+  if (styleJson is! Map<String, dynamic>) {
+    throw 'Ola style response is not a JSON object';
+  }
+
+  final sourcesJson = styleJson['sources'];
+  if (sourcesJson is! Map) {
+    throw 'Ola style has no sources';
+  }
+
+  String withApiKey(String url) {
+    final parsed = Uri.tryParse(url);
+    if (parsed != null && parsed.queryParameters.containsKey('api_key')) {
+      return url;
+    }
+    return '$url${url.contains('?') ? '&' : '?'}api_key=$apiKey';
+  }
+
+  final providerByName = <String, vmt.VectorTileProvider>{};
+  for (final entry in sourcesJson.entries) {
+    final sourceValue = entry.value;
+    if (sourceValue is! Map) continue;
+    final sourceTypeName = sourceValue['type'];
+    vmt.TileProviderType? providerType;
+    for (final candidate in vmt.TileProviderType.values) {
+      if (candidate.name.replaceAll('_', '-') == sourceTypeName) {
+        providerType = candidate;
+        break;
+      }
+    }
+    if (providerType == null) continue;
+
+    Map<String, dynamic> resolvedSource;
+    final referencedUrl = sourceValue['url'] as String?;
+    if (referencedUrl != null) {
+      // Some vector styles point at a separate TileJSON document instead
+      // of embedding `tiles` directly -- fetch that too, with the same
+      // api_key treatment, before we can find its tile URL template.
+      final resolvedUri = Uri.tryParse(withApiKey(referencedUrl));
+      if (resolvedUri == null) continue;
+      final sourceResp =
+          await http.get(resolvedUri).timeout(const Duration(seconds: 10));
+      if (sourceResp.statusCode != 200) continue;
+      final decoded = json.decode(sourceResp.body);
+      if (decoded is! Map<String, dynamic>) continue;
+      resolvedSource = decoded;
+    } else {
+      resolvedSource = Map<String, dynamic>.from(sourceValue);
+    }
+
+    final tiles = resolvedSource['tiles'];
+    if (tiles is! List || tiles.isEmpty) continue;
+    final tileUrl = withApiKey(tiles.first as String);
+    providerByName[entry.key] = vmt.NetworkVectorTileProvider(
+      type: providerType,
+      urlTemplate: tileUrl,
+      maximumZoom: (resolvedSource['maxzoom'] as num?)?.toInt() ?? 14,
+      minimumZoom: (resolvedSource['minzoom'] as num?)?.toInt() ?? 1,
+    );
+  }
+
+  if (providerByName.isEmpty) {
+    throw 'Ola style has no usable vector sources';
+  }
+
+  return vmt.Style(
+    name: styleJson['name'] as String?,
+    theme: vtr.ThemeReader().read(styleJson),
+    providers: vmt.TileProviders(providerByName),
+  );
 }
 
 /// Allin1MapWidget - Dual Map Provider enabled map widget
