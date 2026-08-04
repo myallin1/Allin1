@@ -177,47 +177,6 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 14),
-            // NEW (per Nizam/CTO's approved feature batch): DMart's
-            // e-menu, embedded in-app (see dmart_screen.dart). Added
-            // alongside the existing custom-list-for-hero flow below,
-            // not replacing it -- per Nizam's explicit choice, this
-            // stays an additional option.
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () => Navigator.push<void>(
-                  context,
-                  MaterialPageRoute<void>(builder: (_) => const DmartScreen()),
-                ),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: _kPink.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: _kPink.withValues(alpha: 0.2)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Text('🏬', style: TextStyle(fontSize: 32)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Order from DMart', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 14)),
-                            const SizedBox(height: 2),
-                            const Text('Browse DMart\'s full grocery menu right here in the app.', style: TextStyle(color: _kMuted, fontSize: 11)),
-                          ],
-                        ),
-                      ),
-                      const Icon(Icons.chevron_right_rounded, color: _kPink),
-                    ],
-                  ),
-                ),
-              ),
-            ),
             const SizedBox(height: 24),
             Text('Your grocery list', style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
@@ -302,14 +261,16 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
           ],
         ),
       ),
-      // FIX (per Nizam's correction): consistent bottom page-split UI
-      // across all service request types — a Book/Send button and a
-      // "Booking Status" button opening a full task-history list,
-      // matching the pink/white pattern from custom_food_order_screen.
-      // dart and hero_booking_screen.dart. Grocery had neither before.
+      // FIX (per Nizam's correction, then a follow-up 2-page-to-3-page
+      // split): three equal-weight destinations now instead of two --
+      // Send Order (this custom list form, the default landing page),
+      // Store Order (DMart's e-menu, dmart_screen.dart -- previously a
+      // banner buried inside this form's scroll content, now promoted
+      // to its own top-level action in the center per Nizam's explicit
+      // request), and Order Status (unchanged, full task-history list).
       bottomNavigationBar: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
           child: Row(
             children: [
               Expanded(
@@ -321,16 +282,36 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
                       elevation: 4,
                       shadowColor: _kPink.withValues(alpha: 0.4),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
                     ),
                     onPressed: _canSubmit ? _submit : null,
                     icon: _submitting
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                         : const Icon(Icons.shopping_cart_checkout_rounded, color: Colors.white, size: 18),
-                    label: Text('Send Order', style: GoogleFonts.outfit(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                    label: Text('Send Order', style: GoogleFonts.outfit(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SizedBox(
+                  height: 54,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: _kGreen, width: 1.4),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                    ),
+                    onPressed: () => Navigator.push<void>(
+                      context,
+                      MaterialPageRoute<void>(builder: (_) => const DmartScreen()),
+                    ),
+                    icon: const Icon(Icons.storefront_rounded, color: _kGreen, size: 18),
+                    label: Text('Store Order', style: GoogleFonts.outfit(color: _kGreen, fontSize: 13, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: SizedBox(
                   height: 54,
@@ -338,13 +319,14 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: _kPink, width: 1.4),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
                     ),
                     onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => const GroceryOrderStatusScreen()),
                     ),
                     icon: const Icon(Icons.receipt_long_rounded, color: _kPink, size: 18),
-                    label: Text('Order Status', style: GoogleFonts.outfit(color: _kPink, fontSize: 14, fontWeight: FontWeight.bold)),
+                    label: Text('Status', style: GoogleFonts.outfit(color: _kPink, fontSize: 13, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ),
