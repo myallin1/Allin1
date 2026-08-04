@@ -230,7 +230,7 @@ Future<vmt.Style> _buildOlaStyleManually(String apiKey) async {
     final tiles = resolvedSource['tiles'];
     if (tiles is! List || tiles.isEmpty) continue;
     final tileUrl = withApiKey(tiles.first as String);
-    providerByName[entry.key] = vmt.NetworkVectorTileProvider(
+    providerByName[entry.key as String] = vmt.NetworkVectorTileProvider(
       type: providerType,
       urlTemplate: tileUrl,
       maximumZoom: (resolvedSource['maxzoom'] as num?)?.toInt() ?? 14,

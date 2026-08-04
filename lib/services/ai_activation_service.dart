@@ -10,10 +10,18 @@ class AiActivationService extends ChangeNotifier {
 
   String _apiKey = '';
   bool _isAiClaimed = false;
+  // "MyAllin1 Pro" — the Voice-to-Order tier. Free tier (text chat) only
+  // needs isAiActivated (a Groq key present, provisioned by Admin after a
+  // support call). Pro is a separate, admin-set flag on top of that —
+  // customers who've paid/been granted Pro can also use voice ordering.
+  // Stored exactly like _isAiClaimed: a boolean under promoClaims on the
+  // user's Firestore doc, flipped by Admin, never by the client.
+  bool _isProUnlocked = false;
 
   String get apiKey => _apiKey;
   bool get isAiClaimed => _isAiClaimed;
   bool get isAiActivated => _apiKey.trim().isNotEmpty;
+  bool get isProUnlocked => _isProUnlocked;
   bool get showFloatingCompanion => _isAiClaimed && !isAiActivated;
 
   AiActivationService() {
@@ -31,8 +39,9 @@ class AiActivationService extends ChangeNotifier {
     bool notify = true,
   }) async {
     if (user == null) {
-      if (_isAiClaimed) {
+      if (_isAiClaimed || _isProUnlocked) {
         _isAiClaimed = false;
+        _isProUnlocked = false;
         if (notify) {
           notifyListeners();
         }
@@ -50,9 +59,11 @@ class AiActivationService extends ChangeNotifier {
           (data['promoClaims'] as Map<String, dynamic>?) ??
               <String, dynamic>{};
       final nextClaimed = claims['ai_assistant'] == true;
+      final nextPro = claims['ai_pro'] == true;
 
-      if (_isAiClaimed != nextClaimed) {
+      if (_isAiClaimed != nextClaimed || _isProUnlocked != nextPro) {
         _isAiClaimed = nextClaimed;
+        _isProUnlocked = nextPro;
         if (notify) {
           notifyListeners();
         }
