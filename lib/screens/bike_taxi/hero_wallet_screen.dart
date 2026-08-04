@@ -155,7 +155,7 @@ class _HeroWalletScreenState extends State<HeroWalletScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: _statChip(
-                  'Commission Paid',
+                  'App Usage Fees Paid',
                   '₹${wallet.lifetimeCommissionPaid.toStringAsFixed(0)}',
                 ),
               ),
@@ -262,8 +262,17 @@ class _HeroWalletScreenState extends State<HeroWalletScreen> {
       case HeroWalletTxnType.recharge:
         title = 'Wallet Recharge';
         break;
-      case HeroWalletTxnType.commissionDebit:
-        title = 'Commission (${txn.serviceType ?? 'ride'})';
+      case HeroWalletTxnType.infraUsageFee:
+        final parts = <String>[];
+        if (txn.activeMinutes != null && txn.activeMinutes! > 0) {
+          parts.add('${txn.activeMinutes!.toStringAsFixed(0)} min online');
+        }
+        if (txn.ridesHandled != null && txn.ridesHandled! > 0) {
+          parts.add('${txn.ridesHandled} ride${txn.ridesHandled == 1 ? '' : 's'}');
+        }
+        title = parts.isEmpty
+            ? 'App Usage Fee'
+            : 'App Usage Fee (${parts.join(', ')})';
         break;
       case HeroWalletTxnType.clawback:
         title = 'Recharge Rejected — Claw-back';

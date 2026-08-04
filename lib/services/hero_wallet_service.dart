@@ -1,39 +1,52 @@
 // ================================================================
-// HeroWalletService — Prepaid Commission Wallet (Allin1 Super App)
+// HeroWalletService — App Infra Cost Recovery Wallet (Allin1 Super App)
 // ================================================================
-// Implements the "Revenue Master Plan" Nizam approved: heroes recharge
-// a prepaid balance (auto-credited immediately on submission, verified
-// by admin afterward — "Auto-Credit + Post-Verify / Claw-back"), and
-// the platform's commission is debited from that same balance on every
-// completed ride. A hero whose balance drops below
+// REPLACED per Nizam's explicit instruction: this is NOT a percentage
+// commission on hero earnings anymore. We provide a free earning
+// portal and charge only a minimal, usage-proportional fee for
+// server/database maintenance -- computed from a hero's own real
+// activity (minutes spent Online, rides handled), never a cut of what
+// they earn. Heroes recharge a prepaid balance (auto-credited
+// immediately on submission, verified by admin afterward -- "Auto-
+// Credit + Post-Verify / Claw-back"), and infra usage fees are debited
+// from that same balance. A hero whose balance drops below
 // [HeroWalletModel.lowBalanceThreshold] stops receiving new trip
 // requests until they recharge again.
+//
+// "Zero Usage = Zero Cost" is structural, not a special case: if a hero
+// never opens the app / never goes Online, HeroUsageAccumulatorService
+// never starts a session, flushUsageCost() is simply never called, and
+// no infra_usage_fee entries are ever written for that hero. There is
+// no recurring daily fee anywhere in this design.
+//
+// "Batched Background Deductions" (cost optimization, per Nizam):
+// this method is intentionally NOT called every minute. It is called
+// exactly twice per ride lifecycle at most -- once when a ride
+// completes, once when the hero goes Offline -- with the accumulated
+// minutes/rides handed in by the caller (see
+// HeroUsageAccumulatorService.consumeActiveMinutes() /
+// consumeRidesHandled()). This keeps OUR OWN Firestore write costs
+// bounded by hero activity, not by wall-clock time.
 //
 // STRICT constraint (explicit, from Nizam): NO Cloud Functions — Spark
 // (free) Firebase plan doesn't support them. Every mutation here is a
 // plain client-side `FirebaseFirestore.runTransaction`, which is the
 // strongest consistency guarantee available without server code: it
 // re-reads the balance at commit time and retries automatically if
-// another write (e.g. a ride completing at the same moment as a
-// recharge) raced it, so two concurrent transactions on the same
+// another write raced it, so two concurrent transactions on the same
 // hero's wallet can never silently clobber each other.
 //
 // What plain Firestore rules genuinely CANNOT stop, since there is no
-// trusted server to compute "the correct commission amount" or "did
-// this UPI payment really happen": a modified client could, in theory,
-// call these methods with fabricated numbers. This is the accepted
-// trade-off of the no-Cloud-Functions constraint, mitigated by (a) the
-// post-verify claw-back flow for recharges, and (b) commission debits
-// being computed from the ride's OWN stored fare/serviceType fields
-// (read fresh inside the transaction), not from a value the caller
-// supplies directly.
+// trusted server to independently recompute "the correct usage cost" or
+// "did this UPI payment really happen": a modified client could, in
+// theory, call these methods with fabricated numbers. This is the
+// accepted trade-off of the no-Cloud-Functions constraint, mitigated by
+// the post-verify claw-back flow for recharges.
 // ================================================================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/hero_wallet_model.dart';
-import '../models/platform_settings.dart';
-import 'platform_settings_service.dart';
 
 class HeroWalletService {
   HeroWalletService._internal();
@@ -144,34 +157,51 @@ class HeroWalletService {
     });
   }
 
-  /// Called by the Hero App at the exact moment a ride is marked
-  /// complete/paid (see hero_ride_screen.dart's `_markPaymentReceived`).
-  /// Computes commission from the ride's own stored fare + serviceType
-  /// via the existing admin-configurable `RiderCommission` rates, and
-  /// debits it from the hero's prepaid balance. This is intentionally
-  /// SEPARATE from `heroes/{uid}.walletBalance` / `wallet_transactions`
-  /// (the hero's own collected-cash earnings ledger) — that flow is
-  /// unrelated and untouched by this method.
+  // Token formula (per Nizam's "App Infra Cost Recovery" architecture):
+  // a minimal charge per minute the hero was actually Online (server
+  // presence writes, RTDB radar listeners, ping subscriptions -- all
+  // genuine infra load), plus a minimal charge per ride actually
+  // handled (dispatch + status-update + payment-settlement reads/
+  // writes). Both terms are strictly activity-driven, so zero activity
+  // produces exactly zero cost. Tune these two constants to match real
+  // observed Firestore/RTDB cost per hero -- they are the entire
+  // pricing model now, replacing RiderCommission for heroes.
+  static const double ratePerActiveMinute = 0.05; // ₹ per online minute
+  static const double ratePerRideHandled = 2.0; // ₹ per completed ride
+
+  /// Called by the Hero App at two batched points ONLY -- a ride
+  /// completing, or the hero going Offline (see
+  /// hero_ride_screen.dart / hero_home_screen.dart) -- with the minutes/
+  /// rides accumulated in memory since the last flush (see
+  /// HeroUsageAccumulatorService). This is intentionally NOT called
+  /// every minute in real time, per Nizam's explicit cost-optimization
+  /// instruction: batching keeps OUR OWN Firestore write costs bounded
+  /// by hero activity rather than by elapsed wall-clock time.
+  ///
+  /// "Zero Usage = Zero Cost": if both [activeMinutes] and
+  /// [ridesHandled] are (approximately) zero, this returns immediately
+  /// without writing anything at all -- no entry, no wallet touch.
+  ///
+  /// This is intentionally SEPARATE from `heroes/{uid}.walletBalance` /
+  /// `wallet_transactions` (the hero's own collected-cash earnings
+  /// ledger) — that flow is unrelated and untouched by this method.
   ///
   /// Non-fatal by design at the call site: a failure here should never
   /// block the hero from completing/closing out a ride they already
-  /// collected cash for. Callers should wrap this in try/catch and just
-  /// log on failure, exactly like every other post-completion side
-  /// effect in that screen.
-  Future<void> debitCommissionForRide({
+  /// collected cash for, or from going Offline. Callers should wrap
+  /// this in try/catch and just log on failure.
+  Future<void> flushUsageCost({
     required String heroId,
-    required String rideId,
-    required String serviceType,
-    required double fareAmount,
+    required double activeMinutes,
+    required int ridesHandled,
   }) async {
-    if (fareAmount <= 0) return;
+    if (activeMinutes <= 0 && ridesHandled <= 0) return;
 
-    final settings = await PlatformSettingsService().getSettings();
-    final commissionPercent =
-        settings.riderCommission.getCommissionForType(serviceType);
-    final commissionAmount =
-        (fareAmount * commissionPercent / 100).roundToDouble();
-    if (commissionAmount <= 0) return;
+    final rawCost =
+        (activeMinutes * ratePerActiveMinute) + (ridesHandled * ratePerRideHandled);
+    // Round to paise -- avoids writing values like 0.0500000001 forever.
+    final usageCost = (rawCost * 100).roundToDouble() / 100;
+    if (usageCost <= 0) return;
 
     final walletRef = _walletRef(heroId);
     final txnRef = _txnRef(heroId).doc();
@@ -189,17 +219,22 @@ class HeroWalletService {
               50.0;
       // Balance is allowed to go negative here on purpose -- a hero
       // should never be blocked from CLOSING a ride they already
-      // collected cash for just because their prepaid balance was thin.
-      // Going negative simply makes isEligibleForRequests false, which
-      // is exactly the enforcement mechanism: they stop receiving NEW
-      // requests until they recharge back above the threshold.
-      final newBalance = currentBalance - commissionAmount;
+      // collected cash for, or from going Offline, just because their
+      // prepaid balance was thin. Going negative simply makes
+      // isEligibleForRequests false, which is exactly the enforcement
+      // mechanism: they stop receiving NEW requests until they recharge
+      // back above the threshold.
+      final newBalance = currentBalance - usageCost;
 
       tx.set(
         walletRef,
         {
           'balance': newBalance,
-          'lifetimeCommissionPaid': currentPaid + commissionAmount,
+          // Field name kept as lifetimeCommissionPaid for storage
+          // continuity with the (now-obsolete) commission model this
+          // replaced -- semantically it's lifetime infra usage fees
+          // paid. Renaming would just be churn for a single number.
+          'lifetimeCommissionPaid': currentPaid + usageCost,
           'lowBalanceThreshold': threshold,
           'isEligibleForRequests': newBalance >= threshold,
           'updatedAt': FieldValue.serverTimestamp(),
@@ -212,12 +247,11 @@ class HeroWalletService {
         HeroWalletTransactionModel(
           id: txnRef.id,
           heroId: heroId,
-          type: HeroWalletTxnType.commissionDebit,
-          amount: -commissionAmount,
+          type: HeroWalletTxnType.infraUsageFee,
+          amount: -usageCost,
           balanceAfter: newBalance,
-          rideId: rideId,
-          serviceType: serviceType,
-          commissionPercent: commissionPercent,
+          activeMinutes: activeMinutes,
+          ridesHandled: ridesHandled,
         ).toFirestore(),
       );
     });

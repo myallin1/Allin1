@@ -18,6 +18,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/fare_rates.dart';
 import '../../models/ride_model.dart';
+import '../../services/hero_usage_accumulator_service.dart';
 import '../../services/hero_wallet_service.dart';
 import '../../services/map_service.dart';
 import '../../services/hero_ride_notification_service.dart';
@@ -967,9 +968,15 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         'timestamp': FieldValue.serverTimestamp(),
        });
 
-      // REVENUE MASTER PLAN (per Nizam's explicit instruction): debit the
-      // platform's commission from the hero's PREPAID wallet the moment
-      // a ride's payment is marked received. This is intentionally a
+      // APP INFRA COST RECOVERY (per Nizam's explicit instruction --
+      // REPLACES the flat % commission model entirely): no cut of the
+      // hero's fare is taken here at all. Instead, a minimal
+      // usage-proportional fee (minutes spent Online + this ride) is
+      // flushed from the in-memory accumulator to the hero's PREPAID
+      // wallet in ONE batched write -- see HeroUsageAccumulatorService /
+      // HeroWalletService.flushUsageCost() for the full rationale
+      // (batching keeps OUR OWN Firestore costs bounded by hero
+      // activity, not wall-clock time). This is intentionally a
       // SEPARATE wallet/ledger from `heroes/{uid}.walletBalance` /
       // `wallet_transactions` just written above (that's the hero's own
       // collected-cash earnings bookkeeping, untouched). Non-fatal by
@@ -977,13 +984,15 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       // never get stuck here because of a wallet-service hiccup.
       bool walletEligible = true;
       try {
-        await HeroWalletService().debitCommissionForRide(
+        HeroUsageAccumulatorService().recordRideHandled();
+        final activeMinutes =
+            HeroUsageAccumulatorService().consumeActiveMinutes();
+        final ridesHandled =
+            HeroUsageAccumulatorService().consumeRidesHandled();
+        await HeroWalletService().flushUsageCost(
           heroId: user.uid,
-          rideId: widget.rideDocId,
-          serviceType: rideData['vehicleType'] as String? ??
-              widget.ride.vehicleType ??
-              'bike',
-          fareAmount: fare,
+          activeMinutes: activeMinutes,
+          ridesHandled: ridesHandled,
         );
         final walletSnap = await FirebaseFirestore.instance
             .collection('hero_wallets')
@@ -992,7 +1001,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         walletEligible =
             (walletSnap.data()?['isEligibleForRequests'] as bool?) ?? true;
       } catch (e) {
-        debugPrint('[HeroRideScreen] Wallet commission debit failed (non-fatal): $e');
+        debugPrint('[HeroRideScreen] Wallet usage-fee flush failed (non-fatal): $e');
       }
 
       await FirebaseDatabase.instance

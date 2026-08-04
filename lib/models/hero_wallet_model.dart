@@ -76,15 +76,22 @@ class HeroWalletModel {
   bool get isLowBalance => balance < lowBalanceThreshold;
 }
 
-enum HeroWalletTxnType { recharge, commissionDebit, clawback, adjustment }
+// REPLACED (per Nizam's explicit instruction): the flat %
+// RiderCommission-based cut is obsolete. `infraUsageFee` is the only
+// debit type now -- a minimal, usage-proportional charge for server/DB
+// maintenance (active-minutes-online + rides-handled), computed and
+// batched client-side by HeroUsageAccumulatorService /
+// HeroWalletService.flushUsageCost(). Zero activity produces zero
+// entries of this type, by construction.
+enum HeroWalletTxnType { recharge, infraUsageFee, clawback, adjustment }
 
 extension HeroWalletTxnTypeX on HeroWalletTxnType {
   String get wireName {
     switch (this) {
       case HeroWalletTxnType.recharge:
         return 'recharge';
-      case HeroWalletTxnType.commissionDebit:
-        return 'commission_debit';
+      case HeroWalletTxnType.infraUsageFee:
+        return 'infra_usage_fee';
       case HeroWalletTxnType.clawback:
         return 'clawback';
       case HeroWalletTxnType.adjustment:
@@ -96,8 +103,8 @@ extension HeroWalletTxnTypeX on HeroWalletTxnType {
     switch (value) {
       case 'recharge':
         return HeroWalletTxnType.recharge;
-      case 'commission_debit':
-        return HeroWalletTxnType.commissionDebit;
+      case 'infra_usage_fee':
+        return HeroWalletTxnType.infraUsageFee;
       case 'clawback':
         return HeroWalletTxnType.clawback;
       default:
@@ -113,8 +120,11 @@ class HeroWalletTransactionModel {
   final double amount; // positive = credit, negative = debit
   final double balanceAfter;
   final String? rideId;
-  final String? serviceType;
-  final double? commissionPercent;
+  // Usage-fee breakdown (infra_usage_fee entries only) -- kept
+  // transparent so a hero can see exactly what they were charged for,
+  // per Nizam's "Transparent ... Earning Meter" requirement.
+  final double? activeMinutes;
+  final int? ridesHandled;
   final String? rechargeRequestId;
   final DateTime? createdAt;
 
@@ -125,8 +135,8 @@ class HeroWalletTransactionModel {
     required this.amount,
     required this.balanceAfter,
     this.rideId,
-    this.serviceType,
-    this.commissionPercent,
+    this.activeMinutes,
+    this.ridesHandled,
     this.rechargeRequestId,
     this.createdAt,
   });
@@ -142,8 +152,8 @@ class HeroWalletTransactionModel {
       amount: (data['amount'] as num?)?.toDouble() ?? 0.0,
       balanceAfter: (data['balanceAfter'] as num?)?.toDouble() ?? 0.0,
       rideId: data['rideId'] as String?,
-      serviceType: data['serviceType'] as String?,
-      commissionPercent: (data['commissionPercent'] as num?)?.toDouble(),
+      activeMinutes: (data['activeMinutes'] as num?)?.toDouble(),
+      ridesHandled: (data['ridesHandled'] as num?)?.toInt(),
       rechargeRequestId: data['rechargeRequestId'] as String?,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
     );
@@ -156,8 +166,8 @@ class HeroWalletTransactionModel {
       'amount': amount,
       'balanceAfter': balanceAfter,
       if (rideId != null) 'rideId': rideId,
-      if (serviceType != null) 'serviceType': serviceType,
-      if (commissionPercent != null) 'commissionPercent': commissionPercent,
+      if (activeMinutes != null) 'activeMinutes': activeMinutes,
+      if (ridesHandled != null) 'ridesHandled': ridesHandled,
       if (rechargeRequestId != null) 'rechargeRequestId': rechargeRequestId,
       'createdAt': FieldValue.serverTimestamp(),
     };

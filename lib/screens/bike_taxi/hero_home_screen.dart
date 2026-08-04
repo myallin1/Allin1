@@ -26,6 +26,8 @@ import '../../models/ride_model.dart';
 import '../../services/app_update_checker.dart';
 import '../../services/db_usage_tracker.dart';
 import '../../services/hero_ride_notification_service.dart';
+import '../../services/hero_usage_accumulator_service.dart';
+import '../../services/hero_wallet_service.dart';
 import '../../services/hero_web_audio_service.dart';
 import '../../services/location_service.dart';
 import '../../services/service_request_service.dart';
@@ -1029,10 +1031,45 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       if (online) {
         _listenForHeroPings();
         _listenForServicePings();
+        // APP INFRA COST RECOVERY (per Nizam's instruction): start the
+        // in-memory "active minutes" clock the moment the hero is
+        // genuinely online. Idempotent -- a lifecycle-resume that just
+        // re-confirms an already-online state does NOT reset it (see
+        // HeroUsageAccumulatorService.startSession()).
+        if (isStateTransition) {
+          HeroUsageAccumulatorService().startSession();
+        }
       } else {
         _heroPingSub?.cancel();
         _heroPingSub = null;
         _stopServicePingListening();
+        // APP INFRA COST RECOVERY: flush the accumulated online-minutes
+        // usage fee the moment the hero goes Offline -- this is one of
+        // only two flush points in the whole design (the other is ride
+        // completion, in hero_ride_screen.dart), per Nizam's explicit
+        // "batched, not per-minute" cost-optimization instruction. Fully
+        // non-fatal: a flush failure must never block the hero from
+        // actually going offline.
+        if (isStateTransition) {
+          final activeMinutes =
+              HeroUsageAccumulatorService().consumeActiveMinutes();
+          final ridesHandled =
+              HeroUsageAccumulatorService().consumeRidesHandled();
+          HeroUsageAccumulatorService().endSession();
+          unawaited(
+            HeroWalletService()
+                .flushUsageCost(
+                  heroId: _user!.uid,
+                  activeMinutes: activeMinutes,
+                  ridesHandled: ridesHandled,
+                )
+                .catchError((Object e) {
+              debugPrint(
+                '[HeroHomeScreen] Usage-fee flush on offline-toggle failed (non-fatal): $e',
+              );
+            }),
+          );
+        }
         // FIX: this is the root cause of "admin dispatched a ride but the
         // hero never saw it." Going online (the `if (online)` branch
         // above) writes online_heroes/{uid} — but going offline never
