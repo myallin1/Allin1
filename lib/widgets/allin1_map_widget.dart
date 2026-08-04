@@ -1,4 +1,4 @@
-﻿// lib/widgets/allin1_map_widget.dart
+// lib/widgets/allin1_map_widget.dart
 // Dual Map Provider Architecture | Ola + OSM
 // Architecture: ListenableBuilder only (NO Streams, NO ValueKey)
 // ─────────────────────────────────────────────
@@ -6,7 +6,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +17,7 @@ import 'package:vector_map_tiles/vector_map_tiles.dart' as vmt;
 import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vtr;
 
 import '../config/api_config.dart';
+import '../services/hive_cache.dart';
 import '../services/map_service.dart';
 import '../services/ola_maps_provider.dart';
 
@@ -167,7 +167,39 @@ Future<vmt.Style?> _loadOlaVectorStyle() {
 // style has no `{key}`-token sprite URLs either, and base map rendering --
 // roads, water, land, labels via device fonts -- doesn't depend on them);
 // can be added later if POI icons are needed.
+// PERSISTENT STYLE CACHE (fix: repeat Ola network calls on every app open)
+// ─────────────────────────────────────────────────────────────────────
+// The vector TILE BYTES were already persisted to disk correctly (see
+// vmt.VectorTileLayer's fileCacheTtl/fileCacheMaximumSizeInBytes below),
+// but the STYLE resolution done here -- the style.json fetch, plus any
+// nested TileJSON source fetches -- was only cached in the module-level
+// `_olaVectorStyleFuture`, which is an in-memory variable that resets to
+// null on every cold start. So even with tile bytes cached, every single
+// app launch still re-hit Ola's network API twice (style.json + source
+// TileJSON) before it could render a single (already-cached) tile.
+// Fix: persist the RESOLVED style JSON + per-source tile URL templates
+// (the only two things a fresh vmt.Style needs) to disk via HiveCache
+// with a 7-day TTL. On a cache hit, this function does zero network
+// calls -- it rebuilds the same vmt.Style purely from the cached JSON,
+// which is fast (sync JSON parsing), local, and free.
+const _kOlaStyleCacheKey = 'ola_vector_style_resolved_v1';
+const _kOlaStyleCacheTtl = Duration(days: 7);
+
 Future<vmt.Style> _buildOlaStyleManually(String apiKey) async {
+  final cached = await HiveCache.get<Map>(_kOlaStyleCacheKey);
+  if (cached != null) {
+    try {
+      final style = _styleFromCachedJson(cached);
+      if (style != null) {
+        debugPrint('[Allin1MapWidget] Ola vector style loaded from disk '
+            'cache (no network call)');
+        return style;
+      }
+    } catch (e) {
+      debugPrint('[Allin1MapWidget] Ola style cache unusable, refetching: $e');
+    }
+  }
+
   final styleUri = Uri.parse(
     'https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json',
   ).replace(queryParameters: {'api_key': apiKey});
@@ -196,6 +228,12 @@ Future<vmt.Style> _buildOlaStyleManually(String apiKey) async {
   }
 
   final providerByName = <String, vmt.VectorTileProvider>{};
+  // Resolved per-source info collected alongside providerByName, purely
+  // so it can be persisted to disk once we're done -- everything a
+  // future cold start needs to rebuild providerByName without any HTTP
+  // calls at all.
+  final resolvedSourcesForCache = <String, Map<String, dynamic>>{};
+
   for (final entry in sourcesJson.entries) {
     final sourceValue = entry.value;
     if (sourceValue is! Map) continue;
@@ -230,21 +268,81 @@ Future<vmt.Style> _buildOlaStyleManually(String apiKey) async {
     final tiles = resolvedSource['tiles'];
     if (tiles is! List || tiles.isEmpty) continue;
     final tileUrl = withApiKey(tiles.first as String);
+    final maxzoom = (resolvedSource['maxzoom'] as num?)?.toInt() ?? 14;
+    final minzoom = (resolvedSource['minzoom'] as num?)?.toInt() ?? 1;
     providerByName[entry.key as String] = vmt.NetworkVectorTileProvider(
       type: providerType,
       urlTemplate: tileUrl,
-      maximumZoom: (resolvedSource['maxzoom'] as num?)?.toInt() ?? 14,
-      minimumZoom: (resolvedSource['minzoom'] as num?)?.toInt() ?? 1,
+      maximumZoom: maxzoom,
+      minimumZoom: minzoom,
     );
+    resolvedSourcesForCache[entry.key as String] = {
+      'type': sourceTypeName,
+      'urlTemplate': tileUrl,
+      'maxzoom': maxzoom,
+      'minzoom': minzoom,
+    };
   }
 
   if (providerByName.isEmpty) {
     throw 'Ola style has no usable vector sources';
   }
 
+  // Fire-and-forget: don't let a disk-write failure affect this session's
+  // (already-successful) style load.
+  unawaited(HiveCache.put(
+    _kOlaStyleCacheKey,
+    <String, dynamic>{
+      'styleJson': styleJson,
+      'resolvedSources': resolvedSourcesForCache,
+    },
+    ttl: _kOlaStyleCacheTtl,
+  ));
+
   return vmt.Style(
     name: styleJson['name'] as String?,
     theme: vtr.ThemeReader().read(styleJson),
+    providers: vmt.TileProviders(providerByName),
+  );
+}
+
+/// Rebuilds a [vmt.Style] purely from the JSON persisted by
+/// [_buildOlaStyleManually] above -- no network calls. Returns null if the
+/// cached shape is unexpected (e.g. an older cache format), so the caller
+/// falls back to a normal network fetch instead of crashing.
+vmt.Style? _styleFromCachedJson(Map cached) {
+  final styleJson = cached['styleJson'];
+  final resolvedSources = cached['resolvedSources'];
+  if (styleJson is! Map || resolvedSources is! Map) return null;
+  final styleJsonTyped = Map<String, dynamic>.from(styleJson);
+
+  final providerByName = <String, vmt.VectorTileProvider>{};
+  for (final entry in resolvedSources.entries) {
+    final info = entry.value;
+    if (info is! Map) continue;
+    final sourceTypeName = info['type'];
+    vmt.TileProviderType? providerType;
+    for (final candidate in vmt.TileProviderType.values) {
+      if (candidate.name.replaceAll('_', '-') == sourceTypeName) {
+        providerType = candidate;
+        break;
+      }
+    }
+    if (providerType == null) continue;
+    final urlTemplate = info['urlTemplate'] as String?;
+    if (urlTemplate == null) continue;
+    providerByName[entry.key as String] = vmt.NetworkVectorTileProvider(
+      type: providerType,
+      urlTemplate: urlTemplate,
+      maximumZoom: (info['maxzoom'] as num?)?.toInt() ?? 14,
+      minimumZoom: (info['minzoom'] as num?)?.toInt() ?? 1,
+    );
+  }
+  if (providerByName.isEmpty) return null;
+
+  return vmt.Style(
+    name: styleJsonTyped['name'] as String?,
+    theme: vtr.ThemeReader().read(styleJsonTyped),
     providers: vmt.TileProviders(providerByName),
   );
 }
@@ -300,6 +398,8 @@ class Allin1MapWidget extends StatefulWidget {
     properties.add(DiagnosticsProperty<bool>('interactive', interactive));
     properties.add(DiagnosticsProperty<MapController?>('mapController', mapController));
     properties.add(ObjectFlagProperty<VoidCallback?>.has('onMapReady', onMapReady));
+    properties.add(ObjectFlagProperty<void Function(int index)?>.has('onMarkerTap', onMarkerTap));
+    properties.add(ObjectFlagProperty<void Function(LatLng center, bool gestureFinished)?>.has('onCenterChanged', onCenterChanged));
   }
 }
 
@@ -679,7 +779,7 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
                                     'Allin1 map loading...',
                                     textAlign: TextAlign.center,
                                     style: GoogleFonts.outfit(
-                                      color: Color(0xFF4A1236),
+                                      color: const Color(0xFF4A1236),
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
                                     ),
