@@ -31,10 +31,21 @@
 //    customer lands one tap from confirming, no manual re-typing. Only
 //    utterances with no recognizable service keyword fall back to the
 //    normal AI text reply.
+// 6. Interactive Disambiguation (per Nizam's follow-up safety request):
+//    the AI never silently guesses on a parsed booking anymore. Once a
+//    service + destination are resolved, it asks a spoken + on-screen
+//    clarifying question ("Did you mean an Auto to Erode Railway
+//    Station?") with Yes/No/Type-it-instead chips, and automatically
+//    starts listening again for a voice "yes"/"no" reply — mirroring
+//    the confirm-before-you-act pattern this assistant itself follows.
+//    Saying/tapping "No" asks for the destination again without losing
+//    context (the recognized service is kept); "Type it instead" hands
+//    control back to the text field. See _VoiceFlowState below.
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -46,6 +57,13 @@ import '../services/voice_booking_intent_service.dart';
 import '../widgets/server_busy_dialog.dart' show kCallCenterNumberIntl;
 import 'bike_taxi/bike_booking_screen.dart';
 import 'sos_screen.dart';
+
+// State machine for the voice disambiguation loop. `idle` means a fresh
+// utterance goes through the normal parse-from-scratch path; the other
+// two states mean we're mid-conversation about a specific booking and
+// the next utterance/typed message should be interpreted as a reply to
+// that, not a brand new command.
+enum _VoiceFlowState { idle, awaitingConfirmation, awaitingDestination }
 
 // ---- Dark, glowing "Super Hero" palette ---------------------------------
 const Color _bg = Color(0xFF0B0B12);
@@ -90,6 +108,8 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   final List<_GuruMessage> _messages = <_GuruMessage>[];
   final stt.SpeechToText _speech = stt.SpeechToText();
   final VoiceBookingIntentService _voiceIntent = VoiceBookingIntentService();
+  final FlutterTts _tts = FlutterTts();
+  final FocusNode _inputFocusNode = FocusNode();
 
   bool _isTyping = false;
   bool _isListening = false;
@@ -99,20 +119,40 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   // sent a fallback chat message) for this listening session.
   bool _voiceResultHandled = false;
 
+  // Interactive Disambiguation state (see _VoiceFlowState doc above).
+  _VoiceFlowState _voiceState = _VoiceFlowState.idle;
+  VoiceBookingIntent? _pendingIntent; // set while awaitingConfirmation
+  VoiceService? _pendingService; // set while awaitingDestination
+  // Index into _messages of the currently-active confirmation bubble, so
+  // its Yes/No/Type chips can be hidden the moment it's acted on instead
+  // of staying tappable on old messages once the conversation moves on.
+  int? _activeConfirmationIndex;
+
   @override
   void dispose() {
     _api.dispose();
     _inputController.dispose();
+    _inputFocusNode.dispose();
     _scrollController.dispose();
     if (_isListening) {
       unawaited(_speech.stop());
     }
+    unawaited(_tts.stop());
     super.dispose();
   }
 
   Future<void> _sendMessage([String? presetText]) async {
     final input = (presetText ?? _inputController.text).trim();
     if (input.isEmpty || _isTyping) return;
+
+    // A typed message while we're mid-disambiguation is a reply to that
+    // flow (the destination the AI just asked for), not a fresh chat
+    // question — this is exactly what "Type it instead" hands off to.
+    if (presetText == null && _voiceState == _VoiceFlowState.awaitingDestination) {
+      _inputController.clear();
+      unawaited(_handleDestinationReply(input, spoken: false));
+      return;
+    }
 
     setState(() {
       _messages.add(_GuruMessage(role: 'user', text: input));
@@ -172,6 +212,14 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
       return;
     }
 
+    await _startListening();
+  }
+
+  // Shared listen-start used both for the manual mic tap and for the
+  // automatic re-listen that follows a spoken clarifying question — the
+  // Pro/paywall check only applies to the manual tap (by the time we're
+  // auto-following-up mid-conversation, Pro was already established).
+  Future<void> _startListening() async {
     if (!_speechReady) {
       _speechReady = await _speech.initialize(
         onStatus: (status) {
@@ -196,6 +244,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
       return;
     }
 
+    if (!mounted) return;
     setState(() {
       _isListening = true;
       _voiceResultHandled = false;
@@ -212,7 +261,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
               !_voiceResultHandled) {
             _voiceResultHandled = true;
             setState(() => _isListening = false);
-            unawaited(_handleVoiceUtterance(result.recognizedWords.trim()));
+            unawaited(_routeVoiceResult(result.recognizedWords.trim()));
           }
         },
         listenFor: const Duration(seconds: 20),
@@ -221,12 +270,47 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     );
   }
 
-  // Execute the action, don't just describe it: parse the transcribed
-  // utterance for a service + destination and, when recognized, push the
-  // real booking screen with everything pre-filled — falling back to a
-  // normal AI chat reply only when no service keyword is understood at
-  // all. See voice_booking_intent_service.dart for the parsing rules.
+  // Dispatches a finished voice transcription to whichever step of the
+  // disambiguation conversation is currently active.
+  Future<void> _routeVoiceResult(String text) async {
+    switch (_voiceState) {
+      case _VoiceFlowState.idle:
+        unawaited(_handleVoiceUtterance(text));
+        break;
+      case _VoiceFlowState.awaitingConfirmation:
+        unawaited(_handleConfirmationReply(text, spoken: true));
+        break;
+      case _VoiceFlowState.awaitingDestination:
+        unawaited(_handleDestinationReply(text, spoken: true));
+        break;
+    }
+  }
+
+  Future<void> _speak(String text) async {
+    try {
+      await _tts.stop();
+      await _tts.speak(text);
+    } catch (e) {
+      debugPrint('[GuruChatScreen] TTS error: $e');
+    }
+  }
+
+  void _resetVoiceFlow() {
+    _voiceState = _VoiceFlowState.idle;
+    _pendingIntent = null;
+    _pendingService = null;
+    _activeConfirmationIndex = null;
+  }
+
+  // Entry point for a brand-new utterance (mic tap from idle, or a
+  // reparse triggered by an unclear yes/no reply). Execute the action,
+  // don't just describe it — parse for a service + destination and, once
+  // both are known, ask for confirmation before navigating (Interactive
+  // Disambiguation, per Nizam's safety request) rather than guessing
+  // blindly. Falls back to a normal AI chat reply only when no service
+  // keyword is understood at all. See voice_booking_intent_service.dart.
   Future<void> _handleVoiceUtterance(String utterance) async {
+    _resetVoiceFlow();
     final intent = _voiceIntent.parse(utterance);
     if (intent == null) {
       // Nothing service-shaped in there — treat it as a normal question.
@@ -235,6 +319,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     }
 
     if (intent.service == VoiceService.sos) {
+      // Emergency — never delay this behind a confirmation step.
       _showVoiceToast('Opening SOS...');
       unawaited(
         Navigator.of(context).push(
@@ -244,56 +329,166 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
       return;
     }
 
+    await _processServiceIntent(intent);
+  }
+
+  // Shared by the initial parse (intent already carries whatever
+  // destinationQuery was heard) and by _handleDestinationReply (which
+  // builds a synthetic intent from just-heard destination text) — both
+  // paths converge on the same ask-for-destination /
+  // resolve-then-confirm logic.
+  Future<void> _processServiceIntent(VoiceBookingIntent intent) async {
     if (intent.destinationQuery == null) {
-      // Heard a service ("book an auto") but no destination at all —
-      // still take the customer straight to that service's booking
-      // screen rather than making them repeat themselves in text.
-      _showVoiceToast('Opening ${intent.displayName} booking...');
-      unawaited(
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => BikeBookingScreen(initialCategory: intent.categoryKey),
-          ),
-        ),
-      );
+      unawaited(_askForDestination(intent.service));
       return;
     }
 
-    _showVoiceToast('Finding "${intent.destinationQuery}"...');
     final resolved = await _voiceIntent.resolve(intent);
     if (!mounted) return;
 
     if (resolved.destination == null) {
-      // Recognized the service but couldn't geocode the spoken place —
-      // don't silently fail; open the booking screen with the category
-      // already selected so the customer only has to type/search the
-      // destination once, and say plainly why.
-      _showVoiceToast(
-        'Couldn\'t find "${intent.destinationQuery}" — opening ${intent.displayName} so you can search it.',
-      );
-      unawaited(
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => BikeBookingScreen(initialCategory: intent.categoryKey),
-          ),
-        ),
-      );
+      final message =
+          'I couldn\'t find "${intent.destinationQuery}". Which place would '
+          'you like to go?';
+      _addAssistantMessage(message);
+      unawaited(_speak(message));
+      _voiceState = _VoiceFlowState.awaitingDestination;
+      _pendingService = intent.service;
+      unawaited(_startListening());
       return;
     }
 
+    _showConfirmationPrompt(resolved);
+  }
+
+  Future<void> _askForDestination(VoiceService service) async {
+    final displayName = VoiceBookingIntent(service: service).displayName;
+    final message = 'Sure — which place would you like to go for $displayName?';
+    _addAssistantMessage(message);
+    unawaited(_speak(message));
+    _voiceState = _VoiceFlowState.awaitingDestination;
+    _pendingService = service;
+    unawaited(_startListening());
+  }
+
+  void _showConfirmationPrompt(VoiceBookingIntent intent) {
+    final destinationLabel = intent.destination?['name'] as String? ??
+        intent.destinationQuery ??
+        'that destination';
+    final question = 'Did you mean ${intent.displayName} to $destinationLabel?';
+
+    setState(() {
+      _messages.add(_GuruMessage(role: 'assistant', text: question));
+      _activeConfirmationIndex = _messages.length - 1;
+      _voiceState = _VoiceFlowState.awaitingConfirmation;
+      _pendingIntent = intent;
+    });
+    _scrollToBottom();
+    unawaited(_speak(question));
+    unawaited(_startListening());
+  }
+
+  // Interactive UI chip taps (Yes/No/Type it instead) call these
+  // directly; the spoken "yes"/"no" reply path in _handleConfirmationReply
+  // funnels into the exact same two methods so voice and tap stay
+  // perfectly consistent.
+  void _confirmYes() {
+    final intent = _pendingIntent;
+    if (intent == null) return;
+    _resetVoiceFlow();
+    unawaited(_navigateToBooking(intent));
+  }
+
+  void _confirmNo() {
+    final service = _pendingIntent?.service;
+    _resetVoiceFlow();
+    if (service == null) return;
+    unawaited(_askForDestination(service));
+  }
+
+  void _confirmTypeInstead() {
+    final service = _pendingIntent?.service;
+    setState(() {
+      _resetVoiceFlow();
+      _voiceState = _VoiceFlowState.awaitingDestination;
+      _pendingService = service;
+    });
+    if (service != null) {
+      final displayName = VoiceBookingIntent(service: service).displayName;
+      _addAssistantMessage('No problem — type the destination for $displayName below.');
+    }
+    FocusScope.of(context).requestFocus(_inputFocusNode);
+  }
+
+  Future<void> _handleConfirmationReply(String text, {required bool spoken}) async {
+    final verdict = _voiceIntent.classifyYesNo(text);
+    switch (verdict) {
+      case VoiceYesNo.yes:
+        _confirmYes();
+        break;
+      case VoiceYesNo.no:
+        _confirmNo();
+        break;
+      case VoiceYesNo.unclear:
+        // They likely just re-said a corrected command by voice instead
+        // of answering yes/no (e.g. "actually a cab to the mall") —
+        // treat it as a fresh utterance rather than forcing them to
+        // repeat "no" first.
+        unawaited(_handleVoiceUtterance(text));
+        break;
+    }
+  }
+
+  Future<void> _handleDestinationReply(String text, {required bool spoken}) async {
+    final service = _pendingService;
+    if (service == null) {
+      // Shouldn't happen (state implies a pending service), but fall
+      // back to a fresh parse rather than losing the utterance.
+      unawaited(_handleVoiceUtterance(text));
+      return;
+    }
+    _voiceState = _VoiceFlowState.idle;
+    final intent = VoiceBookingIntent(service: service, destinationQuery: text.trim());
+    if (spoken) {
+      // Echo what was heard into the chat for transparency, same as a
+      // typed message would appear.
+      _addUserMessage('🎙 $text');
+    } else {
+      _addUserMessage(text);
+    }
+    await _processServiceIntent(intent);
+  }
+
+  Future<void> _navigateToBooking(VoiceBookingIntent intent) async {
     _showVoiceToast(
-      'Opening ${intent.displayName} to ${resolved.destination!['name'] ?? intent.destinationQuery}...',
+      'Opening ${intent.displayName} to ${intent.destination?['name'] ?? intent.destinationQuery}...',
     );
     unawaited(
       Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => BikeBookingScreen(
             initialCategory: intent.categoryKey,
-            initialDropLocation: resolved.destination,
+            initialDropLocation: intent.destination,
           ),
         ),
       ),
     );
+  }
+
+  void _addAssistantMessage(String text) {
+    if (!mounted) return;
+    setState(() {
+      _messages.add(_GuruMessage(role: 'assistant', text: text));
+    });
+    _scrollToBottom();
+  }
+
+  void _addUserMessage(String text) {
+    if (!mounted) return;
+    setState(() {
+      _messages.add(_GuruMessage(role: 'user', text: text));
+    });
+    _scrollToBottom();
   }
 
   void _showVoiceToast(String message) {
@@ -450,7 +645,18 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
       controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       itemCount: _messages.length,
-      itemBuilder: (context, index) => _GuruMessageBubble(message: _messages[index]),
+      itemBuilder: (context, index) => _GuruMessageBubble(
+        message: _messages[index],
+        // Only the single most-recent confirmation question shows its
+        // Yes/No/Type chips — once acted on (or superseded by a fresh
+        // parse), _activeConfirmationIndex is cleared so old questions
+        // in the transcript go back to being plain read-only text.
+        showConfirmationChips: index == _activeConfirmationIndex &&
+            _voiceState == _VoiceFlowState.awaitingConfirmation,
+        onYes: _confirmYes,
+        onNo: _confirmNo,
+        onTypeInstead: _confirmTypeInstead,
+      ),
     );
   }
 
@@ -478,6 +684,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
                 ),
                 child: TextField(
                   controller: _inputController,
+                  focusNode: _inputFocusNode,
                   minLines: 1,
                   maxLines: 5,
                   onSubmitted: (_) => unawaited(_sendMessage()),
@@ -922,9 +1129,22 @@ class _VoiceMicButtonState extends State<_VoiceMicButton> with SingleTickerProvi
 // bubble chrome — matches Claude's mobile-app message style, on the
 // new dark backdrop.
 class _GuruMessageBubble extends StatelessWidget {
-  const _GuruMessageBubble({required this.message});
+  const _GuruMessageBubble({
+    required this.message,
+    this.showConfirmationChips = false,
+    this.onYes,
+    this.onNo,
+    this.onTypeInstead,
+  });
 
   final _GuruMessage message;
+  // Interactive Disambiguation (per Nizam's request): when true, this
+  // bubble is the live "Did you mean X?" question and renders Yes/No/
+  // Type-it-instead chips right below it.
+  final bool showConfirmationChips;
+  final VoidCallback? onYes;
+  final VoidCallback? onNo;
+  final VoidCallback? onTypeInstead;
 
   @override
   Widget build(BuildContext context) {
@@ -953,17 +1173,33 @@ class _GuruMessageBubble extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 22),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _GuruAvatar(size: 26),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message.text,
-              style: GoogleFonts.notoSansTamil(color: _ink, fontWeight: FontWeight.w500, fontSize: 14.5, height: 1.5),
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _GuruAvatar(size: 26),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message.text,
+                  style: GoogleFonts.notoSansTamil(color: _ink, fontWeight: FontWeight.w500, fontSize: 14.5, height: 1.5),
+                ),
+              ),
+            ],
           ),
+          if (showConfirmationChips) ...[
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.only(left: 36),
+              child: _ConfirmationChipRow(
+                onYes: onYes,
+                onNo: onNo,
+                onTypeInstead: onTypeInstead,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -973,6 +1209,94 @@ class _GuruMessageBubble extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<_GuruMessage>('message', message));
+    properties.add(FlagProperty('showConfirmationChips', value: showConfirmationChips, ifTrue: 'showConfirmationChips'));
+    properties.add(ObjectFlagProperty<VoidCallback?>.has('onYes', onYes));
+    properties.add(ObjectFlagProperty<VoidCallback?>.has('onNo', onNo));
+    properties.add(ObjectFlagProperty<VoidCallback?>.has('onTypeInstead', onTypeInstead));
+  }
+}
+
+// The Yes / No / Type-it-instead row shown under a live "Did you mean
+// X?" confirmation question.
+class _ConfirmationChipRow extends StatelessWidget {
+  const _ConfirmationChipRow({this.onYes, this.onNo, this.onTypeInstead});
+
+  final VoidCallback? onYes;
+  final VoidCallback? onNo;
+  final VoidCallback? onTypeInstead;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _ActionChip(
+          label: 'Yes',
+          icon: Icons.check_rounded,
+          color: _accentC,
+          filled: true,
+          onTap: onYes,
+        ),
+        _ActionChip(
+          label: 'No',
+          icon: Icons.close_rounded,
+          color: _accentB,
+          filled: false,
+          onTap: onNo,
+        ),
+        _ActionChip(
+          label: 'Type it instead',
+          icon: Icons.keyboard_alt_outlined,
+          color: _muted,
+          filled: false,
+          onTap: onTypeInstead,
+        ),
+      ],
+    );
+  }
+}
+
+class _ActionChip extends StatelessWidget {
+  const _ActionChip({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.filled,
+    this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool filled;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: filled ? color.withValues(alpha: 0.16) : _surfaceElevated,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: filled ? color : _border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.outfit(color: _ink, fontSize: 12.5, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

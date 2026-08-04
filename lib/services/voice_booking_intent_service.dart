@@ -185,4 +185,39 @@ class VoiceBookingIntentService {
       return intent;
     }
   }
+
+  static const List<String> _yesWords = [
+    'yes', 'yeah', 'yep', 'yup', 'correct', 'right', 'confirm', 'confirmed',
+    'sure', 'ok', 'okay', 'go ahead', 'book it', 'that\'s right',
+  ];
+  static const List<String> _noWords = [
+    'no', 'nope', 'nah', 'wrong', 'incorrect', 'cancel', 'not that',
+    'that\'s wrong', 'different',
+  ];
+
+  /// Interactive Disambiguation (per Nizam's request): classifies a
+  /// short spoken reply to a "Did you mean X?" clarifying question as a
+  /// clear yes, a clear no, or unclear (meaning the customer likely just
+  /// re-said their command/correction by voice instead of answering
+  /// yes/no — the caller should re-run [parse] on it in that case).
+  VoiceYesNo classifyYesNo(String utterance) {
+    final lower = utterance.toLowerCase().trim();
+    if (lower.isEmpty) return VoiceYesNo.unclear;
+    // Check "no" phrases first — "nope" contains no useful yes substring
+    // risk, but keeping no-checks first guards against short utterances
+    // like "not really" that could otherwise partially confuse matching.
+    for (final word in _noWords) {
+      if (lower == word || lower.startsWith('$word ') || lower.contains(' $word')) {
+        return VoiceYesNo.no;
+      }
+    }
+    for (final word in _yesWords) {
+      if (lower == word || lower.startsWith('$word ') || lower.contains(' $word')) {
+        return VoiceYesNo.yes;
+      }
+    }
+    return VoiceYesNo.unclear;
+  }
 }
+
+enum VoiceYesNo { yes, no, unclear }

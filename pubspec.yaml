@@ -1,7 +1,7 @@
 ﻿name: erode_superapp
 description: Erode All-in-One Super App - Multi-vendor Commerce MVP by NJ TECH
 publish_to: 'none'
-version: 1.0.8+77
+version: 1.0.8+79
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -14,6 +14,12 @@ dependencies:
   cupertino_icons: ^1.0.8
   colorful_iconify_flutter: ^0.0.5
   flutter_svg: ^2.3.0
+  # MyAllin1 Super Hero — spoken clarifying questions for the Voice-to-Order
+  # disambiguation flow (e.g. "Did you mean an Auto to Erode Railway
+  # Station?"). Pinned to a long-stable 4.x release rather than latest,
+  # since we can't run `flutter pub get` in this sandbox to verify a
+  # newer release against.
+  flutter_tts: ^4.0.2
   dio: ^5.4.0
   encrypt: ^5.0.3
   file_picker: ^8.1.2
