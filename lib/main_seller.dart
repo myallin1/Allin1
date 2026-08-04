@@ -54,8 +54,11 @@ class SellerApp extends StatelessWidget {
       // rendered in the platform default instead of matching the
       // GoogleFonts.outfit(...) calls used everywhere else in the file.
       theme: ThemeData.dark().copyWith(
-        fontFamily: AppBrandTheme.brandFontFamily,
-        fontFamilyFallback: AppBrandTheme.brandFontFallback,
+        // NOTE: ThemeData.copyWith() has no fontFamily/fontFamilyFallback
+        // named params (those only exist on the ThemeData() constructor) --
+        // textTheme below already carries Outfit + the Tamil fallback via
+        // AppBrandTheme.brandTextTheme(), which is what actually matters
+        // for text rendering.
         textTheme: AppBrandTheme.brandTextTheme(
           ThemeData.dark().textTheme,
           bodyColor: const Color(0xFFEEEEF5),

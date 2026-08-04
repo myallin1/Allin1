@@ -128,8 +128,11 @@ class AdminApp extends StatelessWidget {
       // Outfit + NotoSansTamil-fallback text theme brings the admin
       // panel in line with the rest of the app.
       theme: ThemeData.dark().copyWith(
-        fontFamily: AppBrandTheme.brandFontFamily,
-        fontFamilyFallback: AppBrandTheme.brandFontFallback,
+        // NOTE: ThemeData.copyWith() has no fontFamily/fontFamilyFallback
+        // named params (those only exist on the ThemeData() constructor) --
+        // textTheme below already carries Outfit + the Tamil fallback via
+        // AppBrandTheme.brandTextTheme(), which is what actually matters
+        // for text rendering.
         textTheme: AppBrandTheme.brandTextTheme(
           ThemeData.dark().textTheme,
           bodyColor: const Color(0xFFEEEEF5),
