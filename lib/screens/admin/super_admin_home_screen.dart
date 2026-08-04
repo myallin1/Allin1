@@ -286,6 +286,25 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
             // and only fires its first manual fetch, once the admin
             // actually taps this tab).
             if (_visitedTabs.contains(4)) const AdminFoodOrdersScreen(key: ValueKey('food_orders_tab')) else const SizedBox.shrink(),
+            // FIX (pipeline audit, per Nizam's request): custom_order and
+            // grocery_order service_requests had NO live admin tab at
+            // all -- unlike hero_booking/electronics_service above, a
+            // normal accepted/in-progress/completed request of these two
+            // types was invisible to admin oversight; it only ever
+            // surfaced via admin_new_orders_screen.dart's escalation
+            // queue (timed-out or manually-assigned requests only). Same
+            // lazy-mount pattern, same reused AdminServiceRequestsScreen
+            // widget as the Hero/Electronics tabs -- no new plumbing.
+            if (_visitedTabs.contains(5)) const AdminServiceRequestsScreen(
+                    key: ValueKey('custom_order_tab'),
+                    requestType: 'custom_order',
+                    title: 'Custom Orders',
+                  ) else const SizedBox.shrink(),
+            if (_visitedTabs.contains(6)) const AdminServiceRequestsScreen(
+                    key: ValueKey('grocery_order_tab'),
+                    requestType: 'grocery_order',
+                    title: 'Grocery Orders',
+                  ) else const SizedBox.shrink(),
           ],
         ),
       ),
@@ -315,14 +334,21 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
   // Same visual convention as dashboard_screen.dart's _buildBottomNav:
   // Row of InkWell icon+label items, active one highlighted.
   Widget _buildBottomNav() {
-    final List<({String icon, String label, String? requestType, bool isSos, bool isFoodOrders})> items = [
-      (icon: FluentEmojiFlat.bar_chart, label: 'Overview', requestType: null, isSos: false, isFoodOrders: false),
+    // FIX (pipeline audit): added `materialIcon` so the two new tabs
+    // below don't have to fake an SvgPicture.string('') (which would
+    // render nothing/error) just to reuse this record shape. Existing
+    // items are untouched functionally -- materialIcon: null on all of
+    // them just means "fall through to the old isSos/isFoodOrders/svg
+    // chain", exactly as before.
+    final List<({String icon, String label, String? requestType, bool isSos, bool isFoodOrders, IconData? materialIcon})> items = [
+      (icon: FluentEmojiFlat.bar_chart, label: 'Overview', requestType: null, isSos: false, isFoodOrders: false, materialIcon: null),
       (
         icon: FluentEmojiFlat.man_superhero,
         label: 'Hero',
         requestType: 'hero_booking',
         isSos: false,
         isFoodOrders: false,
+        materialIcon: null,
       ),
       (
         icon: FluentEmojiFlat.mobile_phone,
@@ -330,6 +356,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
         requestType: 'electronics_service',
         isSos: false,
         isFoodOrders: false,
+        materialIcon: null,
       ),
       // NEW (per Nizam's request): 4th tab for one-time customer SOS
       // KYC verification. Separate badge source (sos_kyc_requests, not
@@ -343,6 +370,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
         requestType: null,
         isSos: true,
         isFoodOrders: false,
+        materialIcon: null,
       ),
       // NEW (per Nizam's request): 5th tab — Food Orders management.
       // Deliberately requestType: null (no live "new booking" badge
@@ -356,6 +384,27 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
         requestType: null,
         isSos: false,
         isFoodOrders: true,
+        materialIcon: null,
+      ),
+      // NEW (pipeline audit fix): 6th/7th tabs -- custom_order and
+      // grocery_order previously had no live badge/oversight anywhere in
+      // admin. requestType set (not null) so the same _NavWaitingDot
+      // badge stream used by Hero/Electronics above applies here too.
+      (
+        icon: '',
+        label: 'Custom',
+        requestType: 'custom_order',
+        isSos: false,
+        isFoodOrders: false,
+        materialIcon: Icons.shopping_bag_rounded,
+      ),
+      (
+        icon: '',
+        label: 'Grocery',
+        requestType: 'grocery_order',
+        isSos: false,
+        isFoodOrders: false,
+        materialIcon: Icons.local_grocery_store_rounded,
       ),
     ];
     return DecoratedBox(
@@ -389,13 +438,16 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                           height: 22,
                           child: Opacity(
                             opacity: active ? 1.0 : 0.55,
-                            child: item.isSos
-                                ? Icon(Icons.sos_rounded,
+                            child: item.materialIcon != null
+                                ? Icon(item.materialIcon,
                                     color: active ? _gold : _text.withValues(alpha: 0.55), size: 22,)
-                                : item.isFoodOrders
-                                    ? Icon(Icons.restaurant_menu_rounded,
+                                : item.isSos
+                                    ? Icon(Icons.sos_rounded,
                                         color: active ? _gold : _text.withValues(alpha: 0.55), size: 22,)
-                                    : SvgPicture.string(item.icon),
+                                    : item.isFoodOrders
+                                        ? Icon(Icons.restaurant_menu_rounded,
+                                            color: active ? _gold : _text.withValues(alpha: 0.55), size: 22,)
+                                        : SvgPicture.string(item.icon),
                           ),
                         ),
                         if (item.requestType != null)

@@ -18,6 +18,7 @@ import 'seller_electronics_dashboard_screen.dart';
 import 'seller_grocery_dashboard_screen.dart';
 import 'seller_home_kitchen_menu_screen.dart';
 import 'seller_pending_screen.dart';
+import 'seller_settings_screen.dart';
 import 'seller_vertical_picker_screen.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
@@ -401,6 +402,20 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
               if (_seller != null) {
                 _loadMenuItemCount(_seller!.id);
               }
+            },
+          ),
+          // FIX (Nizam's request: same theme-switcher pattern as
+          // customer/hero apps) -- seller app had no Settings entry
+          // point at all before this.
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: _muted),
+            tooltip: 'Settings',
+            onPressed: () {
+              Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => const SellerSettingsScreen(),
+                ),
+              );
             },
           ),
         ],

@@ -44,32 +44,27 @@ class SellerApp extends StatelessWidget {
     // LocalizationService (en/ta/tg) made available app-wide, same as
     // customer/hero/admin apps — seller had zero language
     // infrastructure before this (see language-system audit).
-    return ChangeNotifierProvider(
-      create: (_) => LocalizationService(),
-      child: MaterialApp(
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => LocalizationService()),
+        // FIX (Nizam's request: same theme-switcher pattern as customer
+        // and hero apps): seller app used to have a hardcoded dark
+        // ThemeData with no way to change it, and no Settings screen to
+        // change it from. Now shares the same ThemeService (5 selectable
+        // themes), switchable from seller_settings_screen.dart.
+        ChangeNotifierProvider(create: (_) => ThemeService()),
+      ],
+      child: Consumer<ThemeService>(
+        builder: (context, themeService, _) => MaterialApp(
       title: 'Allin1 Partner Dashboard',
       debugShowCheckedModeBanner: false,
-      // FIX (typography audit): same fix as main_admin.dart -- this had
-      // no fontFamily set, so bare TextStyle() calls in seller screens
-      // rendered in the platform default instead of matching the
-      // GoogleFonts.outfit(...) calls used everywhere else in the file.
-      theme: ThemeData.dark().copyWith(
-        // NOTE: ThemeData.copyWith() has no fontFamily/fontFamilyFallback
-        // named params (those only exist on the ThemeData() constructor) --
-        // textTheme below already carries Outfit + the Tamil fallback via
-        // AppBrandTheme.brandTextTheme(), which is what actually matters
-        // for text rendering.
-        textTheme: AppBrandTheme.brandTextTheme(
-          ThemeData.dark().textTheme,
-          bodyColor: const Color(0xFFEEEEF5),
-          displayColor: const Color(0xFFEEEEF5),
-        ),
-        scaffoldBackgroundColor: const Color(0xFF0A0A1A),
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF11998E),
-          secondary: Color(0xFF38EF7D),
-        ),
-      ),
+      // FIX (Nizam's request): was a hardcoded ThemeData.dark() copyWith
+      // -- now driven by ThemeService.currentTheme so the seller can
+      // actually change it from Settings, same as customer/hero. The
+      // textTheme/brand-font handling ThemeService.currentTheme applies
+      // internally already matches what this hardcoded block used to do
+      // by hand (AppBrandTheme.brandTextTheme with the Tamil fallback).
+      theme: themeService.currentTheme,
       initialRoute: '/',
       routes: {
         '/': (_) => const LoginScreen(
@@ -96,6 +91,7 @@ class SellerApp extends StatelessWidget {
         }
         return null;
       },
+        ),
       ),
     );
   }
