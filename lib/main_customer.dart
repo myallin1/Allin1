@@ -16,8 +16,8 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_navigator.dart';
-import 'firebase_options.dart';
 import 'config/api_config.dart';
+import 'firebase_options.dart';
 import 'screens/ai_settings_screen.dart';
 import 'screens/auth/profile_setup_screen.dart';
 import 'screens/checkout_screen.dart';
@@ -76,7 +76,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 Future<void> _ensureFirebaseInitialized() async {
-  if (Firebase.apps.isNotEmpty) return;
+  if (Firebase.apps.isNotEmpty) {
+    return;
+  }
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -102,6 +104,12 @@ Future<void> _ensureFirebaseInitialized() async {
 class _BootFailedApp extends StatelessWidget {
   final VoidCallback onRetry;
   const _BootFailedApp({required this.onRetry});
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onRetry', onRetry));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -157,9 +165,10 @@ void main() async {
   // redundancy and the actual source of the mismatch.
   await SentryFlutter.init(
     (options) {
-      options.dsn =
-          'https://208217846f0b9708dc26f1d5d812eefc@o4511799785553920.ingest.us.sentry.io/4511799822843904';
-      options.tracesSampleRate = 1.0;
+      options
+        ..dsn =
+            'https://208217846f0b9708dc26f1d5d812eefc@o4511799785553920.ingest.us.sentry.io/4511799822843904'
+        ..tracesSampleRate = 1.0;
     },
     appRunner: () async {
       WidgetsFlutterBinding.ensureInitialized();
@@ -349,13 +358,17 @@ Future<void> _warmDeferredCaches() async {
 Future<void> _listenForSharedLocations() async {
   await const ShareIntentPlatform().listen((text) {
     final accepted = SharedLocationInbox.instance.deliver(text);
-    if (!accepted) return;
+    if (!accepted) {
+      return;
+    }
 
     // If the customer is already somewhere else in the app, take them to
     // the booking form — that's the only screen that can act on this,
     // and it prompts "Pickup or Drop?" as soon as it builds.
     final navigator = navigatorKey.currentState;
-    if (navigator == null) return;
+    if (navigator == null) {
+      return;
+    }
     unawaited(navigator.push<void>(
       MaterialPageRoute<void>(builder: (_) => const HeroBookingScreen()),
     ),);
@@ -380,10 +393,23 @@ Future<void> _warmMapStack() async {
 
 Future<void> _restoreActiveRideIfNeeded() async {
   try {
-    final cached = await HiveCache.get<Map>(HiveCache.kActiveRide);
-    if (cached == null) return;
+    // Map<dynamic, dynamic> (not Map<String, dynamic>) deliberately:
+    // Hive deserializes this as a raw dynamic-keyed map, and
+    // HiveCache.get<T>() does a plain `as T?` cast — casting to
+    // Map<String, dynamic> here would throw (Dart generics are
+    // invariant) and get<T>()'s catch-all would silently swallow it as
+    // null, quietly breaking active-ride restore. This keeps the exact
+    // same runtime behavior as the old raw `Map` while still satisfying
+    // the strict-raw-types analyzer setting with explicit type args.
+    final cached =
+        await HiveCache.get<Map<dynamic, dynamic>>(HiveCache.kActiveRide);
+    if (cached == null) {
+      return;
+    }
     final rideDocId = cached['rideDocId'] as String?;
-    if (rideDocId == null || rideDocId.isEmpty) return;
+    if (rideDocId == null || rideDocId.isEmpty) {
+      return;
+    }
     final snap = await FirebaseFirestore.instance
         .collection('rides')
         .doc(rideDocId)
