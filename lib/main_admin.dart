@@ -4,6 +4,7 @@
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
@@ -18,9 +19,9 @@ import 'screens/admin/super_admin_home_screen.dart';
 import 'screens/admin/task_approvals_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/db_usage_tracker.dart';
-import 'services/theme_service.dart';
 import 'services/localization_service.dart';
 import 'services/session_service.dart';
+import 'services/theme_service.dart';
 
 void main() {
   FlutterError.onError = (details) {
@@ -102,6 +103,12 @@ class _InitErrorApp extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('message', message));
   }
 }
 
