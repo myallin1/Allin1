@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/update_service.dart';
 import '../../widgets/hero_premium_loader.dart';
 import 'hero_settings_screen.dart';
+import 'hero_wallet_screen.dart';
 
 class HeroProfileTab extends StatefulWidget {
   const HeroProfileTab({super.key});
@@ -152,6 +153,14 @@ class _HeroProfileTabState extends State<HeroProfileTab>
     );
   }
 
+  Future<void> _openWallet() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const HeroWalletScreen(),
+      ),
+    );
+  }
+
   Future<void> _openHelpSupport() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -254,6 +263,32 @@ class _HeroProfileTabState extends State<HeroProfileTab>
                           ),
                         ),
                          const SizedBox(height: 12),
+                         // Revenue Master Plan: prepaid commission wallet
+                         // entry point -- recharge here, or check balance
+                         // before it stops incoming trip requests.
+                         SizedBox(
+                           width: double.infinity,
+                           child: ElevatedButton.icon(
+                             style: ElevatedButton.styleFrom(
+                               backgroundColor: const Color(0xFFFF4FA3),
+                               foregroundColor: Colors.white,
+                               padding: const EdgeInsets.symmetric(vertical: 12),
+                               shape: RoundedRectangleBorder(
+                                 borderRadius: BorderRadius.circular(16),
+                               ),
+                             ),
+                             onPressed: _openWallet,
+                             icon: const Icon(Icons.account_balance_wallet_rounded),
+                             label: Text(
+                               'Hero Wallet',
+                               style: GoogleFonts.outfit(
+                                 fontSize: 12,
+                                 fontWeight: FontWeight.w800,
+                               ),
+                             ),
+                           ),
+                         ),
+                         const SizedBox(height: 8),
                          SizedBox(
                            width: double.infinity,
                            child: ElevatedButton.icon(

@@ -18,6 +18,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/fare_rates.dart';
 import '../../models/ride_model.dart';
+import '../../services/hero_wallet_service.dart';
 import '../../services/map_service.dart';
 import '../../services/hero_ride_notification_service.dart';
 import '../../utils/otp_utils.dart';
@@ -966,14 +967,53 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         'timestamp': FieldValue.serverTimestamp(),
        });
 
+      // REVENUE MASTER PLAN (per Nizam's explicit instruction): debit the
+      // platform's commission from the hero's PREPAID wallet the moment
+      // a ride's payment is marked received. This is intentionally a
+      // SEPARATE wallet/ledger from `heroes/{uid}.walletBalance` /
+      // `wallet_transactions` just written above (that's the hero's own
+      // collected-cash earnings bookkeeping, untouched). Non-fatal by
+      // design: a hero who already collected cash for this ride should
+      // never get stuck here because of a wallet-service hiccup.
+      bool walletEligible = true;
+      try {
+        await HeroWalletService().debitCommissionForRide(
+          heroId: user.uid,
+          rideId: widget.rideDocId,
+          serviceType: rideData['vehicleType'] as String? ??
+              widget.ride.vehicleType ??
+              'bike',
+          fareAmount: fare,
+        );
+        final walletSnap = await FirebaseFirestore.instance
+            .collection('hero_wallets')
+            .doc(user.uid)
+            .get();
+        walletEligible =
+            (walletSnap.data()?['isEligibleForRequests'] as bool?) ?? true;
+      } catch (e) {
+        debugPrint('[HeroRideScreen] Wallet commission debit failed (non-fatal): $e');
+      }
+
       await FirebaseDatabase.instance
           .ref('live_locations/${widget.rideDocId}')
           .remove();
       await FirebaseDatabase.instance
           .ref('online_heroes/${user.uid}')
-          .update({'isAvailable': true});
+          .update({'isAvailable': walletEligible});
       if (!mounted) {
         return;
+      }
+      if (!walletEligible) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Wallet balance low — recharge to keep receiving trip requests.',
+            ),
+            backgroundColor: _red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

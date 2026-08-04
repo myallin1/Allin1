@@ -10,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/platform_settings.dart';
 import '../../services/platform_settings_service.dart';
+import 'admin_wallet_approvals_screen.dart';
 
 class CommissionSettingsScreen extends StatefulWidget {
   const CommissionSettingsScreen({super.key});
@@ -358,6 +359,19 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
         backgroundColor: const Color(0xFF1A1A2E),
         foregroundColor: Colors.white,
         actions: [
+          // Revenue Master Plan: entry point to the Hero Wallet recharge
+          // post-verify queue, per Nizam's instruction. Placed here
+          // rather than as a new bottom-nav tab -- lowest-risk addition,
+          // and commission + wallet are the same "revenue engine" concern.
+          IconButton(
+            icon: const Icon(Icons.account_balance_wallet_rounded),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminWalletApprovalsScreen(),
+              ),
+            ),
+            tooltip: 'Wallet Recharge Approvals',
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadSettings,
