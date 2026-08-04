@@ -1,7 +1,7 @@
 ﻿name: erode_superapp
 description: Erode All-in-One Super App - Multi-vendor Commerce MVP by NJ TECH
 publish_to: 'none'
-version: 1.0.8+74
+version: 1.0.8+77
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -30,6 +30,15 @@ dependencies:
   flutter_animate: ^4.5.0
   flutter_dotenv: ^5.1.0
   flutter_map: ^8.2.2
+  # Ola Maps Vector Tiles surgical integration: real MapLibre-style vector
+  # rendering plugged into our existing flutter_map/TileLayer stack. Pinned
+  # to 9.0.0-beta.8 -- the package's own docs name only 8.0.0 and
+  # 9.0.0-beta.8 as production-ready, and 8.0.0 needs flutter_map ^7.0.2
+  # which conflicts with our pinned ^8.2.2 above. 9.0.0-beta.8 needs
+  # flutter_map ^8.1.1, which is satisfied. Do NOT bump to 10.x -- that line
+  # requires the experimental flutter_gpu renderer + Flutter's `main` dev
+  # channel and is explicitly documented as not for production.
+  vector_map_tiles: ^9.0.0-beta.8
   flutter_markdown: ^0.6.22
   flutter_ringtone_player: ^4.0.0+4
   flutter_secure_storage: ^10.0.0

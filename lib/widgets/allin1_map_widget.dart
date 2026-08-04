@@ -12,9 +12,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:vector_map_tiles/vector_map_tiles.dart' as vmt;
 
 import '../config/api_config.dart';
 import '../services/map_service.dart';
+import '../services/ola_maps_provider.dart';
 
 // ── Erode Default Coordinates ──
 const LatLng kErodeCenter = LatLng(11.3410, 77.7171);
@@ -88,6 +90,40 @@ final Uint8List _transparentPixel = Uint8List.fromList(<int>[
   0x82,
 ]);
 
+// Ola Vector Tiles (real MapLibre-style rendering) -- surgical addition.
+// Cached at module level so the style is fetched from Ola ONCE per app
+// session and reused by every map screen (taxi, food, hero, etc.), not
+// re-fetched on every single screen open. If it ever fails (bad key, Ola
+// quota/limit genuinely exhausted, network error), the cached Future
+// resolves to null and stays that way for the rest of the session -- every
+// map screen then just renders the existing OSM TileLayer below, exactly
+// as it always has. This is a pure fallback: the OSM path is completely
+// untouched.
+Future<vmt.Style?>? _olaVectorStyleFuture;
+
+Future<vmt.Style?> _loadOlaVectorStyle() {
+  return _olaVectorStyleFuture ??= () async {
+    final uri = OlaMapsProvider.vectorStyleUriFor(ApiConfig.olaMapsApiKey);
+    if (uri == null) {
+      debugPrint('[Allin1MapWidget] Ola vector style skipped (no valid key)');
+      return null;
+    }
+    try {
+      final style = await vmt.StyleReader(
+        uri: uri,
+        apiKey: ApiConfig.olaMapsApiKey.trim(),
+      ).read();
+      debugPrint('[Allin1MapWidget] Ola vector style loaded OK');
+      return style;
+    } catch (e) {
+      debugPrint(
+        '[Allin1MapWidget] Ola vector style load FAILED, staying on OSM: $e',
+      );
+      return null;
+    }
+  }();
+}
+
 /// Allin1MapWidget - Dual Map Provider enabled map widget
 ///
 /// Features:
@@ -150,6 +186,7 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
   bool _isMapReady = false;
   LatLng? _pendingCenter;
   double? _pendingZoom;
+  vmt.Style? _olaStyle;
 
   MapController get _effectiveMapController =>
       widget.mapController ?? _internalMapController;
@@ -164,6 +201,17 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
       '[Allin1MapWidget] init center=${widget.center.latitude},${widget.center.longitude} zoom=${widget.zoom}',
     );
     unawaited(_initializeMapService());
+    unawaited(_loadOlaVectorStyleForThisScreen());
+  }
+
+  Future<void> _loadOlaVectorStyleForThisScreen() async {
+    // Reuses the module-level cached Future -- on the very first map
+    // screen this actually hits the network; every screen after that
+    // (this session) gets the already-resolved style or null instantly.
+    final style = await _loadOlaVectorStyle();
+    if (mounted && style != null) {
+      setState(() => _olaStyle = style);
+    }
   }
 
   Future<void> _initializeMapService() async {
@@ -316,30 +364,47 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
                 ),
               ),
               children: [
-                TileLayer(
-                  tileProvider: _DynamicTileProvider(_mapService),
-                  userAgentPackageName: 'com.allin1.superapp',
-                  maxZoom: 18,
-                  // FIX (blank-map-tile audit, per Nizam's report): tile
-                  // load failures used to be completely silent -- OSM's
-                  // public tile.openstreetmap.org server can 403/429 a
-                  // request with no visible error anywhere (Flutter's
-                  // image pipeline just swallows it), leaving the map
-                  // area permanently blank with zero feedback. This
-                  // surfaces genuine tile failures to MapService so the
-                  // existing "Allin1 map loading..." error overlay
-                  // (gated on hasUiError) actually appears instead of a
-                  // dead blank screen, and gives us a debug log to
-                  // confirm whether OSM is actually rate-limiting us.
-                  errorTileCallback: (tile, error, stackTrace) {
-                    debugPrint(
-                      '[Allin1MapWidget] Tile load FAILED provider='
-                      '${_mapService.currentProvider.name} '
-                      'coords=${tile.coordinates} error=$error',
-                    );
-                    _mapService.markFailure();
-                  },
-                ),
+                // Ola Vector Tiles (real MapLibre-style rendering) when the
+                // background-loaded style is ready AND Ola is still the
+                // active provider (MapService already flips selectedProvider
+                // to osm on genuine failure elsewhere). Decided BEFORE this
+                // build runs -- never flashes OSM-then-Ola or vice versa,
+                // per Nizam's explicit requirement. Any failure here just
+                // means _olaStyle stayed null and the OSM TileLayer below
+                // renders exactly as it always has -- zero change to that
+                // path.
+                if (_olaStyle != null &&
+                    _mapService.selectedProvider == MapProviderType.ola)
+                  vmt.VectorTileLayer(
+                    theme: _olaStyle!.theme,
+                    sprites: _olaStyle!.sprites,
+                    tileProviders: _olaStyle!.providers,
+                  )
+                else
+                  TileLayer(
+                    tileProvider: _DynamicTileProvider(_mapService),
+                    userAgentPackageName: 'com.allin1.superapp',
+                    maxZoom: 18,
+                    // FIX (blank-map-tile audit, per Nizam's report): tile
+                    // load failures used to be completely silent -- OSM's
+                    // public tile.openstreetmap.org server can 403/429 a
+                    // request with no visible error anywhere (Flutter's
+                    // image pipeline just swallows it), leaving the map
+                    // area permanently blank with zero feedback. This
+                    // surfaces genuine tile failures to MapService so the
+                    // existing "Allin1 map loading..." error overlay
+                    // (gated on hasUiError) actually appears instead of a
+                    // dead blank screen, and gives us a debug log to
+                    // confirm whether OSM is actually rate-limiting us.
+                    errorTileCallback: (tile, error, stackTrace) {
+                      debugPrint(
+                        '[Allin1MapWidget] Tile load FAILED provider='
+                        '${_mapService.currentProvider.name} '
+                        'coords=${tile.coordinates} error=$error',
+                      );
+                      _mapService.markFailure();
+                    },
+                  ),
                 if (widget.routes.isNotEmpty)
                   PolylineLayer(
                     polylines: widget.routes

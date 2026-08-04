@@ -19,6 +19,33 @@ class OlaMapsProvider extends MapProvider {
   static const String _placesHost = 'api.olamaps.io';
   static const String _placesBasePath = '/places/v1';
 
+  // Ola Vector Tiles (MapLibre-style) -- surgical addition per Nizam's
+  // instruction to render Ola's real interactive map instead of the raster
+  // OSM proxy `getTileUrl` below (which stays completely untouched as the
+  // silent fallback path when vector style loading fails or the key is
+  // missing/rate-limited).
+  //
+  // {key} is a literal placeholder -- vector_map_tiles' StyleReader
+  // substitutes it with the `apiKey` value passed alongside this URI. We
+  // never string-interpolate the raw key ourselves, matching this file's
+  // existing convention of never logging/exposing the key value directly.
+  static const String _vectorStyleUriTemplate =
+      'https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json?api_key={key}';
+
+  /// URI to hand to `vector_map_tiles`' `StyleReader(uri: ..., apiKey: ...)`.
+  /// Returns null when there's no usable key, so callers can skip the
+  /// vector-tile attempt entirely and fall straight to OSM.
+  String? get vectorStyleUri => vectorStyleUriFor(apiKey);
+
+  /// Static variant so callers that only have the raw key string (e.g. the
+  /// map widget, which reads `ApiConfig.olaMapsApiKey` directly) can build
+  /// the same URI without constructing a full provider instance.
+  static String? vectorStyleUriFor(String apiKey) {
+    final trimmed = apiKey.trim();
+    if (trimmed.isEmpty || trimmed.length < 16) return null;
+    return _vectorStyleUriTemplate;
+  }
+
   @override
   String getTileUrl(int x, int y, int z) {
     return 'https://tile.openstreetmap.org/$z/$x/$y.png';
