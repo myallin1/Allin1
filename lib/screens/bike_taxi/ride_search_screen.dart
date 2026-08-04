@@ -682,6 +682,12 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   }
 
   void _listenToNearbyCaptains() {
+    // Defense-in-depth alongside the bike_booking_screen.dart fix for the
+    // same RTDB node: _startRideCreation() (the only caller) already
+    // checks for a signed-in user before reaching this point, but an
+    // onError handler costs nothing and means any future transient
+    // permission hiccup degrades silently instead of crashing to the
+    // Flutter framework the way an unhandled stream error does.
     _nearbyHeroesSub = FirebaseDatabase.instance
         .ref('online_heroes')
         .onValue
@@ -707,6 +713,10 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         }
       });
       if (mounted) setState(() => _nearbyMarkers = newMarkers);
+    }, onError: (Object error, StackTrace stack) {
+      debugPrint(
+        '[RideSearchScreen] online_heroes listener error (non-fatal): $error',
+      );
     });
   }
 

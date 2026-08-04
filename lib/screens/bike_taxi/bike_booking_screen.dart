@@ -971,6 +971,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _nearbyCaptainsSub?.cancel();
+    _nearbyCaptainsAuthWaitSub?.cancel();
     for (final timer in _dummyVehicleTimers.values) {
       timer.cancel();
     }
@@ -1023,34 +1024,80 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   // ── Nearby Captains ───────────────────────────────────────────
+  StreamSubscription<User?>? _nearbyCaptainsAuthWaitSub;
+
+  // REGRESSION FIX (per Nizam's console screenshot: uncaught
+  // [firebase_database/permission-denied] on /online_heroes, "EXCEPTION
+  // CAUGHT BY FLUTTER FRAMEWORK"): this used to attach the RTDB listener
+  // unconditionally from initState(), with no auth check and no onError.
+  // Our own instant-launch work renders this screen before waiting on any
+  // auth stream, so on a fresh web load this listener frequently attached
+  // BEFORE Firebase Auth finished restoring the signed-in session --
+  // database.rules.json requires `auth != null` to read online_heroes, so
+  // the very first onValue event with no user yet threw
+  // permission-denied straight into the Flutter framework (a bare
+  // `.listen()` has no onError, so nothing in this file ever caught it).
+  //
+  // Fixed two ways, deliberately not by loosening the RTDB rule (that
+  // would expose every hero's live GPS position to unauthenticated
+  // clients): if there's no signed-in user yet, wait for the first
+  // authStateChanges() event and only attach once a real user exists;
+  // and regardless, the listener itself now has an onError handler so a
+  // future transient permission hiccup degrades silently instead of
+  // crashing.
   void _listenToNearbyCaptains() {
-    _nearbyCaptainsSub =
-        FirebaseDatabase.instance.ref('online_heroes').onValue.listen((event) {
-      final raw = event.snapshot.value as Map<dynamic, dynamic>?;
-      final heroes = <Map<String, dynamic>>[];
-      if (raw != null) {
-        raw.forEach((key, value) {
-          if (value is Map) {
-            heroes.add(
-              <String, dynamic>{
-                'id': '$key',
-                'lat': (value['lat'] as num?)?.toDouble() ??
-                    (value['latitude'] as num?)?.toDouble(),
-                'lng': (value['lng'] as num?)?.toDouble() ??
-                    (value['longitude'] as num?)?.toDouble(),
-                'vehicleType': (value['vehicleType'] as String?)?.trim(),
-                'name': (value['captainName'] as String?)?.trim() ??
-                    (value['name'] as String?)?.trim() ??
-                    'Hero',
-                'isAvailable': value['isAvailable'] as bool?,
-              },
-            );
-          }
-        });
-      }
-      _onlineHeroSnapshots = heroes;
-      _refreshHeroMarkers();
-    });
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      _nearbyCaptainsAuthWaitSub =
+          FirebaseAuth.instance.authStateChanges().listen((user) {
+        _nearbyCaptainsAuthWaitSub?.cancel();
+        _nearbyCaptainsAuthWaitSub = null;
+        if (mounted && user != null) {
+          _attachNearbyCaptainsListener();
+        }
+      });
+      return;
+    }
+    _attachNearbyCaptainsListener();
+  }
+
+  void _attachNearbyCaptainsListener() {
+    _nearbyCaptainsSub = FirebaseDatabase.instance
+        .ref('online_heroes')
+        .onValue
+        .listen(
+      (event) {
+        final raw = event.snapshot.value as Map<dynamic, dynamic>?;
+        final heroes = <Map<String, dynamic>>[];
+        if (raw != null) {
+          raw.forEach((key, value) {
+            if (value is Map) {
+              heroes.add(
+                <String, dynamic>{
+                  'id': '$key',
+                  'lat': (value['lat'] as num?)?.toDouble() ??
+                      (value['latitude'] as num?)?.toDouble(),
+                  'lng': (value['lng'] as num?)?.toDouble() ??
+                      (value['longitude'] as num?)?.toDouble(),
+                  'vehicleType': (value['vehicleType'] as String?)?.trim(),
+                  'name': (value['captainName'] as String?)?.trim() ??
+                      (value['name'] as String?)?.trim() ??
+                      'Hero',
+                  'isAvailable': value['isAvailable'] as bool?,
+                },
+              );
+            }
+          });
+        }
+        _onlineHeroSnapshots = heroes;
+        _refreshHeroMarkers();
+      },
+      onError: (Object error, StackTrace stack) {
+        debugPrint(
+          '[BikeBookingScreen] online_heroes listener error (non-fatal): $error',
+        );
+      },
+    );
   }
 
   // ── Location Tracking ─────────────────────────────────────────
