@@ -138,15 +138,23 @@ class _BootFailedApp extends StatelessWidget {
 }
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Sentry wraps the ENTIRE rest of main() as its appRunner — everything
-  // below (Firebase init, the zone-guarded boot phase, runApp, and the
-  // post-frame warm-up) runs exactly as it did before, just inside
-  // Sentry's zone so uncaught errors anywhere in that tree get reported.
-  // WidgetsFlutterBinding.ensureInitialized() stays OUTSIDE/before this
-  // call on purpose — SentryFlutter.init() expects the binding to already
-  // exist when it's called this way.
+  // REGRESSION FIX (per Nizam's report: "Zone mismatch" + "Bad state:
+  // Future already completed", 2-minute boot on Chrome web): Flutter
+  // requires WidgetsFlutterBinding.ensureInitialized() and runApp() to be
+  // called in the SAME zone. This used to call ensureInitialized() out
+  // here, then SentryFlutter.init(appRunner: ...) below runs appRunner in
+  // its own zone, then that appRunner ALSO wrapped part of its body in a
+  // second, manually-nested runZonedGuarded() before calling runApp() --
+  // three zones deep (root -> Sentry -> manual), with the binding
+  // initialized in the outermost one. That mismatch is silent on most
+  // devices/timings but can surface as exactly these two errors, and every
+  // Firebase-init retry loop then reruns inside a broken zone stack, which
+  // is consistent with the 2-minute stall. Fixed by moving
+  // ensureInitialized() to be the very first statement INSIDE appRunner
+  // (Sentry's own documented pattern) and removing the extra manual
+  // runZonedGuarded() nesting below -- Sentry's appRunner zone already
+  // captures uncaught errors app-wide, so the inner one was pure
+  // redundancy and the actual source of the mismatch.
   await SentryFlutter.init(
     (options) {
       options.dsn =
@@ -154,6 +162,8 @@ void main() async {
       options.tracesSampleRate = 1.0;
     },
     appRunner: () async {
+      WidgetsFlutterBinding.ensureInitialized();
+
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
       FlutterError.onError = (details) {
@@ -202,21 +212,28 @@ void main() async {
       // Firestore usage. See lib/services/db_usage_tracker.dart.
       DbUsageTracker.instance.init('customer');
 
-      await runZonedGuarded(() async {
-        // ── BOOT PHASE 1: only what the first screen genuinely needs ──
-        //
-        // Everything below used to run here, sequentially, before runApp():
-        //   Analytics init, Hive.initFlutter, LocalSync (4 boxes),
-        //   CacheService (5 boxes), ApiService (1 box + Dio), settings write.
-        //
-        // That's 10 Hive box opens one after another — each one a local
-        // storage round-trip (IndexedDB on web) — while the customer stares
-        // at a blank/splash screen. Hive caching makes the DATA free to
-        // read; it does not make OPENING the boxes free, and that cost was
-        // being paid serially on every single launch.
-        //
-        // Now: Hive core + the 3 boxes the home screen reads. Everything
-        // else moved to _warmCustomerServices() (phase 2, post-runApp).
+      // ── BOOT PHASE 1: only what the first screen genuinely needs ──
+      //
+      // Everything below used to run here, sequentially, before runApp():
+      //   Analytics init, Hive.initFlutter, LocalSync (4 boxes),
+      //   CacheService (5 boxes), ApiService (1 box + Dio), settings write.
+      //
+      // That's 10 Hive box opens one after another — each one a local
+      // storage round-trip (IndexedDB on web) — while the customer stares
+      // at a blank/splash screen. Hive caching makes the DATA free to
+      // read; it does not make OPENING the boxes free, and that cost was
+      // being paid serially on every single launch.
+      //
+      // Now: Hive core + the 3 boxes the home screen reads. Everything
+      // else moved to _warmCustomerServices() (phase 2, post-runApp).
+      //
+      // NOTE: this used to be wrapped in its own nested runZonedGuarded()
+      // with a matching (error, stack) handler. Removed as part of the
+      // zone-mismatch fix above — Sentry's own appRunner zone (this whole
+      // function body) already catches and reports uncaught errors here,
+      // so the plain try/catch below covers exactly the same cases
+      // without adding a second zone layer.
+      try {
         await Hive.initFlutter();
         await CacheService().initCritical();
 
@@ -233,15 +250,12 @@ void main() async {
             statusBarIconBrightness: Brightness.light,
           ),
         );
-      }, (error, stack) {
-        debugPrint('Zone error: $error\n$stack');
+      } catch (error, stack) {
+        debugPrint('Boot phase 1 error: $error\n$stack');
         if (AnalyticsService.isInitialized) {
-          AnalyticsService.instance.recordError(
-            error,
-            stack,
-          );
+          AnalyticsService.instance.recordError(error, stack);
         }
-      });
+      }
 
       runApp(const CustomerApp());
 

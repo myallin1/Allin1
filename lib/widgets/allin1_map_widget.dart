@@ -593,6 +593,18 @@ class _DynamicTileProvider extends TileProvider {
     'User-Agent': 'Allin1SuperApp/1.0 (Erode Tamil Nadu; contact via app)',
   };
 
+  // REGRESSION FIX (web crash report): browsers enforce the XHR/fetch
+  // "forbidden header" list, which includes User-Agent -- it can never be
+  // set by page JS, only by the browser itself. On Android/iOS this header
+  // is what satisfies OSM's tile usage policy; on web, attempting to set it
+  // throws "Refused to set unsafe header" and kills the tile fetch outright,
+  // which is what was silently forcing every web map onto the OSM/Ola
+  // failure path. Native platforms keep the header exactly as before; web
+  // sends no custom headers (flutter_map/dart:html already identifies the
+  // request via the browser's own real User-Agent).
+  static Map<String, String>? get _platformTileHeaders =>
+      kIsWeb ? null : _tileHeaders;
+
   @override
   ImageProvider getImage(TileCoordinates coordinates, TileLayer options) {
     try {
@@ -604,7 +616,7 @@ class _DynamicTileProvider extends TileProvider {
       debugPrint(
         '[Allin1MapWidget] Loading tile provider=${mapService.currentProvider.name} url=$url',
       );
-      return NetworkImage(url, headers: _tileHeaders);
+      return NetworkImage(url, headers: _platformTileHeaders);
     } catch (e) {
       debugPrint('[Allin1MapWidget] Tile URL generation failed: $e');
       mapService.markFailure();
