@@ -3,18 +3,27 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:colorful_iconify_flutter/icons/fluent_emoji_flat.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart' hide Category;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../config/food_categories.dart';
-import '../services/category_gateway_service.dart';
+import '../services/app_palette.dart';
+// Imported with a prefix (rather than a `hide` clause on some other
+// import) because the ambiguity here is with a `Category` symbol from
+// one of this file's OTHER imports, not from flutter/material.dart
+// (material.dart doesn't actually export anything named `Category` --
+// the old `hide Category` clause on it was a no-op that never fixed
+// the real conflict). Prefixing removes the ambiguity outright without
+// needing to track down which specific package the other `Category`
+// comes from.
+import '../services/category_gateway_service.dart' as gateway;
 import '../services/food_seller_service.dart';
 import '../services/location_service.dart';
 import '../services/map_service.dart';
 import '../services/service_request_service.dart';
-import '../services/app_palette.dart';
 import '../utils/service_request_labels.dart';
 import '../widgets/server_busy_dialog.dart';
 import 'category_screen.dart';
@@ -36,6 +45,13 @@ class CustomFoodOrderScreen extends StatefulWidget {
   const CustomFoodOrderScreen({super.key, this.initialShop, this.initialItems});
   @override
   State<CustomFoodOrderScreen> createState() => _CustomFoodOrderScreenState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('initialShop', initialShop));
+    properties.add(StringProperty('initialItems', initialItems));
+  }
 }
 
 class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
@@ -116,7 +132,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
       }
       final point = LatLng(position.latitude, position.longitude);
       final reverse = await MapService().reverseGeocode(point);
-      final address = (reverse?['name'] as String?)?.trim().isNotEmpty == true
+      final address = (reverse?['name'] as String?)?.trim().isNotEmpty ?? false
           ? reverse!['name'] as String
           : (reverse?['address'] as String?) ?? 'Current location';
       if (!mounted) return;
@@ -190,7 +206,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
       unawaited(Future.delayed(
         const Duration(seconds: kServiceRequestPingExpirySeconds),
         () => ServiceRequestService().markTimeoutIfStillPending(requestId),
-      ));
+      ),);
 
       if (!mounted) return;
       // Clear the form so the just-placed order shows cleanly in the
@@ -343,7 +359,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
         context,
         MaterialPageRoute<void>(
           builder: (_) => CategoryScreen(
-            category: Category.food,
+            category: gateway.Category.food,
             sellers: sellers.map((s) => s.toJson()).toList(),
           ),
         ),
@@ -384,7 +400,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
                         Text('Just tell us what you want and from where. We will deliver it to you.', style: TextStyle(color: kText, fontSize: 11)),
                       ],
                     ),
-                  )
+                  ),
                 ],
               ),
             ),
@@ -424,7 +440,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
               prefixIcon: Icon(Icons.storefront_rounded, color: kPink, size: 20),
               suffixIcon: _shopSearching
                   ? Padding(
-                      padding: EdgeInsets.all(14),
+                      padding: const EdgeInsets.all(14),
                       child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: kPink)),
                     )
                   : null,
@@ -468,7 +484,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
                                 Text(name, style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w700)),
                                 if (address.isNotEmpty)
                                   Text(address, maxLines: 1, overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(color: kMuted, fontSize: 11)),
+                                      style: TextStyle(color: kMuted, fontSize: 11),),
                               ],
                             ),
                           ),
@@ -546,7 +562,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
+                padding: const EdgeInsets.symmetric(vertical: 20),
                 child: Center(child: CircularProgressIndicator(color: kPink, strokeWidth: 2)),
               );
             }
@@ -682,12 +698,18 @@ class _FoodSidebar extends StatelessWidget {
                 .map((cat) => _SidebarIcon(
                       category: cat,
                       onTap: () => onCategoryTap(cat.key),
-                    ))
+                    ),)
                 .toList(),
           ),
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(ObjectFlagProperty<ValueChanged<String>>.has('onCategoryTap', onCategoryTap));
   }
 }
 
@@ -778,5 +800,12 @@ class _SidebarIcon extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<FoodSubCategory>('category', category));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }
