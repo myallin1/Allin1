@@ -28,15 +28,15 @@ import '../widgets/server_busy_dialog.dart';
 import 'hero_booking_status_screen.dart';
 import 'hero_booking_tracking_screen.dart';
 import 'location_picker_screen.dart';
+import '../services/theme_context_extensions.dart';
 
-const Color _kPink = Color(0xFFFF4FA3);
-const Color _kPinkDark = Color(0xFFBE2A7A);
-const Color _kPinkBg = Color(0xFFFFF0F7);
-const Color _kBg = Color(0xFFFFFFFF);
-const Color _kSurface = Color(0xFFF8F8FF);
-const Color _kText = Color(0xFF1A1A2E);
-const Color _kMuted = Color(0xFF9999BB);
-const Color _kBorder = Color(0x33FF4FA3);
+// Batch 1 retrofit: former hardcoded hex constants (_kPink, _kPinkDark,
+// _kPinkBg, _kBg, _kSurface, _kText, _kMuted, _kBorder) removed in favor
+// of context.colors.* (theme_context_extensions.dart) so this screen is
+// reactive to all 5 app themes instead of frozen on the old pink/white
+// palette. Mapping: _kPink->accent, _kPinkDark->accentSecondary,
+// _kPinkBg->subtleFill, _kBg->background, _kSurface->surface,
+// _kText->text, _kMuted->mutedText, _kBorder->border.
 
 class HeroBookingScreen extends StatefulWidget {
   const HeroBookingScreen({super.key, this.initialCategory = 'pickup_delivery'});
@@ -148,7 +148,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         title: Text(
           'Location received',
           style: GoogleFonts.outfit(
-            color: _kText,
+            color: context.colors.text,
             fontSize: 16,
             fontWeight: FontWeight.w800,
           ),
@@ -160,7 +160,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.place_rounded, color: _kPink, size: 18),
+                Icon(Icons.place_rounded, color: context.colors.accent, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -169,7 +169,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                         : '${shared.lat.toStringAsFixed(5)}, '
                             '${shared.lng.toStringAsFixed(5)}',
                     style: const TextStyle(
-                        color: _kText, fontSize: 13, height: 1.4,),
+                        color: context.colors.text, fontSize: 13, height: 1.4,),
                   ),
                 ),
               ],
@@ -177,14 +177,14 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
             const SizedBox(height: 14),
             const Text(
               'Where should this go?',
-              style: TextStyle(color: _kMuted, fontSize: 12),
+              style: TextStyle(color: context.colors.mutedText, fontSize: 12),
             ),
           ],
         ),
         actionsAlignment: MainAxisAlignment.spaceBetween,
         actions: [
           OutlinedButton(
-            style: OutlinedButton.styleFrom(foregroundColor: _kPinkDark),
+            style: OutlinedButton.styleFrom(foregroundColor: context.colors.accentSecondary),
             onPressed: () {
               Navigator.of(dialogContext).pop();
               unawaited(_applyPickedCoordinates(
@@ -199,7 +199,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: _kPink,
+              backgroundColor: context.colors.accent,
               foregroundColor: Colors.white,
             ),
             onPressed: () {
@@ -553,15 +553,15 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _kBg,
+      backgroundColor: context.colors.background,
       appBar: AppBar(
-        backgroundColor: _kBg,
+        backgroundColor: context.colors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _kText, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: context.colors.text, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Hero Booking', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 18)),
+        title: Text('Hero Booking', style: GoogleFonts.outfit(color: context.colors.text, fontWeight: FontWeight.w800, fontSize: 18)),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
@@ -573,9 +573,9 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: _kPink.withValues(alpha: 0.08),
+                color: context.colors.accent.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: _kPink.withValues(alpha: 0.2)),
+                border: Border.all(color: context.colors.accent.withValues(alpha: 0.2)),
               ),
               child: Row(
                 children: [
@@ -585,9 +585,9 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Hire a Hero for anything', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 14)),
+                        Text('Hire a Hero for anything', style: GoogleFonts.outfit(color: context.colors.text, fontWeight: FontWeight.w800, fontSize: 14)),
                         const SizedBox(height: 2),
-                        const Text("Errands, deliveries, help with tasks — describe it and we'll send the nearest available Hero.", style: TextStyle(color: _kMuted, fontSize: 11)),
+                        Text("Errands, deliveries, help with tasks — describe it and we'll send the nearest available Hero.", style: TextStyle(color: context.colors.mutedText, fontSize: 11)),
                       ],
                     ),
                   ),
@@ -601,7 +601,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
             // below: this is what actually helps a customer realise
             // the range of tasks a Hero covers. Tapping a card jumps
             // straight to its matching category.
-            Text('What can a Hero do for you?', style: GoogleFonts.outfit(color: _kText, fontSize: 14, fontWeight: FontWeight.w700)),
+            Text('What can a Hero do for you?', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
             const SizedBox(height: 10),
             _HeroTaskIdeasMarquee(
               onSelect: (key) => setState(() => _selectedCategory = key),
@@ -609,7 +609,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
             const SizedBox(height: 24),
 
             // ── 1. Task category ─────────────────────────────────
-            Text('What kind of task?', style: GoogleFonts.outfit(color: _kText, fontSize: 14, fontWeight: FontWeight.w700)),
+            Text('What kind of task?', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
@@ -620,7 +620,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
 
             // ── 2. Location(s) — progressive disclosure ──────────
             if (_isPickupDelivery) ...[
-              Text('Pickup location', style: GoogleFonts.outfit(color: _kText, fontSize: 14, fontWeight: FontWeight.w700)),
+              Text('Pickup location', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               _locationField(
                 controller: _fromLocationCtrl,
@@ -628,7 +628,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                 isFrom: true,
               ),
               const SizedBox(height: 16),
-              Text('Drop location', style: GoogleFonts.outfit(color: _kText, fontSize: 14, fontWeight: FontWeight.w700)),
+              Text('Drop location', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               _locationField(
                 controller: _locationCtrl,
@@ -636,7 +636,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                 isFrom: false,
               ),
             ] else ...[
-              Text('Location', style: GoogleFonts.outfit(color: _kText, fontSize: 14, fontWeight: FontWeight.w700)),
+              Text('Location', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               _locationField(
                 controller: _locationCtrl,
@@ -647,7 +647,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
             const SizedBox(height: 16),
 
             // ── 3. Brief task description ─────────────────────────
-            Text('Brief description', style: GoogleFonts.outfit(color: _kText, fontSize: 14, fontWeight: FontWeight.w700)),
+            Text('Brief description', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             _voiceTextField(
               controller: _taskDescCtrl,
@@ -666,18 +666,18 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.add_circle_rounded, color: _kPink, size: 16),
+                      Icon(Icons.add_circle_rounded, color: context.colors.accent, size: 16),
                       const SizedBox(width: 6),
                       Text(
                         'Add more details (optional)',
-                        style: GoogleFonts.outfit(color: _kPinkDark, fontSize: 12, fontWeight: FontWeight.w700),
+                        style: GoogleFonts.outfit(color: context.colors.accentSecondary, fontSize: 12, fontWeight: FontWeight.w700),
                       ),
                     ],
                   ),
                 ),
               )
             else ...[
-              Text('Special instructions', style: GoogleFonts.outfit(color: _kText, fontSize: 14, fontWeight: FontWeight.w700)),
+              Text('Special instructions', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               _voiceTextField(
                 controller: _instructionsCtrl,
@@ -688,7 +688,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
             const SizedBox(height: 20),
 
             // ── 5. Preferred timing — optional ────────────────────
-            Text('When do you need this?', style: GoogleFonts.outfit(color: _kText, fontSize: 14, fontWeight: FontWeight.w700)),
+            Text('When do you need this?', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -706,19 +706,19 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
-                    color: _kSurface,
+                    color: context.colors.surface,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: _kBorder),
+                    border: Border.all(color: context.colors.border),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.schedule_rounded, color: _kPink, size: 18),
+                      Icon(Icons.schedule_rounded, color: context.colors.accent, size: 18),
                       const SizedBox(width: 10),
                       Text(
                         _scheduledAt != null
                             ? '${_scheduledAt!.day}/${_scheduledAt!.month}/${_scheduledAt!.year} at ${TimeOfDay.fromDateTime(_scheduledAt!).format(context)}'
                             : 'Pick a date & time',
-                        style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w600),
+                        style: GoogleFonts.outfit(color: context.colors.text, fontSize: 13, fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
@@ -747,9 +747,9 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                   height: 54,
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _kPink,
+                      backgroundColor: context.colors.accent,
                       elevation: 4,
-                      shadowColor: _kPink.withValues(alpha: 0.4),
+                      shadowColor: context.colors.accent.withValues(alpha: 0.4),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
                     onPressed: _submitting ? null : _submit,
@@ -766,15 +766,15 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                   height: 54,
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: _kPink, width: 1.4),
+                      side: BorderSide(color: context.colors.accent, width: 1.4),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
                     onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => const HeroBookingStatusScreen()),
                     ),
-                    icon: const Icon(Icons.receipt_long_rounded, color: _kPink, size: 18),
-                    label: Text('Booking Status', style: GoogleFonts.outfit(color: _kPink, fontSize: 14, fontWeight: FontWeight.bold)),
+                    icon: Icon(Icons.receipt_long_rounded, color: context.colors.accent, size: 18),
+                    label: Text('Booking Status', style: GoogleFonts.outfit(color: context.colors.accent, fontSize: 14, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ),
@@ -799,13 +799,13 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         duration: const Duration(milliseconds: 220),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
         decoration: BoxDecoration(
-          color: isSelected ? _kPink : _kSurface,
+          color: isSelected ? context.colors.accent : context.colors.surface,
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: isSelected ? _kPink : _kBorder),
+          border: Border.all(color: isSelected ? context.colors.accent : context.colors.border),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: _kPink.withValues(alpha: 0.28),
+                    color: context.colors.accent.withValues(alpha: 0.28),
                     blurRadius: 14,
                     offset: const Offset(0, 5),
                   ),
@@ -815,7 +815,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         child: Text(
           label,
           style: GoogleFonts.outfit(
-            color: isSelected ? Colors.white : _kText,
+            color: isSelected ? Colors.white : context.colors.text,
             fontSize: 12,
             fontWeight: FontWeight.w700,
           ),
@@ -833,13 +833,13 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         duration: const Duration(milliseconds: 220),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
         decoration: BoxDecoration(
-          color: isSelected ? _kPink : _kSurface,
+          color: isSelected ? context.colors.accent : context.colors.surface,
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: isSelected ? _kPink : _kBorder),
+          border: Border.all(color: isSelected ? context.colors.accent : context.colors.border),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: _kPink.withValues(alpha: 0.28),
+                    color: context.colors.accent.withValues(alpha: 0.28),
                     blurRadius: 14,
                     offset: const Offset(0, 5),
                   ),
@@ -849,7 +849,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         child: Text(
           label,
           style: GoogleFonts.outfit(
-            color: isSelected ? Colors.white : _kText,
+            color: isSelected ? Colors.white : context.colors.text,
             fontSize: 12,
             fontWeight: FontWeight.w700,
           ),
@@ -1154,23 +1154,23 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         title: Text(
           title,
           style: GoogleFonts.outfit(
-            color: _kText,
+            color: context.colors.text,
             fontSize: 16,
             fontWeight: FontWeight.w800,
           ),
         ),
         content: Text(
           message,
-          style: const TextStyle(color: _kMuted, fontSize: 13, height: 1.45),
+          style: TextStyle(color: context.colors.mutedText, fontSize: 13, height: 1.45),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Close', style: TextStyle(color: _kMuted)),
+            child: Text('Close', style: TextStyle(color: context.colors.mutedText)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: _kPink,
+              backgroundColor: context.colors.accent,
               foregroundColor: Colors.white,
             ),
             onPressed: () {
@@ -1209,7 +1209,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
               child: Text(
                 isFrom ? 'Pickup location' : 'Drop location',
                 style: GoogleFonts.outfit(
-                  color: _kText,
+                  color: context.colors.text,
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
                 ),
@@ -1255,22 +1255,22 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         width: 38,
         height: 38,
         decoration: BoxDecoration(
-          color: _kPink.withValues(alpha: 0.12),
+          color: context.colors.accent.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(icon, color: _kPink, size: 19),
+        child: Icon(icon, color: context.colors.accent, size: 19),
       ),
       title: Text(
         title,
         style: GoogleFonts.outfit(
-          color: _kText,
+          color: context.colors.text,
           fontSize: 14,
           fontWeight: FontWeight.w700,
         ),
       ),
       subtitle: Text(
         subtitle,
-        style: const TextStyle(color: _kMuted, fontSize: 11),
+        style: TextStyle(color: context.colors.mutedText, fontSize: 11),
       ),
       onTap: () {
         // Close the sheet first — the actions below push screens or
@@ -1303,11 +1303,11 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                     width: 13,
                     height: 13,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: _kPink,),) else Icon(icon, color: _kPink, size: 14),
+                        strokeWidth: 2, color: context.colors.accent,),) else Icon(icon, color: context.colors.accent, size: 14),
             const SizedBox(width: 6),
             Text(label,
                 style: GoogleFonts.outfit(
-                    color: _kPinkDark,
+                    color: context.colors.accentSecondary,
                     fontSize: 11,
                     fontWeight: FontWeight.w700,),),
           ],
@@ -1365,9 +1365,9 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
           Container(
             margin: const EdgeInsets.only(top: 4),
             decoration: BoxDecoration(
-              color: _kSurface,
+              color: context.colors.surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _kBorder),
+              border: Border.all(color: context.colors.border),
             ),
             constraints: const BoxConstraints(maxHeight: 180),
             child: ListView.separated(
@@ -1375,15 +1375,15 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
               padding: const EdgeInsets.symmetric(vertical: 4),
               itemCount: suggestions.length,
               separatorBuilder: (_, __) =>
-                  const Divider(height: 1, color: _kBorder),
+                  Divider(height: 1, color: context.colors.border),
               itemBuilder: (context, i) {
                 final s = suggestions[i];
                 return ListTile(
                   dense: true,
                   leading: const Icon(Icons.place_rounded,
-                      color: _kPink, size: 18,),
+                      color: context.colors.accent, size: 18,),
                   title: Text(s['name'] as String? ?? '',
-                      style: const TextStyle(fontSize: 13, color: _kText),),
+                      style: TextStyle(fontSize: 13, color: context.colors.text),),
                   onTap: () => isFrom
                       ? _selectFromSuggestion(s)
                       : _selectLocationSuggestion(s),
@@ -1406,12 +1406,12 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
       controller: controller,
       maxLines: maxLines,
       onChanged: onChanged,
-      style: const TextStyle(fontSize: 14, color: _kText),
+      style: TextStyle(fontSize: 14, color: context.colors.text),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: TextStyle(color: _kMuted.withValues(alpha: 0.7), fontSize: 13),
+        hintStyle: TextStyle(color: context.colors.mutedText.withValues(alpha: 0.7), fontSize: 13),
         filled: true,
-        fillColor: _kSurface,
+        fillColor: context.colors.surface,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         suffixIcon: Padding(
@@ -1424,8 +1424,8 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: isThisFieldListening
-                      ? [_kPink, _kPinkDark]
-                      : [_kPink.withValues(alpha: 0.16), _kPink.withValues(alpha: 0.08)],
+                      ? [context.colors.accent, context.colors.accentSecondary]
+                      : [context.colors.accent.withValues(alpha: 0.16), context.colors.accent.withValues(alpha: 0.08)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -1433,7 +1433,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                 boxShadow: isThisFieldListening
                     ? [
                         BoxShadow(
-                          color: _kPink.withValues(alpha: 0.4),
+                          color: context.colors.accent.withValues(alpha: 0.4),
                           blurRadius: 10,
                           spreadRadius: 1,
                         ),
@@ -1442,7 +1442,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
               ),
               child: Icon(
                 isThisFieldListening ? Icons.mic_rounded : Icons.mic_none_rounded,
-                color: isThisFieldListening ? Colors.white : _kPinkDark,
+                color: isThisFieldListening ? Colors.white : context.colors.accentSecondary,
                 size: 18,
               ),
             ),
@@ -1541,9 +1541,9 @@ class _HeroTaskIdeasMarqueeState extends State<_HeroTaskIdeasMarquee> {
               margin: const EdgeInsets.only(right: 10),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
               decoration: BoxDecoration(
-                color: _kPinkBg,
+                color: context.colors.subtleFill,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: _kBorder),
+                border: Border.all(color: context.colors.border),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -1554,7 +1554,7 @@ class _HeroTaskIdeasMarqueeState extends State<_HeroTaskIdeasMarquee> {
                     idea['label']!,
                     textAlign: TextAlign.center,
                     style: GoogleFonts.outfit(
-                        color: _kText, fontSize: 11, fontWeight: FontWeight.w700,),
+                        color: context.colors.text, fontSize: 11, fontWeight: FontWeight.w700,),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),

@@ -75,18 +75,23 @@ import 'rewards_screen.dart';
 import 'ride_history_screen.dart';
 import 'settings_screen.dart';
 import 'sos_screen.dart';
+import '../services/theme_context_extensions.dart';
 
-// ---- Dark, glowing "Super Hero" palette ---------------------------------
-const Color _bg = Color(0xFF0B0B12);
-const Color _surface = Color(0xFF15151F);
-const Color _surfaceElevated = Color(0xFF1C1C29);
-const Color _ink = Color(0xFFF3F1FA);
-const Color _muted = Color(0xFF9895AC);
-const Color _border = Color(0xFF2A2A3B);
-const Color _accentA = Color(0xFFB44CFF); // violet
-const Color _accentB = Color(0xFFFF4FA3); // pink
-const Color _accentC = Color(0xFF4CC9FF); // cyan (voice glow)
-const Color _userBubble = Color(0xFF272736);
+// ---- FIX (CTO mandate — Batch 1 Theme Retrofit): this used to be a
+// fixed "Dark, glowing Super Hero palette" of top-level const Colors —
+// meaning this whole screen never once reacted to a theme change,
+// regardless of what ThemeService/the app's MaterialApp said. Removed
+// entirely; every build() method below that used one of these now
+// declares its own local `final` bindings from context.colors right
+// at the top (e.g. `final ink = context.colors.text;`), computed fresh
+// on every rebuild — so a theme switch now genuinely repaints this
+// screen. Mapping kept 1:1 with the old names' INTENT, not their old
+// fixed hex value: _bg->background, _surface->surface,
+// _surfaceElevated->elevatedSurface, _ink->text, _muted->mutedText,
+// _border->border, _accentA(violet)->accentSecondary,
+// _accentB(pink)->accent, _accentC(cyan)->accentTertiary,
+// _userBubble->subtleFill. See theme_context_extensions.dart for what
+// each of those actually resolves to per theme.
 
 const List<_Capability> _capabilities = <_Capability>[
   _Capability('Bike', Icons.two_wheeler_rounded),
@@ -1185,7 +1190,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: _surfaceElevated,
+        backgroundColor: context.colors.elevatedSurface,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
@@ -1204,9 +1209,20 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   @override
   Widget build(BuildContext context) {
     final activation = context.watch<AiActivationService>();
+    // NEW (Batch 1 Theme Retrofit) — local, per-build theme bindings
+    // replacing the old fixed top-level palette. See the file-header
+    // comment for the full name mapping.
+    final bg = context.colors.background;
+    final ink = context.colors.text;
+    final muted = context.colors.mutedText;
+    final border = context.colors.border;
+    final accentA = context.colors.accentSecondary;
+    final accentB = context.colors.accent;
+    final accentC = context.colors.accentTertiary;
+    final surfaceElevated = context.colors.elevatedSurface;
 
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: bg,
       body: !activation.isAiActivated
           ? const _SuperHeroActivationScreen()
           : SafeArea(
@@ -1238,7 +1254,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
         children: [
           IconButton(
             onPressed: () => Navigator.of(context).maybePop(),
-            icon: const Icon(Icons.arrow_back_rounded, color: _ink),
+            icon: Icon(Icons.arrow_back_rounded, color: ink),
           ),
           const _GuruAvatar(size: 30),
           const SizedBox(width: 10),
@@ -1250,7 +1266,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
                 Text(
                   'MyAllin1 Super Hero',
                   style: GoogleFonts.outfit(
-                    color: _ink,
+                    color: ink,
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
                   ),
@@ -1262,7 +1278,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
                 Text(
                   'Voice unlocked',
                   style: GoogleFonts.outfit(
-                    color: _accentC,
+                    color: accentC,
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1281,13 +1297,13 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
             tooltip: _autoSpeak ? 'Mute Guru' : 'Unmute Guru',
             icon: Icon(
               _autoSpeak ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-              color: _muted,
+              color: muted,
             ),
           ),
           IconButton(
             onPressed: _startNewChat,
             tooltip: 'New chat',
-            icon: const Icon(Icons.add_comment_outlined, color: _muted),
+            icon: Icon(Icons.add_comment_outlined, color: muted),
           ),
         ],
       ),
@@ -1305,7 +1321,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
             const SizedBox(height: 18),
             ShaderMask(
               shaderCallback: (bounds) => const LinearGradient(
-                colors: [_accentB, _accentA],
+                colors: [accentB, accentA],
               ).createShader(bounds),
               child: Text(
                 "Vanakkam! I'm your Super Hero.",
@@ -1321,7 +1337,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
             Text(
               'Ask me anything about rides, deliveries, or services in Erode.',
               textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(color: _muted, fontSize: 13.5, height: 1.4),
+              style: GoogleFonts.outfit(color: muted, fontSize: 13.5, height: 1.4),
             ),
             const SizedBox(height: 22),
             Wrap(
@@ -1391,8 +1407,8 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
                         onTap: _clearAttachment,
                         child: Container(
                           padding: const EdgeInsets.all(3),
-                          decoration: const BoxDecoration(color: _surfaceElevated, shape: BoxShape.circle),
-                          child: const Icon(Icons.close_rounded, color: _muted, size: 16),
+                          decoration: BoxDecoration(color: surfaceElevated, shape: BoxShape.circle),
+                          child: Icon(Icons.close_rounded, color: muted, size: 16),
                         ),
                       ),
                     ),
@@ -1411,9 +1427,9 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
                       ? const SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: _muted),
+                          child: CircularProgressIndicator(strokeWidth: 2, color: muted),
                         )
-                      : const Icon(Icons.attach_file_rounded, color: _muted),
+                      : Icon(Icons.attach_file_rounded, color: muted),
                 ),
                 _VoiceMicButton(
                   isListening: _isListening,
@@ -1430,9 +1446,9 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
               child: Container(
                 constraints: const BoxConstraints(minHeight: 48, maxHeight: 140),
                 decoration: BoxDecoration(
-                  color: _surfaceElevated,
+                  color: surfaceElevated,
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: _border),
+                  border: Border.all(color: border),
                 ),
                 child: TextField(
                   controller: _inputController,
@@ -1440,10 +1456,10 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
                   maxLines: 5,
                   onSubmitted: (_) => unawaited(_sendMessage()),
                   textInputAction: TextInputAction.send,
-                  style: GoogleFonts.notoSansTamil(color: _ink, fontWeight: FontWeight.w500, fontSize: 14.5),
+                  style: GoogleFonts.notoSansTamil(color: ink, fontWeight: FontWeight.w500, fontSize: 14.5),
                   decoration: InputDecoration(
                     hintText: _isListening ? 'Listening...' : 'Message your Super Hero...',
-                    hintStyle: GoogleFonts.outfit(color: _muted, fontWeight: FontWeight.w500),
+                    hintStyle: GoogleFonts.outfit(color: muted, fontWeight: FontWeight.w500),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
                   ),
@@ -1456,7 +1472,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
               height: 44,
               child: DecoratedBox(
                 decoration: const BoxDecoration(
-                  gradient: LinearGradient(colors: [_accentB, _accentA]),
+                  gradient: LinearGradient(colors: [accentB, accentA]),
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
@@ -1512,6 +1528,13 @@ class _SuperHeroActivationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ink = context.colors.text;
+    final muted = context.colors.mutedText;
+    final border = context.colors.border;
+    final accentA = context.colors.accentSecondary;
+    final accentB = context.colors.accent;
+    final accentC = context.colors.accentTertiary;
+    final surface = context.colors.surface;
     return Stack(
       children: [
         const _GlowBackdrop(),
@@ -1522,7 +1545,7 @@ class _SuperHeroActivationScreen extends StatelessWidget {
                 alignment: Alignment.topLeft,
                 child: IconButton(
                   onPressed: () => Navigator.of(context).maybePop(),
-                  icon: const Icon(Icons.arrow_back_rounded, color: _ink),
+                  icon: Icon(Icons.arrow_back_rounded, color: ink),
                 ),
               ),
               Expanded(
@@ -1536,7 +1559,7 @@ class _SuperHeroActivationScreen extends StatelessWidget {
                         const SizedBox(height: 26),
                         ShaderMask(
                           shaderCallback: (bounds) => const LinearGradient(
-                            colors: [_accentB, _accentA],
+                            colors: [accentB, accentA],
                           ).createShader(bounds),
                           child: Text(
                             'Unlock your Super Hero',
@@ -1554,7 +1577,7 @@ class _SuperHeroActivationScreen extends StatelessWidget {
                           'Bike, Auto, Cab, Parcel, Mini Truck, Lorry, and SOS — '
                           'plus every other service in the app.',
                           textAlign: TextAlign.center,
-                          style: GoogleFonts.outfit(color: _muted, fontSize: 14, height: 1.5),
+                          style: GoogleFonts.outfit(color: muted, fontSize: 14, height: 1.5),
                         ),
                         const SizedBox(height: 26),
                         Wrap(
@@ -1570,9 +1593,9 @@ class _SuperHeroActivationScreen extends StatelessWidget {
                           width: double.infinity,
                           padding: const EdgeInsets.all(18),
                           decoration: BoxDecoration(
-                            color: _surface,
+                            color: surface,
                             borderRadius: BorderRadius.circular(22),
-                            border: Border.all(color: _border),
+                            border: Border.all(color: border),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1582,7 +1605,7 @@ class _SuperHeroActivationScreen extends StatelessWidget {
                                   Container(
                                     padding: const EdgeInsets.all(10),
                                     decoration: const BoxDecoration(
-                                      gradient: LinearGradient(colors: [_accentA, _accentC]),
+                                      gradient: LinearGradient(colors: [accentA, accentC]),
                                       borderRadius: BorderRadius.all(Radius.circular(14)),
                                     ),
                                     child: const Icon(Icons.support_agent_rounded, color: Colors.white),
@@ -1593,7 +1616,7 @@ class _SuperHeroActivationScreen extends StatelessWidget {
                                       'Call or WhatsApp Admin Support to claim your access. '
                                       'Once activated, your full chat unlocks instantly.',
                                       style: GoogleFonts.outfit(
-                                        color: _ink,
+                                        color: ink,
                                         fontWeight: FontWeight.w600,
                                         fontSize: 13,
                                         height: 1.4,
@@ -1611,8 +1634,8 @@ class _SuperHeroActivationScreen extends StatelessWidget {
                                       icon: const Icon(Icons.call_rounded, size: 18),
                                       label: const Text('Call'),
                                       style: OutlinedButton.styleFrom(
-                                        foregroundColor: _ink,
-                                        side: const BorderSide(color: _border),
+                                        foregroundColor: ink,
+                                        side: BorderSide(color: border),
                                         padding: const EdgeInsets.symmetric(vertical: 14),
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(16),
@@ -1686,14 +1709,21 @@ class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final ink = context.colors.text;
+    final muted = context.colors.mutedText;
+    final border = context.colors.border;
+    final accentA = context.colors.accentSecondary;
+    final accentB = context.colors.accent;
+    final accentC = context.colors.accentTertiary;
+    final surface = context.colors.surface;
     return SafeArea(
       child: Container(
         margin: const EdgeInsets.all(12),
         padding: const EdgeInsets.all(22),
         decoration: BoxDecoration(
-          color: _surface,
+          color: surface,
           borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: _border),
+          border: Border.all(color: border),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1702,7 +1732,7 @@ class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
               width: 64,
               height: 64,
               decoration: const BoxDecoration(
-                gradient: LinearGradient(colors: [_accentC, _accentA]),
+                gradient: LinearGradient(colors: [accentC, accentA]),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.mic_rounded, color: Colors.white, size: 30),
@@ -1711,7 +1741,7 @@ class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
             Text(
               'Voice Mode',
               textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(color: _ink, fontSize: 19, fontWeight: FontWeight.w800),
+              style: GoogleFonts.outfit(color: ink, fontSize: 19, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
             Text(
@@ -1719,18 +1749,18 @@ class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
               'let Super Hero understand and place it for you. It\'s completely '
               'free, one tap away.',
               textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(color: _muted, fontSize: 13.5, height: 1.5),
+              style: GoogleFonts.outfit(color: muted, fontSize: 13.5, height: 1.5),
             ),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: _accentC.withValues(alpha: 0.14),
+                color: accentC.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
                 'FREE • No card, no catch',
-                style: GoogleFonts.outfit(color: _accentC, fontWeight: FontWeight.w800, fontSize: 12.5),
+                style: GoogleFonts.outfit(color: accentC, fontWeight: FontWeight.w800, fontSize: 12.5),
               ),
             ),
             const SizedBox(height: 20),
@@ -1747,7 +1777,7 @@ class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
                     : const Icon(Icons.mic_rounded),
                 label: const Text('Claim My Free Voice Access'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _accentB,
+                  backgroundColor: accentB,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 15),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
@@ -1757,7 +1787,7 @@ class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
             const SizedBox(height: 8),
             TextButton(
               onPressed: () => Navigator.of(context).maybePop(),
-              child: Text('Maybe later', style: GoogleFonts.outfit(color: _muted, fontWeight: FontWeight.w600)),
+              child: Text('Maybe later', style: GoogleFonts.outfit(color: muted, fontWeight: FontWeight.w600)),
             ),
           ],
         ),
@@ -1782,21 +1812,25 @@ class _CapabilityChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ink = context.colors.text;
+    final border = context.colors.border;
+    final accentC = context.colors.accentTertiary;
+    final surfaceElevated = context.colors.elevatedSurface;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
       decoration: BoxDecoration(
-        color: _surfaceElevated,
+        color: surfaceElevated,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
+        border: Border.all(color: border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(capability.icon, size: 15, color: _accentC),
+          Icon(capability.icon, size: 15, color: accentC),
           const SizedBox(width: 6),
           Text(
             capability.label,
-            style: GoogleFonts.outfit(color: _ink, fontSize: 12.5, fontWeight: FontWeight.w700),
+            style: GoogleFonts.outfit(color: ink, fontSize: 12.5, fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -1817,17 +1851,20 @@ class _PromptChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ink = context.colors.text;
+    final border = context.colors.border;
+    final surface = context.colors.surface;
     return InkWell(
       borderRadius: BorderRadius.circular(20),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
         decoration: BoxDecoration(
-          color: _surface,
+          color: surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: _border),
+          border: Border.all(color: border),
         ),
-        child: Text(label, style: GoogleFonts.outfit(color: _ink, fontSize: 13, fontWeight: FontWeight.w600)),
+        child: Text(label, style: GoogleFonts.outfit(color: ink, fontSize: 13, fontWeight: FontWeight.w600)),
       ),
     );
   }
@@ -1877,6 +1914,12 @@ class _VoiceMicButtonState extends State<_VoiceMicButton> with SingleTickerProvi
 
   @override
   Widget build(BuildContext context) {
+    final ink = context.colors.text;
+    final muted = context.colors.mutedText;
+    final border = context.colors.border;
+    final accentB = context.colors.accent;
+    final accentC = context.colors.accentTertiary;
+    final surfaceElevated = context.colors.elevatedSurface;
     return AnimatedBuilder(
       animation: _pulse,
       builder: (context, child) {
@@ -1886,15 +1929,15 @@ class _VoiceMicButtonState extends State<_VoiceMicButton> with SingleTickerProvi
           height: 46,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: widget.isListening ? _accentC.withValues(alpha: 0.18) : _surfaceElevated,
+            color: widget.isListening ? accentC.withValues(alpha: 0.18) : surfaceElevated,
             border: Border.all(
-              color: widget.isListening ? _accentC : _border,
+              color: widget.isListening ? accentC : border,
               width: widget.isListening ? 1.6 : 1,
             ),
             boxShadow: widget.isListening
                 ? [
                     BoxShadow(
-                      color: _accentC.withValues(alpha: glow),
+                      color: accentC.withValues(alpha: glow),
                       blurRadius: 18,
                       spreadRadius: 2,
                     ),
@@ -1908,7 +1951,7 @@ class _VoiceMicButtonState extends State<_VoiceMicButton> with SingleTickerProvi
                 onPressed: widget.onTap,
                 icon: Icon(
                   widget.isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
-                  color: widget.isListening ? _accentC : (widget.isPro ? _ink : _muted),
+                  color: widget.isListening ? accentC : (widget.isPro ? ink : muted),
                   size: 20,
                 ),
                 padding: EdgeInsets.zero,
@@ -1917,7 +1960,7 @@ class _VoiceMicButtonState extends State<_VoiceMicButton> with SingleTickerProvi
                 const Positioned(
                   right: 2,
                   top: 2,
-                  child: Icon(Icons.workspace_premium_rounded, size: 11, color: _accentB),
+                  child: Icon(Icons.workspace_premium_rounded, size: 11, color: accentB),
                 ),
             ],
           ),
@@ -1942,6 +1985,10 @@ class _GuruMessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ink = context.colors.text;
+    final border = context.colors.border;
+    final surfaceElevated = context.colors.elevatedSurface;
+    final userBubble = context.colors.subtleFill;
     final isUser = message.role == 'user';
     if (isUser) {
       return Align(
@@ -1952,9 +1999,9 @@ class _GuruMessageBubble extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 320),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: _userBubble,
+              color: userBubble,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: _border),
+              border: Border.all(color: border),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -1976,7 +2023,7 @@ class _GuruMessageBubble extends StatelessWidget {
                 if (message.text.isNotEmpty)
                   Text(
                     message.text,
-                    style: GoogleFonts.notoSansTamil(color: _ink, fontWeight: FontWeight.w500, fontSize: 14.5, height: 1.4),
+                    style: GoogleFonts.notoSansTamil(color: ink, fontWeight: FontWeight.w500, fontSize: 14.5, height: 1.4),
                   ),
               ],
             ),
@@ -1998,7 +2045,7 @@ class _GuruMessageBubble extends StatelessWidget {
               children: [
                 Text(
                   message.text,
-                  style: GoogleFonts.notoSansTamil(color: _ink, fontWeight: FontWeight.w500, fontSize: 14.5, height: 1.5),
+                  style: GoogleFonts.notoSansTamil(color: ink, fontWeight: FontWeight.w500, fontSize: 14.5, height: 1.5),
                 ),
                 // NEW (CTO mandate — Suggestion Chips): clickable quick
                 // replies parsed out of the model's [SUGGESTIONS: ...]
@@ -2012,9 +2059,9 @@ class _GuruMessageBubble extends StatelessWidget {
                         .map(
                           (s) => ActionChip(
                             label: Text(s, style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w600)),
-                            backgroundColor: _surfaceElevated,
-                            side: const BorderSide(color: _border),
-                            labelStyle: const TextStyle(color: _ink),
+                            backgroundColor: surfaceElevated,
+                            side: BorderSide(color: border),
+                            labelStyle: TextStyle(color: ink),
                             onPressed: onSuggestionTap == null ? null : () => onSuggestionTap!(s),
                           ),
                         )
@@ -2061,6 +2108,7 @@ class _GuruTypingIndicatorState extends State<_GuruTypingIndicator>
 
   @override
   Widget build(BuildContext context) {
+    final accentC = context.colors.accentTertiary;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       child: Row(
@@ -2082,7 +2130,7 @@ class _GuruTypingIndicatorState extends State<_GuruTypingIndicator>
                       height: 6,
                       margin: const EdgeInsets.symmetric(horizontal: 2.5),
                       decoration: BoxDecoration(
-                        color: _accentC.withValues(alpha: 0.5 + scale * 0.3),
+                        color: accentC.withValues(alpha: 0.5 + scale * 0.3),
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -2105,20 +2153,22 @@ class _GuruAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accentA = context.colors.accentSecondary;
+    final accentB = context.colors.accent;
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: const LinearGradient(
-          colors: [_accentB, _accentA],
+        gradient: LinearGradient(
+          colors: [accentB, accentA],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: glow
             ? [
-                BoxShadow(color: _accentA.withValues(alpha: 0.45), blurRadius: 34, spreadRadius: 4),
-                BoxShadow(color: _accentB.withValues(alpha: 0.3), blurRadius: 18, spreadRadius: 1),
+                BoxShadow(color: accentA.withValues(alpha: 0.45), blurRadius: 34, spreadRadius: 4),
+                BoxShadow(color: accentB.withValues(alpha: 0.3), blurRadius: 18, spreadRadius: 1),
               ]
             : null,
       ),
@@ -2142,23 +2192,26 @@ class _GlowBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const IgnorePointer(
+    final accentA = context.colors.accentSecondary;
+    final accentB = context.colors.accent;
+    final accentC = context.colors.accentTertiary;
+    return IgnorePointer(
       child: Stack(
         children: [
           Positioned(
             top: -90,
             left: -60,
-            child: _GlowOrb(color: _accentA, size: 260, opacity: 0.22),
+            child: _GlowOrb(color: accentA, size: 260, opacity: 0.22),
           ),
           Positioned(
             top: 120,
             right: -80,
-            child: _GlowOrb(color: _accentB, size: 220, opacity: 0.16),
+            child: _GlowOrb(color: accentB, size: 220, opacity: 0.16),
           ),
           Positioned(
             bottom: -100,
             left: 40,
-            child: _GlowOrb(color: _accentC, size: 240, opacity: 0.14),
+            child: _GlowOrb(color: accentC, size: 240, opacity: 0.14),
           ),
         ],
       ),

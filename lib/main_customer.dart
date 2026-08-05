@@ -20,7 +20,6 @@ import 'app_navigator.dart';
 import 'config/api_config.dart';
 import 'firebase_options.dart';
 import 'screens/ai_settings_screen.dart';
-import 'screens/auth/profile_setup_screen.dart';
 import 'screens/checkout_screen.dart';
 import 'screens/coming_soon_screen.dart';
 import 'screens/customer_login_screen.dart';
@@ -742,64 +741,29 @@ class _CustomerHomeGateState extends State<_CustomerHomeGate> {
           });
         }
 
-        // FIX (Instant Launch): this used to show a full-screen
-        // BrandedLoadingScreen here while waiting for the FIRST
-        // authStateChanges() emission, and again below while the
-        // Firestore profile-setup check was in flight with no local
-        // cache -- both are network-bound waits that could take a
-        // visible moment on a cold start / PWA resume, during which the
-        // customer saw nothing but a spinner. The Dashboard renders
-        // instantly and optimistically now in both cases; if the
-        // profile-setup check below determines this account genuinely
-        // still needs onboarding, it swaps to ProfileSetupScreen once
-        // that resolves (a one-time, rare-case redirect for brand-new
-        // sign-ups, not something a returning customer will ever see).
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const DashboardScreen();
-        }
-
-        if (!(snapshot.hasData && user != null)) {
-          return const DashboardScreen();
-        }
-
-        return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          // ── Optimistic / cache-first profile read ──────────────────
-          // Attempt local cache first so the gate resolves instantly on
-          // second launch without showing a blocking spinner.  The SDK
-          // automatically falls back to network when cache is empty.
-          future: FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .get(const GetOptions(source: Source.cache))
-              .catchError((_) => FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(user.uid)
-                  .get(),),
-          builder: (context, userSnapshot) {
-            // Still resolving (typically only a genuine first-ever cold
-            // start with no cache) -- show the Dashboard, not a spinner.
-            if (userSnapshot.connectionState == ConnectionState.waiting &&
-                !userSnapshot.hasData) {
-              return const DashboardScreen();
-            }
-
-            final userData = userSnapshot.data?.data() ?? <String, dynamic>{};
-            final phone =
-                (userData['phoneNumber'] as String?)?.trim().isNotEmpty ?? false
-                    ? (userData['phoneNumber'] as String).trim()
-                    : ((userData['phone'] as String?)?.trim() ?? '');
-            final isSetupComplete = userData['isSetupComplete'] == true;
-            final needsSetup = phone.isEmpty || !isSetupComplete;
-
-            final child = needsSetup
-                ? const ProfileSetupScreen(
-                    
-                  )
-                : const DashboardScreen();
-
-            return child;
-          },
-        );
+        // FIX (CTO mandate — Task 1: Remove Legacy Profile Setup): this
+        // gate used to run a whole extra Firestore FutureBuilder here
+        // just to decide whether to swap in ProfileSetupScreen — that
+        // "still needs onboarding" case can no longer genuinely happen
+        // for the customer app. customer_login_screen.dart's new
+        // mobile-number-first Sign Up flow now writes `phoneNumber`,
+        // `phone`, AND `isSetupComplete: true` into users/{uid} at the
+        // exact moment the account is created (see that file's
+        // _signUpWithGoogle()) — so by the time ANY customer reaches
+        // this gate, either they're not signed in yet (handled above)
+        // or their profile is already complete. Removed the
+        // Firestore-profile-read FutureBuilder and the ProfileSetupScreen
+        // branch entirely; every signed-in customer now goes straight to
+        // DashboardScreen, unconditionally, every time. Zero network
+        // round trip added to this gate anymore.
+        //
+        // NOTE: ProfileSetupScreen the WIDGET is not deleted — it's
+        // still a real, actively-used screen for other app types via
+        // lib/screens/login_screen.dart's generic Google sign-in
+        // handler (Admin/Seller/other-role flows), so removing the
+        // FILE would break those. Only this customer-specific gate
+        // stopped routing to it.
+        return const DashboardScreen();
       },
     );
   }

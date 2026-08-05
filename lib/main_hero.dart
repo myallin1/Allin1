@@ -382,10 +382,24 @@ class HeroApp extends StatelessWidget {
             if (kIsWeb) HeroWebAudioService().unlock();
           },
           child: MaterialApp(
+            // FIX (CTO mandate — Task 2: Global Theme Propagation): the
+            // customer app's MaterialApp already forces a full-tree
+            // rebuild on theme change via a ValueKey keyed off
+            // themeService.themeKey (see main_customer.dart) — the Hero
+            // app's MaterialApp never had that, so while
+            // theme: themeService.currentTheme WAS reactive at the
+            // MaterialApp level itself, deeper widgets that read
+            // ThemeService directly (rather than via Theme.of(context),
+            // which already rebuilds correctly on its own) could lag
+            // behind a live theme switch until their own screen
+            // happened to rebuild for some other reason. Matching the
+            // customer app's proven pattern here for consistency.
+            key: ValueKey<String>('hero_${themeService.themeKey}'),
             navigatorKey: navigatorKey,
             title: 'hero allin1',
             debugShowCheckedModeBanner: false,
             theme: themeService.currentTheme,
+            themeMode: ThemeMode.light,
             initialRoute: '/',
             routes: {
               '/': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
