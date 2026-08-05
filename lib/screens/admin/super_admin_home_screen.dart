@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../services/db_usage_tracker.dart';
+import 'admin_ai_settings_screen.dart';
 import 'admin_dashboard_screen.dart';
 import 'admin_food_orders_screen.dart';
 import 'admin_service_requests_screen.dart';
@@ -761,6 +762,19 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute<void>(builder: (_) => const CommissionSettingsScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.support_agent_rounded, color: Color(0xFFE05555)),
+              title: const Text('Admin AI Configuration', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Paste your Groq + Gemini API keys',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const AdminAiSettingsScreen()),
                 );
               },
             ),

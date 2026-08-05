@@ -14,50 +14,71 @@ class AiSettingsScreen extends StatefulWidget {
 class _AiSettingsScreenState extends State<AiSettingsScreen> {
   final TextEditingController _apiKeyController = TextEditingController();
   final FocusNode _apiKeyFocusNode = FocusNode();
+  // NEW (Nizam's report — "Gemini key apply panna vali irukka ilaya?"):
+  // second, independent field for the Gemini key — mirrors the Groq
+  // field's own sync/focus pattern exactly, saved via
+  // AiActivationService.saveGeminiApiKey() (new, additive method; the
+  // existing saveApiKey()/apiKey Groq path above is untouched).
+  final TextEditingController _geminiKeyController = TextEditingController();
+  final FocusNode _geminiKeyFocusNode = FocusNode();
   bool _saving = false;
   String _lastSyncedApiKey = '';
+  String _lastSyncedGeminiKey = '';
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final savedApiKey = context.watch<AiActivationService>().apiKey;
-    if (_apiKeyFocusNode.hasFocus || savedApiKey == _lastSyncedApiKey) {
-      return;
+    final aiActivation = context.watch<AiActivationService>();
+    final savedApiKey = aiActivation.apiKey;
+    if (!_apiKeyFocusNode.hasFocus && savedApiKey != _lastSyncedApiKey) {
+      _apiKeyController.value = TextEditingValue(
+        text: savedApiKey,
+        selection: TextSelection.collapsed(offset: savedApiKey.length),
+      );
+      _lastSyncedApiKey = savedApiKey;
     }
-    _apiKeyController.value = TextEditingValue(
-      text: savedApiKey,
-      selection: TextSelection.collapsed(offset: savedApiKey.length),
-    );
-    _lastSyncedApiKey = savedApiKey;
+    final savedGeminiKey = aiActivation.geminiApiKey;
+    if (!_geminiKeyFocusNode.hasFocus && savedGeminiKey != _lastSyncedGeminiKey) {
+      _geminiKeyController.value = TextEditingValue(
+        text: savedGeminiKey,
+        selection: TextSelection.collapsed(offset: savedGeminiKey.length),
+      );
+      _lastSyncedGeminiKey = savedGeminiKey;
+    }
   }
 
   @override
   void dispose() {
     _apiKeyController.dispose();
     _apiKeyFocusNode.dispose();
+    _geminiKeyController.dispose();
+    _geminiKeyFocusNode.dispose();
     super.dispose();
   }
 
   Future<void> _saveAiConfiguration() async {
     final aiActivation = context.read<AiActivationService>();
     final key = _apiKeyController.text.trim();
+    final geminiKey = _geminiKeyController.text.trim();
 
     setState(() => _saving = true);
     await aiActivation.saveApiKey(key);
+    await aiActivation.saveGeminiApiKey(geminiKey);
     if (!mounted) {
       return;
     }
 
     _lastSyncedApiKey = key;
+    _lastSyncedGeminiKey = geminiKey;
     setState(() => _saving = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          key.isEmpty
+          key.isEmpty && geminiKey.isEmpty
               ? 'Guru AI configuration cleared for this device.'
               : 'Guru AI is ready on this device.',
         ),
-        backgroundColor: key.isEmpty
+        backgroundColor: key.isEmpty && geminiKey.isEmpty
             ? const Color(0xFFFFB74D)
             : const Color(0xFFFF4FA3),
         behavior: SnackBarBehavior.floating,
@@ -68,7 +89,20 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final aiActivation = context.watch<AiActivationService>();
-    final activated = aiActivation.isAiActivated;
+    // FIX (Nizam's report — "gemini api potta apayum groq key already
+    // available nu varuthu"): ROOT CAUSE was that the header icon/text
+    // AND the Save button's label below were both driven by this one
+    // `activated` value alone (Groq-only, via isAiActivated) — so once
+    // Groq was saved, EVERYTHING on this screen kept saying "already
+    // activated," including while pasting/saving a fresh Gemini key,
+    // because nothing here ever actually read isGeminiActivated. Each
+    // key now gets its OWN status, shown right under its own field
+    // (see the two _KeyStatusChip additions below); the shared header
+    // and button below are reworded to be honest about summarizing
+    // BOTH keys instead of implying one covers the other.
+    final groqActivated = aiActivation.isAiActivated;
+    final geminiActivated = aiActivation.isGeminiActivated;
+    final activated = groqActivated; // kept for the top icon only — see header text fix below
 
     return Scaffold(
       backgroundColor: const Color(0xFFFFFBFE),
@@ -139,8 +173,10 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
                           ),
                         ),
                         Text(
-                          activated
-                              ? 'Guru AI is activated on this device.'
+                          groqActivated
+                              ? (geminiActivated
+                                  ? 'Groq and Gemini are both activated on this device.'
+                                  : 'Groq is activated. Gemini is optional — add it below for photo-reading.')
                               : 'Save your Groq API key to unlock the full Guru AI chat.',
                           style: GoogleFonts.outfit(
                             color: const Color(0xFF8A4E72),
@@ -154,12 +190,18 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
                 ],
               ),
               const SizedBox(height: 20),
-              Text(
-                'Groq API Key',
-                style: GoogleFonts.outfit(
-                  color: const Color(0xFF4A1236),
-                  fontWeight: FontWeight.w700,
-                ),
+              Row(
+                children: [
+                  Text(
+                    'Groq API Key',
+                    style: GoogleFonts.outfit(
+                      color: const Color(0xFF4A1236),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _KeyStatusChip(activated: groqActivated),
+                ],
               ),
               const SizedBox(height: 10),
               TextField(
@@ -227,6 +269,69 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+              // NEW (Nizam's report — Gemini key had no paste/save UI
+              // anywhere in the app). Optional: leaving this blank just
+              // means the Multi-Agent Handoff's Gemini vision step
+              // (analyze_screen_with_vision / DMart "I Need This")
+              // degrades to "couldn't read that photo" instead of
+              // failing loudly — same non-fatal pattern as an unset
+              // Groq key, never a crash.
+              Row(
+                children: [
+                  Text(
+                    'Gemini API Key (optional)',
+                    style: GoogleFonts.outfit(
+                      color: const Color(0xFF4A1236),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _KeyStatusChip(activated: geminiActivated),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _geminiKeyController,
+                focusNode: _geminiKeyFocusNode,
+                obscureText: true,
+                style: GoogleFonts.outfit(
+                  color: const Color(0xFF351124),
+                  fontWeight: FontWeight.w600,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Paste your Gemini API key',
+                  hintStyle: GoogleFonts.outfit(
+                    color: const Color(0xFF94697E),
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.auto_awesome_rounded,
+                    color: Color(0xFFB21FFF),
+                  ),
+                  filled: true,
+                  fillColor: const Color(0xFFFFF1F8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(18),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(18),
+                    borderSide: const BorderSide(
+                      color: Color(0xFFB21FFF),
+                      width: 1.4,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Used for the deeper photo-reading step when you tap "I Need This" in DMart or attach a photo in chat.',
+                style: GoogleFonts.outfit(
+                  color: const Color(0xFF8A4E72),
+                  fontSize: 11.5,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -242,7 +347,13 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
                         )
                       : const Icon(Icons.save_rounded),
                   label: Text(
-                    activated ? 'Update Guru AI Key' : 'Save & Activate Guru AI',
+                    // FIX (same root cause as above): this used to say
+                    // "Update Guru AI Key" whenever Groq alone was
+                    // already saved — misleading while the customer was
+                    // actually trying to save a NEW Gemini key for the
+                    // first time. Neutral wording that's accurate no
+                    // matter which of the two fields changed.
+                    (groqActivated || geminiActivated) ? 'Update AI Keys' : 'Save & Activate Guru AI',
                     style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
                   ),
                   style: ElevatedButton.styleFrom(
@@ -257,6 +368,34 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// NEW (Nizam's report fix — per-key status, not one shared "activated"
+// flag for the whole screen). Tiny stateless chip, no logic beyond
+// displaying a bool — the actual root-cause fix is in build() reading
+// isAiActivated and isGeminiActivated separately and passing each in.
+class _KeyStatusChip extends StatelessWidget {
+  const _KeyStatusChip({required this.activated});
+  final bool activated;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: activated ? const Color(0xFFE8F9EE) : const Color(0xFFF3F0F5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        activated ? '✓ Saved' : 'Not set',
+        style: GoogleFonts.outfit(
+          color: activated ? const Color(0xFF2E9E5B) : const Color(0xFF9A8AA5),
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );

@@ -42,6 +42,11 @@ String requestTypeLabel(String requestType) {
       return 'Grocery Order';
     case 'electronics_service':
       return 'Electronics Service';
+    // NEW (CTO mandate — Custom Hotel Ordering & Checkout Pipeline):
+    // one added case, everything else in this shared function
+    // untouched — same reasoning as every other requestType label here.
+    case 'custom_hotel_order':
+      return 'Custom Hotel Order';
     default:
       return 'Service Request';
   }

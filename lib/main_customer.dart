@@ -88,6 +88,24 @@ Future<void> _ensureFirebaseInitialized() async {
       persistenceEnabled: true,
       cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
     );
+    // FIX (Nizam's report — PWA "3 animations every reopen" audit): the
+    // admin app already explicitly sets Persistence.LOCAL
+    // (main_admin.dart) but the customer app never did — on web, Auth
+    // persistence otherwise depends on the Firebase JS SDK's own
+    // default, which is usually LOCAL already but isn't guaranteed
+    // across browser/PWA versions. Setting it explicitly here removes
+    // that one remaining variable: a signed-in customer's session is
+    // now guaranteed to survive a full PWA close/reopen, not just
+    // "probably does." Native (Android/iOS) already persists via the
+    // platform SDK regardless — this call is a no-op there, so nothing
+    // changes for the APK build.
+    if (kIsWeb) {
+      try {
+        await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+      } catch (e) {
+        debugPrint('[main_customer] setPersistence(LOCAL) failed: $e');
+      }
+    }
   } on FirebaseException catch (e) {
     if (e.code == 'duplicate-app') {
       debugPrint('[main_customer] Firebase already initialized, continuing.');
@@ -322,6 +340,37 @@ void main() async {
         final flags = await _resolveIntroFlags();
         showIntro = flags.showIntro;
         showWelcome = flags.showWelcome;
+
+        // FIX (CTO mandate — Splash Screen Loop): the flags above are
+        // the right source of truth for "has this device ever seen the
+        // intro/welcome sequence" — that part already worked. This adds
+        // a SECOND, independent guarantee on top: if a real, currently
+        // signed-in Firebase session exists, skip both screens
+        // regardless of what the flags say. Covers the case the flags
+        // alone can't (e.g. app data partially cleared, or a device
+        // that somehow never got the "seen" flag written but genuinely
+        // has an active login) — a returning, logged-in customer should
+        // never see onboarding again, full stop. `authStateChanges()`
+        // is used instead of the synchronous `currentUser` getter
+        // because on web the persisted session can still be loading
+        // asynchronously immediately after Firebase.initializeApp()
+        // returns; a bare `currentUser` check here could wrongly read
+        // null for an actually-logged-in customer. Capped at 2s so a
+        // slow/failed auth restore can never hang the cold boot the
+        // rest of this file works hard to keep instant — falls back to
+        // the flags-only result on timeout.
+        try {
+          final signedInUser = await FirebaseAuth.instance
+              .authStateChanges()
+              .first
+              .timeout(const Duration(seconds: 2));
+          if (signedInUser != null) {
+            showIntro = false;
+            showWelcome = false;
+          }
+        } catch (e) {
+          debugPrint('[main_customer] auth-state bypass check skipped: $e');
+        }
       } catch (error, stack) {
         debugPrint('Boot phase 1 error: $error\n$stack');
         if (AnalyticsService.isInitialized) {

@@ -791,18 +791,27 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
     unawaited(
       _speech.listen(
         onResult: (result) {
+          final words = result.recognizedWords.trim();
+          // FIX (CTO mandate — AI Voice Misfire, same reasoning as
+          // guru_chat_screen.dart's mic): guards against a "final"
+          // result the plugin returns after only a word or two being
+          // actioned as if the customer had finished speaking.
+          final looksLikeRealUtterance = words.length >= 2;
           if (result.finalResult &&
-              result.recognizedWords.trim().isNotEmpty &&
+              looksLikeRealUtterance &&
               !_voiceResultHandled) {
             _voiceResultHandled = true;
             if (mounted) setState(() => _isListening = false);
-            unawaited(service.sendMessage(result.recognizedWords.trim()));
+            unawaited(service.sendMessage(words));
           }
         },
         localeId: localeId,
         listenOptions: stt.SpeechListenOptions(partialResults: false, cancelOnError: true),
         listenFor: const Duration(seconds: 30),
-        pauseFor: const Duration(seconds: 5),
+        // FIX (CTO mandate — AI Voice Misfire): widened 5s -> 8s, same
+        // reasoning as guru_chat_screen.dart's mic — a natural mid-
+        // sentence pause was likely being read as "done talking".
+        pauseFor: const Duration(seconds: 8),
       ),
     );
   }

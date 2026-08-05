@@ -128,17 +128,31 @@ class AdminQuickTaskService extends ChangeNotifier {
   OverlayEntry? _entry;
   bool _sending = false;
   bool _minimized = false;
-  Offset _position = const Offset(16, 120);
+
+  // FIX (CTO mandate — Admin Quick Task Box stability): this used to be
+  // a plain field whose setter called this class's own
+  // notifyListeners() (ChangeNotifier) — meaning every single
+  // onPanUpdate() pixel of a drag rebuilt the ENTIRE panel (message
+  // list + TextField + everything) via the AnimatedBuilder in
+  // _AdminQuickTaskPanel/_AdminQuickTaskFab, since they all listen to
+  // this same service. That's exactly the kind of "awkward UI rebuild"
+  // that can make an on-screen TextField feel unstable while dragging
+  // (Flutter usually preserves focus across a same-shape rebuild, but
+  // rebuilding the whole subtree every frame during a drag is real,
+  // avoidable jank). Position now lives on its own ValueNotifier, with
+  // its own listeners — dragging only rebuilds the small Positioned
+  // wrapper around the panel (see _AdminQuickTaskPanel below), never
+  // the message list or the input TextField.
+  final ValueNotifier<Offset> positionNotifier = ValueNotifier<Offset>(const Offset(16, 120));
 
   bool get isShowing => _entry != null;
   bool get isSending => _sending;
   bool get isMinimized => _minimized;
-  Offset get position => _position;
+  Offset get position => positionNotifier.value;
   bool get hasPendingAction => _pendingAdminAction != null;
 
   void setPosition(Offset offset) {
-    _position = offset;
-    notifyListeners();
+    positionNotifier.value = offset;
   }
 
   void toggleMinimized() {
@@ -682,7 +696,17 @@ class AdminQuickTaskFab extends StatelessWidget {
     return AnimatedBuilder(
       animation: AdminQuickTaskService.instance,
       builder: (context, _) {
-        if (AdminQuickTaskService.instance.isShowing && !AdminQuickTaskService.instance.isMinimized) {
+        // FIX (Nizam's report — "2 AI buttons on screen at once"): this
+        // used to only hide while the panel was showing AND expanded,
+        // so a MINIMIZED panel (isShowing == true, isMinimized == true)
+        // left this condition false and the fixed launcher FAB
+        // reappeared right alongside the minimized draggable bubble
+        // below — two floating AI buttons visible simultaneously.
+        // Hiding whenever the panel is showing at all (minimized or
+        // not) means there is always exactly one floating AI entry
+        // point on screen: this fixed FAB when the panel is fully
+        // closed, or the draggable bubble/panel once it's open.
+        if (AdminQuickTaskService.instance.isShowing) {
           return const SizedBox.shrink();
         }
         return Positioned(
@@ -752,11 +776,26 @@ class _AdminQuickTaskPanelState extends State<_AdminQuickTaskPanel> {
       animation: service,
       builder: (context, _) {
         if (service.isMinimized) {
-          return Positioned(
-            left: service.position.dx,
-            top: service.position.dy,
+          // FIX (CTO mandate — Admin Quick Task Box stability): the
+          // Positioned's left/top now come from a ValueListenableBuilder
+          // scoped to JUST positionNotifier, with the bubble's actual
+          // content passed as `child` — dragging rebuilds only this
+          // small wrapper, never re-creates the GestureDetector/
+          // Container subtree. Also fixes ("the button and the box
+          // should both be able to float anywhere"): this bubble
+          // already read service.position for placement, but its
+          // GestureDetector only had onTap — no onPanUpdate — so unlike
+          // the expanded panel below (which drags fine), the minimized
+          // bubble could never actually be moved. onPanUpdate now calls
+          // the same service.setPosition(...) the expanded panel uses.
+          return ValueListenableBuilder<Offset>(
+            valueListenable: service.positionNotifier,
+            builder: (context, pos, child) => Positioned(left: pos.dx, top: pos.dy, child: child),
             child: GestureDetector(
               onTap: service.toggleMinimized,
+              onPanUpdate: (details) {
+                service.setPosition(service.position + details.delta);
+              },
               child: SafeArea(
                 child: Container(
                   width: 56,
@@ -772,9 +811,9 @@ class _AdminQuickTaskPanelState extends State<_AdminQuickTaskPanel> {
             ),
           );
         }
-        return Positioned(
-          left: service.position.dx,
-          top: service.position.dy,
+        return ValueListenableBuilder<Offset>(
+          valueListenable: service.positionNotifier,
+          builder: (context, pos, child) => Positioned(left: pos.dx, top: pos.dy, child: child),
           child: SafeArea(
             child: GestureDetector(
               onPanUpdate: (details) {

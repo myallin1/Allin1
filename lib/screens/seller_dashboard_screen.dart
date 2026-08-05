@@ -14,6 +14,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/food_models.dart';
 import '../services/food_seller_service.dart';
+import 'seller_custom_hotel_builder_screen.dart';
 import 'seller_electronics_dashboard_screen.dart';
 import 'seller_grocery_dashboard_screen.dart';
 import 'seller_home_kitchen_menu_screen.dart';
@@ -67,6 +68,16 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   // firestore.rules.
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _catalogOrdersSub;
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _catalogOrders = [];
+
+  // NEW (CTO mandate — Custom Hotel Ordering & Checkout Pipeline,
+  // Seller Visibility). Mirrors _catalogOrdersSub/_catalogOrders exactly
+  // — same collection (service_requests), same equality-only filter
+  // shape (no orderBy, so no new composite index needed), just a
+  // different requestType. Kept as a fully separate field/listener
+  // rather than merged into the existing one, so a bug here can never
+  // affect the legacy catalog-order listener above.
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _customHotelOrdersSub;
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _customHotelOrders = [];
 
   // FIX (root cause of the seller dashboard sometimes getting stuck
   // showing nothing after registration/login): _loadProfile() used to
@@ -182,6 +193,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
 
       _listenToOrders(uid);
       _listenToCatalogOrders(uid);
+      _listenToCustomHotelOrders(uid);
       _loadMenuItemCount(uid);
     } catch (e) {
       if (mounted) {
@@ -226,6 +238,32 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
     },);
   }
 
+  // NEW (CTO mandate — Custom Hotel Ordering & Checkout Pipeline). Same
+  // proven pattern as _listenToCatalogOrders above — requestType
+  // 'custom_hotel_order' instead of 'catalog_food_order', everything
+  // else identical.
+  void _listenToCustomHotelOrders(String sellerId) {
+    _customHotelOrdersSub = FirebaseFirestore.instance
+        .collection('service_requests')
+        .where('requestType', isEqualTo: 'custom_hotel_order')
+        .where('details.sellerId', isEqualTo: sellerId)
+        .where('status', whereIn: [
+          'pending',
+          'admin_review',
+          'hero_assigned',
+          'in_progress',
+          'nearing_completion',
+        ],)
+        .snapshots()
+        .listen((snap) {
+      if (mounted) {
+        setState(() => _customHotelOrders = snap.docs);
+      }
+    }, onError: (Object e) {
+      debugPrint('[SellerDashboard] Custom hotel orders listener error: $e');
+    },);
+  }
+
   Future<void> _loadMenuItemCount(String sellerId) async {
     try {
       final items = await _service.getAvailableMenuItems(sellerId);
@@ -239,6 +277,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   void dispose() {
     _ordersSub?.cancel();
     _catalogOrdersSub?.cancel();
+    _customHotelOrdersSub?.cancel();
     _authSub?.cancel();
     super.dispose();
   }
@@ -310,6 +349,71 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
       ),
     );
     await _loadMenuItemCount(_seller!.id);
+  }
+
+  // NEW (CTO mandate — Custom Hotel Integration System, "New Branch").
+  // Purely additive: a second, independent entry point sitting BELOW
+  // the existing "Manage Menu" flow, not replacing or touching it.
+  // SellerCustomHotelBuilderScreen talks only to CustomHotelService /
+  // the `custom_hotels` collection — never `sellers/{uid}/menu_items` —
+  // so the existing menu system above stays provably unaffected.
+  Widget _buildCustomHotelEntry() {
+    if (_seller == null) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Divider(color: _border)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text('OR', style: GoogleFonts.outfit(color: _muted, fontSize: 11, fontWeight: FontWeight.w700)),
+            ),
+            Expanded(child: Divider(color: _border)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        GestureDetector(
+          onTap: () => Navigator.push<void>(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => SellerCustomHotelBuilderScreen(sellerId: _seller!.id, sellerName: _seller!.name),
+            ),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _card2,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _border),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(12)),
+                  child: const Icon(Icons.dashboard_customize_outlined, color: _gold, size: 26),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Build a Custom Hotel',
+                          style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 14.5)),
+                      const SizedBox(height: 2),
+                      Text('Start from an empty menu and build your own listings',
+                          style: GoogleFonts.outfit(color: _muted, fontSize: 11.5)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: _muted),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -435,6 +539,8 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
               _buildOnlineToggle(),
               const SizedBox(height: 16),
               _buildStatsRow(),
+              const SizedBox(height: 20),
+              _buildCustomHotelEntry(),
               const SizedBox(height: 20),
               _buildActiveOrders(),
             ],
@@ -685,7 +791,70 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
           const SizedBox(height: 12),
           ..._catalogOrders.map(_buildCatalogOrderCard),
         ],
+        // NEW (CTO mandate — Custom Hotel Ordering & Checkout
+        // Pipeline). Same additive section pattern as "App Orders"
+        // above, for the seller's separate Custom Hotel Builder shop.
+        if (_customHotelOrders.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Text(
+            'Custom Hotel Orders (${_customHotelOrders.length})',
+            style: GoogleFonts.outfit(color: _text, fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Placed via your Custom Hotel menu — a hero will pick these up for delivery.',
+            style: GoogleFonts.outfit(color: _muted, fontSize: 11.5),
+          ),
+          const SizedBox(height: 12),
+          ..._customHotelOrders.map(_buildCustomHotelOrderCard),
+        ],
       ],
+    );
+  }
+
+  Widget _buildCustomHotelOrderCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
+    final details = (data['details'] as Map<String, dynamic>?) ?? {};
+    final customerName = (data['customerName'] as String?) ?? 'Customer';
+    final itemsSummary = (details['items'] as String?) ?? '';
+    final address = (details['deliveryAddress'] as String?) ?? '';
+    final total = (details['totalAmount'] as num?)?.toDouble() ?? 0;
+    final status = (data['status'] as String?) ?? 'pending';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _gold.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(customerName, style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(color: _gold.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+                child: Text(status, style: GoogleFonts.outfit(color: _gold, fontSize: 10, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          if (itemsSummary.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(itemsSummary, style: GoogleFonts.outfit(color: _muted, fontSize: 12)),
+          ],
+          if (address.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(address, style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
+          ],
+          const SizedBox(height: 6),
+          Text('₹${total.toStringAsFixed(0)}', style: GoogleFonts.outfit(color: _gold, fontWeight: FontWeight.w800, fontSize: 14)),
+        ],
+      ),
     );
   }
 

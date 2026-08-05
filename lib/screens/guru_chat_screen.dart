@@ -638,12 +638,22 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
           _inputController.selection = TextSelection.collapsed(
             offset: _inputController.text.length,
           );
+          final words = result.recognizedWords.trim();
+          // FIX (CTO mandate — AI Voice Misfire): guards against a
+          // "final" result the plugin returns after only a word or two
+          // (a real speech_to_text behavior on some Android devices when
+          // background noise briefly interrupts listening) getting
+          // actioned as if the customer had actually finished their
+          // sentence. Single common words like "hi"/"ok" are allowed
+          // through (>=1 word), but requires at least 2 characters so a
+          // stray single-letter noise blip never fires an action.
+          final looksLikeRealUtterance = words.length >= 2;
           if (result.finalResult &&
-              result.recognizedWords.trim().isNotEmpty &&
+              looksLikeRealUtterance &&
               !_voiceResultHandled) {
             _voiceResultHandled = true;
             setState(() => _isListening = false);
-            unawaited(_handleVoiceUtterance(result.recognizedWords.trim()));
+            unawaited(_handleVoiceUtterance(words));
           }
         },
         localeId: localeId,
@@ -657,14 +667,18 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
           partialResults: false,
           cancelOnError: true,
         ),
-        // FIX (CTO QA — "mic stops and sends after one or two words"):
-        // 3s of silence was too aggressive for customers who pause
-        // naturally mid-sentence (e.g. thinking of a street name).
-        // Widened to 5s so a normal speaking pause doesn't get read as
-        // "done talking", while listenFor gives a full utterance more
-        // total room before the plugin gives up regardless of pauses.
+        // FIX (CTO QA — "mic stops and sends after one or two words";
+        // CTO mandate — AI Voice Misfire "acts before customer finishes
+        // speaking"): widened again, 5s -> 8s. 3s was already found too
+        // aggressive once; 5s can still read as "done talking" during a
+        // longer natural pause (recalling an address, street name,
+        // item name mid-sentence) — that premature pauseFor cutoff is
+        // the most likely real cause of "acts before I finish talking"
+        // for a customer speaking slowly or in a second language.
+        // listenFor unchanged — still gives 30s of total room before
+        // the plugin gives up regardless of pauses.
         listenFor: const Duration(seconds: 30),
-        pauseFor: const Duration(seconds: 5),
+        pauseFor: const Duration(seconds: 8),
       ),
     );
   }

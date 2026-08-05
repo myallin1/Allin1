@@ -28,7 +28,18 @@ class AiActivationService extends ChangeNotifier {
   // mechanic, not billing.
   static const String _proLocallyClaimedPrefsKey = 'ai_pro_locally_claimed';
 
+  // NEW (Nizam's report — Gemini key had no paste/save UI anywhere):
+  // GeminiApiService.resolveApiKey() (lib/services/gemini_api_service.dart)
+  // already reads this exact SharedPreferences key as its fallback after
+  // the GEMINI_API_KEY env var — this only adds the missing WRITER side.
+  // Kept on plain SharedPreferences (not flutter_secure_storage like the
+  // Groq key above) to match what the existing reader already expects,
+  // rather than silently changing gemini_api_service.dart's own read
+  // source as a side effect of this fix.
+  static const String _geminiApiKeyPrefsKey = 'personal_gemini_api_key';
+
   String _apiKey = '';
+  String _geminiApiKey = '';
   bool _isAiClaimed = false;
   // "MyAllin1 Pro" — the Voice-to-Order tier. Free tier (text chat) only
   // needs isAiActivated (a Groq key present, provisioned by Admin after a
@@ -40,6 +51,8 @@ class AiActivationService extends ChangeNotifier {
   bool _isProLocallyClaimed = false;
 
   String get apiKey => _apiKey;
+  String get geminiApiKey => _geminiApiKey;
+  bool get isGeminiActivated => _geminiApiKey.trim().isNotEmpty;
   bool get isAiClaimed => _isAiClaimed;
   bool get isAiActivated => _apiKey.trim().isNotEmpty;
   // Unlocked either the "real" admin-granted way (Firestore) or via the
@@ -70,6 +83,7 @@ class AiActivationService extends ChangeNotifier {
 
   Future<void> initialize() async {
     await _loadApiKey();
+    await _loadGeminiApiKey();
     await _loadLocalProClaim();
     await refreshForUser(FirebaseAuth.instance.currentUser, notify: false);
     notifyListeners();
@@ -159,6 +173,39 @@ class AiActivationService extends ChangeNotifier {
     }
 
     notifyListeners();
+  }
+
+  // NEW (Nizam's report — "Gemini key apply panna vali illaya?"): the
+  // missing writer for GeminiApiService.resolveApiKey()'s existing
+  // SharedPreferences reader. Plain SharedPreferences here (not secure
+  // storage) is a conscious, narrower choice than saveApiKey() above —
+  // matches what gemini_api_service.dart already reads today without
+  // also changing that file. If Gemini's key later needs the same
+  // secure-storage/logout-wipe treatment the Groq key got, that's a
+  // reasonable follow-up, not silently done here.
+  Future<void> saveGeminiApiKey(String value) async {
+    final trimmed = value.trim();
+    _geminiApiKey = trimmed;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (trimmed.isEmpty) {
+        await prefs.remove(_geminiApiKeyPrefsKey);
+      } else {
+        await prefs.setString(_geminiApiKeyPrefsKey, trimmed);
+      }
+    } catch (e) {
+      debugPrint('[AiActivationService] Failed to save Gemini key: $e');
+    }
+    notifyListeners();
+  }
+
+  Future<void> _loadGeminiApiKey() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _geminiApiKey = prefs.getString(_geminiApiKeyPrefsKey)?.trim() ?? '';
+    } catch (e) {
+      debugPrint('[AiActivationService] Failed to load Gemini key: $e');
+    }
   }
 
   Future<void> _loadApiKey() async {

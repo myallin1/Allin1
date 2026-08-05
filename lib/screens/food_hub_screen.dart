@@ -10,13 +10,16 @@
 // the actual order + payment, then hands the customer back into our
 // existing CustomFoodOrderScreen for pickup + delivery by an Allin1
 // hero. New shops only need to be added to kPartnerShops.
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import '../services/custom_hotel_service.dart';
 import '../services/localization_service.dart';
 import 'custom_food_order_screen.dart';
+import 'custom_hotel_view_screen.dart';
 import 'partner_shop_order_screen.dart';
 
 const Color _kBg = Color(0xFFFFFFFF);
@@ -55,6 +58,15 @@ class FoodHubScreen extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const CustomFoodOrderScreen()),
             ),
           ),
+          const SizedBox(height: 20),
+          // NEW (CTO mandate — Custom Hotel Integration System, Instant
+          // Customer App Sync): a NEW live section, separate from the
+          // static kPartnerShops grid below — that grid stays byte-
+          // identical/untouched. This section is a StreamBuilder over
+          // CustomHotelService.openHotelsStream(): a seller flipping
+          // their global Open/Close toggle adds or removes their hotel
+          // here on the very next Firestore snapshot, no refresh needed.
+          const _CustomHotelsSection(),
           const SizedBox(height: 20),
           Text(t('food_hub_shops_heading'), style: GoogleFonts.outfit(color: _kText, fontSize: 14.5, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
@@ -144,5 +156,62 @@ class _HubTile extends StatelessWidget {
     properties.add(DiagnosticsProperty<IconData>('icon', icon));
     properties.add(IterableProperty<Color>('gradient', gradient));
     properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+  }
+}
+
+// NEW (CTO mandate — Custom Hotel Integration System). Renders nothing
+// (SizedBox.shrink) when there are zero open custom hotels, so an app
+// with none configured yet looks exactly as it did before this
+// feature — no empty-section clutter.
+class _CustomHotelsSection extends StatelessWidget {
+  const _CustomHotelsSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: CustomHotelService().openHotelsStream(),
+      builder: (context, snap) {
+        final docs = snap.data?.docs ?? const [];
+        if (docs.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Custom Hotels',
+                style: GoogleFonts.outfit(color: _kText, fontSize: 14.5, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Text('Live menus built by local hotels — open right now',
+                style: GoogleFonts.outfit(color: _kMuted, fontSize: 12)),
+            const SizedBox(height: 14),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 14,
+              childAspectRatio: 1.35,
+              children: docs.map((doc) {
+                final data = doc.data();
+                final name = (data['hotelName'] as String?)?.trim();
+                return _HubTile(
+                  label: (name == null || name.isEmpty) ? 'Custom Hotel' : name,
+                  subtitle: 'Tap to view live menu',
+                  icon: Icons.storefront_rounded,
+                  gradient: const [Color(0xFF11998E), Color(0xFF38EF7D)],
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CustomHotelViewScreen(
+                        hotelId: doc.id,
+                        hotelName: (name == null || name.isEmpty) ? 'Custom Hotel' : name,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
