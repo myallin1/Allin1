@@ -1,7 +1,7 @@
 ﻿name: erode_superapp
 description: Erode All-in-One Super App - Multi-vendor Commerce MVP by NJ TECH
 publish_to: 'none'
-version: 1.0.8+93
+version: 1.0.8+94
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -119,6 +119,12 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   hive_generator: ^2.0.1
+  # NEW (CTO mandate — Synthetic QA Test-Bot): SDK-bundled, no version
+  # pinning risk, dev-only — never ships in the release build. Drives
+  # the app the same way a real user would (see integration_test/), for
+  # the 5-screen QA bot per QA_AGENT_BLUEPRINT.md.
+  integration_test:
+    sdk: flutter
 
 flutter:
   uses-material-design: true

@@ -298,6 +298,7 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
             Text('Your grocery list', style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             TextField(
+              key: const Key('grocery_list_field'),
               controller: _listCtrl,
               maxLines: 6,
               style: const TextStyle(fontSize: 14),
@@ -447,6 +448,7 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
                 child: SizedBox(
                   height: 54,
                   child: ElevatedButton.icon(
+                    key: const Key('grocery_send_order_button'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _kPink,
                       elevation: 4,

@@ -78,6 +78,63 @@ class AdminAiAuditTools {
     return lines.join('\n');
   }
 
+  // ---- Phase 1.5: Synthetic QA Test-Bot findings summary ------------
+  // Read-only summary of the ux_audit_reports collection the
+  // integration_test bot (integration_test/qa_five_screens_test.dart)
+  // writes to. This does NOT trigger a test run — it only reads what
+  // the bot already recorded from its most recent run(s), same as
+  // admin_ux_audit_screen.dart's manual "Load" view but condensed for
+  // the Quick Task chatbox. Groups by the most recent runId found so
+  // the CTO gets one coherent run's results, not a mix of old and new.
+  static Future<String> runUxAudit() async {
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final snap = await firestore
+          .collection('ux_audit_reports')
+          .orderBy('timestamp', descending: true)
+          .limit(100)
+          .get();
+      if (snap.docs.isEmpty) {
+        return 'No QA test bot runs found yet — the Synthetic QA Test-Bot '
+            '(integration_test/qa_five_screens_test.dart) has not been executed, '
+            'or no results have been written to ux_audit_reports yet.';
+      }
+
+      final latestRunId = snap.docs.first.data()['runId'] as String?;
+      final docsInLatestRun = latestRunId == null
+          ? snap.docs
+          : snap.docs.where((d) => d.data()['runId'] == latestRunId).toList();
+
+      var okCount = 0;
+      final findings = <String>[];
+      for (final doc in docsInLatestRun) {
+        final data = doc.data();
+        final status = data['status'] as String? ?? 'unknown';
+        if (status == 'ok') {
+          okCount++;
+          continue;
+        }
+        final screen = data['screen'] as String? ?? 'unknown screen';
+        final step = data['step'] as String? ?? 'unknown step';
+        final findingText = (data['findingText'] as String?)?.trim();
+        findings.add('- $screen / $step${findingText != null && findingText.isNotEmpty ? ': $findingText' : ''}');
+      }
+
+      final buffer = StringBuffer()
+        ..writeln('Synthetic QA Test-Bot — latest run summary '
+            '(${docsInLatestRun.length} check(s), $okCount OK, ${findings.length} finding(s)):');
+      if (findings.isEmpty) {
+        buffer.write('All checks passed — no visual or navigation issues found across '
+            'Dashboard, Bike Booking, Grocery, Food, and Profile.');
+      } else {
+        buffer.write(findings.join('\n'));
+      }
+      return buffer.toString().trim();
+    } catch (e) {
+      return 'Could not read the ux_audit_reports collection: $e';
+    }
+  }
+
   // ---- Goal 2 / Task 3: Automated KYC Report Generator --------------
   // Field names below are taken directly from the existing approval
   // screens' own rendering code (hero_approvals_screen.dart lines

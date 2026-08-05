@@ -42,8 +42,8 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/ai_activation_service.dart';
+import '../services/gemini_api_service.dart';
 import '../services/grocery_ai_notes_service.dart';
-import '../services/guru_api_service.dart';
 import '../widgets/dmart_embedded_view_web.dart'
     if (dart.library.io) '../widgets/dmart_embedded_view_native.dart';
 import 'grocery_order_screen.dart';
@@ -116,11 +116,21 @@ class _DmartScreenState extends State<DmartScreen> {
         return;
       }
 
-      final extracted = await GuruApiService().extractGroceryItemFromImage(
+      // NEW (CTO mandate — Multi-Agent Orchestration & Handoff
+      // Architecture, step 3-4): "I Need This" already has real image
+      // bytes in hand with no chat text involved — the natural entry
+      // point for the Gemini vision handoff itself, so this now calls
+      // Gemini directly (multi-item, unlike the old single-item Groq
+      // vision call it replaces) rather than going through Groq's
+      // extractAgentAction text tool-calling (which has nothing to
+      // orchestrate here — there's no ambiguity about intent, the
+      // customer explicitly tapped "I Need This").
+      final geminiKey = await GeminiApiService().resolveApiKey();
+      final items = await GeminiApiService().analyzeGroceryScreenshot(
         imageBytes: compressed,
-        apiKeyOverride: apiKey,
+        apiKey: geminiKey,
       );
-      if (extracted == null) {
+      if (items == null || items.isEmpty) {
         if (!mounted) return;
         messenger.showSnackBar(
           const SnackBar(content: Text("Couldn't read a product from that photo — please type it "
@@ -129,15 +139,27 @@ class _DmartScreenState extends State<DmartScreen> {
         return;
       }
 
-      final item = extracted['item'] ?? '';
-      final quantity = extracted['quantity'];
-      GroceryAiNotesService.instance.addItem(item, quantity: (quantity?.isEmpty ?? true) ? null : quantity);
+      // Same execution step add_to_grocery_cart already uses elsewhere
+      // (GroceryAiNotesService.addItem), run once per item Gemini found.
+      for (final entry in items) {
+        final item = entry['item'] ?? '';
+        if (item.isEmpty) continue;
+        final quantity = entry['quantity'];
+        GroceryAiNotesService.instance.addItem(item, quantity: (quantity?.isEmpty ?? true) ? null : quantity);
+      }
 
       if (!mounted) return;
-      final label = (quantity != null && quantity.isNotEmpty) ? '$quantity $item' : item;
+      final labels = items
+          .where((e) => (e['item'] ?? '').isNotEmpty)
+          .map((e) {
+            final q = e['quantity'];
+            final it = e['item'] ?? '';
+            return (q != null && q.isNotEmpty) ? '$q $it' : it;
+          })
+          .join(', ');
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Added "$label" to your grocery list.'),
+          content: Text('Added to your grocery list: $labels'),
           action: SnackBarAction(
             label: 'REVIEW',
             onPressed: () => Navigator.of(context).push(

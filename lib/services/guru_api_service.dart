@@ -313,12 +313,22 @@ class GuruApiService {
   Future<Map<String, dynamic>?> extractAgentAction({
     required String message,
     required String apiKeyOverride,
+    bool hasAttachedImage = false,
   }) async {
     final apiKey = apiKeyOverride.trim();
     final input = message.trim();
     if (apiKey.isEmpty || input.isEmpty) {
       return null;
     }
+    // NEW (CTO mandate — Multi-Agent Orchestration & Handoff
+    // Architecture): the actual image bytes never come anywhere near
+    // this text-only tool-calling request — only this plain marker
+    // does, so Groq can decide whether analyze_screen_with_vision
+    // applies without ever seeing the pixels itself (Gemini is the only
+    // agent that ever sees the image — see GeminiApiService).
+    final userContent = hasAttachedImage
+        ? '$input\n\n[System note: the customer has attached an image to this message.]'
+        : input;
 
     try {
       final response = await _client
@@ -335,7 +345,7 @@ class GuruApiService {
                   {
                     'role': 'system',
                     'content':
-                        'You have four tools available. Call book_transport ONLY '
+                        'You have five tools available. Call book_transport ONLY '
                         'when the user CLEARLY wants to book a ride or send '
                         'something right now (e.g. "book a bike to the bus '
                         'stand", "I need an auto to home", "send a parcel to '
@@ -351,8 +361,14 @@ class GuruApiService {
                         'add_to_grocery_cart ONLY when the user clearly wants to '
                         'add a grocery item to their list (e.g. "add 2 packs of '
                         'milk", "I need rice and sugar", "put onions on my '
-                        'list"). For general conversation, greetings, or '
-                        'anything that is not clearly one of these four, do NOT call any tool '
+                        'list"). Call analyze_screen_with_vision ONLY when the '
+                        'user has attached a photo/screenshot to this message AND '
+                        'wants you to identify a product in it for their grocery '
+                        'list (e.g. "what is this?", "add this to my list" with an '
+                        'attached image). Never call this tool if no image is '
+                        'attached — there is nothing to analyze in that case. For '
+                        'general conversation, greetings, or '
+                        'anything that is not clearly one of these five, do NOT call any tool '
                         '— just let the normal reply happen. IMPORTANT: if the '
                         'request is genuinely ambiguous — you cannot tell which '
                         'service, section, or item the user means (e.g. "book me '
@@ -362,7 +378,7 @@ class GuruApiService {
                         'through to the normal reply, which will ask a short '
                         'clarifying question with exactly 3 options instead.',
                   },
-                  {'role': 'user', 'content': input},
+                  {'role': 'user', 'content': userContent},
                 ],
                 'tools': <Map<String, dynamic>>[
                   {
@@ -461,6 +477,24 @@ class GuruApiService {
                       },
                     },
                   },
+                  {
+                    'type': 'function',
+                    'function': {
+                      'name': 'analyze_screen_with_vision',
+                      'description':
+                          "Hand off to the Gemini vision agent to read the "
+                          "customer's attached photo/screenshot, identify the "
+                          "product(s) shown, and add them to the grocery list. "
+                          'Only call this when an image is attached to the '
+                          'current message. No text arguments — the image itself '
+                          'is what gets analyzed.',
+                      'parameters': {
+                        'type': 'object',
+                        'properties': <String, dynamic>{},
+                        'required': <String>[],
+                      },
+                    },
+                  },
                 ],
                 'tool_choice': 'auto',
                 'temperature': 0,
@@ -494,16 +528,18 @@ class GuruApiService {
         'navigate_to_section',
         'check_and_update_app',
         'add_to_grocery_cart',
+        'analyze_screen_with_vision',
       };
       if (function == null || !knownActions.contains(functionName)) {
         return null;
       }
 
-      // check_and_update_app takes no arguments, so Groq may return an
-      // empty/absent arguments string for it — that's expected, not a
-      // parse failure, unlike the other two tools.
+      // check_and_update_app and analyze_screen_with_vision both take no
+      // arguments, so Groq may return an empty/absent arguments string
+      // for them — that's expected, not a parse failure, unlike the
+      // other tools.
       final argumentsRaw = function['arguments'] as String?;
-      if (functionName == 'check_and_update_app') {
+      if (functionName == 'check_and_update_app' || functionName == 'analyze_screen_with_vision') {
         return {'action': functionName};
       }
       if (argumentsRaw == null || argumentsRaw.trim().isEmpty) {

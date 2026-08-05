@@ -2622,6 +2622,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     final isSelected = _selectedCategory == categoryKey;
 
     return Material(
+      key: Key('bike_booking_category_chip_$categoryKey'),
       color: Colors.transparent,
       child: InkWell(
         onTap: () => _selectCategory(categoryKey),

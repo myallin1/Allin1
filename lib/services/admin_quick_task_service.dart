@@ -52,6 +52,7 @@ import '../screens/admin/hero_approvals_screen.dart';
 import 'admin_ai_audit_tools.dart';
 import 'admin_kyc_vision_service.dart';
 import 'admin_kyc_write_service.dart';
+import 'gemini_api_service.dart';
 import 'guru_admin_api_service.dart';
 import 'voice_booking_intent_service.dart';
 
@@ -67,7 +68,26 @@ class AdminQuickTaskService extends ChangeNotifier {
   static final AdminQuickTaskService instance = AdminQuickTaskService._();
 
   final GuruAdminApiService _api = GuruAdminApiService();
+  final GeminiApiService _gemini = GeminiApiService();
   final VoiceBookingIntentService _yesNo = VoiceBookingIntentService();
+
+  // NEW (CTO mandate — Multi-Agent Orchestration & Handoff Architecture,
+  // Dual Agent Toggle). 'groq' (default) or 'gemini' — controls ONLY
+  // which agent answers plain conversational messages (see the branch
+  // in sendMessage() below). All 5 admin tools (navigate/propose-write/
+  // audit_ui_sections/generate_kyc_report/run_ux_audit) keep running
+  // through Groq's extractAgentAction regardless of this toggle — Groq
+  // is this app's "Fast Logic" tool-calling agent by the CTO's own
+  // framing, so tool-calling parity for Gemini was judged out of scope
+  // for this toggle and left for a future mandate if wanted.
+  String activeAgent = 'groq';
+
+  void setActiveAgent(String agent) {
+    if (agent != 'groq' && agent != 'gemini') return;
+    if (activeAgent == agent) return;
+    activeAgent = agent;
+    notifyListeners();
+  }
   // NEW (CTO mandate — Voice & Speech Fix for Quick Task): the CTO's
   // explicit complaint was the Quick Task chatbox "going silent" —
   // this service had zero TTS before now, unlike the customer overlay
@@ -286,7 +306,18 @@ class AdminQuickTaskService extends ChangeNotifier {
 
     final history = messages.map((m) => {'role': m.role, 'content': m.text}).toList(growable: false);
     try {
-      final reply = await _api.sendMessage(message: trimmed, history: history);
+      // NEW (CTO mandate — Dual Agent Toggle): plain-conversation-only
+      // branch. Tool-calling (_tryAgentActionFromText above) already
+      // returned early when a tool matched, so reaching here means this
+      // is a normal question/reply either way — the only difference is
+      // which agent answers it.
+      final reply = activeAgent == 'gemini'
+          ? await _gemini.sendMessage(
+              message: trimmed,
+              apiKey: await _api.resolveGeminiApiKey(),
+              history: history,
+            )
+          : await _api.sendMessage(message: trimmed, history: history);
       messages.add(AdminChatTurn(role: 'assistant', text: reply));
       unawaited(_speak(reply));
     } catch (e) {
@@ -322,6 +353,22 @@ class AdminQuickTaskService extends ChangeNotifier {
       messages.add(const AdminChatTurn(role: 'assistant', text: 'Running UI section audit...'));
       notifyListeners();
       final report = await AdminAiAuditTools.auditUiSections();
+      messages.add(AdminChatTurn(role: 'assistant', text: report));
+      unawaited(_speak(report));
+      notifyListeners();
+      return true;
+    }
+    // NEW (CTO mandate — Phase 1.5: Admin Tool Wiring). Same read-only
+    // shape as audit_ui_sections above — this only reads the
+    // ux_audit_reports collection the Synthetic QA Test-Bot
+    // (integration_test/qa_five_screens_test.dart) already wrote to; it
+    // never triggers a new test run and never writes anything, so it
+    // runs immediately with no confirmation gate, same justification as
+    // every other read-only tool in this file.
+    if (action == 'run_ux_audit') {
+      messages.add(const AdminChatTurn(role: 'assistant', text: 'Checking the latest QA test bot findings...'));
+      notifyListeners();
+      final report = await AdminAiAuditTools.runUxAudit();
       messages.add(AdminChatTurn(role: 'assistant', text: report));
       unawaited(_speak(report));
       notifyListeners();
@@ -789,6 +836,45 @@ class _AdminQuickTaskPanelState extends State<_AdminQuickTaskPanel> {
                           ],
                         ),
                       ),
+                      // NEW (CTO mandate — Multi-Agent Orchestration &
+                      // Handoff Architecture, Dual Agent Toggle): lets the
+                      // CTO switch which agent answers plain conversation
+                      // (see AdminQuickTaskService.setActiveAgent — tool
+                      // calls like audits/KYC/navigation always stay on
+                      // Groq regardless of this toggle, per that method's
+                      // own doc comment). A separate row rather than
+                      // cramming into the title row above, since the
+                      // header is already tight at 320px wide.
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF1B1B29),
+                          border: Border(bottom: BorderSide(color: Color(0x1AFFFFFF))),
+                        ),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              Text(
+                                'Agent:',
+                                style: GoogleFonts.outfit(color: Colors.white38, fontSize: 10.5),
+                              ),
+                              const SizedBox(width: 6),
+                              _AgentToggleChip(
+                                label: 'Groq (Fast Logic)',
+                                selected: service.activeAgent == 'groq',
+                                onTap: () => service.setActiveAgent('groq'),
+                              ),
+                              const SizedBox(width: 6),
+                              _AgentToggleChip(
+                                label: 'Gemini (Deep Reasoning)',
+                                selected: service.activeAgent == 'gemini',
+                                onTap: () => service.setActiveAgent('gemini'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                       Expanded(
                         child: ListView.builder(
                           controller: _scroll,
@@ -878,6 +964,46 @@ class _AdminQuickTaskPanelState extends State<_AdminQuickTaskPanel> {
           ),
         );
       },
+    );
+  }
+}
+
+// NEW (CTO mandate — Multi-Agent Orchestration & Handoff Architecture,
+// Dual Agent Toggle): tiny stateless chip used by the header row above.
+// Kept as its own widget rather than an inline builder purely for
+// readability at the two call sites — no shared state, no behavior
+// beyond onTap.
+class _AgentToggleChip extends StatelessWidget {
+  const _AgentToggleChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFE05555) : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: selected ? const Color(0xFFE05555) : Colors.white24),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.outfit(
+            color: selected ? Colors.white : Colors.white54,
+            fontSize: 10,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      ),
     );
   }
 }

@@ -45,6 +45,7 @@ class FoodHubScreen extends StatelessWidget {
           Text(t('food_hub_prompt'), style: GoogleFonts.outfit(color: _kMuted, fontSize: 13)),
           const SizedBox(height: 16),
           _HubTile(
+            key: const Key('food_hub_custom_order_tile'),
             label: t('custom_order_title'),
             subtitle: t('food_hub_custom_subtitle'),
             icon: Icons.restaurant_menu_rounded,
@@ -60,6 +61,7 @@ class FoodHubScreen extends StatelessWidget {
           Text(t('food_hub_shops_subheading'), style: GoogleFonts.outfit(color: _kMuted, fontSize: 12)),
           const SizedBox(height: 14),
           GridView.count(
+            key: const Key('food_hub_partner_shops_grid'),
             crossAxisCount: 2,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -95,6 +97,7 @@ class _HubTile extends StatelessWidget {
   final VoidCallback onTap;
 
   const _HubTile({
+    super.key,
     required this.label,
     required this.subtitle,
     required this.icon,

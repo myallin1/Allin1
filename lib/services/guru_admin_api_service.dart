@@ -91,6 +91,21 @@ class GuruAdminApiService {
       Uri.parse('https://api.groq.com/openai/v1/chat/completions');
   static const String _textModel = 'llama-3.1-8b-instant';
 
+  // NEW (CTO mandate — Multi-Agent Orchestration & Handoff Architecture,
+  // Dual Agent Toggle): the "Gemini (Deep Reasoning)" agent's key,
+  // resolved the exact same way as _apiKey above (env var first, then
+  // SharedPreferences). The actual Gemini HTTP calls live in the
+  // sibling file gemini_api_service.dart (GeminiApiService) — kept
+  // separate so this file doesn't grow a second provider's request/
+  // response plumbing, mirroring how AdminKycVisionService already
+  // resolves ITS Groq key via this class's resolveApiKey() wrapper
+  // rather than duplicating the resolution logic.
+  static const String _geminiApiKey = String.fromEnvironment(
+    'GEMINI_API_KEY',
+    defaultValue: 'GEMINI_API_KEY_HERE',
+  );
+  static const String _savedGeminiApiKeyPrefsKey = 'personal_gemini_api_key';
+
   final http.Client _client;
   final Duration _timeout;
 
@@ -204,8 +219,14 @@ class GuruAdminApiService {
                       'a KYC report for the next pending hero", "check this seller\'s '
                       'documents") — this tool is also read-only and safe to run '
                       'immediately; it never approves or rejects anything by itself. '
-                      'For general questions or anything else, do NOT call any tool '
-                      '— just answer normally in text.',
+                      'Call run_ux_audit ONLY when the CTO asks about the Synthetic '
+                      'QA test bot\'s findings (e.g. "any UX bugs found?", "show me '
+                      'the latest QA audit results", "how did the last test run go?") '
+                      '— this tool is read-only and safe to run immediately; it only '
+                      'reads the ux_audit_reports collection the test bot already '
+                      'wrote, it never runs the test bot itself and never writes '
+                      'anything. For general questions or anything else, do NOT call '
+                      'any tool — just answer normally in text.',
                 },
                 {'role': 'user', 'content': input},
               ],
@@ -308,6 +329,22 @@ class GuruAdminApiService {
                     },
                   },
                 },
+                {
+                  'type': 'function',
+                  'function': {
+                    'name': 'run_ux_audit',
+                    'description':
+                        'Read-only: fetch a short summary of the Synthetic QA test '
+                        "bot's most recent findings from the ux_audit_reports "
+                        'collection (Dashboard, Bike Booking, Grocery, Food, Profile). '
+                        'Never triggers a new test run and never writes anything.',
+                    'parameters': {
+                      'type': 'object',
+                      'properties': <String, dynamic>{},
+                      'required': <String>[],
+                    },
+                  },
+                },
               ],
               'tool_choice': 'auto',
               'temperature': 0,
@@ -338,14 +375,16 @@ class GuruAdminApiService {
         'propose_write_action',
         'audit_ui_sections',
         'generate_kyc_report',
+        'run_ux_audit',
       };
       if (function == null || !knownActions.contains(functionName)) return null;
 
-      // audit_ui_sections takes no arguments, so Groq may return an
-      // empty/absent arguments string for it — expected, not a parse
-      // failure, same as check_and_update_app on the customer side.
+      // audit_ui_sections and run_ux_audit both take no arguments, so
+      // Groq may return an empty/absent arguments string for them —
+      // expected, not a parse failure, same as check_and_update_app on
+      // the customer side.
       final argumentsRaw = function['arguments'] as String?;
-      if (functionName == 'audit_ui_sections') {
+      if (functionName == 'audit_ui_sections' || functionName == 'run_ux_audit') {
         return {'action': functionName};
       }
       if (argumentsRaw == null || argumentsRaw.trim().isEmpty) return null;
@@ -370,6 +409,18 @@ class GuruAdminApiService {
   // key AdminKycVisionService needs for its own direct Groq calls,
   // without duplicating the resolution logic above in a second place.
   Future<String> resolveApiKey() => _resolveApiKey();
+
+  // NEW (CTO mandate — Dual Agent Toggle): same public-wrapper pattern
+  // as resolveApiKey() above, for admin_quick_task_service.dart to pass
+  // into GeminiApiService when the CTO has switched the active agent to
+  // Gemini.
+  Future<String> resolveGeminiApiKey() async {
+    if (_geminiApiKey.trim().isNotEmpty && _geminiApiKey != 'GEMINI_API_KEY_HERE') {
+      return _geminiApiKey.trim();
+    }
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_savedGeminiApiKeyPrefsKey)?.trim() ?? '';
+  }
 
   void dispose() {
     _client.close();

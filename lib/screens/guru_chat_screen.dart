@@ -47,6 +47,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/ai_activation_service.dart';
+import '../services/gemini_api_service.dart';
 import '../services/grocery_ai_notes_service.dart';
 import '../services/guru_api_service.dart';
 import '../services/guru_suggestion_parser.dart';
@@ -275,8 +276,19 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     // voice-fallback '🎙 ...' text this same method also handles when
     // the local regex parser already found nothing — Groq gets one
     // honest shot per genuinely-new message.
-    if (pendingImage == null && input.isNotEmpty) {
-      final acted = await _tryAgentActionFromText(input, apiKey);
+    // NEW (CTO mandate — Multi-Agent Orchestration & Handoff
+    // Architecture): an attached image no longer unconditionally skips
+    // tool-calling. Groq still gets first look even with an image
+    // attached — if the customer's text + the fact that an image is
+    // attached clearly means "identify this product for my grocery
+    // list", Groq calls analyze_screen_with_vision (see
+    // GuruApiService.extractAgentAction's hasAttachedImage param) and
+    // this handles it via the Gemini handoff below. If Groq calls
+    // nothing (e.g. the text is an unrelated troubleshooting question),
+    // this falls through exactly as before to the existing
+    // screenshot-troubleshooting reply further down, image bytes intact.
+    if (input.isNotEmpty) {
+      final acted = await _tryAgentActionFromText(input, apiKey, imageBytes: pendingImage);
       if (acted) {
         if (mounted) setState(() => _isTyping = false);
         return;
@@ -355,6 +367,72 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
       );
     });
     _scrollToBottom();
+  }
+
+  // NEW (CTO mandate — Multi-Agent Orchestration & Handoff Architecture,
+  // "The Magic"): the actual handoff. Groq (orchestrator) already
+  // decided to call this; this method wakes up Gemini (the vision
+  // specialist) with the real image bytes, gets back a clean numbered
+  // list of products, and then — exactly like the CTO's step 5 — Groq's
+  // OWN add_to_grocery_cart execution path (_actOnGroceryAction's core
+  // logic, GroceryAiNotesService.addItem) runs automatically for every
+  // item Gemini found. No re-confirmation per item — this whole flow is
+  // a non-write, reversible list-note, same safety class as every other
+  // instant action in this method.
+  Future<void> _actOnVisionHandoffAction(Uint8List imageBytes) async {
+    if (!mounted) return;
+    setState(() {
+      _messages.add(const _GuruMessage(role: 'assistant', text: 'Let me take a closer look at that photo...'));
+    });
+    _scrollToBottom();
+
+    final geminiKey = await GeminiApiService().resolveApiKey();
+    final items = await GeminiApiService().analyzeGroceryScreenshot(
+      imageBytes: imageBytes,
+      apiKey: geminiKey,
+    );
+
+    if (!mounted) return;
+    if (items == null || items.isEmpty) {
+      setState(() {
+        _messages.add(const _GuruMessage(
+          role: 'assistant',
+          text: "I couldn't clearly identify a product in that photo — please try a "
+              'clearer photo, or just type the item into the chat.',
+        ));
+      });
+      _scrollToBottom();
+      return;
+    }
+
+    // Groq's add_to_grocery_cart execution, run once per Gemini-found
+    // item — same GroceryAiNotesService.instance.addItem call
+    // _actOnGroceryAction uses for a single manually-typed item.
+    for (final entry in items) {
+      final item = entry['item'] ?? '';
+      if (item.isEmpty) continue;
+      final quantity = entry['quantity'];
+      GroceryAiNotesService.instance.addItem(item, quantity: (quantity?.isEmpty ?? true) ? null : quantity);
+    }
+
+    final numbered = items.asMap().entries.map((e) {
+      final n = e.key + 1;
+      final item = e.value['item'] ?? '';
+      final quantity = e.value['quantity'];
+      final label = (quantity != null && quantity.isNotEmpty) ? '$quantity $item' : item;
+      return '$n. $label';
+    }).join('\n');
+
+    setState(() {
+      _messages.add(_GuruMessage(
+        role: 'assistant',
+        text: 'Found these in your photo and added them to your grocery list:\n$numbered\n\n'
+            'Open Grocery Order to review and submit.',
+      ));
+    });
+    _scrollToBottom();
+    unawaited(_speak('I found ${items.length} item${items.length == 1 ? '' : 's'} in your photo and added '
+        '${items.length == 1 ? 'it' : 'them'} to your grocery list.'));
   }
 
   // NEW (CTO mandate — Co-work Style Confirmation): a customer tapping
@@ -729,10 +807,18 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   // the model, network/parse failure, unrecognized key). A failure
   // here is never user-visible as an error; it just silently becomes
   // "ask the AI normally" instead.
-  Future<bool> _tryAgentActionFromText(String input, String apiKey) async {
+  Future<bool> _tryAgentActionFromText(
+    String input,
+    String apiKey, {
+    Uint8List? imageBytes,
+  }) async {
     Map<String, dynamic>? args;
     try {
-      args = await _api.extractAgentAction(message: input, apiKeyOverride: apiKey);
+      args = await _api.extractAgentAction(
+        message: input,
+        apiKeyOverride: apiKey,
+        hasAttachedImage: imageBytes != null,
+      );
     } catch (e) {
       debugPrint('[GuruChatScreen] extractAgentAction failed: $e');
     }
@@ -749,8 +835,27 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     if (action != 'book_transport' &&
         action != 'navigate_to_section' &&
         action != 'check_and_update_app' &&
-        action != 'add_to_grocery_cart') {
+        action != 'add_to_grocery_cart' &&
+        action != 'analyze_screen_with_vision') {
       return false;
+    }
+
+    // NEW (CTO mandate — Multi-Agent Orchestration & Handoff
+    // Architecture): the vision handoff needs the actual image bytes,
+    // which never travel through extractAgentAction's text-only call —
+    // Groq only ever sees the fact that AN image is attached (via
+    // hasAttachedImage), never the pixels themselves. If Groq still
+    // called this tool with no image actually attached client-side
+    // (shouldn't happen given the system prompt, but never trust a
+    // model's tool call blindly), degrade to a plain reply instead of
+    // calling Gemini with nothing.
+    if (action == 'analyze_screen_with_vision') {
+      if (imageBytes == null) return false;
+      if (!mounted) return true;
+      unawaited(_logGuruAnalyticsEvent(eventType: 'intent_requested', action: action, args: resolvedArgs));
+      await _actOnVisionHandoffAction(imageBytes);
+      unawaited(_logGuruAnalyticsEvent(eventType: 'intent_resolved', action: action, args: resolvedArgs, resolved: true));
+      return true;
     }
 
     // NEW (CTO mandate — "Autonomous Interaction Rule"): confirmation

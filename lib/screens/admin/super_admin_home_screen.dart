@@ -14,6 +14,7 @@ import 'admin_dashboard_screen.dart';
 import 'admin_food_orders_screen.dart';
 import 'admin_service_requests_screen.dart';
 import 'admin_sos_kyc_approvals_screen.dart';
+import 'admin_ux_audit_screen.dart';
 import 'commission_settings_screen.dart';
 import 'erode_offers_management_screen.dart';
 
@@ -773,6 +774,24 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute<void>(builder: (_) => const AdminErodeOffersScreen()),
+                );
+              },
+            ),
+            // NEW (CTO mandate — Synthetic QA Test-Bot, Step 2: Side
+            // Hamburger Tray Integration): "must not be hidden — must be
+            // directly accessible as a dedicated menu item inside the
+            // Admin app's Side Hamburger Drawer/Tray", per the CTO's
+            // exact wording. Read-only screen, no existing tile touched.
+            ListTile(
+              leading: const Icon(Icons.fact_check_outlined, color: Color(0xFF00C853)),
+              title: const Text('UX Audit Reports', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Synthetic QA bot findings across core screens',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const AdminUxAuditScreen()),
                 );
               },
             ),

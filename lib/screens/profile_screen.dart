@@ -129,6 +129,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     _syncProfilePalette(context);
     return Scaffold(
+      key: const Key('profile_screen_scaffold'),
       backgroundColor: kSurface,
       appBar: AppBar(
         backgroundColor: kSurface,

@@ -1102,6 +1102,10 @@ class _HomeTab extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           GestureDetector(
+            // NEW (CTO mandate — Synthetic QA Test-Bot): stable Key for
+            // integration_test to find this tile without depending on
+            // icon/copy text, which the QA bot must not be fragile to.
+            key: const Key('dashboard_tile_bike'),
             onTap: () => Navigator.push<void>(
               context,
               MaterialPageRoute<void>(builder: (_) => const BikeBookingScreen()),
@@ -1165,6 +1169,7 @@ class _HomeTab extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           GestureDetector(
+            key: const Key('dashboard_tile_food'),
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const FoodHubScreen()),
@@ -1228,6 +1233,7 @@ class _HomeTab extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           GestureDetector(
+            key: const Key('dashboard_tile_grocery'),
             onTap: () => Navigator.push<void>(
               context,
               MaterialPageRoute<void>(builder: (_) => const GroceryOrderScreen()),
@@ -1886,7 +1892,8 @@ class _ProfileDrawer extends StatelessWidget {
               const SizedBox(height: 10),
 
               _drawerItem(context, Icons.person_outline_rounded,
-                  t('drawer_my_profile'), () => onNavigate(const ProfileScreen()),),
+                  t('drawer_my_profile'), () => onNavigate(const ProfileScreen()),
+                  itemKey: const Key('drawer_item_profile'),),
 
               // Activity (Replaces standard history)
               _drawerItem(context, Icons.local_activity_outlined,
@@ -1987,10 +1994,14 @@ class _ProfileDrawer extends StatelessWidget {
     );
   }
 
+  // NEW (CTO mandate — Synthetic QA Test-Bot): optional `itemKey`,
+  // additive — every existing call site keeps working unchanged since
+  // it defaults to null (Flutter's own ListTile behavior with no key).
   Widget _drawerItem(BuildContext context, IconData icon,
-      String title, VoidCallback onTap, {Color? color,}) {
+      String title, VoidCallback onTap, {Color? color, Key? itemKey,}) {
     final c = color ?? kPink;
     return ListTile(
+      key: itemKey,
       onTap: () { Navigator.pop(context); onTap(); },
       leading: Icon(icon, color: c, size: 20),
       title: Text(title, style: TextStyle(
