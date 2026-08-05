@@ -18,6 +18,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_database/firebase_database.dart' as rtdb;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -191,15 +192,63 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
     final data = doc.data();
     final customerName = data['customerName'] as String? ?? 'Customer';
     final customerPhone = data['customerPhone'] as String? ?? '';
-    final status = data['status'] as String? ?? 'pending';
+    final firestoreStatus = data['status'] as String? ?? 'pending';
     final assignedHeroName = data['assignedHeroName'] as String?;
     final details = Map<String, dynamic>.from(data['details'] as Map? ?? {});
-    final statusColor = serviceRequestStatusColor(status);
-    final statusLabel = serviceRequestStatusLabel(widget.requestType, status);
-    // No hero has this yet — offer the manual-assign path.
-    final needsAssignment = status == 'pending' || status == 'admin_review';
     final summary = requestSummary(widget.requestType, details);
 
+    // FIX (Phase 4b — WhatsApp/Uber transient model): 'in_progress' and
+    // 'nearing_completion' are now written only to
+    // active_service_requests/{requestId} in RTDB (see advanceStatus()
+    // in service_request_service.dart), so a Firestore-only card would
+    // never show those two live steps to admin. Overlay a per-card RTDB
+    // listener and prefer its status while it reports one of those two
+    // transient values — same merge rule used in
+    // service_request_tracking_screen.dart.
+    return StreamBuilder<rtdb.DatabaseEvent>(
+      stream: rtdb.FirebaseDatabase.instance
+          .ref('active_service_requests/${doc.id}')
+          .onValue,
+      builder: (context, rtdbSnapshot) {
+        String status = firestoreStatus;
+        final raw = rtdbSnapshot.data?.snapshot.value;
+        if (raw is Map) {
+          final rtdbStatus = raw['status'] as String?;
+          if (rtdbStatus == 'in_progress' || rtdbStatus == 'nearing_completion') {
+            status = rtdbStatus!;
+          }
+        }
+        final statusColor = serviceRequestStatusColor(status);
+        final statusLabel = serviceRequestStatusLabel(widget.requestType, status);
+        // No hero has this yet — offer the manual-assign path.
+        final needsAssignment = status == 'pending' || status == 'admin_review';
+
+        return _buildCardContent(
+          doc: doc,
+          customerName: customerName,
+          customerPhone: customerPhone,
+          assignedHeroName: assignedHeroName,
+          summary: summary,
+          details: details,
+          statusColor: statusColor,
+          statusLabel: statusLabel,
+          needsAssignment: needsAssignment,
+        );
+      },
+    );
+  }
+
+  Widget _buildCardContent({
+    required QueryDocumentSnapshot<Map<String, dynamic>> doc,
+    required String customerName,
+    required String customerPhone,
+    required String? assignedHeroName,
+    required String summary,
+    required Map<String, dynamic> details,
+    required Color statusColor,
+    required String statusLabel,
+    required bool needsAssignment,
+  }) {
     return Card(
       color: _card,
       margin: const EdgeInsets.only(bottom: 10),

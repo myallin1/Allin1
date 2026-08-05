@@ -281,25 +281,48 @@ class _SpotlightPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final barrier = Paint()..color = Colors.black.withValues(alpha: 0.65);
-    final full = Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
 
     if (rect == null) {
-      canvas.drawPath(full, barrier);
+      canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), barrier);
       return;
     }
 
     final padded = rect!.inflate(8);
-    final hole = Path()
-      ..addRRect(RRect.fromRectAndRadius(padded, const Radius.circular(16)));
-    final result = Path.combine(PathOperation.difference, full, hole);
-    canvas.drawPath(result, barrier);
+    // FIX (Nizam's report — PWA/web coach-mark tour showed a plain flat
+    // dark overlay with no spotlight cutout, while native looked
+    // correct): the old approach used Path.combine(PathOperation.
+    // difference, ...) to punch a rounded-rect "hole" through the
+    // barrier — a Skia path-boolean operation. Flutter's web renderers
+    // (both the HTML renderer's SVG/CSS canvas translation and, in
+    // some SDK/CanvasKit version combinations, CanvasKit itself) have
+    // documented inconsistent support for Path.combine, so the "hole"
+    // silently rendered as a solid fill on web instead of a cutout —
+    // matching exactly what was reported. Replaced with four plain
+    // rectangles (top/bottom/left/right bands around the target) —
+    // zero path-boolean ops, zero blend modes, so there's no
+    // renderer-specific behavior left to differ between native and web.
+    canvas.drawRect(Rect.fromLTRB(0, 0, size.width, padded.top), barrier);
+    canvas.drawRect(Rect.fromLTRB(0, padded.bottom, size.width, size.height), barrier);
+    canvas.drawRect(Rect.fromLTRB(0, padded.top, padded.left, padded.bottom), barrier);
+    canvas.drawRect(Rect.fromLTRB(padded.right, padded.top, size.width, padded.bottom), barrier);
+    // The band approach leaves the padded rect's corners square; draw
+    // the rounded highlight ring over them so the visible edge still
+    // reads as a soft rounded spotlight even though the barrier itself
+    // is now rectangular underneath.
+    final cornerPaint = Paint()..color = Colors.black.withValues(alpha: 0.65);
+    final roundedHole = RRect.fromRectAndRadius(padded, const Radius.circular(16));
+    final cornerCover = Path()
+      ..addRect(padded)
+      ..addRRect(roundedHole)
+      ..fillType = PathFillType.evenOdd;
+    canvas.drawPath(cornerCover, cornerPaint);
 
     // Highlight ring around the spotlight.
     final ringPaint = Paint()
       ..color = const Color(0xFFFF4FA3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.5;
-    canvas.drawRRect(RRect.fromRectAndRadius(padded, const Radius.circular(16)), ringPaint);
+    canvas.drawRRect(roundedHole, ringPaint);
   }
 
   @override

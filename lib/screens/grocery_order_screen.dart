@@ -80,12 +80,33 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
         backgroundColor: _kBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: Text('Before you open DMart', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 16)),
-        content: Text(
-          'DMart does not officially deliver here. To view their catalog, '
-          'please enter Pincode 641014 (Coimbatore) or 400001 (Mumbai) when '
-          'DMart asks for your location. Add items to your cart, take '
-          'screenshots, and upload them in our Send Order section!',
-          style: TextStyle(color: _kMuted, fontSize: 13.5, height: 1.4),
+        // FIX (QA bug — dense single paragraph was hard to scan):
+        // refactored into a clean 3-step numbered list, one action per
+        // line, same information as before.
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "DMart doesn't officially deliver here, but you can still browse and order:",
+              style: TextStyle(color: _kMuted, fontSize: 13.5, height: 1.4),
+            ),
+            const SizedBox(height: 14),
+            _DmartStep(
+              number: '1',
+              text: 'When DMart asks for your location, enter Pincode 641014 (Coimbatore) or 400001 (Mumbai).',
+            ),
+            const SizedBox(height: 10),
+            _DmartStep(
+              number: '2',
+              text: 'Add whatever you need to your DMart cart, then take screenshots of it.',
+            ),
+            const SizedBox(height: 10),
+            _DmartStep(
+              number: '3',
+              text: 'Come back and upload those screenshots in our Send Order section below.',
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -462,6 +483,43 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// NEW (QA fix — DMart pincode dialog readability): one row per numbered
+// step, used by _openDmartWithPincodeNotice() above.
+class _DmartStep extends StatelessWidget {
+  final String number;
+  final String text;
+  const _DmartStep({required this.number, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 22,
+          height: 22,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(color: _kGreen, shape: BoxShape.circle),
+          child: Text(
+            number,
+            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              text,
+              style: TextStyle(color: _kMuted, fontSize: 13.5, height: 1.4),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

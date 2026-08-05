@@ -68,6 +68,12 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     final reply = await _aiService.sendMessage(
       input,
       persona: widget.persona,
+      // FIX (AI State Mismatch bug): pass the same key this screen just
+      // validated as non-empty above — AIService used to re-resolve its
+      // own key from a different (legacy, since-deleted) storage
+      // location and would silently see it as empty even when this
+      // screen's own check passed.
+      apiKey: apiKey,
       history: _messages
           .where((message) => message.role == 'user' || message.role == 'assistant')
           .map(

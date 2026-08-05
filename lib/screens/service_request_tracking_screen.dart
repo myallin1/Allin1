@@ -8,6 +8,7 @@
 // hero's app or an admin manual override.
 // ================================================================
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_database/firebase_database.dart' as rtdb;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -36,8 +37,6 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final labels = serviceRequestLabelsFor(requestType);
-
     return Scaffold(
       backgroundColor: _kBg,
       appBar: AppBar(
@@ -61,13 +60,61 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
           }
 
           final data = snapshot.data!.data()!;
-          final status = data['status'] as String? ?? 'pending';
-          final currentIndex = serviceRequestStatusIndex(status);
-          final isAdminReview = status == 'admin_review';
+          final firestoreStatus = data['status'] as String? ?? 'pending';
           final heroName = data['assignedHeroName'] as String?;
           final heroPhone = data['assignedHeroPhone'] as String?;
 
-          return SingleChildScrollView(
+          // FIX (Phase 4b — WhatsApp/Uber transient model): 'in_progress'
+          // and 'nearing_completion' are now written ONLY to
+          // active_service_requests/{requestId} in RTDB, not Firestore
+          // (see advanceStatus() in service_request_service.dart) — a
+          // pure Firestore listener would never show those two steps
+          // live anymore. Overlay a second, nested RTDB listener and
+          // prefer its status while the node exists (and its status is
+          // one of those two transient values); Firestore remains the
+          // fallback for every other state, including after the node is
+          // deleted on completion — same merge rule already proven for
+          // rides in ride_tracking_screen.dart's _listenActiveRideStatus.
+          return StreamBuilder<rtdb.DatabaseEvent>(
+            stream: rtdb.FirebaseDatabase.instance
+                .ref('active_service_requests/$requestId')
+                .onValue,
+            builder: (context, rtdbSnapshot) {
+              String status = firestoreStatus;
+              final raw = rtdbSnapshot.data?.snapshot.value;
+              if (raw is Map) {
+                final rtdbStatus = raw['status'] as String?;
+                if (rtdbStatus == 'in_progress' ||
+                    rtdbStatus == 'nearing_completion') {
+                  status = rtdbStatus!;
+                }
+              }
+              final currentIndex = serviceRequestStatusIndex(status);
+              final isAdminReview = status == 'admin_review';
+
+              return _buildBody(
+                context,
+                isAdminReview: isAdminReview,
+                heroName: heroName,
+                heroPhone: heroPhone,
+                currentIndex: currentIndex,
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildBody(
+    BuildContext context, {
+    required bool isAdminReview,
+    required String? heroName,
+    required String? heroPhone,
+    required int currentIndex,
+  }) {
+    final labels = serviceRequestLabelsFor(requestType);
+    return SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -129,9 +176,6 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
               ],
             ),
           );
-        },
-      ),
-    );
   }
 
   @override

@@ -8,6 +8,8 @@
 // simultaneously instead of pinging sequentially.
 // ================================================================
 
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart' as rtdb;
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -271,11 +273,97 @@ class ServiceRequestService {
     return true;
   }
 
+  // FIX (Phase 4b — WhatsApp/Uber transient model for service_requests,
+  // mirrors Phase 4a's active_rides/{rideDocId} migration for rides):
+  // reads back whatever transient timeline timestamps
+  // active_service_requests/{requestId} has accumulated (inProgressAt /
+  // nearingCompletionAt, written by advanceStatus() below), converts
+  // them from RTDB epoch-millis to Firestore Timestamps for the
+  // permanent record, and deletes the RTDB node — called from every
+  // path that writes a terminal Firestore status (completed).
+  // Best-effort: a read/remove failure here must never block the
+  // Firestore completion write itself, so failures are swallowed after
+  // logging and simply mean the timeline fields are omitted / the RTDB
+  // node is cleaned up on a later best-effort pass instead.
+  Future<Map<String, dynamic>> _foldAndRemoveActiveServiceRequestNode(
+    String requestId,
+  ) async {
+    final activeRef =
+        rtdb.FirebaseDatabase.instance.ref('active_service_requests/$requestId');
+    Map<dynamic, dynamic>? rtdbData;
+    try {
+      final snap = await activeRef.get();
+      if (snap.exists && snap.value is Map) {
+        rtdbData = Map<dynamic, dynamic>.from(snap.value! as Map);
+      }
+    } catch (e) {
+      debugPrint('[ServiceRequestService] active_service_requests read failed (non-fatal): $e');
+    }
+
+    final inProgressAtMs = rtdbData?['in_progressAt'] as int?;
+    final nearingCompletionAtMs = rtdbData?['nearing_completionAt'] as int?;
+
+    unawaited(activeRef.remove());
+
+    return {
+      if (inProgressAtMs != null)
+        'inProgressAt': Timestamp.fromMillisecondsSinceEpoch(inProgressAtMs),
+      if (nearingCompletionAtMs != null)
+        'nearingCompletionAt':
+            Timestamp.fromMillisecondsSinceEpoch(nearingCompletionAtMs),
+    };
+  }
+
   /// Hero or admin status-advance. Both paths write the exact same field
   /// on the exact same document — the customer tracking screen cannot
   /// tell (and does not need to know) which side triggered the update.
+  ///
+  /// FIX (Phase 4b — CTO "WhatsApp/Uber transient model" mandate,
+  /// mirrors what Phase 4a already did for rides via
+  /// active_rides/{rideDocId}): the mid-lifecycle transitions
+  /// ('in_progress', 'nearing_completion') used to hit Firestore on
+  /// every tap — exactly the kind of rapid, non-billing-critical write
+  /// the CTO wants OFF Firestore. Those two now write ONLY to
+  /// active_service_requests/{requestId} in RTDB (already created by
+  /// createServiceRequest() for the pre-accept broadcast phase — this
+  /// extends its lifecycle instead of abandoning it after
+  /// hero_assigned). Firestore is only touched again for a genuinely
+  /// terminal state: 'completed' here folds the RTDB timeline back in
+  /// and wipes the node; hero_assigned is kept as a defensive
+  /// Firestore-write fallback for any legacy caller, since the real
+  /// hero_assigned write already happens in acceptServiceRequest() /
+  /// adminAssignHero() and should never actually reach this branch in
+  /// normal operation.
   Future<void> advanceStatus(String requestId, String newStatus) async {
     assert(kServiceRequestStatuses.contains(newStatus));
+
+    if (newStatus == 'completed') {
+      final timelineFields =
+          await _foldAndRemoveActiveServiceRequestNode(requestId);
+      await FirebaseFirestore.instance
+          .collection('service_requests')
+          .doc(requestId)
+          .update({
+        'status': newStatus,
+        'updatedAt': FieldValue.serverTimestamp(),
+        ...timelineFields,
+      });
+      return;
+    }
+
+    if (newStatus == 'in_progress' || newStatus == 'nearing_completion') {
+      await rtdb.FirebaseDatabase.instance
+          .ref('active_service_requests/$requestId')
+          .update({
+        'status': newStatus,
+        '${newStatus}At': rtdb.ServerValue.timestamp,
+        'updatedAt': rtdb.ServerValue.timestamp,
+      });
+      return;
+    }
+
+    // hero_assigned / admin_review / pending — legacy/defensive path,
+    // unchanged Firestore-only behavior.
     await FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
@@ -365,6 +453,14 @@ class ServiceRequestService {
     String requestId,
     double finalAmount,
   ) async {
+    // FIX (Phase 4b): this is the REAL terminal write for the hero-driven
+    // completion flow (advanceStatus('completed') is only reachable from
+    // admin's no-amount-gate manual control) — so this is where the
+    // active_service_requests RTDB timeline needs to be folded into the
+    // permanent Firestore record and the RTDB node wiped, same as
+    // advanceStatus()'s 'completed' branch above.
+    final timelineFields =
+        await _foldAndRemoveActiveServiceRequestNode(requestId);
     await FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
@@ -373,6 +469,7 @@ class ServiceRequestService {
       'status': 'completed',
       'paymentStatus': 'pending_collection',
       'updatedAt': FieldValue.serverTimestamp(),
+      ...timelineFields,
     });
   }
 

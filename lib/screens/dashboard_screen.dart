@@ -299,6 +299,17 @@ class _DashboardScreenState extends State<DashboardScreen>
     // compares /version.json against the build this tab loaded with,
     // which needs no service worker at all.
     if (kIsWeb) {
+      // NEW (CTO mandate — PWA update popup): if this page load happened
+      // right after we self-triggered an update reload, say welcome
+      // once. Checked/cleared here (not in build()) so it never repeats
+      // on a rebuild, and deferred a frame via addPostFrameCallback so
+      // the dashboard is fully painted before a dialog pops on top of it.
+      if (PwaCachePlatform().consumeJustUpdatedFlag()) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _showWelcomeToNewVersionPopup(context);
+        });
+      }
       unawaited(WebVersionChecker.instance.start());
       _pwaUpdatePollTimer = Timer.periodic(const Duration(seconds: 8), (_) {
         if (!mounted) return;
@@ -2033,6 +2044,10 @@ Future<void> _checkForUpdates(BuildContext context) async {
   );
 
   await Future<void>.delayed(const Duration(milliseconds: 1500));
+  // FIX (CTO QA — "crashes if no update exists"): the customer can
+  // navigate away during the 1.5s delay above; without this guard the
+  // navigator.pop()/showDialog calls below throw on a disposed context.
+  if (!context.mounted) return;
   navigator.pop();
 
   if (kIsWeb) {
@@ -2046,6 +2061,7 @@ Future<void> _checkForUpdates(BuildContext context) async {
       }
     }
   } else {
+    if (!context.mounted) return;
     showDialog<void>(
       context: navigator.context,
       builder: (_) => AlertDialog(
@@ -2122,9 +2138,17 @@ Future<void> _runManualUpdateCheck(BuildContext context) async {
 
   await WebVersionChecker.instance.checkNow();
 
+  // FIX (CTO QA — "Check for Updates crashes if no update exists"): the
+  // real root cause was never a null crash on the no-update path -- it
+  // was a missing context.mounted guard after this and the delay below.
+  // If the customer navigates away mid-await, navigator.pop()/
+  // ScaffoldMessenger.of(navigator.context) throw on a disposed context.
+  if (!context.mounted) return;
+
   // A beat so the spinner reads as "it looked" rather than flashing
   // past too fast to notice.
   await Future<void>.delayed(const Duration(milliseconds: 900));
+  if (!context.mounted) return;
 
   if (!WebVersionChecker.instance.isUpdateAvailable) {
     navigator.pop();
@@ -2167,6 +2191,7 @@ Future<void> _runManualUpdateCheck(BuildContext context) async {
   );
 
   await Future<void>.delayed(const Duration(milliseconds: 600));
+  if (!context.mounted) return;
 
   try {
     await _clearPwaCacheAndReload();
@@ -2223,11 +2248,42 @@ Future<void> _applyPwaUpdate(BuildContext context) async {
     await _clearPwaCacheAndReload();
   } catch (e) {
     debugPrint('[PwaUpdate] cache clear failed, reloading anyway: $e');
+    if (!context.mounted) return;
     final uri = Uri.parse(Uri.base.toString());
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
+}
+
+// ================================================================
+// WELCOME-BACK POPUP (shown once, right after a self-triggered update)
+// ================================================================
+void _showWelcomeToNewVersionPopup(BuildContext context) {
+  final t = context.read<LocalizationService>().t;
+  showDialog<void>(
+    context: context,
+    builder: (dialogCtx) => AlertDialog(
+      backgroundColor: const Color(0xFF1A1A26),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Row(children: [
+        const Text('🎉 ', style: TextStyle(fontSize: 20)),
+        Text(t('welcome_new_version_title'),
+            style: GoogleFonts.outfit(
+                color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800,),),
+      ],),
+      content: Text(
+        t('welcome_new_version_body'),
+        style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogCtx).pop(),
+          child: Text(t('got_it_label'), style: TextStyle(color: kPink)),
+        ),
+      ],
+    ),
+  );
 }
 
 // ================================================================

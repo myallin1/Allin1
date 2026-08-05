@@ -1,5 +1,115 @@
 # Allin1 — Session Handoff (read this first)
 
+---
+
+## UPDATE: Super App AI Agent & PWA (August 5, 2026)
+
+Everything below is NEW work from a later session than the rest of this
+file — the sections after this one (project overview, environment
+rules, commit history, pending work) are from an earlier phase and are
+still valid; nothing here replaces them. This block is additive.
+
+### What got built
+
+**1. PWA update bug fixes**
+- Root cause of the "infinite reload loop": `PwaCachePlatform.
+  clearAndReload()` (`lib/services/pwa_cache_platform_web.dart`) cleared
+  Cache Storage but did a plain `location.reload()` — a different cache
+  from the browser's normal HTTP cache, and modern browsers dropped the
+  old force-bypass-cache reload parameter. FIX: navigates to a
+  cache-busted URL (`?a1_upd=<timestamp>`) instead of reloading in
+  place. Also sets a `sessionStorage` flag before leaving so the next
+  page load can show a one-time "Welcome to the new version!" popup
+  (`dashboard_screen.dart`, checked/cleared in `initState`'s `kIsWeb`
+  block).
+- Root cause of "Check for Updates crashes if no update exists": missing
+  `context.mounted` guards after `await`s in `_checkForUpdates`,
+  `_runManualUpdateCheck`, `_applyPwaUpdate` (`dashboard_screen.dart`) —
+  fixed.
+- New Groq tool `check_and_update_app` in `guru_api_service.dart` lets
+  the customer say "update the app" to Guru and have it run the same
+  safe flow.
+
+**2. GuruOverlayService — global "Quick Task" floating AI**
+(`lib/services/guru_overlay_service.dart`, new file) — a singleton
+`ChangeNotifier` holding a single root-level `OverlayEntry`, inserted
+via the existing `navigatorKey` (`app_navigator.dart`) so it needs no
+`BuildContext` from wherever `.show()` is called and survives
+`Navigator.push`/`pop` across every screen. `GlobalGuruFab` is wired
+into `MaterialApp.builder` in `main_customer.dart` so the "Ask Guru" FAB
+floats over the whole app. Panel is draggable, minimizes to a bubble,
+and the Close button always shows a confirm dialog ("Are you sure you
+want to close Guru?") before removing the entry.
+
+**3. Voice/TTS/language upgrades** (both `guru_chat_screen.dart` and the
+new overlay)
+- STT patience: `pauseFor` 3s→5s, `listenFor` 20s→30s — mic was cutting
+  off after 1-2 words on a natural speaking pause.
+- TTS via `flutter_tts` (already a pubspec dep): every assistant reply
+  auto-speaks unless muted; speaker icon in both the chat app bar and
+  the overlay header.
+- Deep language sync: `_languageInfo()` maps `LocalizationService.
+  languageCode` → (label, BCP-47 locale) — ta/tg→Tamil/ta-IN,
+  hi→Hindi/hi-IN, ml→Malayalam/ml-IN, else English/en-IN — fed to both
+  the STT `listen()` locale and TTS `setLanguage()`, and the label is
+  injected into the Groq system prompt via `GuruApiService.sendMessage`'s
+  new `languageLabel` param ("You MUST communicate ... strictly in
+  [language].").
+
+**4. Function-calling / Human-in-the-Loop architecture**
+- `guru_api_service.dart`: three Groq tools now —
+  `book_transport`, `navigate_to_section`, `check_and_update_app`.
+- `_pendingAgentAction` safety gate (mirrored in BOTH
+  `guru_chat_screen.dart`'s State and `GuruOverlayService`): a tool call
+  from Groq is never executed immediately. It's stored as
+  `_pendingAgentAction`, a confirmation message is posted ("I'm ready to
+  book a bike to X — should I proceed?") with `[SUGGESTIONS: Yes,
+  proceed | No, cancel]` chips (parsed by the new
+  `guru_suggestion_parser.dart` and rendered as `ActionChip`s in both
+  UIs). Only an explicit "yes" (via `VoiceBookingIntentService.
+  classifyYesNo`) executes the real `Navigator.push` to the booking/
+  section screen — the customer still has to tap Confirm on the booking
+  screen itself, unchanged from the original safety net.
+- The overlay's mic, tool-calling, and confirmation gate are now fully
+  wired — a customer can tap the overlay mic anywhere in the app, say
+  "book a bike," get the confirmation chips, tap Yes, and land on
+  `BikeBookingScreen`, without leaving whatever screen they were on.
+
+### Bugs found by `flutter analyze` (Nizam's IDE) and their status
+
+Nizam's local `flutter analyze` (not runnable from this AI's sandbox —
+see environment rule #1 above) surfaced 2 real compiler errors in
+`lib/screens/guru_chat_screen.dart`, both in `_tryAgentActionFromText`
+and `_confirmationTextFor`. **Both were found and fixed in this same
+session** — noted here in case they resurface after a merge/rebase:
+
+1. `argument_type_not_assignable` — `args` (`Map<String, dynamic>?`) was
+   used inside a `setState()` closure after an `if (args == null) return
+   false;` guard. Dart doesn't carry null-promotion for a mutable local
+   through a closure boundary. FIX: copied to `final resolvedArgs =
+   args;` right after the null check and used that everywhere below
+   instead of `args`.
+2. `argument_type_not_assignable` (`String?` → `String`) —
+   `_sectionLabel(String section)` was called with a nullable `section`
+   from `_confirmationTextFor`. FIX: widened the signature to
+   `_sectionLabel(String? section)`; the switch's existing default case
+   ("that section") already handles null correctly.
+
+**No other pending errors known from this session's work.** Nizam should
+still run a full `flutter analyze` after pulling, since this AI cannot
+verify a build — if new errors show up elsewhere, they're unrelated to
+the above two.
+
+### Files touched this session
+`lib/services/pwa_cache_platform_web.dart`,
+`lib/services/pwa_cache_platform_stub.dart`,
+`lib/screens/dashboard_screen.dart`, `lib/services/localization_service.dart`,
+`lib/services/guru_api_service.dart`, `lib/screens/guru_chat_screen.dart`,
+`lib/services/guru_overlay_service.dart` (new),
+`lib/services/guru_suggestion_parser.dart` (new), `lib/main_customer.dart`.
+
+---
+
 Complete context for continuing this project in a new Cowork session.
 Everything here is verified against the code, not assumed. Read top to
 bottom once and you have the whole picture.

@@ -10,6 +10,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
+import 'app_navigator.dart';
 import 'firebase_options.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 import 'screens/admin/ads_management_screen.dart';
@@ -18,6 +19,7 @@ import 'screens/admin/fare_management_screen.dart';
 import 'screens/admin/super_admin_home_screen.dart';
 import 'screens/admin/task_approvals_screen.dart';
 import 'screens/login_screen.dart';
+import 'services/admin_quick_task_service.dart';
 import 'services/db_usage_tracker.dart';
 import 'services/localization_service.dart';
 import 'services/session_service.dart';
@@ -142,6 +144,14 @@ class AdminApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (_) => LocalizationService(),
       child: MaterialApp(
+      // NEW (CTO mandate — Admin App Autonomous Agent Support System):
+      // wires the app's shared navigatorKey (app_navigator.dart) into
+      // the Admin app's own MaterialApp, same as main_customer.dart and
+      // main_hero.dart already do. AdminApp never had this before —
+      // without it, AdminQuickTaskService (below) has no Overlay/
+      // Navigator to insert its floating panel into or push admin
+      // screens from.
+      navigatorKey: navigatorKey,
       title: 'Allin1 Admin',
       debugShowCheckedModeBanner: false,
       // FIX (typography audit): this used to be a bare ThemeData.dark()
@@ -200,6 +210,18 @@ class AdminApp extends StatelessWidget {
              lockedUserLabel: 'Admin',
            );
         },
+      ),
+      // NEW (CTO mandate — Task 1: The Admin Confirmation Gate): the
+      // "Quick Task Chatbox" FAB, laid over every admin screen exactly
+      // like GlobalGuruFab is on the customer app. The actual panel is
+      // a separate root-level OverlayEntry (see
+      // AdminQuickTaskService.show()) inserted via `navigatorKey`, so
+      // it survives Navigator.push/pop the same way this FAB does.
+      builder: (context, child) => Stack(
+        children: [
+          if (child != null) child,
+          const AdminQuickTaskFab(),
+        ],
       ),
       routes: {
         '/admin-home':       (_) => const AdminDashboardScreen(),

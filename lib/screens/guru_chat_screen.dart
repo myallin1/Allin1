@@ -32,19 +32,43 @@
 //    utterances with no recognizable service keyword fall back to the
 //    normal AI text reply.
 import 'dart:async';
+import 'dart:typed_data';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/ai_activation_service.dart';
 import '../services/guru_api_service.dart';
+import '../services/guru_suggestion_parser.dart';
+import '../services/localization_service.dart';
+// NEW (CTO mandate — AI Autonomous App Updating): reuses the exact same
+// web-only cache-clear-and-cache-busted-reload path dashboard_screen.dart's
+// update button already calls, via the same stub/web conditional-import
+// split, so there is only ever one real implementation of "apply the
+// update" in the codebase.
+import '../services/pwa_cache_platform_stub.dart'
+    if (dart.library.html) '../services/pwa_cache_platform_web.dart';
 import '../services/voice_booking_intent_service.dart';
+import '../services/web_version_checker.dart';
 import '../widgets/server_busy_dialog.dart' show kCallCenterNumberIntl;
 import 'bike_taxi/bike_booking_screen.dart';
+import 'car_wash_screen.dart';
+import 'food_hub_screen.dart';
+import 'grocery_order_screen.dart';
+import 'nj_tech_service_screen.dart';
+import 'play_zone_screen.dart';
+import 'printing_service_screen.dart';
+import 'rewards_screen.dart';
+import 'settings_screen.dart';
 import 'sos_screen.dart';
 
 // ---- Dark, glowing "Super Hero" palette ---------------------------------
@@ -90,6 +114,11 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   final List<_GuruMessage> _messages = <_GuruMessage>[];
   final stt.SpeechToText _speech = stt.SpeechToText();
   final VoiceBookingIntentService _voiceIntent = VoiceBookingIntentService();
+  // NEW (CTO mandate — Text-to-Speech): one shared FlutterTts instance
+  // for this screen's lifetime, mirrored in GuruOverlayService for the
+  // floating panel.
+  final FlutterTts _tts = FlutterTts();
+  bool _ttsReady = false;
 
   bool _isTyping = false;
   bool _isListening = false;
@@ -99,6 +128,22 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   // sent a fallback chat message) for this listening session.
   bool _voiceResultHandled = false;
 
+  // NEW (CTO mandate — Text-to-Speech): auto-speak toggle, on by
+  // default per the mandate ("it should automatically speak"); the
+  // header speaker icon flips this.
+  bool _autoSpeak = true;
+
+  // NEW (CTO mandate — Co-work Style Confirmation): the tool-call
+  // args Groq extracted but hasn't been executed yet, pending the
+  // customer's explicit yes/no. Cleared once actioned or cancelled.
+  Map<String, dynamic>? _pendingAgentAction;
+
+  // NEW (Guru AI upgrade, Task 2 — Vision): the screenshot the customer
+  // has picked but not yet sent — shown as a small removable preview
+  // chip above the input bar, cleared once _sendMessage() ships it.
+  Uint8List? _pendingImageBytes;
+  bool _pickingImage = false;
+
   @override
   void dispose() {
     _api.dispose();
@@ -107,34 +152,263 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     if (_isListening) {
       unawaited(_speech.stop());
     }
+    unawaited(_tts.stop());
     super.dispose();
+  }
+
+  // NEW (CTO mandate — Deep Language Sync): maps the app's in-app
+  // language selection to (a) a plain-English label to inject into the
+  // Groq system prompt, and (b) a BCP-47 locale for flutter_tts'
+  // setLanguage. Tanglish ('tg') is spoken content in Tamil, so it maps
+  // to the Tamil locale/label same as 'ta' — there's no separate
+  // "Tanglish" TTS voice on any platform.
+  ({String label, String ttsLocale}) _languageInfo(BuildContext context) {
+    final code = context.read<LocalizationService>().languageCode;
+    switch (code) {
+      case 'ta':
+      case 'tg':
+        return (label: 'Tamil', ttsLocale: 'ta-IN');
+      case 'hi':
+        return (label: 'Hindi', ttsLocale: 'hi-IN');
+      case 'ml':
+        return (label: 'Malayalam', ttsLocale: 'ml-IN');
+      default:
+        return (label: 'English', ttsLocale: 'en-IN');
+    }
+  }
+
+  Future<void> _ensureTtsReady(String locale) async {
+    try {
+      await _tts.setLanguage(locale);
+      await _tts.setSpeechRate(0.48);
+      await _tts.setPitch(1.0);
+      _ttsReady = true;
+    } catch (e) {
+      debugPrint('[GuruChatScreen] TTS setup failed: $e');
+    }
+  }
+
+  Future<void> _speak(String text) async {
+    if (!_autoSpeak || text.trim().isEmpty) return;
+    try {
+      final locale = _languageInfo(context).ttsLocale;
+      await _ensureTtsReady(locale);
+      if (!_ttsReady) return;
+      await _tts.stop();
+      await _tts.speak(text);
+    } catch (e) {
+      debugPrint('[GuruChatScreen] TTS speak failed: $e');
+    }
   }
 
   Future<void> _sendMessage([String? presetText]) async {
     final input = (presetText ?? _inputController.text).trim();
-    if (input.isEmpty || _isTyping) return;
+    final pendingImage = _pendingImageBytes;
+    // NEW (Guru AI upgrade, Task 2 — Vision): a message can now be
+    // image-only (customer attaches a screenshot with no typed text) —
+    // only block sending when BOTH are empty.
+    if ((input.isEmpty && pendingImage == null) || _isTyping) return;
 
     setState(() {
-      _messages.add(_GuruMessage(role: 'user', text: input));
+      _messages.add(_GuruMessage(role: 'user', text: input, imageBytes: pendingImage));
       _isTyping = true;
       _inputController.clear();
+      _pendingImageBytes = null;
     });
     _scrollToBottom();
+
+    // FIX (AI State Mismatch bug): pass the activated key straight from
+    // AiActivationService (secure storage) instead of letting
+    // GuruApiService re-resolve it from its own legacy/stale fallback.
+    final apiKey = context.read<AiActivationService>().apiKey;
+    final languageLabel = _languageInfo(context).label;
+
+    // NEW (CTO mandate — Co-work Style Confirmation): if there's an
+    // action awaiting the customer's yes/no, this message IS the
+    // answer — never re-run agent-action extraction on it.
+    if (_pendingAgentAction != null) {
+      final decision = _voiceIntent.classifyYesNo(input);
+      final pending = _pendingAgentAction!;
+      if (decision == VoiceYesNo.yes) {
+        _pendingAgentAction = null;
+        unawaited(_logGuruAnalyticsEvent(
+          eventType: 'intent_resolved',
+          action: pending['action'] as String?,
+          args: pending,
+          resolved: true,
+        ));
+        await _executePendingAction(pending);
+        if (mounted) setState(() => _isTyping = false);
+        return;
+      } else if (decision == VoiceYesNo.no) {
+        _pendingAgentAction = null;
+        unawaited(_logGuruAnalyticsEvent(
+          eventType: 'intent_resolved',
+          action: pending['action'] as String?,
+          args: pending,
+          resolved: false,
+        ));
+        if (!mounted) return;
+        setState(() {
+          _messages.add(const _GuruMessage(role: 'assistant', text: 'Okay, cancelled — let me know if you need anything else.'));
+          _isTyping = false;
+        });
+        _scrollToBottom();
+        return;
+      }
+      // Unclear -- drop the stale pending action and fall through to
+      // treat this as a fresh message (the customer likely re-said
+      // their request instead of answering yes/no).
+      _pendingAgentAction = null;
+    }
+
+    // NEW (CTO mandate — Autonomous Agent, Option 3 w/ human-in-the-loop
+    // safety net, + Dynamic PWA Guided Tour navigation tool): before
+    // falling back to plain chat, ask Groq whether this text is a
+    // clear booking request OR a "where/how do I do X" navigation
+    // request. Skipped for image-attached messages (a screenshot is a
+    // troubleshooting request, not either of these) and for the
+    // voice-fallback '🎙 ...' text this same method also handles when
+    // the local regex parser already found nothing — Groq gets one
+    // honest shot per genuinely-new message.
+    if (pendingImage == null && input.isNotEmpty) {
+      final acted = await _tryAgentActionFromText(input, apiKey);
+      if (acted) {
+        if (mounted) setState(() => _isTyping = false);
+        return;
+      }
+      if (!mounted) return;
+    }
 
     final history = _messages
         .where((m) => m.role == 'user' || m.role == 'assistant')
         .map((m) => <String, String>{'role': m.role, 'content': m.text})
         .toList();
 
-    final reply = await _api.sendMessage(message: input, history: history);
+    final rawReply = await _api.sendMessage(
+      message: input,
+      history: history,
+      apiKeyOverride: apiKey,
+      imageBytes: pendingImage,
+      languageLabel: languageLabel,
+    );
 
     if (!mounted) return;
 
+    // NEW (CTO mandate — Suggestion Chips): strip the [SUGGESTIONS: ...]
+    // tag out of the displayed bubble and keep the options separately so
+    // the UI can render them as tappable chips right below the message.
+    final parsed = GuruSuggestionParser.parse(rawReply);
+
     setState(() {
-      _messages.add(_GuruMessage(role: 'assistant', text: reply));
+      _messages.add(_GuruMessage(role: 'assistant', text: parsed.text, suggestions: parsed.suggestions));
       _isTyping = false;
     });
     _scrollToBottom();
+    unawaited(_speak(parsed.text));
+  }
+
+  // NEW (CTO mandate — Co-work Style Confirmation): actually dispatches
+  // a previously-confirmed tool call. Mirrors the same switch
+  // _tryAgentActionFromText used to run immediately, just deferred
+  // until the customer said yes.
+  Future<void> _executePendingAction(Map<String, dynamic> args) async {
+    switch (args['action'] as String?) {
+      case 'book_transport':
+        _actOnBookingAction(args);
+        break;
+      case 'navigate_to_section':
+        _actOnNavigateAction(args);
+        break;
+      case 'check_and_update_app':
+        await _actOnUpdateAction();
+        break;
+    }
+  }
+
+  // NEW (CTO mandate — Co-work Style Confirmation): a customer tapping
+  // a suggestion chip sends its exact label back as their next message,
+  // same as if they'd typed it.
+  void _onSuggestionTapped(String suggestion) {
+    unawaited(_sendMessage(suggestion));
+  }
+
+  // NEW (Guru AI upgrade, Task 2 — Vision): reuses file_picker (already
+  // a project dependency — see grocery_order_screen.dart's DMart
+  // cart-screenshot upload) instead of adding image_picker as a second,
+  // redundant image-selection package for the same job.
+  Future<void> _pickAttachment() async {
+    if (_pickingImage) return;
+    setState(() => _pickingImage = true);
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+      );
+      final bytes = result?.files.single.bytes;
+      if (bytes != null && mounted) {
+        // FIX (Nizam's report — screenshot upload to Guru "olaruthu"/
+        // fails): raw phone-screenshot PNGs (often 1-4MB) were being
+        // base64-encoded and sent as-is, mislabeled as image/jpeg —
+        // both likely over Groq's base64 payload ceiling AND a
+        // format/MIME mismatch. Downscale + re-encode as real JPEG
+        // (already have the `image` package as a dependency, just
+        // wasn't wired into this flow) before it ever leaves the
+        // device — this also makes uploads noticeably faster on
+        // mobile data.
+        final compressed = _compressForVision(bytes);
+        setState(() => _pendingImageBytes = compressed ?? bytes);
+      }
+    } catch (e) {
+      debugPrint('[GuruChatScreen] image pick failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open the screenshot. Please try again.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _pickingImage = false);
+    }
+  }
+
+  void _clearAttachment() {
+    setState(() => _pendingImageBytes = null);
+  }
+
+  // NEW (Guru AI upgrade, Task 2 — Vision, screenshot-upload fix): decode,
+  // downscale to a max 800px longest edge, and re-encode as heavily
+  // compressed JPEG (quality 70) — plenty for the AI to read UI
+  // text/buttons, screenshots don't need full resolution. FIX (per
+  // Nizam's explicit ask): used the `image` package instead of adding
+  // `flutter_image_compress` as a second dependency doing the same job —
+  // `image` was already a pubspec dependency, is pure-Dart (no extra
+  // native platform channel/plugin surface to maintain), and does
+  // exactly this decode/resize/re-encode job synchronously with no
+  // external process. Happy to switch to flutter_image_compress instead
+  // if there's a specific reason to prefer it (e.g. its native
+  // encoders are meaningfully faster on very large images), just say
+  // the word. Runs synchronously on the UI isolate — screenshots are
+  // small enough (a few MB) that this is a brief, one-time cost per
+  // attachment, not worth a background isolate for this flow. Returns
+  // null (caller falls back to the original bytes) if decoding fails
+  // for any reason, e.g. an unsupported/corrupt file — never blocks
+  // the customer from sending.
+  Uint8List? _compressForVision(Uint8List rawBytes) {
+    try {
+      final decoded = img.decodeImage(rawBytes);
+      if (decoded == null) return null;
+      final resized = decoded.width > 800 || decoded.height > 800
+          ? img.copyResize(
+              decoded,
+              width: decoded.width >= decoded.height ? 800 : null,
+              height: decoded.height > decoded.width ? 800 : null,
+            )
+          : decoded;
+      return Uint8List.fromList(img.encodeJpg(resized, quality: 70));
+    } catch (e) {
+      debugPrint('[GuruChatScreen] Screenshot compression failed: $e');
+      return null;
+    }
   }
 
   void _scrollToBottom() {
@@ -161,9 +435,23 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
 
   Future<void> _onMicTapped() async {
     final activation = context.read<AiActivationService>();
-    if (!activation.isProUnlocked) {
-      unawaited(_showProPaywall());
+    if (!activation.isAiActivated) {
       return;
+    }
+
+    // NEW (Guru AI upgrade — "Claim My Free Voice Access"): voice is
+    // still free for every activated customer, but the first tap now
+    // shows a quick claim sheet instead of unlocking silently — a
+    // deliberate small engagement moment, not a real paywall (see
+    // AiActivationService.claimFreeVoiceAccess(), persisted locally
+    // once tapped). isProUnlocked returns true immediately for anyone
+    // who's already claimed it (or been admin-granted real Pro), so
+    // this only ever shows once per device.
+    if (!activation.isProUnlocked) {
+      final claimed = await _showVoiceClaimSheet();
+      if (claimed != true || !mounted) {
+        return;
+      }
     }
 
     if (_isListening) {
@@ -196,6 +484,40 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
       return;
     }
 
+    // FIX (Nizam's report — Tamil voice input garbled/stuttering,
+    // e.g. "ErodeErode busErode bus stand..."): the old listen() call
+    // never passed a localeId at all, so speech_to_text fell back to
+    // the PHONE's system-level input language — commonly en-IN even on
+    // devices where the customer is speaking Tamil to the app itself.
+    // Forcing English acoustic/language recognition onto Tamil speech
+    // is exactly what produces this kind of fragmented, re-guessed
+    // stutter. Resolve the actual device-reported Tamil locale (never
+    // hardcode a guessed string like 'ta-IN' — casing/separator varies
+    // by OEM) and use it whenever the customer's in-app language
+    // (Settings → Language) is Tamil or Tanglish.
+    final languageCode = context.read<LocalizationService>().languageCode;
+    String? localeId;
+    if (languageCode == 'ta' || languageCode == 'tg') {
+      try {
+        final locales = await _speech.locales();
+        for (final locale in locales) {
+          if (locale.localeId.toLowerCase().startsWith('ta')) {
+            localeId = locale.localeId;
+            break;
+          }
+        }
+      } catch (e) {
+        debugPrint('[GuruChatScreen] Could not resolve Tamil locale: $e');
+      }
+      // FIX (per Nizam's explicit ask for a 'ta-IN' fallback): if the
+      // device's own locale list came back empty/failed to enumerate
+      // (rare, but seen on some OEM builds with a stripped-down speech
+      // service), don't silently fall through to the system default —
+      // try the standard Android/iOS Tamil locale ID directly as a
+      // last resort before giving up on the locale hint entirely.
+      localeId ??= 'ta-IN';
+    }
+
     setState(() {
       _isListening = true;
       _voiceResultHandled = false;
@@ -215,8 +537,25 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
             unawaited(_handleVoiceUtterance(result.recognizedWords.trim()));
           }
         },
-        listenFor: const Duration(seconds: 20),
-        pauseFor: const Duration(seconds: 3),
+        localeId: localeId,
+        // FIX (same report): partial (interim) results were left on
+        // the plugin's default. Independently of the locale, streaming
+        // partial hypotheses being repeatedly re-guessed is a second,
+        // separate source of the "word word word" stutter pattern.
+        // Only firing onResult once, on the final transcript, removes
+        // that whole accumulating-hypothesis path outright.
+        listenOptions: stt.SpeechListenOptions(
+          partialResults: false,
+          cancelOnError: true,
+        ),
+        // FIX (CTO QA — "mic stops and sends after one or two words"):
+        // 3s of silence was too aggressive for customers who pause
+        // naturally mid-sentence (e.g. thinking of a street name).
+        // Widened to 5s so a normal speaking pause doesn't get read as
+        // "done talking", while listenFor gives a full utterance more
+        // total room before the plugin gives up regardless of pauses.
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 5),
       ),
     );
   }
@@ -233,7 +572,21 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
       unawaited(_sendMessage('🎙 $utterance'));
       return;
     }
+    unawaited(_navigateForBookingIntent(intent));
+  }
 
+  // NEW (CTO mandate — Autonomous Agent, Option 3 with the mandatory
+  // human-in-the-loop safety net): shared navigate-and-prefill action,
+  // extracted so BOTH the local regex-based voice parser above AND the
+  // Groq function-calling text-intent path below (_tryAgentActionFromText)
+  // drive the exact same "programmatic navigation" behavior. Critically,
+  // this method NEVER calls a ride-creation/dispatch API itself — it
+  // only pushes BikeBookingScreen with fields pre-filled. The actual
+  // booking still requires the customer to review and tap Confirm on
+  // that screen, completely unchanged — that's the safety net, and it
+  // costs nothing extra to guarantee because it's simply reusing the
+  // existing screen rather than bypassing it.
+  Future<void> _navigateForBookingIntent(VoiceBookingIntent intent) async {
     if (intent.service == VoiceService.sos) {
       _showVoiceToast('Opening SOS...');
       unawaited(
@@ -245,9 +598,9 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     }
 
     if (intent.destinationQuery == null) {
-      // Heard a service ("book an auto") but no destination at all —
-      // still take the customer straight to that service's booking
-      // screen rather than making them repeat themselves in text.
+      // Heard/typed a service ("book an auto") but no destination at
+      // all — still take the customer straight to that service's
+      // booking screen rather than making them repeat themselves.
       _showVoiceToast('Opening ${intent.displayName} booking...');
       unawaited(
         Navigator.of(context).push(
@@ -296,6 +649,334 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     );
   }
 
+  // NEW (CTO mandate — Admin AI Co-Pilot Foundation, Option 1: Analytics
+  // Logging): fire-and-forget structured event log of WHAT customers ask
+  // Guru to do — never the raw chat text (privacy + cost) — so a future
+  // Admin AI can read `guru_analytics` and see usage patterns (which
+  // services get asked for, confirm-vs-cancel rates, language split,
+  // peak times) without touching conversation content. Two events per
+  // agent action: 'intent_requested' when confirmation chips are shown,
+  // 'intent_resolved' when the customer answers yes/no. Wrapped in its
+  // own try/catch and always called via `unawaited` by its callers, so a
+  // Firestore hiccup (or being offline) can never block or break the
+  // existing chat/booking flow — this is purely additive, analytics-only,
+  // and does not alter any existing function's behavior or signature.
+  Future<void> _logGuruAnalyticsEvent({
+    required String eventType,
+    String? action,
+    Map<String, dynamic>? args,
+    bool? resolved,
+  }) async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final languageLabel = mounted ? _languageInfo(context).label : null;
+      await FirebaseFirestore.instance.collection('guru_analytics').add(<String, dynamic>{
+        'customerId': uid,
+        'source': 'chat_screen',
+        'eventType': eventType,
+        'intent': action,
+        if (args?['section'] != null) 'section': args!['section'],
+        if (args?['service'] != null) 'serviceType': args!['service'],
+        if (resolved != null) 'resolved': resolved,
+        if (languageLabel != null && languageLabel.isNotEmpty)
+          'languageUsed': languageLabel,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('[GuruChatScreen] analytics log failed: $e');
+    }
+  }
+
+  // NEW (CTO mandate — Autonomous Agent "brain" + Dynamic PWA Guided
+  // Tour): asks Groq (via function/tool calling, see
+  // GuruApiService.extractAgentAction) if this TYPED message is a
+  // clear booking request OR a navigation ("where/how do I...")
+  // request. Returns true and takes over (posts a confirming assistant
+  // message + navigates) only when the model actually called one of
+  // the two tools; returns false — meaning the caller should fall
+  // through to a normal chat reply — for every other case (declined by
+  // the model, network/parse failure, unrecognized key). A failure
+  // here is never user-visible as an error; it just silently becomes
+  // "ask the AI normally" instead.
+  Future<bool> _tryAgentActionFromText(String input, String apiKey) async {
+    Map<String, dynamic>? args;
+    try {
+      args = await _api.extractAgentAction(message: input, apiKeyOverride: apiKey);
+    } catch (e) {
+      debugPrint('[GuruChatScreen] extractAgentAction failed: $e');
+    }
+    if (args == null) return false;
+    // FIX (compiler error — "argument type Map<String, dynamic>? can't
+    // be assigned to Map<String, dynamic>"): `args` is a mutable local,
+    // so the `args == null` check above doesn't stay promoted to
+    // non-null once it's captured inside the setState() closure below —
+    // Dart can't prove the variable is still non-null by the time the
+    // closure actually runs. Copying it into a new `final` local carries
+    // the non-null type through the closure with no such ambiguity.
+    final resolvedArgs = args;
+    final action = resolvedArgs['action'] as String?;
+    if (action != 'book_transport' &&
+        action != 'navigate_to_section' &&
+        action != 'check_and_update_app') {
+      return false;
+    }
+
+    // NEW (CTO mandate — Co-work Style Confirmation & Suggestions,
+    // "Human-in-the-Loop"): don't execute yet. Store the parsed args and
+    // ask the customer to confirm first, with Yes/No suggestion chips —
+    // the next message they send is interpreted as that answer (see the
+    // top of _sendMessage).
+    if (!mounted) return true;
+    _pendingAgentAction = resolvedArgs;
+    unawaited(_logGuruAnalyticsEvent(
+      eventType: 'intent_requested',
+      action: action,
+      args: resolvedArgs,
+    ));
+    setState(() {
+      _messages.add(
+        _GuruMessage(
+          role: 'assistant',
+          text: _confirmationTextFor(resolvedArgs),
+          suggestions: const ['Yes, proceed', 'No, cancel'],
+        ),
+      );
+    });
+    _scrollToBottom();
+    unawaited(_speak(_confirmationTextFor(resolvedArgs)));
+    return true;
+  }
+
+  // NEW (CTO mandate — Co-work Style Confirmation): plain-language
+  // preview of what's about to happen, shown before any tool actually
+  // runs.
+  String _confirmationTextFor(Map<String, dynamic> args) {
+    switch (args['action'] as String?) {
+      case 'book_transport':
+        final service = _voiceServiceFromKey(args['service'] as String?);
+        final dest = (args['destination'] as String?)?.trim();
+        final serviceName = service != null
+            ? VoiceBookingIntent(service: service).displayName
+            : 'ride';
+        return dest != null && dest.isNotEmpty
+            ? "I'm ready to book a $serviceName to $dest — should I proceed?"
+            : "I'm ready to open $serviceName booking for you — should I proceed?";
+      case 'navigate_to_section':
+        final section = args['section'] as String?;
+        return "I'm ready to open ${_sectionLabel(section)} for you — should I proceed?";
+      case 'check_and_update_app':
+        return "I'm ready to check for an app update — should I proceed?";
+      default:
+        return 'Should I proceed?';
+    }
+  }
+
+  // NEW (CTO mandate — AI Autonomous App Updating): runs the same safe
+  // PWA update flow the dashboard's Update button/drawer tile use.
+  // Native builds get an honest "not supported yet" reply instead of a
+  // silent no-op, since AppUpdateChecker's native flow needs a
+  // BuildContext-driven download/install dialog this chat bubble isn't
+  // set up to host.
+  Future<bool> _actOnUpdateAction() async {
+    if (!mounted) return true;
+    if (!kIsWeb) {
+      setState(() {
+        _messages.add(
+          const _GuruMessage(
+            role: 'assistant',
+            text: "You're on the app store build — updates install "
+                'automatically in the background, nothing to trigger here.',
+          ),
+        );
+      });
+      _scrollToBottom();
+      return true;
+    }
+
+    setState(() {
+      _messages.add(
+        const _GuruMessage(role: 'assistant', text: 'Checking for an update...'),
+      );
+    });
+    _scrollToBottom();
+
+    try {
+      await WebVersionChecker.instance.checkNow();
+    } catch (e) {
+      debugPrint('[GuruChatScreen] update check failed: $e');
+    }
+
+    if (!mounted) return true;
+
+    if (!WebVersionChecker.instance.isUpdateAvailable) {
+      setState(() {
+        _messages.add(
+          const _GuruMessage(
+            role: 'assistant',
+            text: "You're already on the latest version!",
+          ),
+        );
+      });
+      _scrollToBottom();
+      return true;
+    }
+
+    setState(() {
+      _messages.add(
+        const _GuruMessage(
+          role: 'assistant',
+          text: 'Found a new version — updating now, the app will refresh in a moment...',
+        ),
+      );
+    });
+    _scrollToBottom();
+
+    try {
+      // The page navigates away on success, so nothing after this needs
+      // to run in the happy path.
+      await PwaCachePlatform().clearAndReload();
+    } catch (e) {
+      debugPrint('[GuruChatScreen] update apply failed: $e');
+      if (!mounted) return true;
+      setState(() {
+        _messages.add(
+          const _GuruMessage(
+            role: 'assistant',
+            text: "The update didn't go through — please try again from the side menu.",
+          ),
+        );
+      });
+      _scrollToBottom();
+    }
+    return true;
+  }
+
+  bool _actOnBookingAction(Map<String, dynamic> args) {
+    final service = _voiceServiceFromKey(args['service'] as String?);
+    if (service == null) return false;
+
+    final destinationRaw = (args['destination'] as String?)?.trim();
+    final intent = VoiceBookingIntent(
+      service: service,
+      destinationQuery: (destinationRaw != null && destinationRaw.isNotEmpty) ? destinationRaw : null,
+    );
+
+    if (!mounted) return true;
+    setState(() {
+      _messages.add(
+        _GuruMessage(
+          role: 'assistant',
+          text: intent.service == VoiceService.sos
+              ? "I've opened SOS for you — please confirm there so we can get you help right away."
+              : "I've got it! Setting up your ${intent.displayName} booking now — review the details and press Confirm to book your Hero.",
+        ),
+      );
+    });
+    _scrollToBottom();
+    unawaited(_navigateForBookingIntent(intent));
+    return true;
+  }
+
+  // NEW (CTO mandate — "Dynamic PWA Guided Tour"): maps the section key
+  // Groq extracted to a real screen and pushes it directly, exactly
+  // the same Navigator.push pattern _navigateForBookingIntent already
+  // uses for booking screens — no dashboard tab-index plumbing needed
+  // (DashboardScreen's bottom-nav tabs are private State, unreachable
+  // from a screen pushed on top of it; every non-tab section in this
+  // codebase is already a plain pushed route, so this is consistent
+  // with the existing architecture, not a special case).
+  bool _actOnNavigateAction(Map<String, dynamic> args) {
+    final section = args['section'] as String?;
+    final target = _screenForSection(section);
+    if (target == null) return false;
+
+    if (!mounted) return true;
+    setState(() {
+      _messages.add(
+        _GuruMessage(role: 'assistant', text: "Sure! Opening ${_sectionLabel(section!)} for you now."),
+      );
+    });
+    _scrollToBottom();
+    unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => target)));
+    return true;
+  }
+
+  Widget? _screenForSection(String? section) {
+    switch (section) {
+      case 'food':
+        return const FoodHubScreen();
+      case 'grocery':
+        return const GroceryOrderScreen();
+      case 'electronics':
+        return const NjTechServiceScreen();
+      case 'rewards':
+        return const RewardsScreen();
+      case 'game_zone':
+        return const PlayZoneScreen();
+      case 'safety':
+        return const SosScreen();
+      case 'settings':
+        return const SettingsScreen();
+      case 'car_wash':
+        return const CarWashScreen();
+      case 'printing':
+        return const PrintingServiceScreen();
+      default:
+        return null;
+    }
+  }
+
+  // FIX (compiler error — "String? can't be assigned to String"):
+  // widened to accept null since _confirmationTextFor above only has a
+  // nullable `section` to hand it (the args map doesn't guarantee the
+  // key exists) — the switch's own default case already reads fine as
+  // "that section" for a null input.
+  String _sectionLabel(String? section) {
+    switch (section) {
+      case 'food':
+        return 'Food Genie';
+      case 'grocery':
+        return 'Grocery';
+      case 'electronics':
+        return 'Electronics service';
+      case 'rewards':
+        return 'Rewards';
+      case 'game_zone':
+        return 'Game Zone';
+      case 'safety':
+        return 'Safety';
+      case 'settings':
+        return 'Settings';
+      case 'car_wash':
+        return 'Car Wash';
+      case 'printing':
+        return 'Printing';
+      default:
+        return 'that section';
+    }
+  }
+
+  VoiceService? _voiceServiceFromKey(String? key) {
+    switch (key) {
+      case 'bike':
+        return VoiceService.bike;
+      case 'auto':
+        return VoiceService.auto;
+      case 'cab':
+        return VoiceService.cab;
+      case 'parcel':
+        return VoiceService.parcel;
+      case 'mini_truck':
+        return VoiceService.miniTruck;
+      case 'lorry':
+        return VoiceService.lorry;
+      case 'sos':
+        return VoiceService.sos;
+      default:
+        return null;
+    }
+  }
+
   void _showVoiceToast(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -308,12 +989,12 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     );
   }
 
-  Future<void> _showProPaywall() {
-    return showModalBottomSheet<void>(
+  Future<bool?> _showVoiceClaimSheet() {
+    return showModalBottomSheet<bool>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => const _ProPaywallSheet(),
+      builder: (_) => const _VoiceClaimSheet(),
     );
   }
 
@@ -338,7 +1019,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
                             : _buildMessages(),
                       ),
                       if (_isTyping) const _GuruTypingIndicator(),
-                      _buildInputBar(activation),
+                      _buildInputBar(),
                     ],
                   ),
                 ],
@@ -371,15 +1052,33 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
+                // FIX (Pro Mode Voice Bypass mandate): voice is no longer
+                // Pro-gated, so this badge shouldn't imply it is —
+                // always reflects that chat + voice are both unlocked
+                // once the customer has activated their own key.
                 Text(
-                  activation.isProUnlocked ? 'Pro • Voice unlocked' : 'Free plan',
+                  'Voice unlocked',
                   style: GoogleFonts.outfit(
-                    color: activation.isProUnlocked ? _accentC : _muted,
+                    color: _accentC,
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
+            ),
+          ),
+          // NEW (CTO mandate — Text-to-Speech): lets the customer turn
+          // off auto-speak without losing anything else — chat still
+          // works exactly the same, Guru just stays silent.
+          IconButton(
+            onPressed: () {
+              setState(() => _autoSpeak = !_autoSpeak);
+              if (!_autoSpeak) unawaited(_tts.stop());
+            },
+            tooltip: _autoSpeak ? 'Mute Guru' : 'Unmute Guru',
+            icon: Icon(
+              _autoSpeak ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+              color: _muted,
             ),
           ),
           IconButton(
@@ -450,25 +1149,81 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
       controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       itemCount: _messages.length,
-      itemBuilder: (context, index) => _GuruMessageBubble(message: _messages[index]),
+      itemBuilder: (context, index) => _GuruMessageBubble(
+        message: _messages[index],
+        onSuggestionTap: _onSuggestionTapped,
+      ),
     );
   }
 
-  Widget _buildInputBar(AiActivationService activation) {
+  Widget _buildInputBar() {
     return SafeArea(
       top: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _VoiceMicButton(
-              isListening: _isListening,
-              isPro: activation.isProUnlocked,
-              onTap: () => unawaited(_onMicTapped()),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
+            // NEW (Guru AI upgrade, Task 2 — Vision): preview of the
+            // screenshot picked but not yet sent, with a quick remove.
+            if (_pendingImageBytes != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.memory(
+                        _pendingImageBytes!,
+                        width: 72,
+                        height: 72,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    Positioned(
+                      top: -6,
+                      right: -6,
+                      child: GestureDetector(
+                        onTap: _clearAttachment,
+                        child: Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: const BoxDecoration(color: _surfaceElevated, shape: BoxShape.circle),
+                          child: const Icon(Icons.close_rounded, color: _muted, size: 16),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // NEW (Guru AI upgrade, Task 2 — Vision): attachment
+                // button so the customer can send a screenshot of an
+                // app issue for Guru to troubleshoot.
+                IconButton(
+                  onPressed: _pickingImage ? null : () => unawaited(_pickAttachment()),
+                  icon: _pickingImage
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: _muted),
+                        )
+                      : const Icon(Icons.attach_file_rounded, color: _muted),
+                ),
+                _VoiceMicButton(
+                  isListening: _isListening,
+                  // FIX (Pro Mode Voice Bypass mandate): voice is unlocked
+                  // for every activated customer now, not just
+                  // isProUnlocked ones — pass true so the mic always shows
+                  // its active/unlocked styling instead of the old muted
+                  // "locked" look.
+                  isPro: true,
+                  onTap: () => unawaited(_onMicTapped()),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
               child: Container(
                 constraints: const BoxConstraints(minHeight: 48, maxHeight: 140),
                 decoration: BoxDecoration(
@@ -507,6 +1262,8 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
                   padding: EdgeInsets.zero,
                 ),
               ),
+            ),
+              ],
             ),
           ],
         ),
@@ -697,20 +1454,30 @@ class _SuperHeroActivationScreen extends StatelessWidget {
 // ================================================================
 // Pro paywall — shown when a Free-tier customer taps the mic.
 // ================================================================
-class _ProPaywallSheet extends StatelessWidget {
-  const _ProPaywallSheet();
+// NEW (Guru AI upgrade — "Claim My Free Voice Access"): replaced the old
+// WhatsApp-upgrade paywall sheet with an honest, one-tap unlock. FIX
+// (deliberately NOT built as originally specced): the brief asked for a
+// struck-through "₹2000" reference price next to "FREE FOR YOU" — a
+// fabricated original price that was never actually charged is a
+// deceptive-pricing dark pattern (and risks a real Play Store policy
+// strike / Consumer Protection E-Commerce Rules issue in India). This
+// version keeps the same "surprise and delight, one big claim button"
+// energy without inventing a price that never existed.
+class _VoiceClaimSheet extends StatefulWidget {
+  const _VoiceClaimSheet();
 
-  Future<void> _upgrade(BuildContext context) async {
-    final message = Uri.encodeComponent(
-      "Hi NJ Tech! I'd like to upgrade to MyAllin1 Pro for Voice-to-Order.",
-    );
-    final uri = Uri.parse('https://wa.me/$kCallCenterNumberIntl?text=$message');
-    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (context.mounted) Navigator.of(context).maybePop();
-    if (!launched && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open WhatsApp.')),
-      );
+  @override
+  State<_VoiceClaimSheet> createState() => _VoiceClaimSheetState();
+}
+
+class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
+  bool _claiming = false;
+
+  Future<void> _claim(BuildContext context) async {
+    setState(() => _claiming = true);
+    await context.read<AiActivationService>().claimFreeVoiceAccess();
+    if (context.mounted) {
+      Navigator.of(context).pop(true);
     }
   }
 
@@ -739,25 +1506,43 @@ class _ProPaywallSheet extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Voice-to-Order is a Pro feature',
+              'Voice Mode',
               textAlign: TextAlign.center,
               style: GoogleFonts.outfit(color: _ink, fontSize: 19, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
             Text(
               'Speak your booking — "Book an auto to the railway station" — and '
-              'let Super Hero understand and place it for you. Upgrade to '
-              'MyAllin1 Pro to unlock voice ordering. Text chat stays free, always.',
+              'let Super Hero understand and place it for you. It\'s completely '
+              'free, one tap away.',
               textAlign: TextAlign.center,
               style: GoogleFonts.outfit(color: _muted, fontSize: 13.5, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: _accentC.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                'FREE • No card, no catch',
+                style: GoogleFonts.outfit(color: _accentC, fontWeight: FontWeight.w800, fontSize: 12.5),
+              ),
             ),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () => unawaited(_upgrade(context)),
-                icon: const Icon(Icons.workspace_premium_rounded),
-                label: const Text('Upgrade to MyAllin1 Pro'),
+                onPressed: _claiming ? null : () => unawaited(_claim(context)),
+                icon: _claiming
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.mic_rounded),
+                label: const Text('Claim My Free Voice Access'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _accentB,
                   foregroundColor: Colors.white,
@@ -943,9 +1728,14 @@ class _VoiceMicButtonState extends State<_VoiceMicButton> with SingleTickerProvi
 // bubble chrome — matches Claude's mobile-app message style, on the
 // new dark backdrop.
 class _GuruMessageBubble extends StatelessWidget {
-  const _GuruMessageBubble({required this.message});
+  const _GuruMessageBubble({required this.message, this.onSuggestionTap});
 
   final _GuruMessage message;
+  // NEW (CTO mandate — Suggestion Chips): null for messages rendered
+  // where chip taps don't make sense (there are none today, but keeping
+  // this optional avoids a required-param ripple if this widget is ever
+  // reused read-only elsewhere).
+  final ValueChanged<String>? onSuggestionTap;
 
   @override
   Widget build(BuildContext context) {
@@ -963,9 +1753,29 @@ class _GuruMessageBubble extends StatelessWidget {
               borderRadius: BorderRadius.circular(18),
               border: Border.all(color: _border),
             ),
-            child: Text(
-              message.text,
-              style: GoogleFonts.notoSansTamil(color: _ink, fontWeight: FontWeight.w500, fontSize: 14.5, height: 1.4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // NEW (Guru AI upgrade, Task 2 — Vision): show the
+                // screenshot the customer attached to this message.
+                if (message.imageBytes != null) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.memory(
+                      message.imageBytes!,
+                      width: 180,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  if (message.text.isNotEmpty) const SizedBox(height: 8),
+                ],
+                if (message.text.isNotEmpty)
+                  Text(
+                    message.text,
+                    style: GoogleFonts.notoSansTamil(color: _ink, fontWeight: FontWeight.w500, fontSize: 14.5, height: 1.4),
+                  ),
+              ],
             ),
           ),
         ),
@@ -980,9 +1790,35 @@ class _GuruMessageBubble extends StatelessWidget {
           const _GuruAvatar(size: 26),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              message.text,
-              style: GoogleFonts.notoSansTamil(color: _ink, fontWeight: FontWeight.w500, fontSize: 14.5, height: 1.5),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  message.text,
+                  style: GoogleFonts.notoSansTamil(color: _ink, fontWeight: FontWeight.w500, fontSize: 14.5, height: 1.5),
+                ),
+                // NEW (CTO mandate — Suggestion Chips): clickable quick
+                // replies parsed out of the model's [SUGGESTIONS: ...]
+                // tag, rendered right below the message they belong to.
+                if (message.suggestions.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: message.suggestions
+                        .map(
+                          (s) => ActionChip(
+                            label: Text(s, style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                            backgroundColor: _surfaceElevated,
+                            side: const BorderSide(color: _border),
+                            labelStyle: const TextStyle(color: _ink),
+                            onPressed: onSuggestionTap == null ? null : () => onSuggestionTap!(s),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -1158,9 +1994,23 @@ class _GlowOrb extends StatelessWidget {
 }
 
 class _GuruMessage {
-  const _GuruMessage({required this.role, required this.text});
+  const _GuruMessage({
+    required this.role,
+    required this.text,
+    this.imageBytes,
+    this.suggestions = const [],
+  });
 
   final String role;
   final String text;
+  // NEW (Guru AI upgrade, Task 2 — Vision): the screenshot the customer
+  // attached to THIS message, if any — kept only for local bubble
+  // display, never re-sent on later turns (see GuruApiService.sendMessage,
+  // which only attaches the image on the request it was picked for).
+  final Uint8List? imageBytes;
+  // NEW (CTO mandate — Suggestion Chips): quick-reply options parsed out
+  // of an assistant reply's [SUGGESTIONS: ...] tag (see
+  // guru_suggestion_parser.dart). Always empty for user messages.
+  final List<String> suggestions;
 }
 

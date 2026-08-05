@@ -1,7 +1,7 @@
 ﻿name: erode_superapp
 description: Erode All-in-One Super App - Multi-vendor Commerce MVP by NJ TECH
 publish_to: 'none'
-version: 1.0.8+88
+version: 1.0.8+92
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -98,6 +98,13 @@ dependencies:
   # to a real <iframe> on web instead (see dmart_embedded_view_web.dart).
   # Run `flutter pub get` after this change before building.
   webview_flutter: ^4.7.0
+  # FIX (DMart WebView OTP session fix): needed directly (not just
+  # transitively via webview_flutter) so dmart_embedded_view_native.dart
+  # can import AndroidWebViewController/AndroidWebViewCookieManager to
+  # explicitly enable third-party cookies for DMart's OTP-login flow.
+  # Already resolves via pubspec.lock (4.13.0 as of this change) -- this
+  # just makes the dependency direct/explicit instead of transitive.
+  webview_flutter_android: ^4.0.0
 
 dev_dependencies:
   build_runner: ^2.4.8

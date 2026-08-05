@@ -37,6 +37,7 @@ import 'services/analytics_service.dart';
 import 'services/api_service.dart';
 import 'services/cache_service.dart';
 import 'services/db_usage_tracker.dart';
+import 'services/guru_overlay_service.dart';
 import 'services/hive_cache.dart';
 import 'services/local_sync_service.dart';
 import 'services/localization_service.dart';
@@ -589,6 +590,19 @@ class CustomerApp extends StatelessWidget {
           navigatorObservers: [
             AnalyticsService.instance.getObserver(),
           ],
+          // NEW (CTO mandate — Quick Task Global AI Overlay): the launcher
+          // FAB lives here so it appears above every screen with zero
+          // per-screen wiring, exactly like the CTO's "travels with the
+          // user across ALL screens" requirement. The actual chat panel
+          // is NOT built here -- it's a separate root-level OverlayEntry
+          // (see GuruOverlayService.show()) inserted via `navigatorKey`,
+          // so it survives Navigator.push/pop the same way this FAB does.
+          builder: (context, child) => Stack(
+            children: [
+              if (child != null) child,
+              const GlobalGuruFab(),
+            ],
+          ),
           // The bouncing Paytm soundbox used to be mounted HERE, at the
           // MaterialApp builder — meaning it sat on top of every single
           // screen in the app with a Ticker firing on every frame for

@@ -18,6 +18,16 @@ class AiActivationService extends ChangeNotifier {
   static const String _apiKeySecureKey = 'personal_ai_api_key_secure';
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 
+  // NEW (Guru AI "Claim My Free Voice Access" flow): a lightweight,
+  // device-local flag separate from the admin-controlled Firestore
+  // `promoClaims.ai_pro` flag below — set the moment the customer taps
+  // "Claim" in the in-app voice-unlock sheet (see
+  // _ProPaywallSheet/_showProPaywall in guru_chat_screen.dart). Plain
+  // SharedPreferences is fine here (not sensitive, not a real
+  // entitlement/payment record) — this is a marketing/engagement
+  // mechanic, not billing.
+  static const String _proLocallyClaimedPrefsKey = 'ai_pro_locally_claimed';
+
   String _apiKey = '';
   bool _isAiClaimed = false;
   // "MyAllin1 Pro" — the Voice-to-Order tier. Free tier (text chat) only
@@ -27,12 +37,32 @@ class AiActivationService extends ChangeNotifier {
   // Stored exactly like _isAiClaimed: a boolean under promoClaims on the
   // user's Firestore doc, flipped by Admin, never by the client.
   bool _isProUnlocked = false;
+  bool _isProLocallyClaimed = false;
 
   String get apiKey => _apiKey;
   bool get isAiClaimed => _isAiClaimed;
   bool get isAiActivated => _apiKey.trim().isNotEmpty;
-  bool get isProUnlocked => _isProUnlocked;
+  // Unlocked either the "real" admin-granted way (Firestore) or via the
+  // free in-app claim button — either is sufficient.
+  bool get isProUnlocked => _isProUnlocked || _isProLocallyClaimed;
   bool get showFloatingCompanion => _isAiClaimed && !isAiActivated;
+
+  /// Called when the customer taps "Claim My Free Voice Access" in the
+  /// voice-unlock sheet. Free, instant, no admin/WhatsApp round-trip —
+  /// persists locally so it survives app restarts.
+  Future<void> claimFreeVoiceAccess() async {
+    if (_isProLocallyClaimed) {
+      return;
+    }
+    _isProLocallyClaimed = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_proLocallyClaimedPrefsKey, true);
+    } catch (e) {
+      debugPrint('[AiActivationService] Failed to persist local Pro claim: $e');
+    }
+    notifyListeners();
+  }
 
   AiActivationService() {
     unawaited(initialize());
@@ -40,8 +70,18 @@ class AiActivationService extends ChangeNotifier {
 
   Future<void> initialize() async {
     await _loadApiKey();
+    await _loadLocalProClaim();
     await refreshForUser(FirebaseAuth.instance.currentUser, notify: false);
     notifyListeners();
+  }
+
+  Future<void> _loadLocalProClaim() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _isProLocallyClaimed = prefs.getBool(_proLocallyClaimedPrefsKey) ?? false;
+    } catch (e) {
+      debugPrint('[AiActivationService] Failed to load local Pro claim: $e');
+    }
   }
 
   Future<void> refreshForUser(
@@ -49,7 +89,24 @@ class AiActivationService extends ChangeNotifier {
     bool notify = true,
   }) async {
     if (user == null) {
-      if (_isAiClaimed || _isProUnlocked) {
+      // FIX (CTO mandate — "strictly tied to the active user session"):
+      // the personal Groq key used to live purely at the app-INSTALL
+      // level (flutter_secure_storage, never cleared on sign-out) —
+      // on a shared/handed-down device, the next customer to sign in
+      // would inherit and unknowingly burn the previous customer's key
+      // and quota. Logout is the one reliable signal we get that the
+      // session is ending, so wipe the key here too, not just the
+      // Firestore-derived claim flags.
+      final hadKey = _apiKey.isNotEmpty;
+      if (hadKey) {
+        _apiKey = '';
+        try {
+          await _secureStorage.delete(key: _apiKeySecureKey);
+        } catch (e) {
+          debugPrint('[AiActivationService] Secure storage delete on logout failed: $e');
+        }
+      }
+      if (_isAiClaimed || _isProUnlocked || hadKey) {
         _isAiClaimed = false;
         _isProUnlocked = false;
         if (notify) {
