@@ -70,10 +70,27 @@ class GuruApiService {
       // reliably stop the model from calling a tool immediately, so the
       // real safety net lives in code. This line keeps the model's own
       // words consistent with that behavior instead of contradicting it.
-      'Before suggesting you are about to take an action (like booking a '
-      'ride or opening a section), phrase it as asking for confirmation, '
-      "e.g. 'I'm ready to book a bike to the bus stand — should I proceed?' "
-      'and wait for the customer to say yes or no.\n'
+      // UPDATED (CTO mandate — Autonomous Interaction Rule): booking/
+      // navigation/section-opening tool calls now execute immediately
+      // (see guru_chat_screen.dart / guru_overlay_service.dart) — do
+      // NOT ask "should I proceed?" for these anymore, that phrasing is
+      // now wrong. Replaced with the new two-scenario rule below. FIX
+      // (caught during this same edit): the actual instruction text
+      // MUST be inside a string literal, not a // comment, or Groq
+      // never receives it — worth flagging since a silently-inert
+      // prompt change is a very easy mistake to ship unnoticed.
+      'You no longer need to ask "should I proceed?" before booking or '
+      'opening a section — that now happens immediately. Only ask for '
+      'confirmation in words in two situations: (A) an actual payment or '
+      'final order/booking commitment — that confirmation happens on the '
+      "booking screen itself, not in this chat, so just mention it's the "
+      'next step rather than asking to proceed yourself; or (B) when you '
+      'are genuinely unsure which service, section, or item the customer '
+      'means. For (B), do not guess — ask a short clarifying question and '
+      'offer EXACTLY 3 suggestion chips (using the [SUGGESTIONS: ...] '
+      'format below) covering the most likely options, and wait for the '
+      'customer to pick one instead of calling a tool with a guessed '
+      'value.\n'
       // NEW (CTO mandate — Tamil Language Quality Fix): the earlier
       // prompt only said "Reply in ... Tamil" with no register guidance,
       // so the model defaulted to stiff, literal-translation Tamil.
@@ -318,7 +335,7 @@ class GuruApiService {
                   {
                     'role': 'system',
                     'content':
-                        'You have three tools available. Call book_transport ONLY '
+                        'You have four tools available. Call book_transport ONLY '
                         'when the user CLEARLY wants to book a ride or send '
                         'something right now (e.g. "book a bike to the bus '
                         'stand", "I need an auto to home", "send a parcel to '
@@ -330,10 +347,20 @@ class GuruApiService {
                         '"I want to play a game"). Call check_and_update_app ONLY '
                         'when the user explicitly asks to update the app or '
                         'check for a new version (e.g. "update the app", "is '
-                        'there a new version?", "check for updates"). For '
-                        'general conversation, greetings, or anything that is '
-                        'not clearly one of these three, do NOT call any tool '
-                        '— just let the normal reply happen.',
+                        'there a new version?", "check for updates"). Call '
+                        'add_to_grocery_cart ONLY when the user clearly wants to '
+                        'add a grocery item to their list (e.g. "add 2 packs of '
+                        'milk", "I need rice and sugar", "put onions on my '
+                        'list"). For general conversation, greetings, or '
+                        'anything that is not clearly one of these four, do NOT call any tool '
+                        '— just let the normal reply happen. IMPORTANT: if the '
+                        'request is genuinely ambiguous — you cannot tell which '
+                        'service, section, or item the user means (e.g. "book me '
+                        'a ride" with no service named, or a section name that '
+                        'could match more than one thing) — do NOT guess and do '
+                        'NOT call a tool with a made-up value. Let it fall '
+                        'through to the normal reply, which will ask a short '
+                        'clarifying question with exactly 3 options instead.',
                   },
                   {'role': 'user', 'content': input},
                 ],
@@ -383,6 +410,9 @@ class GuruApiService {
                               'settings',
                               'car_wash',
                               'printing',
+                              'hero_needs',
+                              'profile',
+                              'ride_history',
                             ],
                             'description': 'Which app section to open.',
                           },
@@ -402,6 +432,32 @@ class GuruApiService {
                         'type': 'object',
                         'properties': <String, dynamic>{},
                         'required': <String>[],
+                      },
+                    },
+                  },
+                  {
+                    'type': 'function',
+                    'function': {
+                      'name': 'add_to_grocery_cart',
+                      'description':
+                          "Add an item to the customer's grocery list. Never "
+                          'executes a purchase — only notes the item for the '
+                          'existing grocery order form.',
+                      'parameters': {
+                        'type': 'object',
+                        'properties': {
+                          'item': {
+                            'type': 'string',
+                            'description': 'The grocery item name, e.g. "milk".',
+                          },
+                          'quantity': {
+                            'type': 'string',
+                            'description':
+                                'How much/many, in the customer\'s own words, e.g. '
+                                '"2 packs" or "1 kg". Omit if not stated.',
+                          },
+                        },
+                        'required': ['item'],
                       },
                     },
                   },
@@ -437,6 +493,7 @@ class GuruApiService {
         'book_transport',
         'navigate_to_section',
         'check_and_update_app',
+        'add_to_grocery_cart',
       };
       if (function == null || !knownActions.contains(functionName)) {
         return null;
@@ -456,6 +513,86 @@ class GuruApiService {
       return {'action': functionName, ...args};
     } catch (error) {
       debugPrint('[GuruApiService] extractAgentAction error: $error');
+      return null;
+    }
+  }
+
+  // NEW (CTO mandate — Dual-Mode Grocery Cart, Mode 3 "I Need This"):
+  // one-shot vision read for the DMart-screen photo-capture flow —
+  // reuses the exact same _visionModel this class already uses for
+  // screenshot troubleshooting in sendMessage() above, just with a
+  // strict-JSON extraction prompt instead of a conversational one.
+  // Returns null on any failure (unclear photo, network issue, bad
+  // JSON) — the caller (dmart_screen.dart) shows a plain "couldn't
+  // read that, please type it instead" message in that case, never a
+  // crash or a silently wrong item.
+  Future<Map<String, String>?> extractGroceryItemFromImage({
+    required Uint8List imageBytes,
+    required String apiKeyOverride,
+  }) async {
+    final apiKey = apiKeyOverride.trim();
+    if (apiKey.isEmpty) return null;
+    try {
+      final response = await _client
+          .post(
+            _endpoint,
+            headers: <String, String>{
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $apiKey',
+            },
+            body: jsonEncode(<String, dynamic>{
+              'model': _visionModel,
+              'messages': <Map<String, dynamic>>[
+                {
+                  'role': 'user',
+                  'content': <Map<String, dynamic>>[
+                    {
+                      'type': 'text',
+                      'text':
+                          'This is a photo of a grocery product or shopping app '
+                          'screen. Identify the single main product shown and, if '
+                          'visible, the quantity/pack size. Respond with ONLY '
+                          'strict JSON, no other text: {"item": "<product name, '
+                          'empty string if unclear>", "quantity": "<quantity/pack '
+                          'size if visible, else empty string>"}.',
+                    },
+                    {
+                      'type': 'image_url',
+                      'image_url': {
+                        'url': 'data:image/jpeg;base64,${base64Encode(imageBytes)}',
+                      },
+                    },
+                  ],
+                },
+              ],
+              'temperature': 0,
+              'max_tokens': 150,
+            }),
+          )
+          .timeout(_timeout);
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        debugPrint('Grocery vision extraction failed: ${response.statusCode} ${response.body}');
+        return null;
+      }
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final choices = body['choices'] as List<dynamic>? ?? const <dynamic>[];
+      if (choices.isEmpty) return null;
+      final content = ((choices.first as Map<String, dynamic>)['message']
+              as Map<String, dynamic>?)?['content']
+          ?.toString()
+          .trim();
+      if (content == null || content.isEmpty) return null;
+      final cleaned = content.replaceAll(RegExp(r'```json|```'), '').trim();
+      final parsed = jsonDecode(cleaned) as Map<String, dynamic>;
+      final item = (parsed['item'] as String?)?.trim() ?? '';
+      if (item.isEmpty) return null;
+      return {
+        'item': item,
+        'quantity': (parsed['quantity'] as String?)?.trim() ?? '',
+      };
+    } catch (error) {
+      debugPrint('[GuruApiService] extractGroceryItemFromImage error: $error');
       return null;
     }
   }

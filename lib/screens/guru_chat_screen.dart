@@ -47,6 +47,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/ai_activation_service.dart';
+import '../services/grocery_ai_notes_service.dart';
 import '../services/guru_api_service.dart';
 import '../services/guru_suggestion_parser.dart';
 import '../services/localization_service.dart';
@@ -64,10 +65,13 @@ import 'bike_taxi/bike_booking_screen.dart';
 import 'car_wash_screen.dart';
 import 'food_hub_screen.dart';
 import 'grocery_order_screen.dart';
+import 'hero_booking_screen.dart';
 import 'nj_tech_service_screen.dart';
 import 'play_zone_screen.dart';
 import 'printing_service_screen.dart';
+import 'profile_screen.dart';
 import 'rewards_screen.dart';
+import 'ride_history_screen.dart';
 import 'settings_screen.dart';
 import 'sos_screen.dart';
 
@@ -323,7 +327,34 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
       case 'check_and_update_app':
         await _actOnUpdateAction();
         break;
+      case 'add_to_grocery_cart':
+        _actOnGroceryAction(args);
+        break;
     }
+  }
+
+  // NEW (CTO mandate — Dual-Mode Grocery Cart, Mode 2): notes the item
+  // via GroceryAiNotesService — NOT a Firestore write, NOT a
+  // navigation. The existing GroceryOrderScreen picks this up next
+  // time it opens and pre-fills its own, completely unmodified
+  // `_listCtrl` text field, exactly as if the customer had typed it.
+  void _actOnGroceryAction(Map<String, dynamic> args) {
+    final item = (args['item'] as String?)?.trim() ?? '';
+    if (item.isEmpty) return;
+    final quantity = (args['quantity'] as String?)?.trim();
+    GroceryAiNotesService.instance.addItem(item, quantity: quantity);
+
+    if (!mounted) return;
+    final label = (quantity != null && quantity.isNotEmpty) ? '$quantity $item' : item;
+    setState(() {
+      _messages.add(
+        _GuruMessage(
+          role: 'assistant',
+          text: 'Added "$label" to your grocery list — open Grocery Order to review and submit.',
+        ),
+      );
+    });
+    _scrollToBottom();
   }
 
   // NEW (CTO mandate — Co-work Style Confirmation): a customer tapping
@@ -717,8 +748,44 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     final action = resolvedArgs['action'] as String?;
     if (action != 'book_transport' &&
         action != 'navigate_to_section' &&
-        action != 'check_and_update_app') {
+        action != 'check_and_update_app' &&
+        action != 'add_to_grocery_cart') {
       return false;
+    }
+
+    // NEW (CTO mandate — "Autonomous Interaction Rule"): confirmation
+    // gates are now REMOVED for every tool action except two scenarios
+    // — (A) final payment/order/booking confirmation, and (B) genuine
+    // ambiguity, handled via suggestion chips in the plain-chat
+    // fallback below, not this gate. None of this screen's 4 tools are
+    // Scenario A: book_transport/navigate_to_section only push a
+    // screen (optionally pre-filled); check_and_update_app and
+    // add_to_grocery_cart don't spend money or finalize anything
+    // either. Scenario A itself — the actual booking/payment — still
+    // lives entirely on the destination screen's own Confirm button
+    // and SOS's separate KYC gate, both completely untouched by this
+    // change. The block below this comment is kept as a defensive
+    // fallback for any FUTURE tool that DOES need Scenario-A gating —
+    // it's simply unreached by today's 4 actions, not deleted, so a
+    // later write-type tool has a gate ready to opt into.
+    if (action == 'navigate_to_section' ||
+        action == 'book_transport' ||
+        action == 'check_and_update_app' ||
+        action == 'add_to_grocery_cart') {
+      if (!mounted) return true;
+      unawaited(_logGuruAnalyticsEvent(
+        eventType: 'intent_requested',
+        action: action,
+        args: resolvedArgs,
+      ));
+      unawaited(_logGuruAnalyticsEvent(
+        eventType: 'intent_resolved',
+        action: action,
+        args: resolvedArgs,
+        resolved: true,
+      ));
+      await _executePendingAction(resolvedArgs);
+      return true;
     }
 
     // NEW (CTO mandate — Co-work Style Confirmation & Suggestions,
@@ -766,6 +833,11 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
         return "I'm ready to open ${_sectionLabel(section)} for you — should I proceed?";
       case 'check_and_update_app':
         return "I'm ready to check for an app update — should I proceed?";
+      case 'add_to_grocery_cart':
+        final item = (args['item'] as String?)?.trim() ?? 'that item';
+        final quantity = (args['quantity'] as String?)?.trim();
+        final label = (quantity != null && quantity.isNotEmpty) ? '$quantity $item' : item;
+        return "I'll add \"$label\" to your grocery list — should I proceed?";
       default:
         return 'Should I proceed?';
     }
@@ -921,6 +993,12 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
         return const CarWashScreen();
       case 'printing':
         return const PrintingServiceScreen();
+      case 'hero_needs':
+        return const HeroBookingScreen();
+      case 'profile':
+        return const ProfileScreen();
+      case 'ride_history':
+        return const RideHistoryScreen();
       default:
         return null;
     }
@@ -951,6 +1029,12 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
         return 'Car Wash';
       case 'printing':
         return 'Printing';
+      case 'hero_needs':
+        return 'Hero Booking';
+      case 'profile':
+        return 'your Profile';
+      case 'ride_history':
+        return 'Ride History';
       default:
         return 'that section';
     }

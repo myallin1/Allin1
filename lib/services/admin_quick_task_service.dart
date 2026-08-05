@@ -38,6 +38,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../app_navigator.dart';
@@ -67,6 +68,31 @@ class AdminQuickTaskService extends ChangeNotifier {
 
   final GuruAdminApiService _api = GuruAdminApiService();
   final VoiceBookingIntentService _yesNo = VoiceBookingIntentService();
+  // NEW (CTO mandate — Voice & Speech Fix for Quick Task): the CTO's
+  // explicit complaint was the Quick Task chatbox "going silent" —
+  // this service had zero TTS before now, unlike the customer overlay
+  // (GuruOverlayService._speak). Mirrors that exact FlutterTts setup,
+  // English-only (no multi-language requirement for the admin side).
+  final FlutterTts _tts = FlutterTts();
+  bool _autoSpeak = true;
+  bool get autoSpeak => _autoSpeak;
+
+  void toggleAutoSpeak() {
+    _autoSpeak = !_autoSpeak;
+    if (!_autoSpeak) unawaited(_tts.stop());
+    notifyListeners();
+  }
+
+  Future<void> _speak(String text) async {
+    if (!_autoSpeak || text.trim().isEmpty) return;
+    try {
+      await _tts.setLanguage('en-IN');
+      await _tts.stop();
+      await _tts.speak(text);
+    } catch (e) {
+      debugPrint('[AdminQuickTaskService] TTS failed: $e');
+    }
+  }
 
   Map<String, dynamic>? _pendingAdminAction;
   // NEW (CTO mandate — Task 3: Automated KYC Report Generator): the
@@ -182,6 +208,7 @@ class AdminQuickTaskService extends ChangeNotifier {
       if (lower == 'skip') {
         _lastKycReport = null;
         messages.add(const AdminChatTurn(role: 'assistant', text: 'Okay, skipped — no changes made.'));
+        unawaited(_speak('Okay, skipped. No changes made.'));
         _sending = false;
         notifyListeners();
         return;
@@ -209,11 +236,13 @@ class AdminQuickTaskService extends ChangeNotifier {
               '(${report.targetType}, uid: ${report.uid}) based on the '
               'AI-generated KYC report above.',
         };
+        final confirmationText = _confirmationTextFor(_pendingAdminAction!);
         messages.add(AdminChatTurn(
           role: 'assistant',
-          text: _confirmationTextFor(_pendingAdminAction!),
+          text: confirmationText,
           suggestions: const ['Yes, proceed', 'No, cancel'],
         ));
+        unawaited(_speak(confirmationText));
         _sending = false;
         notifyListeners();
         return;
@@ -240,6 +269,7 @@ class AdminQuickTaskService extends ChangeNotifier {
         _pendingAdminAction = null;
         unawaited(_executePendingAdminAction(pending, approved: false));
         messages.add(const AdminChatTurn(role: 'assistant', text: 'Understood — cancelled, no changes made.'));
+        unawaited(_speak('Understood. Cancelled, no changes made.'));
         _sending = false;
         notifyListeners();
         return;
@@ -258,11 +288,11 @@ class AdminQuickTaskService extends ChangeNotifier {
     try {
       final reply = await _api.sendMessage(message: trimmed, history: history);
       messages.add(AdminChatTurn(role: 'assistant', text: reply));
+      unawaited(_speak(reply));
     } catch (e) {
-      messages.add(const AdminChatTurn(
-        role: 'assistant',
-        text: 'Admin AI is temporarily unavailable. Please try again shortly.',
-      ));
+      const failureText = 'Admin AI is temporarily unavailable. Please try again shortly.';
+      messages.add(const AdminChatTurn(role: 'assistant', text: failureText));
+      unawaited(_speak(failureText));
     } finally {
       _sending = false;
       notifyListeners();
@@ -293,6 +323,7 @@ class AdminQuickTaskService extends ChangeNotifier {
       notifyListeners();
       final report = await AdminAiAuditTools.auditUiSections();
       messages.add(AdminChatTurn(role: 'assistant', text: report));
+      unawaited(_speak(report));
       notifyListeners();
       return true;
     }
@@ -307,10 +338,9 @@ class AdminQuickTaskService extends ChangeNotifier {
         _ => await AdminAiAuditTools.generateHeroKycReport(targetUid: targetUid),
       };
       if (result == null) {
-        messages.add(AdminChatTurn(
-          role: 'assistant',
-          text: 'No pending ${type ?? 'hero'} KYC submissions found.',
-        ));
+        final notFoundText = 'No pending ${type ?? 'hero'} KYC submissions found.';
+        messages.add(AdminChatTurn(role: 'assistant', text: notFoundText));
+        unawaited(_speak(notFoundText));
         notifyListeners();
         return true;
       }
@@ -352,22 +382,40 @@ class AdminQuickTaskService extends ChangeNotifier {
         text: reportText,
         suggestions: ['Approve ${result.name}', 'Reject ${result.name}', 'Skip'],
       ));
+      unawaited(_speak(reportText));
       notifyListeners();
       return true;
     }
 
-    if (action != 'navigate_to_admin_section' && action != 'propose_write_action') {
+    // NEW (CTO mandate — "True Autonomous Agent" / Active Navigation):
+    // navigate_to_admin_section is pure navigation — it never writes
+    // to Firestore, it just opens a screen (see _actOnNavigateAction
+    // below). propose_write_action is the ONLY action in this whole
+    // service that can ever touch a real record, and that gate is a
+    // hard CTO requirement from an earlier session ("never remove
+    // it") — completely unchanged below. Making navigation instant
+    // does not weaken that in any way; it just stops routing a
+    // harmless screen-open through the same Yes/No round-trip a real
+    // write goes through.
+    if (action == 'navigate_to_admin_section') {
+      await _executePendingAdminAction(args, approved: true);
+      return true;
+    }
+
+    if (action != 'propose_write_action') {
       return false;
     }
 
     _pendingAdminAction = args;
+    final proposeConfirmText = _confirmationTextFor(args);
     messages.add(
       AdminChatTurn(
         role: 'assistant',
-        text: _confirmationTextFor(args),
+        text: proposeConfirmText,
         suggestions: const ['Yes, proceed', 'No, cancel'],
       ),
     );
+    unawaited(_speak(proposeConfirmText));
     notifyListeners();
     return true;
   }
@@ -416,7 +464,9 @@ class AdminQuickTaskService extends ChangeNotifier {
     final navState = navigatorKey.currentState;
     if (target == null || navState == null) return;
 
-    messages.add(AdminChatTurn(role: 'assistant', text: 'Opening ${_sectionLabel(section)} now.'));
+    final openingText = 'Opening ${_sectionLabel(section)} now.';
+    messages.add(AdminChatTurn(role: 'assistant', text: openingText));
+    unawaited(_speak(openingText));
     notifyListeners();
     unawaited(navState.push(MaterialPageRoute<void>(builder: (_) => target)));
   }
@@ -539,6 +589,7 @@ class AdminQuickTaskService extends ChangeNotifier {
           'changed on the real document; the attempt is logged.';
     }
     messages.add(AdminChatTurn(role: 'assistant', text: resultText));
+    unawaited(_speak(resultText));
   }
 
   // NEW (CTO mandate — Task 1 foundation, extended for Final Write
@@ -711,6 +762,19 @@ class _AdminQuickTaskPanelState extends State<_AdminQuickTaskPanel> {
                                 style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
                                 overflow: TextOverflow.ellipsis,
                               ),
+                            ),
+                            // NEW (CTO mandate — Voice & Speech Fix): lets the
+                            // CTO mute/unmute the new TTS without opening
+                            // settings — mirrors the customer overlay's
+                            // speaker icon.
+                            IconButton(
+                              icon: Icon(
+                                service.autoSpeak ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                                color: Colors.white54,
+                                size: 18,
+                              ),
+                              onPressed: service.toggleAutoSpeak,
+                              tooltip: service.autoSpeak ? 'Mute voice' : 'Unmute voice',
                             ),
                             IconButton(
                               icon: const Icon(Icons.remove, color: Colors.white54, size: 18),

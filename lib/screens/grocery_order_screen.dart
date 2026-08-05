@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/cloudinary_upload_service.dart';
+import '../services/grocery_ai_notes_service.dart';
 import '../services/service_request_service.dart';
 import '../widgets/location_capture_field.dart';
 import '../widgets/server_busy_dialog.dart';
@@ -52,6 +53,23 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
   static const int _maxImages = 10;
   final List<PlatformFile> _pickedFiles = [];
   bool _submitting = false;
+
+  // NEW (CTO mandate — Dual-Mode Grocery Cart, Modes 2 & 3): the ONLY
+  // touch this file gets for the new Guru-driven item flow. Consumes
+  // anything Guru noted via chat/voice/"I Need This" and appends it
+  // into `_listCtrl` — the exact same text field the customer would
+  // type into by hand. `_submit()`, `_canSubmit`, the Cloudinary
+  // upload, and the Firestore write below are completely untouched.
+  @override
+  void initState() {
+    super.initState();
+    final pending = GroceryAiNotesService.instance.consumeAll();
+    if (pending.isNotEmpty) {
+      final existing = _listCtrl.text.trim();
+      final addition = pending.join('\n');
+      _listCtrl.text = existing.isEmpty ? addition : '$existing\n$addition';
+    }
+  }
 
   @override
   void dispose() {

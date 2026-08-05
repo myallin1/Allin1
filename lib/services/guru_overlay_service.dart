@@ -47,13 +47,17 @@ import '../screens/bike_taxi/bike_booking_screen.dart';
 import '../screens/car_wash_screen.dart';
 import '../screens/food_hub_screen.dart';
 import '../screens/grocery_order_screen.dart';
+import '../screens/hero_booking_screen.dart';
 import '../screens/nj_tech_service_screen.dart';
 import '../screens/play_zone_screen.dart';
 import '../screens/printing_service_screen.dart';
+import '../screens/profile_screen.dart';
 import '../screens/rewards_screen.dart';
+import '../screens/ride_history_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/sos_screen.dart';
 import 'ai_activation_service.dart';
+import 'grocery_ai_notes_service.dart';
 import 'guru_api_service.dart';
 import 'guru_suggestion_parser.dart';
 import 'localization_service.dart';
@@ -350,8 +354,28 @@ class GuruOverlayService extends ChangeNotifier {
     final action = args['action'] as String?;
     if (action != 'book_transport' &&
         action != 'navigate_to_section' &&
-        action != 'check_and_update_app') {
+        action != 'check_and_update_app' &&
+        action != 'add_to_grocery_cart') {
       return false;
+    }
+
+    // NEW (CTO mandate — "Autonomous Interaction Rule"): mirrors
+    // guru_chat_screen.dart's identical change exactly — confirmation
+    // gates removed for every action except Scenario A (final
+    // payment/booking confirmation, which lives entirely on the
+    // destination screen's own Confirm button / SOS's KYC gate, both
+    // untouched) and Scenario B (genuine ambiguity, handled via
+    // suggestion chips in the plain-chat fallback, not this gate). The
+    // block below stays as a defensive fallback for any FUTURE
+    // write-type tool, unreached by today's 4 actions.
+    if (action == 'navigate_to_section' ||
+        action == 'book_transport' ||
+        action == 'check_and_update_app' ||
+        action == 'add_to_grocery_cart') {
+      unawaited(_logGuruAnalyticsEvent(eventType: 'intent_requested', action: action, args: args));
+      unawaited(_logGuruAnalyticsEvent(eventType: 'intent_resolved', action: action, args: args, resolved: true));
+      await _executePendingAction(args);
+      return true;
     }
 
     _pendingAgentAction = args;
@@ -419,6 +443,11 @@ class GuruOverlayService extends ChangeNotifier {
         return "I'm ready to open ${_sectionLabel(args['section'] as String?)} for you — should I proceed?";
       case 'check_and_update_app':
         return "I'm ready to check for an app update — should I proceed?";
+      case 'add_to_grocery_cart':
+        final item = (args['item'] as String?)?.trim() ?? 'that item';
+        final quantity = (args['quantity'] as String?)?.trim();
+        final label = (quantity != null && quantity.isNotEmpty) ? '$quantity $item' : item;
+        return "I'll add \"$label\" to your grocery list — should I proceed?";
       default:
         return 'Should I proceed?';
     }
@@ -435,7 +464,29 @@ class GuruOverlayService extends ChangeNotifier {
       case 'check_and_update_app':
         await _actOnUpdateAction();
         break;
+      case 'add_to_grocery_cart':
+        _actOnGroceryAction(args);
+        break;
     }
+  }
+
+  // NEW (CTO mandate — Dual-Mode Grocery Cart, Mode 2): mirrors
+  // guru_chat_screen.dart's _actOnGroceryAction exactly — notes the
+  // item via GroceryAiNotesService, no Firestore write, no navigation.
+  void _actOnGroceryAction(Map<String, dynamic> args) {
+    final item = (args['item'] as String?)?.trim() ?? '';
+    if (item.isEmpty) return;
+    final quantity = (args['quantity'] as String?)?.trim();
+    GroceryAiNotesService.instance.addItem(item, quantity: quantity);
+
+    final label = (quantity != null && quantity.isNotEmpty) ? '$quantity $item' : item;
+    messages.add(
+      GuruChatTurn(
+        role: 'assistant',
+        text: 'Added "$label" to your grocery list — open Grocery Order to review and submit.',
+      ),
+    );
+    notifyListeners();
   }
 
   // NEW (CTO mandate — Final Overlay Tool Wiring): the actual
@@ -561,6 +612,12 @@ class GuruOverlayService extends ChangeNotifier {
         return const CarWashScreen();
       case 'printing':
         return const PrintingServiceScreen();
+      case 'hero_needs':
+        return const HeroBookingScreen();
+      case 'profile':
+        return const ProfileScreen();
+      case 'ride_history':
+        return const RideHistoryScreen();
       default:
         return null;
     }
@@ -586,6 +643,12 @@ class GuruOverlayService extends ChangeNotifier {
         return 'Car Wash';
       case 'printing':
         return 'Printing';
+      case 'hero_needs':
+        return 'Hero Booking';
+      case 'profile':
+        return 'your Profile';
+      case 'ride_history':
+        return 'Ride History';
       default:
         return 'that section';
     }
