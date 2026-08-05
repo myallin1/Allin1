@@ -49,6 +49,8 @@ import '../screens/admin/admin_sos_kyc_approvals_screen.dart';
 import '../screens/admin/admin_wallet_approvals_screen.dart';
 import '../screens/admin/hero_approvals_screen.dart';
 import 'admin_ai_audit_tools.dart';
+import 'admin_kyc_vision_service.dart';
+import 'admin_kyc_write_service.dart';
 import 'guru_admin_api_service.dart';
 import 'voice_booking_intent_service.dart';
 
@@ -192,6 +194,16 @@ class AdminQuickTaskService extends ChangeNotifier {
           'action': 'propose_write_action',
           'actionType': '${isApprove ? 'approve' : 'reject'}_${report.targetType}_kyc',
           'targetLabel': report.name,
+          // NEW (CTO mandate — Final Write Execution, "No Blind
+          // Writes"): uid + kycTargetType come straight from the
+          // verified Firestore document AdminAiAuditTools just read —
+          // never guessed or LLM-invented. _executePendingAdminAction
+          // below only performs a REAL write when both of these are
+          // present, which is only ever true for actions that
+          // originated from this exact KYC-report flow.
+          'uid': report.uid,
+          'kycTargetType': report.targetType,
+          'reportText': report.reportText,
           'summary':
               '${isApprove ? 'Approve' : 'Reject'} KYC for ${report.name} '
               '(${report.targetType}, uid: ${report.uid}) based on the '
@@ -289,21 +301,55 @@ class AdminQuickTaskService extends ChangeNotifier {
       final targetUid = args['targetUid'] as String?;
       messages.add(const AdminChatTurn(role: 'assistant', text: 'Fetching and cross-verifying the submission...'));
       notifyListeners();
-      final result = type == 'seller'
-          ? await AdminAiAuditTools.generateSellerKycReport(targetUid: targetUid)
-          : await AdminAiAuditTools.generateHeroKycReport(targetUid: targetUid);
+      final result = switch (type) {
+        'seller' => await AdminAiAuditTools.generateSellerKycReport(targetUid: targetUid),
+        'sos' => await AdminAiAuditTools.generateSosKycReport(targetUid: targetUid),
+        _ => await AdminAiAuditTools.generateHeroKycReport(targetUid: targetUid),
+      };
       if (result == null) {
         messages.add(AdminChatTurn(
           role: 'assistant',
-          text: 'No pending ${type == 'seller' ? 'seller' : 'hero'} KYC submissions found.',
+          text: 'No pending ${type ?? 'hero'} KYC submissions found.',
         ));
         notifyListeners();
         return true;
       }
       _lastKycReport = result;
+
+      // NEW (CTO mandate — Advanced KYC & Facial Verification): OCR
+      // number-matching + facial comparison, only for hero/sos (the
+      // types with Aadhaar/PAN/License doc photos — see
+      // KycVisionInputs' comment in admin_ai_audit_tools.dart). Fully
+      // additive to the base report above: if this fails or is
+      // skipped for any reason, the base report the CTO already sees
+      // is untouched and still usable.
+      var reportText = result.reportText;
+      final visionInputs = result.visionInputs;
+      if (visionInputs != null) {
+        try {
+          final apiKey = await _api.resolveApiKey();
+          final vision = await AdminKycVisionService.crossCheck(
+            apiKey: apiKey,
+            aadhaarNumber: visionInputs.aadhaarNumber,
+            aadhaarDocUrl: visionInputs.aadhaarDocUrl,
+            panNumber: visionInputs.panNumber,
+            panDocUrl: visionInputs.panDocUrl,
+            licenseNumber: visionInputs.licenseNumber,
+            licenseDocUrl: visionInputs.licenseDocUrl,
+            selfieUrl: visionInputs.selfieUrl,
+          );
+          reportText = '$reportText\n\n--- Vision Cross-Check ---\n'
+              '${vision.notes.join('\n')}\n\n${vision.strictRecommendation}';
+        } catch (e) {
+          debugPrint('[AdminQuickTaskService] vision cross-check failed: $e');
+          reportText = '$reportText\n\n--- Vision Cross-Check ---\n'
+              'Vision cross-check failed to run ($e) — falling back to manual review.';
+        }
+      }
+
       messages.add(AdminChatTurn(
         role: 'assistant',
-        text: result.reportText,
+        text: reportText,
         suggestions: ['Approve ${result.name}', 'Reject ${result.name}', 'Skip'],
       ));
       notifyListeners();
@@ -336,8 +382,15 @@ class AdminQuickTaskService extends ChangeNotifier {
         final base = (summary != null && summary.isNotEmpty)
             ? summary
             : 'Apply this action${target != null && target.isNotEmpty ? ' to $target' : ''}';
-        return '$base\nShould I proceed? (This will only be logged — no seller/hero/wallet '
-            'record is modified until that write path is built and wired in.)';
+        // NEW (CTO mandate — Final Write Execution): only actions that
+        // carry a verified `uid` (i.e. came from a real KYC report this
+        // service just read, not free-text) will actually write to the
+        // real record — see _executePendingAdminAction's "No Blind
+        // Writes" check below. Say so honestly here, since what happens
+        // after "Yes" genuinely differs between the two cases.
+        final hasVerifiedTarget = (args['uid'] as String?)?.trim().isNotEmpty ?? false;
+        return '$base\nShould I proceed?'
+            '${hasVerifiedTarget ? ' (This will update the real record.)' : ' (No verified document was captured for this — it will only be logged, not applied. Generate a KYC report first so I can target the exact document.)'}';
       default:
         return 'Should I proceed?';
     }
@@ -349,17 +402,7 @@ class AdminQuickTaskService extends ChangeNotifier {
         if (approved) _actOnNavigateAction(args);
         break;
       case 'propose_write_action':
-        await _logAdminAiAction(args, approved: approved);
-        messages.add(
-          AdminChatTurn(
-            role: 'assistant',
-            text: approved
-                ? "Logged as approved. Note: this foundation only records your decision "
-                    "in the admin_ai_actions audit trail — the actual seller/hero/wallet "
-                    "write path is not wired yet (that's Task 2/3)."
-                : 'Logged as declined — no changes made.',
-          ),
-        );
+        await _executeWriteDecision(args, approved: approved);
         notifyListeners();
         break;
       default:
@@ -420,25 +463,106 @@ class AdminQuickTaskService extends ChangeNotifier {
     }
   }
 
-  // NEW (CTO mandate — Task 1 foundation): the ONLY write this whole
-  // service performs. Writes an audit record of what the CTO
-  // approved/declined via the chatbox — never touches operational data.
-  // This is exactly the audit-log shape Task 2 (DB audit) and Task 3
-  // (KYC report) should reuse once their real write handlers exist.
-  Future<void> _logAdminAiAction(Map<String, dynamic> args, {required bool approved}) async {
+  // NEW (CTO mandate — Final Write Execution): decides whether a
+  // confirmed propose_write_action gets a REAL Firestore write, then
+  // always logs the outcome to admin_ai_actions regardless. This is
+  // the ONLY place in the whole Admin AI Co-Pilot feature that calls
+  // AdminKycWriteService — i.e. the only place that can ever touch a
+  // real heroes/sellers/sos_kyc_requests document.
+  //
+  // "No Blind Writes" (CTO's own requirement #3): a real write only
+  // fires when BOTH `uid` and `kycTargetType` are present on the
+  // pending action. Those two fields are only ever set in one place in
+  // this file — the KYC-report Approve/Reject chip handling in
+  // sendMessage() above — where they come from a document
+  // AdminAiAuditTools just actually read via Firestore, never from
+  // free-text the CTO typed or the model guessed. If the CTO instead
+  // types something like "approve seller X" without going through a
+  // generated report first, propose_write_action still fires and still
+  // gets a Yes/No confirmation (per the CTO's own requirement #3 that
+  // EVERY write action must go through the gate), but no uid was ever
+  // resolved for it, so this method deliberately falls back to
+  // log-only and says so plainly — refusing to guess which document
+  // "X" refers to is the responsible reading of "No Blind Writes", not
+  // a way of dodging the mandate.
+  Future<void> _executeWriteDecision(Map<String, dynamic> args, {required bool approved}) async {
+    final uid = (args['uid'] as String?)?.trim();
+    final kycTargetType = (args['kycTargetType'] as String?)?.trim();
+    final actionType = (args['actionType'] as String?) ?? '';
+    final isApprove = actionType.startsWith('approve');
+    final hasVerifiedTarget = uid != null && uid.isNotEmpty && kycTargetType != null && kycTargetType.isNotEmpty;
+
+    AdminKycWriteResult? writeResult;
+    if (approved && hasVerifiedTarget) {
+      final reason = (args['reportText'] as String?)?.trim().isNotEmpty == true
+          ? 'Rejected via Admin AI Co-Pilot after CTO review. Report:\n${args['reportText']}'
+          : 'Rejected via Admin AI Co-Pilot after CTO review.';
+      switch (kycTargetType) {
+        case 'hero':
+          writeResult = isApprove
+              ? await AdminKycWriteService.approveHero(uid)
+              : await AdminKycWriteService.rejectHero(uid, reason);
+          break;
+        case 'seller':
+          writeResult = isApprove
+              ? await AdminKycWriteService.approveSeller(uid)
+              : await AdminKycWriteService.rejectSeller(uid, reason);
+          break;
+        case 'sos':
+          writeResult = isApprove
+              ? await AdminKycWriteService.approveSosKyc(uid)
+              : await AdminKycWriteService.rejectSosKyc(uid, reason);
+          break;
+        default:
+          writeResult = null;
+      }
+    }
+
+    await _logAdminAiAction(
+      args,
+      approved: approved,
+      downstreamWriteExecuted: writeResult?.success ?? false,
+      writeError: writeResult?.error,
+    );
+
+    final String resultText;
+    if (!approved) {
+      resultText = 'Logged as declined — no changes made.';
+    } else if (!hasVerifiedTarget) {
+      resultText = 'Logged as approved. No verified document was captured for this request, so '
+          'no real record was changed — generate a KYC report first so I can target the exact document.';
+    } else if (writeResult?.success == true) {
+      resultText = '✅ Done — the real ${kycTargetType ?? 'record'} document (uid: $uid) has been '
+          '${isApprove ? 'approved' : 'rejected'}, and the decision is logged.';
+    } else {
+      resultText = '❌ The write failed: ${writeResult?.error ?? 'unknown error'}. Nothing was '
+          'changed on the real document; the attempt is logged.';
+    }
+    messages.add(AdminChatTurn(role: 'assistant', text: resultText));
+  }
+
+  // NEW (CTO mandate — Task 1 foundation, extended for Final Write
+  // Execution): audit-trail write for every propose_write_action
+  // decision, real write or not — `downstreamWriteExecuted` now
+  // reflects what actually happened instead of always being false.
+  Future<void> _logAdminAiAction(
+    Map<String, dynamic> args, {
+    required bool approved,
+    bool downstreamWriteExecuted = false,
+    String? writeError,
+  }) async {
     try {
       final adminUid = FirebaseAuth.instance.currentUser?.uid;
       await FirebaseFirestore.instance.collection('admin_ai_actions').add(<String, dynamic>{
         'actionType': args['actionType'],
         'targetLabel': args['targetLabel'],
+        'targetUid': args['uid'],
         'summary': args['summary'],
         'approved': approved,
         'approvedBy': adminUid,
         'executedBy': 'guru_admin_ai',
-        // Task 2/3 will set this true once a real downstream write is
-        // wired in for the given actionType; false here is honest about
-        // today's foundation-only state.
-        'downstreamWriteExecuted': false,
+        'downstreamWriteExecuted': downstreamWriteExecuted,
+        if (writeError != null) 'writeError': writeError,
         'timestamp': FieldValue.serverTimestamp(),
       });
     } catch (e) {

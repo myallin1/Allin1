@@ -161,6 +161,15 @@ class AdminAiAuditTools {
       uid: uid,
       name: name.isEmpty ? uid : name,
       reportText: report.toString().trim(),
+      visionInputs: KycVisionInputs(
+        aadhaarNumber: aadhaar,
+        aadhaarDocUrl: aadhaarDoc,
+        panNumber: pan,
+        panDocUrl: panDoc,
+        licenseNumber: license,
+        licenseDocUrl: licenseDoc,
+        selfieUrl: (data['selfieUrl'] as String?)?.trim(),
+      ),
     );
   }
 
@@ -226,6 +235,97 @@ class AdminAiAuditTools {
       reportText: report.toString().trim(),
     );
   }
+
+  // ---- SOS/KYC report (CTO's "Final Write Execution" mandate names
+  // Hero/Seller/SOS explicitly) — mirrors generateHeroKycReport's shape
+  // exactly, field names taken from admin_sos_kyc_approvals_screen.dart
+  // lines ~173-182.
+  static Future<KycReportResult?> generateSosKycReport({String? targetUid}) async {
+    final firestore = FirebaseFirestore.instance;
+    if (targetUid != null && targetUid.trim().isNotEmpty) {
+      final snap = await firestore.collection('sos_kyc_requests').doc(targetUid.trim()).get();
+      if (!snap.exists) return null;
+      return _buildSosReport(snap.id, snap.data()!);
+    }
+    final query = await firestore
+        .collection('sos_kyc_requests')
+        .where('status', isEqualTo: 'pending')
+        .limit(10)
+        .get();
+    if (query.docs.isEmpty) return null;
+    final sorted = query.docs.toList()
+      ..sort((a, b) {
+        final at = (a.data()['submittedAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+        final bt = (b.data()['submittedAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+        return at.compareTo(bt);
+      });
+    final oldest = sorted.first;
+    return _buildSosReport(oldest.id, oldest.data());
+  }
+
+  static KycReportResult _buildSosReport(String uid, Map<String, dynamic> data) {
+    final name = (data['name'] as String? ?? '').trim();
+    final phone = (data['userPhone'] as String? ?? '').trim();
+    final email = (data['userEmail'] as String? ?? '').trim();
+    final address = (data['address'] as String? ?? '').trim();
+    final aadhaar = (data['aadhaarNumber'] as String? ?? '').trim();
+    final pan = (data['panNumber'] as String? ?? '').trim();
+    final license = (data['licenseNumber'] as String? ?? '').trim();
+    final aadhaarDoc = (data['aadhaarDocUrl'] as String? ?? '').trim();
+    final panDoc = (data['panDocUrl'] as String? ?? '').trim();
+    final licenseDoc = (data['licenseDocUrl'] as String? ?? '').trim();
+
+    final findings = <String>[];
+    if (name.isEmpty) findings.add('Missing name.');
+    if (phone.replaceAll(RegExp(r'\D'), '').length < 10) {
+      findings.add('Phone number looks incomplete ("$phone").');
+    }
+    if (email.isNotEmpty && !email.contains('@')) {
+      findings.add('Email looks malformed ("$email").');
+    }
+    if (address.isEmpty) findings.add('Missing address.');
+    if (aadhaar.replaceAll(RegExp(r'\s'), '').length != 12) {
+      findings.add('Aadhaar number is not 12 digits.');
+    }
+    if (pan.isNotEmpty && pan.length != 10) {
+      findings.add('PAN number is not 10 characters.');
+    }
+    if (aadhaarDoc.isEmpty) findings.add('Aadhaar document photo is missing.');
+    if (panDoc.isEmpty) findings.add('PAN document photo is missing.');
+    if (license.isNotEmpty && licenseDoc.isEmpty) {
+      findings.add('License number given but no license document photo uploaded.');
+    }
+
+    final recommendation = findings.isEmpty
+        ? 'Recommendation: APPROVE — all required fields and documents present and plausible.'
+        : 'Recommendation: NEEDS REVIEW — ${findings.length} issue(s) found, see above.';
+
+    final report = StringBuffer()
+      ..writeln('KYC Report — SOS Activation: ${name.isEmpty ? uid : name} (uid: $uid)')
+      ..writeln('Phone: ${phone.isEmpty ? 'N/A' : phone}  |  Email: ${email.isEmpty ? 'N/A' : email}')
+      ..writeln('Address: ${address.isEmpty ? 'N/A' : address}')
+      ..writeln('Aadhaar: ${aadhaar.isEmpty ? 'N/A' : aadhaar}  |  PAN: ${pan.isEmpty ? 'N/A' : pan}  |  License: ${license.isEmpty ? 'N/A' : license}')
+      ..writeln(findings.isEmpty
+          ? 'Findings: none — submission looks complete.'
+          : 'Findings:\n- ${findings.join('\n- ')}')
+      ..write(recommendation);
+
+    return KycReportResult(
+      targetType: 'sos',
+      uid: uid,
+      name: name.isEmpty ? uid : name,
+      reportText: report.toString().trim(),
+      visionInputs: KycVisionInputs(
+        aadhaarNumber: aadhaar,
+        aadhaarDocUrl: aadhaarDoc,
+        panNumber: pan,
+        panDocUrl: panDoc,
+        licenseNumber: license,
+        licenseDocUrl: licenseDoc,
+        selfieUrl: (data['selfieUrl'] as String?)?.trim(),
+      ),
+    );
+  }
 }
 
 class _SectionAudit {
@@ -247,9 +347,40 @@ class KycReportResult {
     required this.uid,
     required this.name,
     required this.reportText,
+    this.visionInputs,
   });
-  final String targetType; // 'hero' | 'seller'
+  final String targetType; // 'hero' | 'seller' | 'sos'
   final String uid;
   final String name;
   final String reportText;
+  // NEW (CTO mandate — Advanced KYC & Facial Verification): the raw doc
+  // URLs/typed numbers + selfie URL (if any) needed for
+  // AdminKycVisionService's OCR/face-match cross-check. Only populated
+  // for 'hero' and 'sos' (the two types with Aadhaar/PAN/License doc
+  // photos) — sellers have no such documents in this schema, so this
+  // stays null for them and the vision step is simply skipped.
+  final KycVisionInputs? visionInputs;
+}
+
+class KycVisionInputs {
+  const KycVisionInputs({
+    this.aadhaarNumber,
+    this.aadhaarDocUrl,
+    this.panNumber,
+    this.panDocUrl,
+    this.licenseNumber,
+    this.licenseDocUrl,
+    this.selfieUrl,
+  });
+  final String? aadhaarNumber;
+  final String? aadhaarDocUrl;
+  final String? panNumber;
+  final String? panDocUrl;
+  final String? licenseNumber;
+  final String? licenseDocUrl;
+  // NOTE: no hero/sos registration flow captures a selfie yet as of
+  // this file's creation — `data['selfieUrl']` simply reads null until
+  // that capture step is built, at which point this starts populating
+  // automatically with zero further changes needed here.
+  final String? selfieUrl;
 }

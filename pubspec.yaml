@@ -1,7 +1,7 @@
 ﻿name: erode_superapp
 description: Erode All-in-One Super App - Multi-vendor Commerce MVP by NJ TECH
 publish_to: 'none'
-version: 1.0.8+92
+version: 1.0.8+93
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -23,6 +23,13 @@ dependencies:
   dio: ^5.4.0
   encrypt: ^5.0.3
   file_picker: ^8.1.2
+  # NEW (CTO mandate — Advanced KYC & Facial Verification): file_picker
+  # above only opens the gallery/file browser (no way to force a LIVE
+  # camera capture, and no camera option at all on web). image_picker's
+  # ImageSource.camera opens the actual camera on every platform this
+  # app ships to (Android/iOS/web via <input capture>), which is what
+  # a genuine "live selfie" requires. Used only in hero_register_screen.dart.
+  image_picker: ^1.1.2
   firebase_analytics: any
   firebase_auth: ^6.2.0
   firebase_core: ^4.5.0

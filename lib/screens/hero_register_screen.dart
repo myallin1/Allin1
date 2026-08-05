@@ -3,6 +3,8 @@
 // Allin1 Super App - Hero Onboarding
 // ================================================================
 
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -10,6 +12,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -191,6 +194,16 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
   PlatformFile? _licensePhoto;
   PlatformFile? _aadhaarPhoto;
   PlatformFile? _panPhoto;
+  // NEW (CTO mandate — Advanced KYC & Facial Verification): a live
+  // camera selfie, captured via image_picker's ImageSource.camera (not
+  // file_picker above, which only opens the gallery/file browser) so
+  // the Admin AI Co-Pilot's facial-comparison check
+  // (admin_kyc_vision_service.dart) has something genuine to compare
+  // the ID document photo against. Stored as raw bytes immediately on
+  // capture — same "hold bytes in memory, upload once at Submit" shape
+  // the 3 doc photos above already use.
+  Uint8List? _selfieBytes;
+  String? _selfieFileName;
   // FIX: was only true during the doc-upload step, with a silent gap
   // during Google sign-in and the duplicate-phone Firestore check right
   // before it — the button looked idle/clickable again during that gap,
@@ -330,6 +343,60 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     }
   }
 
+  // NEW (CTO mandate — Advanced KYC & Facial Verification): forces the
+  // device's actual camera (ImageSource.camera), unlike _pickDocPhoto
+  // above which opens the gallery/file browser — a gallery pick could
+  // be an old photo of anyone, which would defeat the whole point of a
+  // "live" selfie for facial comparison. imageQuality: 70 does a
+  // reasonable on-device JPEG compression before the bytes even reach
+  // us; CloudinaryUploadService's targetBytes below compresses further
+  // to a small, storage-friendly size, matching the CTO's "compressed"
+  // requirement.
+  Future<void> _captureSelfie() async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.front,
+        imageQuality: 70,
+        maxWidth: 1024,
+      );
+      if (picked == null) return; // hero cancelled the camera
+      final bytes = await picked.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _selfieBytes = bytes;
+        _selfieFileName = picked.name;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open camera: $e'), backgroundColor: _red),
+      );
+    }
+  }
+
+  /// Uploads the live selfie (if captured) to the same Cloudinary
+  /// folder convention as the doc photos, returning {'selfieUrl': ...}
+  /// or an empty map if there's nothing to upload — mirrors
+  /// _uploadPickedDocPhotos' shape exactly so both merge into the
+  /// Firestore write with `...` the same way.
+  Future<Map<String, String>> _uploadSelfiePhoto(String uid) async {
+    final bytes = _selfieBytes;
+    if (bytes == null) return const {};
+    try {
+      final url = await CloudinaryUploadService().uploadImageBytes(
+        bytes,
+        fileName: 'selfie_${_selfieFileName ?? 'capture.jpg'}',
+        folder: 'hero_documents/$uid',
+        targetBytes: 200 * 1024,
+      );
+      return {'selfieUrl': url};
+    } catch (e) {
+      debugPrint('[HeroRegister] selfie upload failed: $e');
+      return const {};
+    }
+  }
+
   /// Uploads the 3 mandatory doc photos (all 3 are guaranteed non-null
   /// by the time this runs — _submitRegistration validates that before
   /// calling this), returning a map of the ones that uploaded
@@ -403,6 +470,13 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       if (_licensePhoto == null) 'License photo',
       if (_aadhaarPhoto == null) 'Aadhaar photo',
       if (_panPhoto == null) 'PAN photo',
+      // NEW (CTO mandate — Advanced KYC & Facial Verification): a
+      // selfie is now mandatory alongside the 3 doc photos, same
+      // reasoning as the FIX comment above — without it, the Admin AI's
+      // facial-comparison step has nothing to compare against and
+      // every report falls back to "no selfie on file, manual
+      // verification required" indefinitely.
+      if (_selfieBytes == null) 'Live selfie',
     ];
     if (missingDocs.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -462,6 +536,10 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
 
        // Upload the 3 mandatory doc photos (already validated present above).
        final docUrls = await _uploadPickedDocPhotos(user.uid);
+       // NEW (CTO mandate — Advanced KYC & Facial Verification): live
+       // selfie, uploaded the same way, merged into the same Firestore
+       // write below via `...selfieUrl` exactly like `...docUrls`.
+       final selfieUrl = await _uploadSelfiePhoto(user.uid);
 
        // Save to heroes collection
        await FirebaseFirestore.instance.collection('heroes').doc(user.uid).set({
@@ -494,6 +572,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
          // an actual photo here to cross-check against the typed
          // numbers before approving.
          ...docUrls,
+         ...selfieUrl,
          'approvalStatus': 'pending',
          'status': 'offline',
          'onboardingMethod': docUrls.isEmpty ? 'manual_whatsapp' : 'in_app_upload',
@@ -634,6 +713,56 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
               IconButton(
                 icon: const Icon(Icons.close, size: 16, color: _muted),
                 onPressed: onClear,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // NEW (CTO mandate — Advanced KYC & Facial Verification): mirrors
+  // _docPhotoTile's look, adapted for raw bytes (image_picker's XFile
+  // doesn't produce a PlatformFile) instead of a picked file.
+  Widget _selfieTile() {
+    return InkWell(
+      onTap: _captureSelfie,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _selfieBytes != null ? _green.withValues(alpha: 0.5) : _muted.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(
+          children: [
+            if (_selfieBytes != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.memory(_selfieBytes!, width: 36, height: 36, fit: BoxFit.cover),
+              )
+            else
+              const Icon(Icons.camera_alt_outlined, color: _muted, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _selfieBytes != null ? (_selfieFileName ?? 'Selfie captured') : 'Take a live selfie (required)',
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.outfit(
+                  color: _selfieBytes != null ? _text : _muted,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            if (_selfieBytes != null)
+              IconButton(
+                icon: const Icon(Icons.close, size: 16, color: _muted),
+                onPressed: () => setState(() {
+                  _selfieBytes = null;
+                  _selfieFileName = null;
+                }),
               ),
           ],
         ),
@@ -933,6 +1062,19 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                 'All 3 photos are required so admin can verify you and '
                 'call to confirm before approving. Having trouble? Use '
                 'WhatsApp / Call below as a backup.',
+                style: GoogleFonts.outfit(color: _muted, fontSize: 11),
+              ),
+              const SizedBox(height: 16),
+
+              // NEW (CTO mandate — Advanced KYC & Facial Verification):
+              // live selfie, required alongside the 3 doc photos above.
+              _sectionLabel('🤳  Live Selfie'),
+              const SizedBox(height: 12),
+              _selfieTile(),
+              const SizedBox(height: 4),
+              Text(
+                'Required — used to confirm your face matches your ID documents. '
+                'Please use your front camera in good lighting, no filters.',
                 style: GoogleFonts.outfit(color: _muted, fontSize: 11),
               ),
               const SizedBox(height: 20),

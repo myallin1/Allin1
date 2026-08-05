@@ -283,6 +283,12 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
               _detailRowWithPhoto('Aadhaar', aadhaarNumber, data['aadhaarDocUrl'] as String?),
               _detailRowWithPhoto('PAN', panNumber, data['panDocUrl'] as String?),
               _detailRowWithPhoto('License', licenseNumber, data['licenseDocUrl'] as String?),
+              // NEW (CTO mandate — Advanced KYC & Facial Verification):
+              // the live selfie hero_register_screen.dart now captures,
+              // shown here so the human admin can eyeball it directly —
+              // same widget, no "typed number" to pair it with, so the
+              // value column is just left blank.
+              _detailRowWithPhoto('Live Selfie', '', data['selfieUrl'] as String?),
               const SizedBox(height: 8),
               Text(
                 'UID: $uid',

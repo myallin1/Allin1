@@ -294,7 +294,7 @@ class GuruAdminApiService {
                       'properties': {
                         'type': {
                           'type': 'string',
-                          'enum': ['hero', 'seller'],
+                          'enum': ['hero', 'seller', 'sos'],
                           'description': 'Which registration type to check.',
                         },
                         'targetUid': {
@@ -364,6 +364,12 @@ class GuruAdminApiService {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_savedApiKeyPrefsKey)?.trim() ?? '';
   }
+
+  // NEW (CTO mandate — Advanced KYC & Facial Verification): public
+  // wrapper so admin_quick_task_service.dart can resolve the exact same
+  // key AdminKycVisionService needs for its own direct Groq calls,
+  // without duplicating the resolution logic above in a second place.
+  Future<String> resolveApiKey() => _resolveApiKey();
 
   void dispose() {
     _client.close();
