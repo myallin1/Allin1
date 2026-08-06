@@ -168,14 +168,14 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                         ? shared.label!.trim()
                         : '${shared.lat.toStringAsFixed(5)}, '
                             '${shared.lng.toStringAsFixed(5)}',
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: context.colors.text, fontSize: 13, height: 1.4,),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               'Where should this go?',
               style: TextStyle(color: context.colors.mutedText, fontSize: 12),
             ),
@@ -1299,7 +1299,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (busy) const SizedBox(
+            if (busy) SizedBox(
                     width: 13,
                     height: 13,
                     child: CircularProgressIndicator(
@@ -1380,7 +1380,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                 final s = suggestions[i];
                 return ListTile(
                   dense: true,
-                  leading: const Icon(Icons.place_rounded,
+                  leading: Icon(Icons.place_rounded,
                       color: context.colors.accent, size: 18,),
                   title: Text(s['name'] as String? ?? '',
                       style: TextStyle(fontSize: 13, color: context.colors.text),),

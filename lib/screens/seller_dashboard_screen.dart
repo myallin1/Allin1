@@ -20,6 +20,7 @@ import 'seller_grocery_dashboard_screen.dart';
 import 'seller_home_kitchen_menu_screen.dart';
 import 'seller_pending_screen.dart';
 import 'seller_settings_screen.dart';
+import 'seller_side_drawer.dart';
 import 'seller_vertical_picker_screen.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
@@ -484,6 +485,10 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
       },
       child: Scaffold(
       backgroundColor: _bg,
+      // NEW (CTO mandate — Universal Side Tray Banner): Seller app had
+      // no drawer before this — AppBar auto-shows the hamburger icon
+      // once `drawer:` is set.
+      drawer: const SellerSideDrawer(),
       appBar: AppBar(
         title: Text(
           _seller?.name ?? 'Seller Dashboard',

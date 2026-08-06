@@ -124,7 +124,7 @@ class _CustomerLoginScreenState extends State<CustomerLoginScreen> {
         return;
       }
       final userCredential = await _signInWithGoogleAccount(account);
-      final user = userCredential.user;
+      final user = userCredential?.user;
       if (user == null) {
         if (mounted) setState(() => _loadingNewUser = false);
         return;
@@ -184,7 +184,7 @@ class _CustomerLoginScreenState extends State<CustomerLoginScreen> {
         return;
       }
       final userCredential = await _signInWithGoogleAccount(account);
-      final user = userCredential.user;
+      final user = userCredential?.user;
       if (user == null) {
         if (mounted) setState(() => _loadingExistingUser = false);
         return;

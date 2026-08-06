@@ -66,6 +66,12 @@ android {
             applicationId = "com.njtech.admininallin1"
             manifestPlaceholders["appName"] = "admin allin1"
         }
+        // NEW: Seller flavor for assembleSellerRelease (lib/main_seller.dart)
+        create("seller") {
+            dimension = "app"
+            applicationId = "com.njtech.sellerallin1"
+            manifestPlaceholders["appName"] = "seller allin1"
+        }
     }
 
     // signingConfigs MUST be declared before buildTypes

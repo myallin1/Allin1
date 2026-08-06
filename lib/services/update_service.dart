@@ -20,6 +20,10 @@ class UpdateService {
       'https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-hero.apk';
   static const String adminApkUrl =
       'https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-admin.apk';
+  // NEW (Universal Side Tray Banner mandate): Seller app's own APK,
+  // matching the same release-filename convention as the other 3.
+  static const String sellerApkUrl =
+      'https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-seller.apk';
 
   bool isUpdatePayload(Map<String, dynamic> data) {
     final explicit = _asBool(data['update_available']);
@@ -36,6 +40,8 @@ class UpdateService {
         return heroApkUrl;
       case 'admin':
         return adminApkUrl;
+      case 'seller':
+        return sellerApkUrl;
       default:
         return customerApkUrl;
     }

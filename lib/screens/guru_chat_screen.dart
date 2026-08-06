@@ -1209,17 +1209,13 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   @override
   Widget build(BuildContext context) {
     final activation = context.watch<AiActivationService>();
-    // NEW (Batch 1 Theme Retrofit) — local, per-build theme bindings
+    // NEW (Batch 1 Theme Retrofit) — local, per-build theme binding
     // replacing the old fixed top-level palette. See the file-header
-    // comment for the full name mapping.
+    // comment for the full name mapping. (The other palette colors are
+    // bound locally inside _buildAppBar/_buildWelcomeState/
+    // _buildInputBar instead — each is a separate method, not part of
+    // build()'s own scope, so build() only needs what it uses itself.)
     final bg = context.colors.background;
-    final ink = context.colors.text;
-    final muted = context.colors.mutedText;
-    final border = context.colors.border;
-    final accentA = context.colors.accentSecondary;
-    final accentB = context.colors.accent;
-    final accentC = context.colors.accentTertiary;
-    final surfaceElevated = context.colors.elevatedSurface;
 
     return Scaffold(
       backgroundColor: bg,
@@ -1248,6 +1244,9 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   }
 
   Widget _buildAppBar(BuildContext context, AiActivationService activation) {
+    final ink = context.colors.text;
+    final muted = context.colors.mutedText;
+    final accentC = context.colors.accentTertiary;
     return Padding(
       padding: const EdgeInsets.fromLTRB(6, 4, 10, 4),
       child: Row(
@@ -1311,6 +1310,9 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   }
 
   Widget _buildWelcomeState() {
+    final muted = context.colors.mutedText;
+    final accentA = context.colors.accentSecondary;
+    final accentB = context.colors.accent;
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -1320,7 +1322,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
             const _GuruAvatar(size: 64, glow: true),
             const SizedBox(height: 18),
             ShaderMask(
-              shaderCallback: (bounds) => const LinearGradient(
+              shaderCallback: (bounds) => LinearGradient(
                 colors: [accentB, accentA],
               ).createShader(bounds),
               child: Text(
@@ -1376,6 +1378,12 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   }
 
   Widget _buildInputBar() {
+    final ink = context.colors.text;
+    final muted = context.colors.mutedText;
+    final border = context.colors.border;
+    final accentA = context.colors.accentSecondary;
+    final accentB = context.colors.accent;
+    final surfaceElevated = context.colors.elevatedSurface;
     return SafeArea(
       top: false,
       child: Padding(
@@ -1424,7 +1432,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
                 IconButton(
                   onPressed: _pickingImage ? null : () => unawaited(_pickAttachment()),
                   icon: _pickingImage
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2, color: muted),
@@ -1471,7 +1479,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
               width: 44,
               height: 44,
               child: DecoratedBox(
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   gradient: LinearGradient(colors: [accentB, accentA]),
                   shape: BoxShape.circle,
                 ),
@@ -1558,7 +1566,7 @@ class _SuperHeroActivationScreen extends StatelessWidget {
                         const _GuruAvatar(size: 84, glow: true),
                         const SizedBox(height: 26),
                         ShaderMask(
-                          shaderCallback: (bounds) => const LinearGradient(
+                          shaderCallback: (bounds) => LinearGradient(
                             colors: [accentB, accentA],
                           ).createShader(bounds),
                           child: Text(
@@ -1604,7 +1612,7 @@ class _SuperHeroActivationScreen extends StatelessWidget {
                                 children: [
                                   Container(
                                     padding: const EdgeInsets.all(10),
-                                    decoration: const BoxDecoration(
+                                    decoration: BoxDecoration(
                                       gradient: LinearGradient(colors: [accentA, accentC]),
                                       borderRadius: BorderRadius.all(Radius.circular(14)),
                                     ),
@@ -1731,7 +1739,7 @@ class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
             Container(
               width: 64,
               height: 64,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(colors: [accentC, accentA]),
                 shape: BoxShape.circle,
               ),
@@ -1957,7 +1965,7 @@ class _VoiceMicButtonState extends State<_VoiceMicButton> with SingleTickerProvi
                 padding: EdgeInsets.zero,
               ),
               if (!widget.isPro)
-                const Positioned(
+                Positioned(
                   right: 2,
                   top: 2,
                   child: Icon(Icons.workspace_premium_rounded, size: 11, color: accentB),

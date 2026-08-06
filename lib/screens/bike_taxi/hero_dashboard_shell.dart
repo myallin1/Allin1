@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'hero_history_screen.dart';
 import 'hero_home_screen.dart';
 import 'hero_profile_tab.dart';
+import 'hero_side_drawer.dart';
 import 'hero_sos_screen.dart';
 
 class HeroDashboardShell extends StatefulWidget {
@@ -142,6 +143,10 @@ class _HeroDashboardShellState extends State<HeroDashboardShell> {
       },
       child: Scaffold(
       backgroundColor: _bg,
+      // NEW (CTO mandate — Universal Side Tray Banner): Hero app had no
+      // drawer at all before this. Edge-swipe opens it (no AppBar here
+      // to host a hamburger icon).
+      drawer: const HeroSideDrawer(),
       body: IndexedStack(
         index: _tabIndex,
         children: _tabs,

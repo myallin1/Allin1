@@ -74,6 +74,17 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
           heroData?['name'] ??
           heroData?['captainName'] ??
           '',
+      // FIX (Hero Registration/Approval bug, CTO mandate): this was the
+      // other half of the disconnect — this identity-sync merge-set could
+      // be the FIRST write to heroes/{uid} for a hero, and it never set
+      // approvalStatus at all. If auth_service.dart's
+      // completeProfileSetup() ran afterward and only checked
+      // `!existingHero.exists` (now fixed to check the field itself), the
+      // hero's doc would permanently have no approvalStatus and never
+      // show up in Admin's pending-approvals query. Backfilling it here
+      // too closes the gap regardless of which write path runs first.
+      if (!(heroData?.containsKey('approvalStatus') ?? false))
+        'approvalStatus': 'pending',
     }, SetOptions(merge: true),);
   }
 

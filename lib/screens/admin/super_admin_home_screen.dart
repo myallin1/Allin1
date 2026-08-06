@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../services/db_usage_tracker.dart';
+import '../../widgets/download_app_banner.dart';
 import 'admin_ai_settings_screen.dart';
 import 'admin_dashboard_screen.dart';
 import 'admin_food_orders_screen.dart';
@@ -829,6 +830,11 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 _logout(context);
               },
             ),
+            const SizedBox(height: 20),
+            // NEW (CTO mandate — Universal Side Tray Banner): same
+            // "Download App" CTA as the Customer app's drawer, now
+            // shared via widgets/download_app_banner.dart.
+            const DownloadAppBanner(appVariant: 'admin'),
             const Spacer(),
             Padding(
               padding: const EdgeInsets.all(20),

@@ -492,7 +492,23 @@ class AuthService {
           // its own, but kept the door open for exactly the bug this
           // migration fixes — a Firestore presence field that can go
           // stale and never self-correct.
-          if (!existingHero.exists) 'approvalStatus': 'pending',
+          // FIX (Hero Registration/Approval bug, CTO mandate): was
+          // `if (!existingHero.exists)` — only backfilled approvalStatus
+          // when heroes/{uid} was created for the very first time here.
+          // But hero_login_screen.dart's _syncHeroIdentityFields() can
+          // create heroes/{uid} FIRST (via its own merge-set, which never
+          // touches approvalStatus), so by the time this method runs,
+          // existingHero.exists is already true and approvalStatus never
+          // gets written at all. That hero's doc silently has NO
+          // approvalStatus field forever, so Admin's
+          // .where('approvalStatus', isEqualTo: 'pending') query in
+          // hero_approvals_screen.dart never matches it — the hero is
+          // stuck invisible to Admin with no way to be approved. Checking
+          // whether the FIELD is missing (not whether the DOC is new)
+          // catches that path too, without touching an approvalStatus
+          // that's already set (approved/rejected/pending stays as-is).
+          if (!(existingHero.data()?.containsKey('approvalStatus') ?? false))
+            'approvalStatus': 'pending',
           'updatedAt': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),

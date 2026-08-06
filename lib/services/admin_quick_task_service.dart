@@ -790,7 +790,7 @@ class _AdminQuickTaskPanelState extends State<_AdminQuickTaskPanel> {
           // the same service.setPosition(...) the expanded panel uses.
           return ValueListenableBuilder<Offset>(
             valueListenable: service.positionNotifier,
-            builder: (context, pos, child) => Positioned(left: pos.dx, top: pos.dy, child: child),
+            builder: (context, pos, child) => Positioned(left: pos.dx, top: pos.dy, child: child!),
             child: GestureDetector(
               onTap: service.toggleMinimized,
               onPanUpdate: (details) {
@@ -813,7 +813,7 @@ class _AdminQuickTaskPanelState extends State<_AdminQuickTaskPanel> {
         }
         return ValueListenableBuilder<Offset>(
           valueListenable: service.positionNotifier,
-          builder: (context, pos, child) => Positioned(left: pos.dx, top: pos.dy, child: child),
+          builder: (context, pos, child) => Positioned(left: pos.dx, top: pos.dy, child: child!),
           child: SafeArea(
             child: GestureDetector(
               onPanUpdate: (details) {
