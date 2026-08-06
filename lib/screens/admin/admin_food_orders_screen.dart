@@ -54,11 +54,23 @@ class _AdminFoodOrdersScreenState extends State<AdminFoodOrdersScreen> {
       // orderBy + whereIn combo needs a composite index (same root cause
       // fixed once already this session in usage_billing_service.dart).
       // Sorted client-side below instead.
-      final snap = await FirebaseFirestore.instance
+      //
+      // FIX (CTO mandate — Phase 2 "Cache-First" audit): this is an
+      // admin browse/history list of food orders, not a decision-gating
+      // read — cache-first here, falling back to a real server read if
+      // nothing is cached yet on this device.
+      var snap = await FirebaseFirestore.instance
           .collection('service_requests')
           .where('requestType', whereIn: _kFoodOrderRequestTypes)
           .limit(200)
-          .get();
+          .get(const GetOptions(source: Source.cache));
+      if (snap.docs.isEmpty) {
+        snap = await FirebaseFirestore.instance
+            .collection('service_requests')
+            .where('requestType', whereIn: _kFoodOrderRequestTypes)
+            .limit(200)
+            .get();
+      }
       final docs = snap.docs.toList()
         ..sort((a, b) {
           final at = a.data()['createdAt'] as Timestamp?;

@@ -15,6 +15,7 @@ import 'package:firebase_database/firebase_database.dart' as rtdb;
 import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../config/city_config.dart';
+import '../models/service_request_model.dart';
 import 'city_service.dart';
 
 /// Canonical status enum — the single source of truth for lifecycle state.
@@ -44,6 +45,62 @@ const List<String> kServiceRequestAdvanceOrder = [
 ];
 
 class ServiceRequestService {
+  // FIX (CTO mandate — Model Adoption, Phase 3): typed accessors, added
+  // ALONGSIDE the existing write methods below (unchanged — every
+  // create/update/delete call keeps writing plain Maps exactly as
+  // before, since Firestore's wire format is Map-based regardless).
+  // These two are what let read-side screens stop doing
+  // `snapshot.data()!['status']` and start doing
+  // `request.status` — see service_request_tracking_screen.dart and
+  // my_orders_screen.dart for the first two callers.
+
+  /// Live single-document stream, typed. Mirrors the exact query
+  /// service_request_tracking_screen.dart used to build inline
+  /// (`service_requests/{requestId}.snapshots()`) — same stream, just
+  /// mapped through `ServiceRequestModel.fromFirestore` before it
+  /// reaches the caller. Emits `null` if the document doesn't exist
+  /// (deleted/cancelled) so callers can show a "not found" state the
+  /// same way a missing `DocumentSnapshot.exists` used to signal.
+  Stream<ServiceRequestModel?> streamRequest(String requestId) {
+    return FirebaseFirestore.instance
+        .collection('service_requests')
+        .doc(requestId)
+        .snapshots()
+        .map((doc) {
+      if (!doc.exists) return null;
+      return ServiceRequestModel.fromFirestore(doc.data()!, doc.id);
+    });
+  }
+
+  /// Live list stream for one customer's own requests across every
+  /// requestType, typed. Deliberately mirrors my_orders_screen.dart's
+  /// original query shape exactly: a single `.where('customerId', ...)`
+  /// filter with NO paired `.orderBy()` (that combination needs a
+  /// composite index that doesn't exist here — the same class of bug
+  /// already fixed once this session in erode_offers_section.dart) —
+  /// sorted by `createdAt` descending client-side instead, after the
+  /// map to typed models.
+  Stream<List<ServiceRequestModel>> streamCustomerRequests(
+    String customerId,
+  ) {
+    return FirebaseFirestore.instance
+        .collection('service_requests')
+        .where('customerId', isEqualTo: customerId)
+        .snapshots()
+        .map((snap) {
+      final models = snap.docs
+          .map((doc) => ServiceRequestModel.fromFirestore(doc.data(), doc.id))
+          .toList();
+      models.sort((a, b) {
+        final aTs = a.createdAt;
+        final bTs = b.createdAt;
+        if (aTs == null || bTs == null) return 0;
+        return bTs.compareTo(aTs);
+      });
+      return models;
+    });
+  }
+
   /// Reserves a document ID without writing anything — used when a
   /// caller needs the future request's ID before creating the doc
   /// (e.g. to build a Storage upload path keyed by requestId).

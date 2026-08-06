@@ -226,13 +226,43 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     });
   }
 
+  // FIX (CTO mandate — Phase 2 "Cache-First" audit): this is a "recent
+  // activity preview" list, not a live total that must reconcile with
+  // a real-time count (unlike _fetchStatCards' "today" numbers, which
+  // deliberately stay server-fresh — see its own comment). A few
+  // seconds/minutes of staleness here is fine, and the admin already
+  // has an explicit manual-refresh button (ManualRefreshHeader) to force
+  // a real read when they actually need up-to-the-second data. Try the
+  // on-device Firestore cache first (0 server reads if a copy already
+  // exists); only fall through to a real server read if there's nothing
+  // cached yet (first-ever load on this device, or cache was cleared).
   Future<void> _fetchRecentTransactions() async {
     if (mounted) setState(() => _recentTransactionsLoading = true);
-    final snap = await FirebaseFirestore.instance
-        .collection('wallet_transactions')
-        .orderBy('createdAt', descending: true)
-        .limit(15)
-        .get();
+    QuerySnapshot<Map<String, dynamic>> snap;
+    try {
+      snap = await FirebaseFirestore.instance
+          .collection('wallet_transactions')
+          .orderBy('createdAt', descending: true)
+          .limit(15)
+          .get(const GetOptions(source: Source.cache));
+      if (snap.docs.isEmpty) {
+        // Nothing cached yet on this device — fall through to a real read.
+        snap = await FirebaseFirestore.instance
+            .collection('wallet_transactions')
+            .orderBy('createdAt', descending: true)
+            .limit(15)
+            .get();
+      }
+    } catch (_) {
+      // Cache-only reads throw if there's no cached result at all on
+      // some platforms — fall back to a normal server read rather than
+      // leaving the admin looking at an error for a non-critical list.
+      snap = await FirebaseFirestore.instance
+          .collection('wallet_transactions')
+          .orderBy('createdAt', descending: true)
+          .limit(15)
+          .get();
+    }
     DbUsageTracker.instance.recordRead(snap.docs.length);
     if (!mounted) return;
     setState(() {
