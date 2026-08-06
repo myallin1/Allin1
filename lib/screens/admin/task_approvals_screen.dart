@@ -4,9 +4,11 @@
 // ================================================================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_palette.dart';
+import '../../utils/hero_presence_utils.dart';
 
 class TaskApprovalsScreen extends StatefulWidget {
   const TaskApprovalsScreen({super.key});
@@ -541,10 +543,25 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                 final captainName =
                     captainData?['captainName'] as String? ?? 'Hero';
                 final captainEmail = captainData?['email'] as String? ?? '';
-                final status = captainData?['status'] as String? ?? 'offline';
-                final isOnline = status == 'online' || status == 'on_ride';
+                // FIX (presence reliability audit — "admin ku exacta ah
+                // theriyanum yaru real ah online"): this used to read
+                // `captainData['status']` from the Firestore `captains`
+                // doc — a field the hero app no longer writes at all
+                // (see hero_home_screen.dart's WhatsApp-model presence
+                // migration), so this card would always show "OFFLINE"
+                // regardless of reality. Switched to the same RTDB
+                // online_heroes/{uid} presence node (backed by
+                // onDisconnect() + a heartbeat, cross-checked for
+                // staleness) every other admin screen already uses.
+                return StreamBuilder<DatabaseEvent>(
+                  stream: FirebaseDatabase.instance
+                      .ref('online_heroes/$captainId')
+                      .onValue,
+                  builder: (context, presenceSnap) {
+                    final rawPresence = presenceSnap.data?.snapshot.value;
+                    final isOnline = isHeroPresenceMapFresh(rawPresence);
 
-                return Container(
+                    return Container(
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -710,6 +727,8 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                       ),
                     ],
                   ),
+                    );
+                  },
                 );
               },
             );

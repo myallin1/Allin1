@@ -16,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/db_usage_tracker.dart';
 import '../../services/service_requests_listener.dart';
+import '../../utils/hero_presence_utils.dart';
 import '../../widgets/manual_refresh_header.dart';
 import 'admin_detailed_reports_screen.dart';
 import 'admin_hero_dispatch_screen.dart';
@@ -1053,7 +1054,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 int activeNow = 0;
                 if (rtdbSnap.hasData && rtdbSnap.data!.snapshot.value != null) {
                   final val = rtdbSnap.data!.snapshot.value;
-                  if (val is Map) activeNow = val.length;
+                  if (val is Map) {
+                    // FIX (presence reliability audit — "admin ku exacta
+                    // ah theriyanum yaru real ah online"): a node still
+                    // existing in online_heroes isn't proof the hero is
+                    // actually reachable right now — onDisconnect() is
+                    // best-effort, not an instant guarantee. Only count
+                    // heroes whose lastUpdated heartbeat is recent (see
+                    // hero_presence_utils.dart); a lingering node whose
+                    // heartbeat went stale almost certainly belongs to a
+                    // hero whose app closed without the cleanup hook
+                    // completing.
+                    activeNow = val.values.where(isHeroPresenceMapFresh).length;
+                  }
                 }
                 return _statCard(
                   '⚡',
@@ -1148,7 +1161,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   // ── Online Heroes Live Feed ────────────────────────────────────
   Widget _buildOnlineHeroes() {
-    final entries = _onlineHeroesData?.entries.toList() ?? [];
+    // FIX (presence reliability audit): filter out stale entries here
+    // too, same reasoning as the "Active Now" stat card above — a
+    // node's mere existence doesn't mean the hero is actually online
+    // right now, only that onDisconnect() hasn't cleaned it up yet.
+    final entries = (_onlineHeroesData?.entries.toList() ?? [])
+        .where((e) => isHeroPresenceMapFresh(e.value))
+        .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

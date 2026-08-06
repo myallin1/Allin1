@@ -1,0 +1,290 @@
+// ================================================================
+// SelfieCaptureScreen — forces a REAL live-camera selfie with an
+// on-screen oval face-guide, for Hero KYC liveness verification.
+// ================================================================
+// FIX (per Nizam's request): hero_register_screen.dart's old
+// _captureSelfie() opened the OS's native camera app via image_picker
+// (ImageSource.camera) — that works, but it's the system camera UI,
+// which Flutter cannot draw an overlay on top of, AND that same
+// screen also had a plain "Gallery" button sitting right next to it
+// that let a hero skip the camera entirely and upload any old photo,
+// defeating the whole point of a liveness selfie.
+//
+// This screen replaces that flow: it embeds a live `camera` package
+// preview directly in-app (not the OS camera app), so a dark scrim
+// with an oval cutout can be painted on top — the hero has to
+// position their face inside the oval before they can see themselves
+// clearly, mirroring familiar KYC-app UX (bank apps, Aadhaar
+// verification, etc.). No gallery option is exposed here at all; the
+// only way out is to cancel and not submit a selfie, or (if the
+// camera itself is genuinely unusable — permission denied, no camera
+// hardware, blocked getUserMedia on web) an explicit, clearly-labelled
+// "Camera not available — use gallery instead" fallback that only
+// appears once camera initialization has actually failed, not as a
+// standing shortcut.
+// ================================================================
+import 'dart:typed_data';
+
+import 'package:camera/camera.dart';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+
+const Color _kBg = Color(0xFF0A0A1A);
+const Color _kPink = Color(0xFFFF4FA3);
+const Color _kText = Color(0xFFEEEEF5);
+const Color _kMuted = Color(0xFF9999BB);
+
+class SelfieCaptureResult {
+  final Uint8List bytes;
+  final String fileName;
+  const SelfieCaptureResult({required this.bytes, required this.fileName});
+}
+
+class SelfieCaptureScreen extends StatefulWidget {
+  const SelfieCaptureScreen({super.key});
+
+  @override
+  State<SelfieCaptureScreen> createState() => _SelfieCaptureScreenState();
+}
+
+class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
+  CameraController? _controller;
+  Future<void>? _initFuture;
+  bool _capturing = false;
+  String? _initError;
+
+  @override
+  void initState() {
+    super.initState();
+    _initFuture = _initCamera();
+  }
+
+  Future<void> _initCamera() async {
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        setState(() => _initError = 'No camera found on this device.');
+        return;
+      }
+      // Prefer the front camera for a selfie; fall back to whatever's
+      // available (e.g. a device with only a rear camera).
+      final front = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first,
+      );
+      final controller = CameraController(
+        front,
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.jpeg,
+      );
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() => _controller = controller);
+    } catch (e) {
+      // Covers permission-denied (native), and blocked getUserMedia on
+      // web (no HTTPS, iframed PWA without Permissions-Policy: camera,
+      // etc.) — same failure modes the old ImagePicker path had to
+      // handle, just surfaced here instead.
+      if (mounted) {
+        setState(() => _initError = 'Could not access the camera: $e');
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _capture() async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized || _capturing) {
+      return;
+    }
+    setState(() => _capturing = true);
+    try {
+      final file = await controller.takePicture();
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      Navigator.pop(
+        context,
+        SelfieCaptureResult(bytes: bytes, fileName: file.name),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not capture photo: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _capturing = false);
+    }
+  }
+
+  // Only reachable once the live camera has genuinely failed to
+  // initialize — not a standing bypass button sitting next to a
+  // working camera preview.
+  Future<void> _useGalleryFallback() async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 70,
+        maxWidth: 1024,
+      );
+      if (picked == null || !mounted) return;
+      final bytes = await picked.readAsBytes();
+      if (!mounted) return;
+      Navigator.pop(
+        context,
+        SelfieCaptureResult(bytes: bytes, fileName: picked.name),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not pick a photo: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: _kBg,
+        elevation: 0,
+        title: Text('Take a Live Selfie', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w700)),
+        iconTheme: const IconThemeData(color: _kText),
+      ),
+      body: FutureBuilder<void>(
+        future: _initFuture,
+        builder: (context, snapshot) {
+          if (_initError != null) {
+            return _errorState(_initError!);
+          }
+          final controller = _controller;
+          if (snapshot.connectionState != ConnectionState.done || controller == null) {
+            return const Center(child: CircularProgressIndicator(color: _kPink));
+          }
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Center(child: CameraPreview(controller)),
+              // Dark scrim with an oval cutout — the "round box" guide,
+              // so the hero can see exactly where to place their face.
+              CustomPaint(
+                painter: _OvalGuidePainter(),
+                size: Size.infinite,
+              ),
+              Positioned(
+                top: 24,
+                left: 0,
+                right: 0,
+                child: Text(
+                  'Center your face inside the oval',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.outfit(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+              ),
+              Positioned(
+                bottom: 32,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: GestureDetector(
+                    onTap: _capturing ? null : _capture,
+                    child: Container(
+                      width: 74,
+                      height: 74,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white,
+                        border: Border.all(color: _kPink, width: 4),
+                      ),
+                      child: _capturing
+                          ? const Padding(
+                              padding: EdgeInsets.all(20),
+                              child: CircularProgressIndicator(strokeWidth: 3, color: _kPink),
+                            )
+                          : const Icon(Icons.camera_alt_rounded, color: _kPink, size: 32),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _errorState(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.videocam_off_rounded, color: _kMuted, size: 48),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(color: _kText, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: _useGalleryFallback,
+              style: ElevatedButton.styleFrom(backgroundColor: _kPink),
+              icon: const Icon(Icons.photo_library_outlined, color: Colors.white),
+              label: Text(
+                'Camera not available — use gallery instead',
+                style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Paints a dark scrim over the whole preview with an oval cutout in
+/// the center — the visual "round box" guide the hero lines their
+/// face up with before tapping capture. Pure UI guide, not an actual
+/// face-detection check (no ML/camera-vision dependency added).
+class _OvalGuidePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final ovalWidth = size.width * 0.68;
+    final ovalHeight = ovalWidth * 1.3;
+    final ovalRect = Rect.fromCenter(
+      center: Offset(size.width / 2, size.height / 2 - 20),
+      width: ovalWidth,
+      height: ovalHeight,
+    );
+
+    final scrimPath = Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+    final ovalPath = Path()..addOval(ovalRect);
+    final cutoutPath = Path.combine(PathOperation.difference, scrimPath, ovalPath);
+
+    canvas.drawPath(cutoutPath, Paint()..color = Colors.black.withValues(alpha: 0.55));
+    canvas.drawOval(
+      ovalRect,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.9)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}

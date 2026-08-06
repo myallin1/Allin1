@@ -153,6 +153,23 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   /// dispatch-matching accuracy. See the report accompanying this change.
   static const double _idleRadarMoveThresholdMeters = 200;
   Timer? _locationTimer;
+
+  /// FIX (WhatsApp-model presence, take 2 — CTO architecture review):
+  /// presence trust boundary is `.info/connected` + `onDisconnect()`
+  /// only, deliberately with NO client heartbeat and NO admin-side
+  /// staleness timeout. `onDisconnect()` is a server-side hook tied to
+  /// the actual RTDB session — Firebase's own low-level keepalive
+  /// detects a dead connection and fires it without any writes from
+  /// us. The only real gap that pattern has is a SILENT RECONNECT
+  /// (network blip, carrier switch, tab backgrounding) — the old
+  /// session's onDisconnect() hook is gone the moment the socket
+  /// drops, and nothing re-arms it on the new session unless we
+  /// explicitly do so. `.info/connected` is RTDB's own connection-state
+  /// stream (free, no reads/writes charged) — subscribing to it and
+  /// re-writing + re-arming on every `true` transition (not just the
+  /// first) closes that gap with zero polling. See
+  /// _startPresenceConnectionWatcher() below.
+  StreamSubscription<DatabaseEvent>? _presenceConnectedSub;
   Position? _latestPosition;
   LatLng? _displayHeroLocation;
   double? _displayHeroBearingDegrees;
@@ -1021,7 +1038,16 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             // no matter how ungracefully the client left. Re-registering
             // it on every write is safe/idempotent — it just replaces
             // the pending disconnect action with an equivalent one.
-            unawaited(onlineHeroRef.onDisconnect().remove());
+            // FIX (presence reliability audit): was a bare unawaited()
+            // with no error handling — if this registration call itself
+            // failed (transient network blip at exactly the wrong
+            // moment), the hero would go online with NO server-side
+            // disconnect hook armed for that entire session, and
+            // nothing would ever know. Now logged so a silent failure
+            // is at least visible in debug output instead of invisible.
+            unawaited(onlineHeroRef.onDisconnect().remove().catchError((Object e) {
+              debugPrint('[HeroHomeScreen] onDisconnect() registration failed: $e');
+            }));
             _lastUploadedPosition = currentPos;
             debugPrint(
               '🔥 [ONLINE] Wrote hero position to RTDB '
@@ -1195,6 +1221,13 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               '${dist.toStringAsFixed(1)}m of '
               '${_idleRadarMoveThresholdMeters.toStringAsFixed(0)}m',
             );
+            // No heartbeat write here (removed per CTO architecture
+            // review — DB cost + wrong business fit for a hero parked
+            // and waiting on an order for an hour). Presence for a
+            // stationary-but-connected hero is entirely covered by
+            // onDisconnect() + the .info/connected re-arm watcher
+            // (_startPresenceConnectionWatcher) — neither needs the
+            // node touched again until the hero actually moves.
             return;
           }
         }
@@ -1214,7 +1247,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         });
         // See the matching comment on the other online_heroes.set() call
         // above (~line 960) — server-side cleanup for ungraceful exits.
-        unawaited(onlineHeroRef.onDisconnect().remove());
+        unawaited(onlineHeroRef.onDisconnect().remove().catchError((Object e) {
+          debugPrint('[HeroHomeScreen] onDisconnect() re-registration failed: $e');
+        }));
 
         // Firestore: SKIPPED in timer — status writes are handled by
         // _syncOnlineStatus with its own 3-minute gate.

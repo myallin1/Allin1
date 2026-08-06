@@ -12,7 +12,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -27,6 +26,7 @@ import '../services/location_service.dart';
 // tracker used everywhere else), not the old one-shot, non-live
 // HeroVerificationPendingScreen — see hero_pending_screen.dart.
 import 'hero_pending_screen.dart';
+import 'selfie_capture_screen.dart';
 
 // THEME FIX (merge duplicate registration forms): this screen used to be
 // a dark theme, separate from the light pink/white ProfileSetupScreen
@@ -417,63 +417,26 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
   // file picker so the hero can still supply a photo and finish
   // registering, with a clear snackbar explaining what happened instead
   // of a raw error string.
+  // FIX (per Nizam's request — round-box live selfie): the old flow
+  // used image_picker's ImageSource.camera, which opens the OS's
+  // native camera app — Flutter can't draw a face-guide overlay on
+  // top of that. Now pushes SelfieCaptureScreen, an in-app live
+  // `camera` package preview with a dark scrim + oval "round box"
+  // cutout painted over it, so the hero has to line their face up
+  // inside the oval before capturing. That screen has its own
+  // internal camera-unavailable fallback (permission denied, no
+  // camera hardware, blocked getUserMedia on web); there's no plain
+  // "Gallery" bypass sitting next to a working camera anymore.
   Future<void> _captureSelfie() async {
-    try {
-      final picked = await ImagePicker().pickImage(
-        source: ImageSource.camera,
-        preferredCameraDevice: CameraDevice.front,
-        imageQuality: 70,
-        maxWidth: 1024,
-      );
-      if (picked == null) return; // hero cancelled the camera
-      final bytes = await picked.readAsBytes();
-      if (!mounted) return;
-      setState(() {
-        _selfieBytes = bytes;
-        _selfieFileName = picked.name;
-      });
-    } catch (e) {
-      debugPrint('[HeroRegister] camera capture failed, falling back to gallery: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            kIsWeb
-                ? 'Camera not available in this browser/view. Pick a photo instead.'
-                : 'Camera permission was denied. Pick a photo from your gallery instead.',
-          ),
-          backgroundColor: _red,
-        ),
-      );
-      await _pickSelfieFromGallery();
-    }
-  }
-
-  /// Fallback path for _captureSelfie(): opens the plain gallery/file
-  /// picker (same mechanism _pickDocPhoto uses) so a hero whose camera
-  /// is unreachable can still complete registration. Also reachable
-  /// directly via a "Choose from gallery" tap on the selfie tile, not
-  /// just as an automatic fallback.
-  Future<void> _pickSelfieFromGallery() async {
-    try {
-      final picked = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 70,
-        maxWidth: 1024,
-      );
-      if (picked == null) return; // hero cancelled the picker too
-      final bytes = await picked.readAsBytes();
-      if (!mounted) return;
-      setState(() {
-        _selfieBytes = bytes;
-        _selfieFileName = picked.name;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not pick a photo: $e'), backgroundColor: _red),
-      );
-    }
+    final result = await Navigator.push<SelfieCaptureResult>(
+      context,
+      MaterialPageRoute(builder: (_) => const SelfieCaptureScreen()),
+    );
+    if (result == null || !mounted) return; // hero cancelled
+    setState(() {
+      _selfieBytes = result.bytes;
+      _selfieFileName = result.fileName;
+    });
   }
 
   /// Uploads the live selfie (if captured) to the same Cloudinary
@@ -864,21 +827,11 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                   _selfieBytes = null;
                   _selfieFileName = null;
                 }),
-              )
-            else
-              // FIX (CTO critical-bug mandate): an explicit manual
-              // fallback for a hero whose camera is blocked (permission
-              // denied, no HTTPS, iframed PWA, etc.) — they don't have
-              // to wait for the camera to fail first; they can go
-              // straight to the gallery/file picker.
-              TextButton(
-                onPressed: _pickSelfieFromGallery,
-                style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
-                child: Text(
-                  'Gallery',
-                  style: GoogleFonts.outfit(color: _njPink, fontSize: 11, fontWeight: FontWeight.w700),
-                ),
               ),
+            // No "Gallery" bypass here anymore — SelfieCaptureScreen
+            // (pushed by _captureSelfie above) owns its own
+            // camera-unavailable fallback internally, so there's no
+            // standing shortcut next to a working live camera.
           ],
         ),
       ),

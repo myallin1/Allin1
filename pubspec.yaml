@@ -30,6 +30,15 @@ dependencies:
   # app ships to (Android/iOS/web via <input capture>), which is what
   # a genuine "live selfie" requires. Used only in hero_register_screen.dart.
   image_picker: ^1.1.2
+  # NEW (per Nizam's request — live selfie with round-box face guide):
+  # image_picker's ImageSource.camera opens the OS's native camera app,
+  # which Flutter can't draw a custom oval overlay on top of. The
+  # `camera` package gives an embedded, in-app live preview instead
+  # (works on Android/iOS/web via the bundled camera_web plugin), so
+  # selfie_capture_screen.dart can paint a face-guide oval directly over
+  # it. Used only by selfie_capture_screen.dart (hero_register_screen.dart's
+  # live selfie step). Run `flutter pub get` after this change.
+  camera: ^0.11.0+2
   firebase_analytics: any
   firebase_auth: ^6.2.0
   firebase_core: ^4.5.0
