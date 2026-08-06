@@ -22,7 +22,12 @@ import 'ai_settings_screen.dart';
 // Rate App / Share App links — customer app's actual Play Store
 // package name (see android/app/build.gradle.kts customer flavor) and
 // its live PWA link.
-const String kPlayStoreUrl = 'https://play.google.com/store/apps/details?id=com.njtech.myallin1';
+// NEW (CTO mandate — Naming Standardization): updated to match the
+// customer flavor's new applicationId (com.njtech.allin1.customer,
+// was com.njtech.myallin1) — kept in sync since neither app is live
+// on the Play Store yet, so there's no existing listing this could
+// break.
+const String kPlayStoreUrl = 'https://play.google.com/store/apps/details?id=com.njtech.allin1.customer';
 const String kCustomerAppShareUrl = 'https://my-allin1.web.app';
 
 // NOTE (Nizam's full Option 2 rollout): the theme dropdown further down

@@ -24,10 +24,29 @@ class ErodeOffersSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      // FIX (root cause of "Could not load offers, please try again
+      // later" — live bug, security rules were already correctly
+      // deployed by this point): a Firestore query combining an
+      // equality filter (.where('active', isEqualTo: true)) with an
+      // .orderBy() on a DIFFERENT field (createdAt) requires a
+      // composite index — Firestore does NOT auto-create these, unlike
+      // single-field indexes. No such index existed for erode_offers
+      // (confirmed: zero entries in firestore.indexes.json), so this
+      // stream was throwing `[cloud_firestore/failed-precondition] The
+      // query requires an index...` on every single load — surfacing
+      // as snapshot.hasError below, which is exactly this UI's "Could
+      // not load offers" message. This is a DIFFERENT failure mode
+      // from the earlier rules-deployment bug (permission-denied vs.
+      // failed-precondition) that happened to produce the identical
+      // symptom. Dropping .orderBy() here — keeping only the
+      // single-field .where('active', ...) filter, which Firestore
+      // always auto-indexes — removes the composite-index requirement
+      // entirely, so this feature can never break this way again
+      // regardless of whether an index gets deployed. Sorting is done
+      // client-side instead, right after the docs list is built below.
       stream: FirebaseFirestore.instance
           .collection('erode_offers')
           .where('active', isEqualTo: true)
-          .orderBy('createdAt', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -37,13 +56,22 @@ class ErodeOffersSection extends StatelessWidget {
           );
         }
         if (snapshot.hasError) {
+          // Was previously silent — no debugPrint at all — so a future
+          // regression here would be just as invisible as this one was.
+          debugPrint('ErodeOffersSection: stream error -> ${snapshot.error}');
           return _emptyState(
             icon: Icons.error_outline_rounded,
             title: 'Could not load offers',
             subtitle: 'Please try again in a moment.',
           );
         }
-        final docs = snapshot.data?.docs ?? [];
+        final docs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(snapshot.data?.docs ?? [])
+          ..sort((a, b) {
+            final aTs = a.data()['createdAt'];
+            final bTs = b.data()['createdAt'];
+            if (aTs is! Timestamp || bTs is! Timestamp) return 0;
+            return bTs.compareTo(aTs); // descending, newest first
+          });
         if (docs.isEmpty) {
           return _emptyState(
             icon: Icons.storefront_rounded,
@@ -141,6 +169,7 @@ class _OfferCard extends StatelessWidget {
     final shopName = (data['shopName'] as String?) ?? 'Shop';
     final offerPercent = data['offerPercent'];
     final validTill = data['validTill'];
+    final imageUrl = data['imageUrl'] as String?;
 
     return GestureDetector(
       onTap: () {
@@ -167,12 +196,17 @@ class _OfferCard extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: const LinearGradient(colors: [_offerPink, _offerPurple]),
                 borderRadius: BorderRadius.circular(16),
+                image: (imageUrl != null && imageUrl.isNotEmpty)
+                    ? DecorationImage(image: NetworkImage(imageUrl), fit: BoxFit.cover)
+                    : null,
               ),
               alignment: Alignment.center,
-              child: Text(
-                offerPercent != null ? '$offerPercent%' : 'OFFER',
-                style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14),
-              ),
+              child: (imageUrl != null && imageUrl.isNotEmpty)
+                  ? null
+                  : Text(
+                      offerPercent != null ? '$offerPercent%' : 'OFFER',
+                      style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14),
+                    ),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -238,6 +272,7 @@ class OfferDetailScreen extends StatelessWidget {
     final phone = (data['phone'] as String?) ?? '';
     final lat = data['lat'];
     final lng = data['lng'];
+    final imageUrl = data['imageUrl'] as String?;
 
     return Scaffold(
       backgroundColor: const Color(0xFFFFF6FA),
@@ -252,6 +287,24 @@ class OfferDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // NEW (CTO mandate — Erode Offers image + map pin): shows
+            // the shop photo admin uploaded, so the customer can
+            // recognise the shop's storefront on sight. Only rendered
+            // when an offer actually has one — older offers created
+            // before this feature simply skip straight to the gradient
+            // banner below.
+            if (imageUrl != null && imageUrl.isNotEmpty)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Image.network(
+                  imageUrl,
+                  width: double.infinity,
+                  height: 180,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            if (imageUrl != null && imageUrl.isNotEmpty) const SizedBox(height: 16),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(22),

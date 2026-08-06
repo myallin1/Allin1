@@ -17,6 +17,7 @@ import '../services/cloudinary_upload_service.dart';
 import '../services/grocery_ai_notes_service.dart';
 import '../services/service_request_service.dart';
 import '../widgets/location_capture_field.dart';
+import '../widgets/quick_order_line_items.dart';
 import '../widgets/server_busy_dialog.dart';
 import 'dmart_screen.dart';
 import 'grocery_order_status_screen.dart';
@@ -37,7 +38,7 @@ class GroceryOrderScreen extends StatefulWidget {
 }
 
 class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
-  final _listCtrl = TextEditingController();
+  List<OrderLineItem> _lineItems = [OrderLineItem()];
   // NEW (per Nizam's request — every service request needs a real
   // navigable delivery point for the hero): this form used to collect
   // zero location data at all, not even a text address.
@@ -65,22 +66,29 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
     super.initState();
     final pending = GroceryAiNotesService.instance.consumeAll();
     if (pending.isNotEmpty) {
-      final existing = _listCtrl.text.trim();
-      final addition = pending.join('\n');
-      _listCtrl.text = existing.isEmpty ? addition : '$existing\n$addition';
+      final newItems = pending
+          .where((line) => line.trim().isNotEmpty)
+          .map((line) => OrderLineItem(name: line.trim()))
+          .toList();
+      if (newItems.isNotEmpty) {
+        _lineItems = [
+          ..._lineItems.where((it) => !it.isEmpty),
+          ...newItems,
+        ];
+        if (_lineItems.isEmpty) _lineItems = [OrderLineItem()];
+      }
     }
   }
 
   @override
   void dispose() {
-    _listCtrl.dispose();
     _deliveryAddressCtrl.dispose();
     super.dispose();
   }
 
   bool get _canSubmit =>
       !_submitting &&
-      (_listCtrl.text.trim().isNotEmpty || _pickedFiles.isNotEmpty) &&
+      (_lineItems.any((it) => !it.isEmpty) || _pickedFiles.isNotEmpty) &&
       _deliveryAddressCtrl.text.trim().isNotEmpty;
 
   // NEW (per Nizam/CTO's DMart UX workaround): DMart's own site rejects
@@ -217,7 +225,15 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
         customerName: user.displayName ?? 'Customer',
         customerPhone: user.phoneNumber ?? '',
         details: {
-          'listText': _listCtrl.text.trim(),
+          'items': quickOrderItemsToJson(_lineItems),
+          // Backward compat: grocery_order_status_screen.dart and
+          // requestSummary() in admin_new_orders_screen.dart still read
+          // 'listText' as a plain string — keep it populated by joining
+          // each line item's qty + name, comma-separated.
+          'listText': _lineItems
+              .where((it) => !it.isEmpty)
+              .map((it) => [it.qty.trim(), it.name.trim()].where((s) => s.isNotEmpty).join(' '))
+              .join(', '),
           'listImageUrl': listImageUrls.isNotEmpty ? listImageUrls.first : null,
           'listImageUrls': listImageUrls,
           'deliveryAddress': _deliveryAddressCtrl.text.trim(),
@@ -297,20 +313,11 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
             const SizedBox(height: 24),
             Text('Your grocery list', style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
-            TextField(
-              key: const Key('grocery_list_field'),
-              controller: _listCtrl,
-              maxLines: 6,
-              style: const TextStyle(fontSize: 14),
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                hintText: 'e.g., 1kg rice, 1L milk, 2 bread, tomatoes...',
-                hintStyle: TextStyle(color: _kMuted.withValues(alpha: 0.6), fontSize: 13),
-                filled: true,
-                fillColor: _kSurface,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.all(16),
-              ),
+            QuickOrderLineItemsForm(
+              items: _lineItems,
+              itemLabel: 'Item',
+              qtyLabel: 'Qty',
+              onChanged: (items) => setState(() => _lineItems = items),
             ),
             const SizedBox(height: 16),
             // FIX (multi-image, per Nizam's "screenshot your DMart cart, 1-10

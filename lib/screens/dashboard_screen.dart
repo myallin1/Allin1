@@ -42,6 +42,7 @@ import 'food_hub_screen.dart';
 import 'grocery_order_screen.dart';
 import 'guru_chat_screen.dart';
 import 'hero_booking_screen.dart';
+import 'my_orders_screen.dart';
 import 'nj_tech_service_screen.dart';
 import 'nj_tech_store_screen.dart';
 import 'play_zone_screen.dart';
@@ -1059,6 +1060,14 @@ class _HomeTab extends StatelessWidget {
         const SizedBox(height: 20),
         const BannerAdsSlider(
           height: 240,
+          textSlides: [
+            BannerTextSlide(
+              title: 'Internet Offers 🌐',
+              subtitle: 'Fast recharge plans & broadband deals — tap to explore',
+              gradient: [Color(0xFFFF4FA3), Color(0xFF7B2FF7)],
+              icon: Icons.wifi_rounded,
+            ),
+          ],
           imageUrls: [
             'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=800&q=80',
             'https://images.unsplash.com/photo-1546054454-aa26e2b734c7?w=800&q=80',
@@ -1898,6 +1907,14 @@ class _ProfileDrawer extends StatelessWidget {
               // Activity (Replaces standard history)
               _drawerItem(context, Icons.local_activity_outlined,
                   t('drawer_activity'), () => onNavigate(const RideHistoryScreen()),),
+
+              // NEW: unified view across all 4 service_requests
+              // categories (Hero Booking / Custom Order / Custom Food
+              // Order / Grocery Order) — additive, does not replace the
+              // existing per-type status screens.
+              _drawerItem(context, Icons.receipt_long_rounded,
+                  'My Orders', () => onNavigate(const MyOrdersScreen()),
+                  itemKey: const Key('drawer_item_my_orders'),),
 
               _drawerItem(context, Icons.settings_outlined,
                   t('drawer_settings'), () => onNavigate(const SettingsScreen()),),

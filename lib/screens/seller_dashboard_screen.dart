@@ -821,7 +821,18 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
     final data = doc.data();
     final details = (data['details'] as Map<String, dynamic>?) ?? {};
     final customerName = (data['customerName'] as String?) ?? 'Customer';
-    final itemsSummary = (details['items'] as String?) ?? '';
+    // details['items'] is now written as a structured List<Map>
+    // ({itemId, name, price, quantity}) — same priced-cart shape
+    // catalog_food_order uses — rather than the plain-String summary
+    // this used to write. Fall back to the legacy String shape so any
+    // already-placed orders from before this change still render.
+    final itemsRaw = details['items'];
+    final itemsSummary = itemsRaw is List
+        ? itemsRaw
+            .whereType<Map>()
+            .map((it) => '${it['quantity'] ?? it['qty'] ?? 1} × ${it['name'] ?? 'Item'}')
+            .join(', ')
+        : (itemsRaw as String?) ?? '';
     final address = (details['deliveryAddress'] as String?) ?? '';
     final total = (details['totalAmount'] as num?)?.toDouble() ?? 0;
     final status = (data['status'] as String?) ?? 'pending';

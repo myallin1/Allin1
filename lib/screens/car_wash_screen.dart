@@ -76,14 +76,37 @@ class _CarService {
 // ================================================================
 // SCREEN
 // ================================================================
-class CarWashScreen extends StatelessWidget {
+class CarWashScreen extends StatefulWidget {
   const CarWashScreen({super.key});
+
+  @override
+  State<CarWashScreen> createState() => _CarWashScreenState();
+}
+
+class _CarWashScreenState extends State<CarWashScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToServices() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _kDark,
       body: CustomScrollView(
+        controller: _scrollController,
         physics: const BouncingScrollPhysics(),
         slivers: [
           _buildAppBar(context),
@@ -98,7 +121,7 @@ class CarWashScreen extends StatelessWidget {
           ),
         ],
       ),
-      bottomNavigationBar: _BottomContactBar(),
+      bottomNavigationBar: _BottomActionBar(onServiceTap: _scrollToServices),
     );
   }
 
@@ -398,12 +421,26 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-class _BottomContactBar extends StatelessWidget {
+// FIX (CTO checklist Item 14): 4 rigidly-pinned bottom buttons —
+// Service / Old Spares / Appointment / Call. No dedicated spare-parts
+// marketplace or in-app appointment scheduler exists yet in this repo
+// (confirmed via repo search), so "Old Spares" and "Appointment" open a
+// pre-filled WhatsApp enquiry to the same CTO-provided number the old
+// contact bar used — functional today without waiting on new backend
+// screens, and easy to repoint at real screens later without touching
+// this bar's layout.
+class _BottomActionBar extends StatelessWidget {
+  final VoidCallback onServiceTap;
+  const _BottomActionBar({required this.onServiceTap});
+
+  static Future<void> _whatsAppEnquiry(String text) =>
+      _launch('https://wa.me/919092031090?text=${Uri.encodeComponent(text)}');
+
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(
-          16, 12, 16, 12 + MediaQuery.paddingOf(context).bottom,),
+          10, 10, 10, 10 + MediaQuery.paddingOf(context).bottom,),
       decoration: BoxDecoration(
         color: _kCard,
         border: Border(top: BorderSide(color: _kPink.withValues(alpha: 0.2))),
@@ -413,48 +450,90 @@ class _BottomContactBar extends StatelessWidget {
         ],
       ),
       child: Row(children: [
-        const Icon(Icons.phone_in_talk_rounded, color: _kPink, size: 18),
-        const SizedBox(width: 8),
-        Column(crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min, children: [
-          Text('Book Now', style: GoogleFonts.outfit(
-              color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700,),),
-          const Text(_phone, style: TextStyle(color: _kMuted, fontSize: 10)),
-        ],),
-        const Spacer(),
-        GestureDetector(
-          onTap: () => _launch(_telUri),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: _kPink,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(
-                  color: _kPink.withValues(alpha: 0.4), blurRadius: 10,),],
-            ),
-            child: Text('📞  Call', style: GoogleFonts.outfit(
-                color: Colors.white, fontSize: 13,
-                fontWeight: FontWeight.w700,),),
+        Expanded(
+          child: _BottomBarButton(
+            icon: Icons.build_rounded,
+            label: 'Service',
+            color: _kPink,
+            onTap: onServiceTap,
           ),
         ),
         const SizedBox(width: 8),
-        GestureDetector(
-          onTap: () => _launch(_waUri),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: const Color(0xFF25D366),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(
-                  color: const Color(0xFF25D366).withValues(alpha: 0.4),
-                  blurRadius: 10,),],
-            ),
-            child: Text('💬  WA', style: GoogleFonts.outfit(
-                color: Colors.white, fontSize: 13,
-                fontWeight: FontWeight.w700,),),
+        Expanded(
+          child: _BottomBarButton(
+            icon: Icons.settings_suggest_rounded,
+            label: 'Old Spares',
+            color: _kGold,
+            onTap: () => _whatsAppEnquiry(
+                "Hi, I'm looking for old/spare car parts. Please share availability.",),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _BottomBarButton(
+            icon: Icons.event_available_rounded,
+            label: 'Appointment',
+            color: _kGreen,
+            onTap: () => _whatsAppEnquiry(
+                "Hi, I'd like to book a car service appointment.",),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _BottomBarButton(
+            icon: Icons.call_rounded,
+            label: 'Call',
+            color: const Color(0xFF25D366),
+            onTap: () => _launch(_telUri),
           ),
         ),
       ],),
+    );
+  }
+}
+
+class _BottomBarButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  const _BottomBarButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.5)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.outfit(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

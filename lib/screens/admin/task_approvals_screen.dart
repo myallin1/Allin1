@@ -6,6 +6,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/app_palette.dart';
 
 class TaskApprovalsScreen extends StatefulWidget {
   const TaskApprovalsScreen({super.key});
@@ -16,23 +17,16 @@ class TaskApprovalsScreen extends StatefulWidget {
 
 class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
   // ── Theme ────────────────────────────────────────────────────
-  static const Color _bg = Color(0xFF0A0A12);
-  static const Color _surface = Color(0xFF12121E);
-  static const Color _card = Color(0xFF1A1A2A);
-  static const Color _purple = Color(0xFF6C63FF);
-  static const Color _green = Color(0xFF00C853);
-  static const Color _gold = Color(0xFFFFBB00);
-  static const Color _red = Color(0xFFFF5252);
-  static const Color _text = Color(0xFFEEEEF5);
-  static const Color _muted = Color(0xFF7777A0);
+// Theme colors are now sourced from shared app_palette.dart via syncAppPalette(context);
   static const Color _border = Color(0x1AFFFFFF);
 
   int _selectedTab = 0;
 
   @override
   Widget build(BuildContext context) {
+    syncAppPalette(context);
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: kBg,
       appBar: _buildAppBar(),
       body: _selectedTab == 0 ? _buildCustomerTasks() : _buildHeroReport(),
     );
@@ -41,7 +35,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
   // ── App Bar ─────────────────────────────────────────────────
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: _surface,
+      backgroundColor: kSurface,
       title: Row(
         children: [
           const Text('📋', style: TextStyle(fontSize: 18)),
@@ -49,7 +43,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
           Text(
             'Task Approvals',
             style: GoogleFonts.outfit(
-              color: _text,
+              color: kText,
               fontWeight: FontWeight.w800,
               fontSize: 17,
             ),
@@ -69,7 +63,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     decoration: BoxDecoration(
                       color: _selectedTab == 0
-                          ? _purple.withValues(alpha: 0.2)
+                          ? kPink.withValues(alpha: 0.2)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -77,7 +71,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                       child: Text(
                         '🛒 Customer Tasks',
                         style: TextStyle(
-                          color: _selectedTab == 0 ? _purple : _muted,
+                          color: _selectedTab == 0 ? kPink : kMuted,
                           fontWeight: FontWeight.w700,
                           fontSize: 13,
                         ),
@@ -94,7 +88,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     decoration: BoxDecoration(
                       color: _selectedTab == 1
-                          ? _green.withValues(alpha: 0.2)
+                          ? kGreen.withValues(alpha: 0.2)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -102,7 +96,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                       child: Text(
                         '🏍️ Hero Report',
                         style: TextStyle(
-                          color: _selectedTab == 1 ? _green : _muted,
+                          color: _selectedTab == 1 ? kGreen : kMuted,
                           fontWeight: FontWeight.w700,
                           fontSize: 13,
                         ),
@@ -131,7 +125,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
-            child: CircularProgressIndicator(color: _purple),
+            child: CircularProgressIndicator(color: kPink),
           );
         }
 
@@ -147,14 +141,14 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                   'No pending tasks!',
                   style: GoogleFonts.outfit(
                     fontSize: 16,
-                    color: _text,
+                    color: kText,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 8),
                 const Text(
                   'All caught up. Great job!',
-                  style: TextStyle(fontSize: 12, color: _muted),
+                  style: TextStyle(fontSize: 12, color: kMuted),
                 ),
               ],
             ),
@@ -182,9 +176,9 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: _card,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _gold.withValues(alpha: 0.3)),
+                color: kCard,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kGold.withValues(alpha: 0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -196,7 +190,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: _purple.withValues(alpha: 0.15),
+                          color: kPink.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Center(
@@ -207,7 +201,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
-                              color: _purple,
+                              color: kPink,
                             ),
                           ),
                         ),
@@ -221,7 +215,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                               userName,
                               style: const TextStyle(
                                 fontSize: 14,
-                                color: _text,
+                                color: kText,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -229,7 +223,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                               userEmail,
                               style: const TextStyle(
                                 fontSize: 11,
-                                color: _muted,
+                                color: kMuted,
                               ),
                             ),
                           ],
@@ -243,9 +237,9 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: _surface,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _border),
+                      color: kSurface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: kBorder),
                     ),
                     child: Row(
                       children: [
@@ -256,9 +250,9 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                               Text(
                                 adTitle,
                                 style: const TextStyle(
-                                  fontSize: 12,
-                                  color: _text,
-                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                  color: kText,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -266,7 +260,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                                 '🪙 $coinsReward coins',
                                 style: const TextStyle(
                                   fontSize: 11,
-                                  color: _gold,
+                                  color: kGold,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
@@ -277,7 +271,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                           time,
                           style: const TextStyle(
                             fontSize: 10,
-                            color: _muted,
+                            color: kMuted,
                           ),
                         ),
                       ],
@@ -291,7 +285,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                       Expanded(
                         child: ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: _green,
+                            backgroundColor: kGreen,
                             foregroundColor: Colors.white,
                             minimumSize: const Size(0, 42),
                             shape: RoundedRectangleBorder(
@@ -315,7 +309,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                       Expanded(
                         child: ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: _red,
+                            backgroundColor: kRed,
                             foregroundColor: Colors.white,
                             minimumSize: const Size(0, 42),
                             shape: RoundedRectangleBorder(
@@ -439,7 +433,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('❌ Task rejected. Coins refunded.'),
-            backgroundColor: _red,
+            backgroundColor: kRed,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -449,7 +443,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ Error: $e'),
-            backgroundColor: _red,
+            backgroundColor: kRed,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -469,7 +463,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
-            child: CircularProgressIndicator(color: _green),
+            child: CircularProgressIndicator(color: kGreen),
           );
         }
 
@@ -508,14 +502,14 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                   'No rides today',
                   style: GoogleFonts.outfit(
                     fontSize: 16,
-                    color: _text,
+                    color: kText,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 8),
                 const Text(
                   'Heroes will appear here once they start riding',
-                  style: TextStyle(fontSize: 12, color: _muted),
+                  style: TextStyle(fontSize: 12, color: kMuted),
                 ),
               ],
             ),
@@ -554,10 +548,10 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: _card,
-                    borderRadius: BorderRadius.circular(14),
+                    color: kCard,
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: isOnline ? _green.withValues(alpha: 0.3) : _border,
+                      color: isOnline ? kGreen.withValues(alpha: 0.3) : kBorder,
                     ),
                   ),
                   child: Column(
@@ -571,8 +565,8 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                             height: 40,
                             decoration: BoxDecoration(
                               color: isOnline
-                                  ? _green.withValues(alpha: 0.15)
-                                  : _muted.withValues(alpha: 0.15),
+                                  ? kGreen.withValues(alpha: 0.15)
+                                  : kMuted.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Center(
@@ -581,9 +575,9 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                                     ? captainName[0].toUpperCase()
                                     : 'H',
                                 style: TextStyle(
-                                  fontSize: 16,
+                                  fontSize: 18,
                                   fontWeight: FontWeight.w800,
-                                  color: isOnline ? _green : _muted,
+                                  color: isOnline ? kGreen : kMuted,
                                 ),
                               ),
                             ),
@@ -599,7 +593,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                                       captainName,
                                       style: const TextStyle(
                                         fontSize: 14,
-                                        color: _text,
+                                        color: kText,
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
@@ -608,7 +602,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                                       width: 8,
                                       height: 8,
                                       decoration: BoxDecoration(
-                                        color: isOnline ? _green : _muted,
+                                        color: isOnline ? kGreen : kMuted,
                                         shape: BoxShape.circle,
                                       ),
                                     ),
@@ -617,8 +611,8 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                                 Text(
                                   captainEmail,
                                   style: const TextStyle(
-                                    fontSize: 11,
-                                    color: _muted,
+                                    fontSize: 10,
+                                    color: kMuted,
                                   ),
                                 ),
                               ],

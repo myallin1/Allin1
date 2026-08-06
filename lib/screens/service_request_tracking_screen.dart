@@ -15,6 +15,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../utils/service_request_labels.dart';
+import '../widgets/delivery_challan_card.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
 const Color _kBg = Color(0xFFFFFFFF);
@@ -92,12 +93,19 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
               final currentIndex = serviceRequestStatusIndex(status);
               final isAdminReview = status == 'admin_review';
 
+              // Merge the live (possibly RTDB-overlaid) status into the
+              // data map handed to DeliveryChallanCard so its embedded
+              // TrackingTimeline reflects the same status this screen's
+              // own stepper shows, not a stale Firestore-only value.
+              final mergedData = {...data, 'status': status};
+
               return _buildBody(
                 context,
                 isAdminReview: isAdminReview,
                 heroName: heroName,
                 heroPhone: heroPhone,
                 currentIndex: currentIndex,
+                requestData: mergedData,
               );
             },
           );
@@ -112,6 +120,7 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
     required String? heroName,
     required String? heroPhone,
     required int currentIndex,
+    required Map<String, dynamic> requestData,
   }) {
     final labels = serviceRequestLabelsFor(requestType);
     return SingleChildScrollView(
@@ -119,6 +128,7 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                DeliveryChallanCard(requestData: requestData, requestId: requestId),
                 if (isAdminReview)
                   Container(
                     width: double.infinity,

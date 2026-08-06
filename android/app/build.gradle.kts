@@ -18,6 +18,12 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
+    // NEW (CTO mandate — Naming Standardization): already the exact
+    // shared prefix of the new com.njtech.allin1.<role> applicationId
+    // family below (customer/hero/admin/seller) — no change needed here,
+    // it just generates R/BuildConfig classes and doesn't need to equal
+    // any single flavor's applicationId, but this value already lines up
+    // logically with the new structure.
     namespace = "com.njtech.allin1"
     // FIX (build failure): receive_sharing_intent compiles against
     // Android SDK 37 -- Flutter refuses to build unless our own
@@ -40,7 +46,11 @@ android {
     }
 
     defaultConfig {
-        // Matches google-services.json — change after adding allin1 app in Firebase Console
+        // NEW (CTO mandate — Naming Standardization): every flavor below
+        // now overrides this with its own com.njtech.allin1.<role>
+        // applicationId, so this base value is never what actually ships
+        // — it only matters as the fallback/namespace-adjacent default.
+        // Kept aligned with the new dot-notation family on purpose.
         applicationId = "com.njtech.allin1"
         minSdk = flutter.minSdkVersion
         targetSdk = 36
@@ -49,27 +59,39 @@ android {
         multiDexEnabled = true
     }
 
+    // NEW (CTO mandate — Naming Standardization): all 4 flavors renamed
+    // from the old, inconsistent com.njtech.<role>allin1 pattern
+    // (myallin1 / heroallin1 / admininallin1 / sellerallin1 — the admin
+    // one even had a stray extra "in") to a single uniform
+    // com.njtech.allin1.<role> dot-notation family, matching `namespace`
+    // below. None of these 4 apps are live on the Play Store yet, so
+    // this is a clean rename with no existing installs to migrate.
+    // CTO will register these exact 4 new package names in Firebase
+    // Console and replace android/app/google-services.json himself —
+    // that file is intentionally NOT touched by this patch (a
+    // hand-edited google-services.json would be invalid; it must come
+    // from Firebase's own download).
     productFlavors {
         create("customer") {
             dimension = "app"
-            applicationId = "com.njtech.myallin1"
+            applicationId = "com.njtech.allin1.customer"
             manifestPlaceholders["appName"] = "my allin1"
         }
         create("hero") {
             dimension = "app"
-            applicationId = "com.njtech.heroallin1"
+            applicationId = "com.njtech.allin1.hero"
             manifestPlaceholders["appName"] = "hero allin1"
         }
         // Task 2: Admin flavor for assembleAdminRelease
         create("admin") {
             dimension = "app"
-            applicationId = "com.njtech.admininallin1"
+            applicationId = "com.njtech.allin1.admin"
             manifestPlaceholders["appName"] = "admin allin1"
         }
-        // NEW: Seller flavor for assembleSellerRelease (lib/main_seller.dart)
+        // Seller flavor for assembleSellerRelease (lib/main_seller.dart)
         create("seller") {
             dimension = "app"
-            applicationId = "com.njtech.sellerallin1"
+            applicationId = "com.njtech.allin1.seller"
             manifestPlaceholders["appName"] = "seller allin1"
         }
     }

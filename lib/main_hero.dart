@@ -53,11 +53,16 @@ Future<void> _ensureFirebaseInitialized() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
-    // Enable Firestore offline persistence
-    FirebaseFirestore.instance.settings = const Settings(
-      persistenceEnabled: true,
-      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-    );
+    // Enable Firestore offline persistence on web (PWA). Mobile
+    // (Android/iOS) already has persistence on by default, so this is
+    // guarded to web only; a capped 50MB cache (CTO-specified) keeps
+    // browser storage bounded instead of unlimited.
+    if (kIsWeb) {
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
+        cacheSizeBytes: 52428800, // 50MB
+      );
+    }
   } on FirebaseException catch (e) {
     if (e.code == 'duplicate-app') {
       debugPrint('[main_hero] Firebase already initialized, continuing.');
@@ -261,10 +266,12 @@ void _initGlobalHeroPingListener() {
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await _ensureFirebaseInitialized();
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true,
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-  );
+  if (kIsWeb) {
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: 52428800, // 50MB
+    );
+  }
   final rideId = _rideIdFromPushData(message.data);
   if (rideId != null) {
     // ✅ FIX: When app is KILLED, FCM already shows a system notification.

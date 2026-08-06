@@ -143,7 +143,19 @@ class _FoodOrderStatusCard extends StatelessWidget {
     } else {
       final shop = (details['restaurantOrPreference'] as String?)?.trim();
       title = (shop != null && shop.isNotEmpty) ? shop : 'Custom food order';
-      subtitle = (details['items'] as String?)?.trim() ?? '';
+      // details['items'] may now be the structured List<Map>
+      // {sNo, name, qty} shape (see quick_order_line_items.dart) or the
+      // legacy plain String — handle both.
+      final itemsRaw = details['items'];
+      if (itemsRaw is List) {
+        subtitle = itemsRaw
+            .whereType<Map>()
+            .map((it) => '${it['qty'] ?? ''} ${it['name'] ?? ''}'.trim())
+            .where((s) => s.isNotEmpty)
+            .join(', ');
+      } else {
+        subtitle = (itemsRaw as String?)?.trim() ?? '';
+      }
     }
 
     return InkWell(

@@ -25,6 +25,7 @@ import '../services/location_service.dart';
 import '../services/map_service.dart';
 import '../services/service_request_service.dart';
 import '../utils/service_request_labels.dart';
+import '../widgets/quick_order_line_items.dart';
 import '../widgets/server_busy_dialog.dart';
 import 'category_screen.dart';
 import 'food_order_status_screen.dart';
@@ -56,10 +57,25 @@ class CustomFoodOrderScreen extends StatefulWidget {
 
 class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
   late final _shopCtrl = TextEditingController(text: widget.initialShop ?? '');
-  late final _itemsCtrl = TextEditingController(text: widget.initialItems ?? '');
+  List<OrderLineItem> _lineItems = [OrderLineItem()];
   final _nameCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialItems?.trim();
+    if (initial != null && initial.isNotEmpty) {
+      final parsed = initial
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .map((s) => OrderLineItem(name: s))
+          .toList();
+      if (parsed.isNotEmpty) _lineItems = parsed;
+    }
+  }
 
   // ── Hotel-name autocomplete ("erode hotels touch aguramari" — same
   // suggestion mechanism as the bike-taxi From/To fields, via the
@@ -79,7 +95,6 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
   void dispose() {
     _shopDebounce?.cancel();
     _shopCtrl.dispose();
-    _itemsCtrl.dispose();
     _nameCtrl.dispose();
     _addressCtrl.dispose();
     super.dispose();
@@ -174,7 +189,8 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
   }
 
   Future<void> _placeOrder() async {
-    if (_shopCtrl.text.isEmpty || _itemsCtrl.text.isEmpty || _addressCtrl.text.isEmpty) {
+    final hasItems = _lineItems.any((it) => !it.isEmpty);
+    if (_shopCtrl.text.isEmpty || !hasItems || _addressCtrl.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill in the required details 🍔'), backgroundColor: Colors.red),
       );
@@ -192,7 +208,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
         customerName: _nameCtrl.text.trim().isNotEmpty ? _nameCtrl.text.trim() : (user.displayName ?? 'Customer'),
         customerPhone: user.phoneNumber ?? '',
         details: {
-          'items': _itemsCtrl.text.trim(),
+          'items': quickOrderItemsToJson(_lineItems),
           'restaurantOrPreference': _shopCtrl.text.trim(),
           'deliveryAddress': _addressCtrl.text.trim(),
           if (_selectedShop != null) 'shopAddress': _selectedShop!['address'],
@@ -212,7 +228,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
       // Clear the form so the just-placed order shows cleanly in the
       // "My Orders" list when the user taps back from tracking.
       _shopCtrl.clear();
-      _itemsCtrl.clear();
+      setState(() => _lineItems = [OrderLineItem()]);
       _addressCtrl.clear();
       _selectedShop = null;
       _deliveryLat = null;
@@ -406,7 +422,22 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
             ),
             const SizedBox(height: 24),
             _buildShopField(),
-            _buildField(label: 'What do you want to eat?', hint: 'e.g., 2 Chicken Biryani, 1 Coke...', ctrl: _itemsCtrl, lines: 3),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('What do you want to eat?', style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  QuickOrderLineItemsForm(
+                    items: _lineItems,
+                    itemLabel: 'Dish',
+                    qtyLabel: 'Qty',
+                    onChanged: (items) => setState(() => _lineItems = items),
+                  ),
+                ],
+              ),
+            ),
             _buildField(label: 'Your Name', hint: 'Enter your name', ctrl: _nameCtrl, icon: Icons.person_outline_rounded),
             _buildField(label: 'Delivery Location', hint: 'Enter your full address & landmark', ctrl: _addressCtrl, lines: 2, icon: Icons.location_on_outlined),
             _buildLocationButtons(),
@@ -601,7 +632,20 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
     final data = doc.data();
     final details = (data['details'] as Map<String, dynamic>?) ?? const {};
     final shop = (details['restaurantOrPreference'] as String?)?.trim();
-    final items = (details['items'] as String?)?.trim();
+    // Backward compat: 'items' used to be a plain String; now it's a
+    // List<Map> of {sNo, name, qty} line items (see
+    // quick_order_line_items.dart). Handle both shapes.
+    final itemsRaw = details['items'];
+    String? items;
+    if (itemsRaw is List) {
+      items = itemsRaw
+          .whereType<Map>()
+          .map((it) => '${it['qty'] ?? ''} ${it['name'] ?? ''}'.trim())
+          .where((s) => s.isNotEmpty)
+          .join(', ');
+    } else if (itemsRaw is String) {
+      items = itemsRaw.trim();
+    }
     final status = (data['status'] as String?) ?? 'pending';
     final statusColor = serviceRequestStatusColor(status);
     final statusLabel = serviceRequestStatusLabel('custom_food_order', status);

@@ -57,6 +57,11 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   late Animation<double> _foundFadeAnim;
   late Animation<Offset> _foundSlideAnim;
 
+  // NEW (audit fix — "customer phone not reaching Hero/Admin" bug):
+  // cached so both _createRideInRTDB() and _finalizeRideToFirestore()
+  // reuse one Firestore lookup instead of two.
+  String? _resolvedCustomerPhone;
+
   bool _captainFound = false;
   bool _cancelled = false;
   bool _searchTimedOut = false;
@@ -306,8 +311,43 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     }
   }
 
+  // FIX (audit: "customer avanga signup pannumbothu kudukura mobile
+  // number namma hero/admin ku wire agi irukanum" — customer-reported
+  // pipeline gap): this used to be `user.phoneNumber ?? user.email ??
+  // ''` inline at both write sites below — FirebaseAuth's own
+  // phoneNumber field is ONLY populated by actual phone-OTP auth, never
+  // by the mobile number a Google-Sign-In customer types in at
+  // customer_login_screen.dart's signup step (that number is written
+  // to Firestore users/{uid}.phoneNumber, with .phone kept in sync).
+  // So every Google-Sign-In customer's ride request carried an EMPTY
+  // phone (or their email, which isn't a phone number at all) into
+  // active_ride_requests (RTDB) and the rides Firestore doc — meaning
+  // the Hero's "call customer" button and Admin's order-detail screen
+  // both had nothing to call. Matches the same Firestore-first, Auth-
+  // field-fallback pattern already used correctly elsewhere in this
+  // app (bike_booking_screen.dart, ride_tracking_screen.dart).
+  Future<String> _resolveCustomerPhone(User user) async {
+    if (_resolvedCustomerPhone != null && _resolvedCustomerPhone!.isNotEmpty) {
+      return _resolvedCustomerPhone!;
+    }
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final data = doc.data();
+      final phone = (data?['phoneNumber'] as String?)?.trim();
+      final phoneAlt = (data?['phone'] as String?)?.trim();
+      final resolved = (phone != null && phone.isNotEmpty)
+          ? phone
+          : (phoneAlt != null && phoneAlt.isNotEmpty ? phoneAlt : (user.phoneNumber ?? ''));
+      _resolvedCustomerPhone = resolved;
+      return resolved;
+    } catch (_) {
+      return user.phoneNumber ?? '';
+    }
+  }
+
   Future<void> _createRideInRTDB(User user) async {
     try {
+      final customerPhone = await _resolveCustomerPhone(user);
       if (_rideDocId.isEmpty) {
         final firestoreRef = FirebaseFirestore.instance.collection('rides').doc();
         _rideDocId = firestoreRef.id;
@@ -324,7 +364,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       await ref.set({
         'customerId': user.uid,
         'customerName': user.displayName ?? 'Customer',
-        'customerPhone': user.phoneNumber ?? user.email ?? '',
+        'customerPhone': customerPhone,
         'firestoreDocId': _rideDocId,
         'pickupAddress': widget.ride.pickupAddress ?? '',
         'dropAddress': widget.ride.dropAddress ?? '',
@@ -532,6 +572,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       final heroName = requestData['acceptedHeroName'] as String? ?? 'Hero Rider';
       final heroPhone = requestData['acceptedHeroPhone'] as String? ?? '';
       final heroVehicle = requestData['acceptedHeroVehicle'] as String? ?? '';
+      final customerPhone = await _resolveCustomerPhone(user);
 
       if (_rideDocId.isEmpty) {
         debugPrint('❌ [CRITICAL ERROR] _finalizeRideToFirestore called with empty _rideDocId — aborting!');
@@ -547,7 +588,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         'estimatedFare': widget.ride.estimatedFare ?? widget.ride.fare ?? 0,
         'status': 'accepted',
         'customerId': user.uid,
-        'customerPhone': user.phoneNumber ?? user.email ?? '',
+        'customerPhone': customerPhone,
         'customerName': user.displayName ?? 'Customer',
         'heroId': acceptedHeroId,
         'heroName': heroName,

@@ -147,6 +147,15 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
   String? _selectedCity;
   bool _detectingCity = false;
 
+  // FIX (CTO critical-bug mandate — Hero onboarding pipeline): before
+  // this, a GPS/location-permission failure left _selectedCity null
+  // FOREVER with only a "please enable GPS and try again" snackbar as
+  // the way out — and _submitRegistration() hard-blocks on
+  // _selectedCity == null, so a hero who denied location permission
+  // (or is on a device/browser where GPS is flaky, e.g. web/PWA) could
+  // never submit at all. Now offers a manual city picker as an
+  // explicit fallback whenever auto-detect fails, so the form can
+  // always be completed.
   Future<void> _detectCity() async {
     setState(() => _detectingCity = true);
     try {
@@ -154,8 +163,9 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       if (position == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not get your location. Please enable GPS and try again.'), backgroundColor: _red),
+            const SnackBar(content: Text('Could not get your location. Pick your city manually instead.'), backgroundColor: _red),
           );
+          await _pickCityManually();
         }
         return;
       }
@@ -176,6 +186,47 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       }
     } finally {
       if (mounted) setState(() => _detectingCity = false);
+    }
+  }
+
+  /// Manual fallback for city selection — reachable automatically when
+  /// GPS detection fails, and also directly via a "Choose manually"
+  /// link next to the city tile, so a hero is never stuck waiting on
+  /// GPS to complete registration.
+  Future<void> _pickCityManually() async {
+    if (!mounted) return;
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: _bg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Text(
+                'Select your city',
+                style: GoogleFonts.outfit(color: _text, fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              ...kSupportedCities.map(
+                (c) => ListTile(
+                  title: Text(c.label, style: GoogleFonts.outfit(color: _text)),
+                  trailing: _selectedCity == c.slug ? const Icon(Icons.check_circle_rounded, color: _njPink) : null,
+                  onTap: () => Navigator.pop(sheetContext, c.slug),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (chosen != null && mounted) {
+      setState(() => _selectedCity = chosen);
     }
   }
   String? _selectedVehicleType;
@@ -352,6 +403,20 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
   // us; CloudinaryUploadService's targetBytes below compresses further
   // to a small, storage-friendly size, matching the CTO's "compressed"
   // requirement.
+  // FIX (CTO critical-bug mandate — Hero onboarding pipeline): the old
+  // version only ever tried ImageSource.camera and, on ANY failure
+  // (permission denied on native, getUserMedia blocked on web/PWA —
+  // e.g. no HTTPS, or the page loaded inside an iframe without
+  // Permissions-Policy: camera), showed a raw exception string and left
+  // _selfieBytes null forever. Since _submitRegistration() hard-blocks
+  // submission until _selfieBytes is set, a camera failure silently
+  // made the ENTIRE form unsubmittable — this is bug #1 and #2 from the
+  // same root cause. Now: try the camera first (still the default, so a
+  // genuine live selfie is preferred for facial-comparison KYC), and if
+  // that throws for ANY reason, automatically fall back to the gallery/
+  // file picker so the hero can still supply a photo and finish
+  // registering, with a clear snackbar explaining what happened instead
+  // of a raw error string.
   Future<void> _captureSelfie() async {
     try {
       final picked = await ImagePicker().pickImage(
@@ -368,9 +433,45 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
         _selfieFileName = picked.name;
       });
     } catch (e) {
+      debugPrint('[HeroRegister] camera capture failed, falling back to gallery: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open camera: $e'), backgroundColor: _red),
+        SnackBar(
+          content: Text(
+            kIsWeb
+                ? 'Camera not available in this browser/view. Pick a photo instead.'
+                : 'Camera permission was denied. Pick a photo from your gallery instead.',
+          ),
+          backgroundColor: _red,
+        ),
+      );
+      await _pickSelfieFromGallery();
+    }
+  }
+
+  /// Fallback path for _captureSelfie(): opens the plain gallery/file
+  /// picker (same mechanism _pickDocPhoto uses) so a hero whose camera
+  /// is unreachable can still complete registration. Also reachable
+  /// directly via a "Choose from gallery" tap on the selfie tile, not
+  /// just as an automatic fallback.
+  Future<void> _pickSelfieFromGallery() async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 70,
+        maxWidth: 1024,
+      );
+      if (picked == null) return; // hero cancelled the picker too
+      final bytes = await picked.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _selfieBytes = bytes;
+        _selfieFileName = picked.name;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not pick a photo: $e'), backgroundColor: _red),
       );
     }
   }
@@ -458,7 +559,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     }
     if (_selectedCity == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please tap "Use my current location" first.'), backgroundColor: _red),
+        const SnackBar(content: Text('Please set your city first — tap the location button or "Choose city manually".'), backgroundColor: _red),
       );
       return;
     }
@@ -763,6 +864,20 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                   _selfieBytes = null;
                   _selfieFileName = null;
                 }),
+              )
+            else
+              // FIX (CTO critical-bug mandate): an explicit manual
+              // fallback for a hero whose camera is blocked (permission
+              // denied, no HTTPS, iframed PWA, etc.) — they don't have
+              // to wait for the camera to fail first; they can go
+              // straight to the gallery/file picker.
+              TextButton(
+                onPressed: _pickSelfieFromGallery,
+                style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
+                child: Text(
+                  'Gallery',
+                  style: GoogleFonts.outfit(color: _njPink, fontSize: 11, fontWeight: FontWeight.w700),
+                ),
               ),
           ],
         ),
@@ -987,7 +1102,22 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              // FIX (CTO critical-bug mandate): manual fallback, always
+              // visible — a hero doesn't have to wait for GPS to fail
+              // first if they already know location access won't work
+              // (denied earlier, no GPS on this device, restricted PWA
+              // context, etc.).
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _pickCityManually,
+                  child: Text(
+                    'Choose city manually',
+                    style: GoogleFonts.outfit(color: _njPink, fontSize: 11, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
               // FIX: work-area interest field, per Nizam's request — lets
               // a hero say where in Erode they want to work (keywords,
               // e.g. "Perundurai, Bhavani Road, Erode Town"), shown to

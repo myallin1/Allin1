@@ -24,6 +24,7 @@ import '../services/service_request_service.dart';
 import '../services/shared_location_inbox.dart';
 import '../utils/location_link_parser.dart';
 import '../utils/service_request_labels.dart';
+import '../widgets/quick_order_line_items.dart';
 import '../widgets/server_busy_dialog.dart';
 import 'hero_booking_status_screen.dart';
 import 'hero_booking_tracking_screen.dart';
@@ -62,7 +63,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
   late String _selectedCategory;
   final _fromLocationCtrl = TextEditingController();
   final _locationCtrl = TextEditingController();
-  final _taskDescCtrl = TextEditingController();
+  List<OrderLineItem> _lineItems = [OrderLineItem()];
   final _instructionsCtrl = TextEditingController();
   bool _showMoreDetails = false;
   String _timingMode = 'asap'; // 'asap' | 'scheduled'
@@ -243,7 +244,6 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
   void dispose() {
     _fromLocationCtrl.dispose();
     _locationCtrl.dispose();
-    _taskDescCtrl.dispose();
     _instructionsCtrl.dispose();
     _fromDebounce?.cancel();
     _locationDebounce?.cancel();
@@ -475,7 +475,8 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
   }
 
   Future<void> _submit() async {
-    if (_taskDescCtrl.text.trim().isEmpty) {
+    final hasTask = _lineItems.any((it) => !it.isEmpty);
+    if (!hasTask) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please describe your task first!'), backgroundColor: Colors.red),
       );
@@ -484,6 +485,14 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
+
+    // Human-readable join of item names, kept for backward compat with
+    // hero_booking_tracking_screen.dart and requestSummary() which both
+    // still read details['taskDescription'] directly as a String.
+    final taskDescriptionJoined = _lineItems
+        .where((it) => !it.isEmpty)
+        .map((it) => [it.name.trim(), it.qty.trim()].where((s) => s.isNotEmpty).join(' '))
+        .join(', ');
 
     setState(() => _submitting = true);
     try {
@@ -494,7 +503,8 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         customerPhone: user.phoneNumber ?? '',
         details: {
           'category': _selectedCategory,
-          'taskDescription': _taskDescCtrl.text.trim(),
+          'taskDescription': taskDescriptionJoined,
+          'items': quickOrderItemsToJson(_lineItems),
           if (_isPickupDelivery && _fromLocationCtrl.text.trim().isNotEmpty)
             'fromLocation': _fromLocationCtrl.text.trim(),
           // Coordinates are only present when the customer picked a
@@ -647,12 +657,13 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
             const SizedBox(height: 16),
 
             // ── 3. Brief task description ─────────────────────────
-            Text('Brief description', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
+            Text('What do you need done?', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
-            _voiceTextField(
-              controller: _taskDescCtrl,
-              hint: 'e.g., Collect my parcel and deliver it home',
-              maxLines: 1,
+            QuickOrderLineItemsForm(
+              items: _lineItems,
+              itemLabel: 'Task',
+              qtyLabel: 'Qty',
+              onChanged: (items) => setState(() => _lineItems = items),
             ),
             const SizedBox(height: 10),
 

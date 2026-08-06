@@ -16,6 +16,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/service_request_service.dart';
+import '../../services/service_requests_listener.dart';
 import '../../widgets/order_photo_gallery.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
@@ -52,25 +53,69 @@ String requestTypeLabel(String requestType) {
   }
 }
 
+// NEW: shared helper — details['items'] may now be a structured
+// List<Map> of {sNo, name, qty} line items (see
+// quick_order_line_items.dart), replacing the old free-text paragraph
+// fields on grocery/custom_food/hero_booking. Renders them as
+// "qty name, qty name, ..." Returns null (not empty string) when
+// details['items'] isn't a List, so callers can fall back to whatever
+// legacy string field that request type used to use.
+String? _itemsListSummary(Map<String, dynamic> details) {
+  final raw = details['items'];
+  if (raw is! List) return null;
+  final joined = raw
+      .whereType<Map>()
+      .map((it) => [
+            // 'qty' for the {sNo, name, qty} shape (grocery/custom_food/
+            // hero_booking); 'quantity' for the priced-cart shape
+            // ({itemId, name, price, quantity, total}) used by
+            // catalog_food_order and custom_hotel_order — handle both
+            // so this one summary helper works for every requestType.
+            (it['qty'] ?? it['quantity'] ?? '').toString().trim(),
+            (it['name'] ?? '').toString().trim(),
+          ].where((s) => s.isNotEmpty).join(' '))
+      .where((s) => s.isNotEmpty)
+      .join(', ');
+  return joined;
+}
+
 // Public — also used by admin_service_requests_screen.dart.
 String requestSummary(String requestType, Map<String, dynamic> details) {
   switch (requestType) {
     case 'hero_booking':
+      final itemsSummary = _itemsListSummary(details);
+      if (itemsSummary != null && itemsSummary.isNotEmpty) return itemsSummary;
       return (details['taskDescription'] as String?) ?? '';
     case 'custom_order':
       return (details['orderDescription'] as String?) ?? '';
     case 'custom_food_order':
-      final items = (details['items'] as String?) ?? '';
+      final itemsSummary = _itemsListSummary(details);
+      final items = itemsSummary ?? (details['items'] as String?) ?? '';
       final pref = (details['restaurantOrPreference'] as String?) ?? '';
       return [if (pref.isNotEmpty) 'From: $pref', if (items.isNotEmpty) items].join(' — ');
     case 'grocery_order':
-      final text = (details['listText'] as String?) ?? '';
+      final itemsSummary = _itemsListSummary(details);
+      final text = (itemsSummary != null && itemsSummary.isNotEmpty)
+          ? itemsSummary
+          : (details['listText'] as String?) ?? '';
       final hasImage = (details['listImageUrl'] as String?)?.isNotEmpty ?? false;
       return [if (text.isNotEmpty) text, if (hasImage) '📷 Photo list attached'].join(' — ');
     case 'electronics_service':
       final catLabel = (details['categoryLabel'] as String?) ?? '';
       final issue = (details['issue'] as String?) ?? '';
       return [if (catLabel.isNotEmpty) catLabel, if (issue.isNotEmpty) issue].join(' — ');
+    // NEW (Custom Hotel Order consistency pass): details['items'] is
+    // the same priced-cart List shape catalog_food_order uses — reuse
+    // _itemsListSummary (now quantity/price-aware, see above) rather
+    // than the old plain-String 'items' field this requestType used to
+    // write before this pass.
+    case 'custom_hotel_order':
+      final itemsSummary = _itemsListSummary(details);
+      final hotelName = (details['hotelName'] as String?) ?? '';
+      final items = (itemsSummary != null && itemsSummary.isNotEmpty)
+          ? itemsSummary
+          : (details['items'] as String?) ?? '';
+      return [if (hotelName.isNotEmpty) 'From: $hotelName', if (items.isNotEmpty) items].join(' — ');
     default:
       return '';
   }
@@ -126,14 +171,36 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
 
   void _listenToNewOrders() {
     _pendingReviewSub?.cancel();
-    _pendingReviewSub = FirebaseFirestore.instance
-        .collection('service_requests')
-        .where('status', isEqualTo: 'admin_review')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .listen(
+    // Sourced from the shared singleton (see service_requests_listener.dart)
+    // instead of opening its own .where('status', isEqualTo: 'admin_review')
+    // .orderBy('createdAt') listener -- this is the SAME real Firestore
+    // listener SuperAdminHomeScreen already has open (this screen is pushed
+    // on top of it, which stays alive underneath). The shared stream is a
+    // broadcast stream that stays live regardless of this subscriber's
+    // pause state, but this screen's OWN .listen() subscription below is
+    // still cancelled/restarted on lifecycle changes exactly as before, so
+    // nothing leaks while backgrounded.
+    //
+    // Filtering to admin_review and sorting by createdAt both move
+    // client-side here since the shared stream can't carry either
+    // constraint server-side without narrowing it back down to a
+    // single-screen-specific query (the whole point of sharing it).
+    _pendingReviewSub =
+        ServiceRequestsListener.instance.waitingAndReviewStream.listen(
       (snapshot) {
-        if (mounted) setState(() => _pendingReview = snapshot.docs);
+        final filtered = snapshot.docs
+            .where((d) => d.data()['status'] == 'admin_review')
+            .toList()
+          ..sort((a, b) {
+            final aTs = a.data()['createdAt'];
+            final bTs = b.data()['createdAt'];
+            if (aTs == null && bTs == null) return 0;
+            if (aTs == null) return 1;
+            if (bTs == null) return -1;
+            // Timestamp implements Comparable<Timestamp>.
+            return (bTs as Comparable).compareTo(aTs);
+          });
+        if (mounted) setState(() => _pendingReview = filtered);
       },
       onError: (Object e) {
         debugPrint('[AdminNewOrders] Pending-review listener error: $e');

@@ -1,7 +1,9 @@
 // lib/main_seller.dart
 // Allin1 — SELLER App Entry Point (Food/E-commerce Pipeline)
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -48,6 +50,16 @@ void main() async {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
+      // Enable Firestore offline persistence on web (PWA). Mobile
+      // (Android/iOS) already has persistence on by default, so this
+      // is guarded to web only; a capped 50MB cache (CTO-specified)
+      // keeps browser storage bounded instead of unlimited.
+      if (kIsWeb) {
+        FirebaseFirestore.instance.settings = const Settings(
+          persistenceEnabled: true,
+          cacheSizeBytes: 52428800, // 50MB
+        );
+      }
       DbUsageTracker.instance.init('seller');
       // NOTE (boot-flicker audit, per Nizam's request to mirror the fix
       // across all 4 apps): unlike main_customer.dart/main_hero.dart/

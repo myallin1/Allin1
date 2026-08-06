@@ -8,9 +8,17 @@
 // Customer app reads these live via a StreamBuilder, so any change
 // here reflects immediately in the customer Rewards screen.
 // ================================================================
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
+import 'package:latlong2/latlong.dart';
+
+import '../../services/cloudinary_upload_service.dart';
+import '../location_picker_screen.dart';
 
 const Color _bg = Color(0xFF0F0B14);
 const Color _surface = Color(0xFF1B1524);
@@ -85,6 +93,8 @@ class _OfferAdminCard extends StatelessWidget {
     final offerPercent = data['offerPercent'];
     final active = (data['active'] as bool?) ?? true;
     final validTill = data['validTill'];
+    final imageUrl = data['imageUrl'] as String?;
+    final hasLocation = data['lat'] != null && data['lng'] != null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -102,12 +112,17 @@ class _OfferAdminCard extends StatelessWidget {
             decoration: BoxDecoration(
               gradient: const LinearGradient(colors: [_pink, _purple]),
               borderRadius: BorderRadius.circular(14),
+              image: (imageUrl != null && imageUrl.isNotEmpty)
+                  ? DecorationImage(image: NetworkImage(imageUrl), fit: BoxFit.cover)
+                  : null,
             ),
             alignment: Alignment.center,
-            child: Text(
-              offerPercent != null ? '$offerPercent%' : '—',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12),
-            ),
+            child: (imageUrl != null && imageUrl.isNotEmpty)
+                ? null
+                : Text(
+                    offerPercent != null ? '$offerPercent%' : '—',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12),
+                  ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -119,6 +134,21 @@ class _OfferAdminCard extends StatelessWidget {
                 Text(
                   _formatValidTill(validTill),
                   style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    Icon(
+                      hasLocation ? Icons.location_on_rounded : Icons.location_off_rounded,
+                      size: 12,
+                      color: hasLocation ? const Color(0xFF00C853) : Colors.white38,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      hasLocation ? 'Map pin set' : 'No map pin',
+                      style: TextStyle(color: hasLocation ? const Color(0xFF00C853) : Colors.white38, fontSize: 10.5),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -202,9 +232,19 @@ class _OfferFormDialogState extends State<_OfferFormDialog> {
   late final TextEditingController _validTillCtrl;
   late final TextEditingController _addressCtrl;
   late final TextEditingController _phoneCtrl;
-  late final TextEditingController _latCtrl;
-  late final TextEditingController _lngCtrl;
   bool _saving = false;
+  bool _uploadingPhoto = false;
+
+  // NEW (CTO mandate — Erode Offers image + map pin): lat/lng are no
+  // longer hand-typed text fields — they're set by LocationPickerScreen
+  // (the same "drag map, drop pin" widget already used for hero
+  // bookings/custom hotel checkout elsewhere in the app), and the offer
+  // photo is uploaded via Cloudinary, same pattern as
+  // seller_custom_hotel_builder_screen.dart's item photos.
+  double? _lat;
+  double? _lng;
+  String? _imageUrl;
+  Uint8List? _pickedImageBytes;
 
   @override
   void initState() {
@@ -215,8 +255,9 @@ class _OfferFormDialogState extends State<_OfferFormDialog> {
     _validTillCtrl = TextEditingController(text: e?['validTill'] is String ? e!['validTill'] as String : '');
     _addressCtrl = TextEditingController(text: e?['address'] as String? ?? '');
     _phoneCtrl = TextEditingController(text: e?['phone'] as String? ?? '');
-    _latCtrl = TextEditingController(text: e?['lat']?.toString() ?? '');
-    _lngCtrl = TextEditingController(text: e?['lng']?.toString() ?? '');
+    _lat = (e?['lat'] as num?)?.toDouble();
+    _lng = (e?['lng'] as num?)?.toDouble();
+    _imageUrl = e?['imageUrl'] as String?;
   }
 
   @override
@@ -226,25 +267,73 @@ class _OfferFormDialogState extends State<_OfferFormDialog> {
     _validTillCtrl.dispose();
     _addressCtrl.dispose();
     _phoneCtrl.dispose();
-    _latCtrl.dispose();
-    _lngCtrl.dispose();
     super.dispose();
+  }
+
+  Uint8List? _compress(Uint8List bytes) {
+    try {
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) return null;
+      final resized = decoded.width > 900 ? img.copyResize(decoded, width: 900) : decoded;
+      return Uint8List.fromList(img.encodeJpg(resized, quality: 78));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _pickPhoto() async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
+    final bytes = result?.files.single.bytes;
+    if (bytes == null) return;
+    setState(() => _pickedImageBytes = _compress(bytes) ?? bytes);
+  }
+
+  Future<void> _pickLocation() async {
+    final picked = await Navigator.of(context).push<PickedLocation>(
+      MaterialPageRoute<PickedLocation>(
+        builder: (_) => LocationPickerScreen(
+          title: 'Pin the shop\'s location',
+          initialCenter: (_lat != null && _lng != null) ? LatLng(_lat!, _lng!) : null,
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _lat = picked.lat;
+      _lng = picked.lng;
+      // Only auto-fill the address field if the admin hasn't already
+      // typed one — never silently overwrite a manually-entered address.
+      if (_addressCtrl.text.trim().isEmpty) {
+        _addressCtrl.text = picked.name;
+      }
+    });
   }
 
   Future<void> _save() async {
     if (_shopNameCtrl.text.trim().isEmpty) return;
     setState(() => _saving = true);
-    final data = <String, dynamic>{
-      'shopName': _shopNameCtrl.text.trim(),
-      'offerPercent': num.tryParse(_offerPercentCtrl.text.trim()),
-      'validTill': _validTillCtrl.text.trim(),
-      'address': _addressCtrl.text.trim(),
-      'phone': _phoneCtrl.text.trim(),
-      'lat': double.tryParse(_latCtrl.text.trim()),
-      'lng': double.tryParse(_lngCtrl.text.trim()),
-      'active': widget.existing?['active'] as bool? ?? true,
-    };
     try {
+      var imageUrl = _imageUrl;
+      if (_pickedImageBytes != null) {
+        setState(() => _uploadingPhoto = true);
+        imageUrl = await CloudinaryUploadService().uploadImageBytes(
+          _pickedImageBytes!,
+          fileName: 'erode_offer_${DateTime.now().millisecondsSinceEpoch}.jpg',
+          folder: 'erode_offers',
+        );
+        if (mounted) setState(() => _uploadingPhoto = false);
+      }
+      final data = <String, dynamic>{
+        'shopName': _shopNameCtrl.text.trim(),
+        'offerPercent': num.tryParse(_offerPercentCtrl.text.trim()),
+        'validTill': _validTillCtrl.text.trim(),
+        'address': _addressCtrl.text.trim(),
+        'phone': _phoneCtrl.text.trim(),
+        'lat': _lat,
+        'lng': _lng,
+        'imageUrl': imageUrl,
+        'active': widget.existing?['active'] as bool? ?? true,
+      };
       if (widget.offerId != null) {
         await FirebaseFirestore.instance.collection('erode_offers').doc(widget.offerId).update(data);
       } else {
@@ -252,6 +341,18 @@ class _OfferFormDialogState extends State<_OfferFormDialog> {
         await FirebaseFirestore.instance.collection('erode_offers').add(data);
       }
       if (mounted) Navigator.pop(context);
+    } catch (e) {
+      // FIX (root cause of "Erode Offers don't reach the customer app"):
+      // this was a bare try/finally before — any Firestore error
+      // (permission-denied being the actual live one) was silently
+      // swallowed, the dialog just closed as if it had saved, and
+      // Admin had no idea the offer was never written. Now surfaces the
+      // real error instead of failing silently.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save offer: $e'), backgroundColor: const Color(0xFFFF5252)),
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -266,13 +367,14 @@ class _OfferFormDialogState extends State<_OfferFormDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            _photoPicker(),
+            const SizedBox(height: 14),
             _field(_shopNameCtrl, 'Shop Name'),
             _field(_offerPercentCtrl, 'Offer %', keyboardType: TextInputType.number),
             _field(_validTillCtrl, 'Valid Till (e.g. 31 Aug 2026)'),
             _field(_addressCtrl, 'Address'),
             _field(_phoneCtrl, 'Phone Number', keyboardType: TextInputType.phone),
-            _field(_latCtrl, 'Latitude', keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true)),
-            _field(_lngCtrl, 'Longitude', keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true)),
+            _locationPicker(),
           ],
         ),
       ),
@@ -286,6 +388,70 @@ class _OfferFormDialogState extends State<_OfferFormDialog> {
               : const Text('Save'),
         ),
       ],
+    );
+  }
+
+  Widget _photoPicker() {
+    return GestureDetector(
+      onTap: _uploadingPhoto ? null : _pickPhoto,
+      child: Container(
+        width: double.infinity,
+        height: 120,
+        decoration: BoxDecoration(
+          color: const Color(0xFF120E18),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _pink.withValues(alpha: 0.25)),
+          image: _pickedImageBytes != null
+              ? DecorationImage(image: MemoryImage(_pickedImageBytes!), fit: BoxFit.cover)
+              : (_imageUrl != null && _imageUrl!.isNotEmpty)
+                  ? DecorationImage(image: NetworkImage(_imageUrl!), fit: BoxFit.cover)
+                  : null,
+        ),
+        alignment: Alignment.center,
+        child: (_pickedImageBytes == null && (_imageUrl == null || _imageUrl!.isEmpty))
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.add_photo_alternate_rounded, color: Colors.white54, size: 28),
+                  SizedBox(height: 6),
+                  Text('Add shop photo', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                ],
+              )
+            : _uploadingPhoto
+                ? const CircularProgressIndicator(color: _pink)
+                : Align(
+                    alignment: Alignment.bottomRight,
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                        child: const Icon(Icons.edit_rounded, color: Colors.white, size: 16),
+                      ),
+                    ),
+                  ),
+      ),
+    );
+  }
+
+  Widget _locationPicker() {
+    final hasLocation = _lat != null && _lng != null;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 4),
+      child: OutlinedButton.icon(
+        onPressed: _pickLocation,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: hasLocation ? const Color(0xFF00C853) : _pink,
+          side: BorderSide(color: hasLocation ? const Color(0xFF00C853) : _pink),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+        icon: Icon(hasLocation ? Icons.location_on_rounded : Icons.map_rounded),
+        label: Text(
+          hasLocation
+              ? 'Map pin set (${_lat!.toStringAsFixed(5)}, ${_lng!.toStringAsFixed(5)}) — tap to change'
+              : 'Pin shop location on map',
+        ),
+      ),
     );
   }
 

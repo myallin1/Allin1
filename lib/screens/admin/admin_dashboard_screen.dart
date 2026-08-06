@@ -15,6 +15,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/db_usage_tracker.dart';
+import '../../services/service_requests_listener.dart';
 import '../../widgets/manual_refresh_header.dart';
 import 'admin_detailed_reports_screen.dart';
 import 'admin_hero_dispatch_screen.dart';
@@ -97,7 +98,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   // Same caching reasoning as above — feeds the "New Orders" bottom-nav
   // badge, which (like the AppBar) is always mounted regardless of
   // which tab is selected (see _buildBottomNav()).
-  late final Stream<QuerySnapshot> _adminReviewCountStream;
+  // Sourced from the shared singleton (see
+  // service_requests_listener.dart) instead of opening its own
+  // .snapshots() -- this is the SAME real Firestore listener
+  // SuperAdminHomeScreen already has open (this screen is pushed on
+  // top of it, which stays alive underneath). This screen only wants
+  // the admin_review-status subset, so the badge below filters the
+  // shared stream's docs client-side instead of running a second
+  // server-side query.
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _adminReviewCountStream;
+
+  // Same caching reasoning — feeds the Rides tab list (_buildRidesList()).
+  // Previously constructed inline inside _buildRidesList(), which is
+  // called fresh from build() on every rebuild while the Rides tab is
+  // selected, tearing down and reopening a 100-doc listener each time.
+  late final Stream<QuerySnapshot> _ridesListStream;
 
   // FIX (per Nizam's request — cut auto-listeners, use manual refresh):
   // _buildStatCards() (rides, limit 200), _buildOnlineHeroes() (heroes),
@@ -139,9 +154,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         .collection('heroes')
         .where('approvalStatus', isEqualTo: 'pending')
         .snapshots();
-    _adminReviewCountStream = FirebaseFirestore.instance
-        .collection('service_requests')
-        .where('status', isEqualTo: 'admin_review')
+    _adminReviewCountStream =
+        ServiceRequestsListener.instance.waitingAndReviewStream;
+    _ridesListStream = FirebaseFirestore.instance
+        .collection('rides')
+        .orderBy('createdAt', descending: true)
+        .limit(100)
         .snapshots();
     _pendingSellerApprovalsStream = FirebaseFirestore.instance
         .collection('sellers')
@@ -154,7 +172,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     // streams — StreamBuilder above and this .listen() share the same
     // underlying query/watch). See lib/services/db_usage_tracker.dart.
     _pendingHeroApprovalsStream.listen((s) => DbUsageTracker.instance.recordRead(s.docs.length));
-    _adminReviewCountStream.listen((s) => DbUsageTracker.instance.recordRead(s.docs.length));
+    _adminReviewCountStream.listen((s) => DbUsageTracker.instance
+        .recordRead(s.docs.where((d) => d.data()['status'] == 'admin_review').length));
     _pendingSellerApprovalsStream.listen((s) => DbUsageTracker.instance.recordRead(s.docs.length));
 
     unawaited(_fetchStatCards());
@@ -167,10 +186,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Future<void> _fetchStatCards() async {
     if (mounted) setState(() => _statCardsLoading = true);
+    // Scope the query to just "today" instead of fetching the 200 most
+    // recent rides regardless of date and filtering client-side — bounds
+    // the read count to actual today's-ride volume, not a fixed 200 every
+    // open/refresh.
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    final endOfToday = startOfToday.add(const Duration(days: 1));
     final snap = await FirebaseFirestore.instance
         .collection('rides')
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfToday))
+        .where('createdAt', isLessThan: Timestamp.fromDate(endOfToday))
         .orderBy('createdAt', descending: true)
-        .limit(200)
+        .limit(300)
         .get();
     DbUsageTracker.instance.recordRead(snap.docs.length);
     if (!mounted) return;
@@ -855,10 +883,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     Positioned(
                       right: -6,
                       top: -4,
-                      child: StreamBuilder<QuerySnapshot>(
+                      child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                         stream: _adminReviewCountStream,
                         builder: (context, snap) {
-                          final count = snap.data?.docs.length ?? 0;
+                          // Shared stream covers pending+admin_review; this
+                          // badge only wants the admin_review subset, so
+                          // filter client-side instead of opening a second
+                          // server-side listener.
+                          final count = snap.data?.docs
+                                  .where((d) => d.data()['status'] == 'admin_review')
+                                  .length ??
+                              0;
                           if (count == 0) return const SizedBox.shrink();
                           return Container(
                             padding: const EdgeInsets.all(3),
@@ -1369,11 +1404,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   // ================================================================
   Widget _buildRidesList() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('rides')
-          .orderBy('createdAt', descending: true)
-          .limit(100)
-          .snapshots(),
+      stream: _ridesListStream,
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: _gold));

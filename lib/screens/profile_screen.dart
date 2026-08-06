@@ -3,6 +3,9 @@
 // Allin1 Super App - Allin1
 // ================================================================
 
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -78,8 +81,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _currentUser = user;
         _nameController.text = user.displayName ?? '';
         _emailController.text = user.email ?? '';
+        // FIX (audit: "mobile number view agala" — customer-reported
+        // bug): this used to read user.phoneNumber straight off the
+        // FirebaseAuth object, which is ONLY ever populated by actual
+        // phone-OTP auth. Every Google-Sign-In customer's real mobile
+        // number lives in Firestore (users/{uid}.phoneNumber, with
+        // .phone kept in sync — see customer_login_screen.dart's
+        // _signUpWithGoogle), never in FirebaseAuth's own phoneNumber
+        // field, so this field was blank for every Google-Sign-In
+        // customer even though the number was on file. Falls back to
+        // the Auth field too, in case a future phone-OTP flow does
+        // populate it directly.
         _phoneController.text = user.phoneNumber ?? '';
       });
+      unawaited(_loadPhoneFromFirestore(user.uid));
+    }
+  }
+
+  Future<void> _loadPhoneFromFirestore(String uid) async {
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final data = doc.data();
+      final phone = (data?['phoneNumber'] as String?)?.trim();
+      final phoneAlt = (data?['phone'] as String?)?.trim();
+      final resolved = (phone != null && phone.isNotEmpty)
+          ? phone
+          : (phoneAlt != null && phoneAlt.isNotEmpty ? phoneAlt : null);
+      if (resolved != null && mounted) {
+        setState(() => _phoneController.text = resolved);
+      }
+    } catch (_) {
+      // Non-fatal — the Auth-field fallback set above stays as-is.
     }
   }
 
@@ -167,8 +199,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 30),
               _buildInfoCard(),
               const SizedBox(height: 20),
-              _buildStatsCard(),
-              const SizedBox(height: 20),
+              // FIX (audit cleanup): removed — this "Activity Stats"
+              // card showed hardcoded fake numbers (24 rides, 156 km,
+              // ₹120 saved) for literally every customer, never backed
+              // by any real query. Misleading fabricated data is worse
+              // than no card at all; removed rather than left dummy.
+              // _buildStatsCard() and its _statItem() helper are left
+              // in place below, unused, in case a future mandate wants
+              // to wire them to real order-history counts.
               _buildAccountSection(),
             ],
           ),
@@ -380,84 +418,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildStatsCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            kPurple.withValues(alpha: 0.2),
-            kPurple2.withValues(alpha: 0.1),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kPurple.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.analytics_outlined, color: kPurple, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'Activity Stats',
-                style: GoogleFonts.outfit(
-                  color: kText,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              _statItem('Total Rides', '24', Icons.directions_bike),
-              _statItem('Distance', '156 km', Icons.route),
-              _statItem('Saved', '₹120', Icons.savings_outlined),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _statItem(String label, String value, IconData icon) {
-    return Expanded(
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: kPurple.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: kPurple, size: 24),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: GoogleFonts.outfit(
-              color: kText,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Text(
-            label,
-            style: GoogleFonts.outfit(
-              color: kMuted,
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildAccountSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -472,36 +432,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        _buildMenuItem(
-          icon: Icons.wallet_outlined,
-          title: 'Payment Methods',
-          subtitle: 'Manage UPI & cards',
-          onTap: () {},
-        ),
-        _buildMenuItem(
-          icon: Icons.location_on_outlined,
-          title: 'Saved Addresses',
-          subtitle: 'Home, Work, Other',
-          onTap: () {},
-        ),
-        _buildMenuItem(
-          icon: Icons.history,
-          title: 'Ride History',
-          subtitle: 'View all past rides',
-          onTap: () => Navigator.pushNamed(context, '/ride-history'),
-        ),
-        _buildMenuItem(
-          icon: Icons.directions_bike,
-          title: 'Captain Documents',
-          subtitle: 'Upload DL, RC, Aadhaar',
-          onTap: () => Navigator.pushNamed(context, '/captain-docs'),
-        ),
-        _buildMenuItem(
-          icon: Icons.help_outline,
-          title: 'Help & Support',
-          subtitle: 'FAQs, Contact us',
-          onTap: () {},
-        ),
+        // FIX (audit: "athulla iruka option dummy and unwanted ah
+        // iruku" — customer-reported cleanup request): removed 5 menu
+        // items. Payment Methods / Saved Addresses had dead no-op
+        // onTap: () {} handlers and don't correspond to any real
+        // feature anywhere in this app (not even the side drawer) —
+        // pure placeholders. Help & Support was also a no-op, but DOES
+        // duplicate a real, working drawer item (dashboard_screen.dart
+        // — WhatsApp support link). Ride History navigated to
+        // '/ride-history', a route never registered in
+        // main_customer.dart (would throw at runtime) — also a
+        // duplicate, since the drawer's real "Activity" item already
+        // opens RideHistoryScreen correctly. Captain Documents
+        // navigated to another unregistered route, '/captain-docs' —
+        // and is a Hero-app concept (DL/RC/Aadhaar upload) that had no
+        // business being in the Customer app's profile at all, looks
+        // like leftover copy-paste from a Hero screen. Kept Settings
+        // (real, working route) and Sign Out (real, fully wired) below
+        // — the only two that actually did something.
         _buildMenuItem(
           icon: Icons.settings_outlined,
           title: 'Settings',

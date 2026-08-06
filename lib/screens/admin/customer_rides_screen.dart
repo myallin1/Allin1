@@ -3,6 +3,8 @@
 // View all rides per customer, searchable by name or phone
 // Firestore: rides collection, filtered by customerId / customerName
 // ================================================================
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -27,9 +29,26 @@ class CustomerRidesScreen extends StatefulWidget {
 class _CustomerRidesScreenState extends State<CustomerRidesScreen> {
   final _searchCtrl = TextEditingController();
   String _query = '';
+  Timer? _debounce;
+
+  // Cached stream — created once in initState() so typing in the search
+  // box only re-filters the already-streamed snapshot client-side and
+  // does NOT tear down and re-subscribe to Firestore on every keystroke.
+  late final Stream<QuerySnapshot> _ridesStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _ridesStream = FirebaseFirestore.instance
+        .collection('rides')
+        .orderBy('createdAt', descending: true)
+        .limit(300)
+        .snapshots();
+  }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -69,7 +88,14 @@ class _CustomerRidesScreenState extends State<CustomerRidesScreen> {
             child: TextField(
               controller: _searchCtrl,
               style: const TextStyle(color: _text),
-              onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
+              onChanged: (v) {
+                _debounce?.cancel();
+                _debounce = Timer(const Duration(milliseconds: 400), () {
+                  if (mounted) {
+                    setState(() => _query = v.trim().toLowerCase());
+                  }
+                });
+              },
               decoration: InputDecoration(
                 hintText: 'Search by customer name or phone…',
                 hintStyle: const TextStyle(color: _muted, fontSize: 13),
@@ -83,10 +109,13 @@ class _CustomerRidesScreenState extends State<CustomerRidesScreen> {
                 suffixIcon: _query.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear, color: _muted, size: 16),
-                        onPressed: () => setState(() {
-                          _searchCtrl.clear();
-                          _query = '';
-                        }),
+                        onPressed: () {
+                          _debounce?.cancel();
+                          setState(() {
+                            _searchCtrl.clear();
+                            _query = '';
+                          });
+                        },
                       )
                     : null,
               ),
@@ -95,11 +124,7 @@ class _CustomerRidesScreenState extends State<CustomerRidesScreen> {
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('rides')
-            .orderBy('createdAt', descending: true)
-            .limit(300)
-            .snapshots(),
+        stream: _ridesStream,
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(

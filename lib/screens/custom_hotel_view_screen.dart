@@ -357,7 +357,17 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
       // ServiceRequestService or the admin/hero screens that already
       // read from it) — same call shape custom_food_order_screen.dart
       // already makes for its own order type.
-      final itemsSummary = activeItems.map((i) => '${_qty[i.id]}x ${i.name}').join(', ');
+      //
+      // details['items'] is written as the SAME structured List<Map>
+      // shape catalog_food_order already uses ({itemId, name, price,
+      // quantity}) — this is a genuine priced cart built from live
+      // menu items with real per-item pricing, not a free-text list,
+      // so it keeps its own real price/quantity keys rather than being
+      // downgraded to the simpler {sNo, name, qty} shape used by
+      // grocery/custom_food/hero_booking's free-text line items. All
+      // readers (DeliveryChallanCard, admin_new_orders_screen.dart,
+      // seller_dashboard_screen.dart) treat details['items'] as a List
+      // defensively and know how to render this quantity/price shape.
       final requestId = await ServiceRequestService().createServiceRequest(
         requestType: 'custom_hotel_order',
         customerId: user.uid,
@@ -367,8 +377,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
           'sellerId': widget.hotelId,
           'hotelName': widget.hotelName,
           'customHotelOrderId': orderId,
-          'items': itemsSummary,
-          'itemsDetailed': itemsPayload,
+          'items': itemsPayload,
           'deliveryAddress': address,
           'totalAmount': _total,
         },

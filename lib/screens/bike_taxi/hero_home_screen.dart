@@ -1873,18 +1873,40 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     }
   }
 
+  // details['items'] may now be the structured List<Map>
+  // {sNo, name, qty} shape (see quick_order_line_items.dart) instead of
+  // a plain String — returns null when details['items'] isn't a List,
+  // so callers fall back to whatever legacy string field they used.
+  String? _itemsListSummary(Map details) {
+    final raw = details['items'];
+    if (raw is! List) return null;
+    return raw
+        .whereType<Map>()
+        .map((it) => '${it['qty'] ?? ''} ${it['name'] ?? ''}'.trim())
+        .where((s) => s.isNotEmpty)
+        .join(', ');
+  }
+
   String _serviceRequestSummary(String requestType, Map details) {
     switch (requestType) {
       case 'hero_booking':
+        final itemsSummary = _itemsListSummary(details);
+        if (itemsSummary != null && itemsSummary.isNotEmpty) return itemsSummary;
         return (details['taskDescription'] as String?) ?? '';
       case 'custom_order':
         return (details['orderDescription'] as String?) ?? '';
       case 'custom_food_order':
-        final items = (details['items'] as String?) ?? '';
+        final itemsSummary = _itemsListSummary(details);
+        final items = (itemsSummary != null && itemsSummary.isNotEmpty)
+            ? itemsSummary
+            : (details['items'] as String?) ?? '';
         final pref = (details['restaurantOrPreference'] as String?) ?? '';
         return [if (pref.isNotEmpty) 'From: $pref', if (items.isNotEmpty) items].join('\n');
       case 'grocery_order':
-        final text = (details['listText'] as String?) ?? '';
+        final itemsSummary = _itemsListSummary(details);
+        final text = (itemsSummary != null && itemsSummary.isNotEmpty)
+            ? itemsSummary
+            : (details['listText'] as String?) ?? '';
         final hasImage = (details['listImageUrl'] as String?)?.isNotEmpty ?? false;
         return [if (text.isNotEmpty) text, if (hasImage) '📷 Photo list attached'].join('\n');
       default:

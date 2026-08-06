@@ -40,6 +40,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../app_navigator.dart';
 import '../screens/admin/admin_dashboard_screen.dart';
@@ -160,7 +161,22 @@ class AdminQuickTaskService extends ChangeNotifier {
     notifyListeners();
   }
 
-  void show() {
+  // NEW (CTO mandate — floating button single-tap = mic-on, double-tap
+  // = open chat box): a one-shot flag set by show(startListening: true)
+  // and read exactly once by _AdminQuickTaskPanelState.initState() to
+  // decide whether to auto-start the mic the instant the panel mounts.
+  // Deliberately consumed (read-then-cleared) rather than a persistent
+  // field — re-showing the panel later (e.g. un-minimizing) must never
+  // auto-trigger listening again on its own.
+  bool _autoListenPending = false;
+
+  bool consumeAutoListen() {
+    final value = _autoListenPending;
+    _autoListenPending = false;
+    return value;
+  }
+
+  void show({bool startListening = false}) {
     if (_entry != null) {
       if (_minimized) {
         _minimized = false;
@@ -168,6 +184,7 @@ class AdminQuickTaskService extends ChangeNotifier {
       }
       return;
     }
+    _autoListenPending = startListening;
     _entry = OverlayEntry(builder: (_) => const _AdminQuickTaskPanel());
     final overlay = navigatorKey.currentState?.overlay;
     if (overlay == null) {
@@ -709,15 +726,36 @@ class AdminQuickTaskFab extends StatelessWidget {
         if (AdminQuickTaskService.instance.isShowing) {
           return const SizedBox.shrink();
         }
+        // NEW (CTO mandate — floating button tap split): single tap
+        // opens the panel AND immediately starts listening (mic-on),
+        // for "say your command right away" flow; double tap opens the
+        // panel in plain text-chat mode without touching the mic. A
+        // plain GestureDetector replaces FloatingActionButton here
+        // because Flutter has no onDoubleTap on FAB itself — wrapping
+        // a FAB in a GestureDetector risks both tap handlers firing;
+        // this Container is styled to look identical to the FAB it
+        // replaces. Note: having both onTap and onDoubleTap on the same
+        // GestureDetector adds Flutter's standard ~300ms
+        // double-tap-disambiguation delay before a single tap fires —
+        // expected, unavoidable, and the correct tradeoff for this
+        // explicit CTO request.
         return Positioned(
           right: 14,
           bottom: 90,
           child: SafeArea(
-            child: FloatingActionButton(
-              heroTag: 'admin_quick_task_fab',
-              backgroundColor: const Color(0xFFE05555),
-              onPressed: () => AdminQuickTaskService.instance.show(),
-              child: const Icon(Icons.support_agent_rounded, color: Colors.white),
+            child: GestureDetector(
+              onTap: () => AdminQuickTaskService.instance.show(startListening: true),
+              onDoubleTap: () => AdminQuickTaskService.instance.show(),
+              child: Container(
+                width: 56,
+                height: 56,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFE05555),
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 6, offset: Offset(0, 3))],
+                ),
+                child: const Icon(Icons.support_agent_rounded, color: Colors.white),
+              ),
             ),
           ),
         );
@@ -742,11 +780,90 @@ class _AdminQuickTaskPanelState extends State<_AdminQuickTaskPanel> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scroll = ScrollController();
 
+  // NEW (CTO mandate — Admin Quick Task voice input): mirrors
+  // guru_chat_screen.dart's hardened speech_to_text setup (same
+  // package, already a pubspec dependency), tuned to the CTO's own
+  // explicit spec instead of that screen's numbers: pauseFor 3s (a
+  // short command with nothing more said within 3s of silence is
+  // treated as finished and sent), listenFor 10s (a hard ceiling so a
+  // longer, continuous instruction still gets to finish instead of
+  // being cut off at 3s — the CTO's own "periya task sonna 10 sec
+  // varaikkum wait pannanum" requirement). partialResults stays off
+  // and only the plugin's own finalResult fires _send(), same
+  // "don't act on a half-heard word" guard as the customer screen.
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _speechReady = false;
+  bool _isListening = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Consumed exactly once — see AdminQuickTaskService.consumeAutoListen().
+    if (AdminQuickTaskService.instance.consumeAutoListen()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_toggleListening()));
+    }
+  }
+
   @override
   void dispose() {
+    unawaited(_speech.stop());
     _controller.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  Future<void> _toggleListening() async {
+    if (_isListening) {
+      await _speech.stop();
+      if (mounted) setState(() => _isListening = false);
+      return;
+    }
+
+    if (!_speechReady) {
+      _speechReady = await _speech.initialize(
+        onStatus: (status) {
+          if (status == 'notListening' || status == 'done') {
+            if (mounted) setState(() => _isListening = false);
+          }
+        },
+        onError: (error) {
+          debugPrint('[AdminQuickTask] speech error: $error');
+          if (mounted) setState(() => _isListening = false);
+        },
+      );
+    }
+
+    if (!_speechReady) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Microphone not available on this device.')),
+      );
+      return;
+    }
+
+    var handled = false;
+    setState(() => _isListening = true);
+    unawaited(
+      _speech.listen(
+        onResult: (result) {
+          _controller.text = result.recognizedWords;
+          _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
+          final words = result.recognizedWords.trim();
+          final looksLikeRealCommand = words.length >= 2;
+          if (result.finalResult && looksLikeRealCommand && !handled) {
+            handled = true;
+            setState(() => _isListening = false);
+            unawaited(_send(words));
+          }
+        },
+        listenOptions: stt.SpeechListenOptions(partialResults: false, cancelOnError: true),
+        // CTO's explicit spec: 3s of silence = "that's the whole
+        // command," but never force-stop a still-talking admin before
+        // 10s total.
+        listenFor: const Duration(seconds: 10),
+        pauseFor: const Duration(seconds: 3),
+      ),
+    );
   }
 
   void _scrollToBottom() {
@@ -987,6 +1104,19 @@ class _AdminQuickTaskPanelState extends State<_AdminQuickTaskPanel> {
                                 ),
                                 onSubmitted: (_) => _send(),
                               ),
+                            ),
+                            // NEW (CTO mandate — Admin Quick Task voice
+                            // input): mic toggle, mirrors the guru chat
+                            // screen's mic button visually (red while
+                            // listening, muted grey otherwise).
+                            IconButton(
+                              icon: Icon(
+                                _isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
+                                color: _isListening ? const Color(0xFFE05555) : Colors.white54,
+                                size: 20,
+                              ),
+                              tooltip: _isListening ? 'Listening… tap to stop' : 'Speak a command',
+                              onPressed: () => unawaited(_toggleListening()),
                             ),
                             IconButton(
                               icon: const Icon(Icons.send_rounded, color: Color(0xFFE05555), size: 20),

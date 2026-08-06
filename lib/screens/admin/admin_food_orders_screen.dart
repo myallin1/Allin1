@@ -147,7 +147,18 @@ class _AdminFoodOrdersScreenState extends State<AdminFoodOrdersScreen> {
     } else {
       final shop = (details['restaurantOrPreference'] as String?)?.trim();
       shopLabel = (shop != null && shop.isNotEmpty) ? shop : 'Custom food order';
-      itemsLabel = (details['items'] as String?)?.trim() ?? '';
+      // details['items'] may be the new structured List<Map>
+      // {sNo, name, qty} shape (see quick_order_line_items.dart) or the
+      // legacy plain String — handle both so old documents still render.
+      final itemsRaw = details['items'];
+      if (itemsRaw is List) {
+        itemsLabel = itemsRaw
+            .whereType<Map>()
+            .map((it) => '${it['qty'] ?? 1} × ${it['name'] ?? 'Item'}')
+            .join(', ');
+      } else {
+        itemsLabel = (itemsRaw as String?)?.trim() ?? '';
+      }
     }
 
     return Container(

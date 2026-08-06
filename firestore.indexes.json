@@ -1,6 +1,20 @@
 {
   "indexes": [
     {
+      "collectionGroup": "erode_offers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "heroes",
       "queryScope": "COLLECTION",
       "fields": [

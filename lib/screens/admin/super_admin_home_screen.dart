@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../services/db_usage_tracker.dart';
+import '../../services/service_requests_listener.dart';
 import '../../widgets/download_app_banner.dart';
 import 'admin_ai_settings_screen.dart';
 import 'admin_dashboard_screen.dart';
@@ -83,12 +84,24 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
   // fetched docs client-side, instead of opening its own listener.
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _waitingRequestsStream;
 
+  // Same caching reasoning — feeds _SosKycWaitingDot, which used to call
+  // .snapshots() directly inside its own build(), re-subscribing to
+  // sos_kyc_requests on every parent rebuild (every tab switch, every
+  // setState). Hoisted here alongside the other badge streams.
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _sosKycWaitingStream;
+
   @override
   void initState() {
     super.initState();
-    _waitingRequestsStream = FirebaseFirestore.instance
-        .collection('service_requests')
-        .where('status', whereIn: ['pending', 'admin_review'])
+    // Sourced from the shared singleton (see service_requests_listener.dart)
+    // instead of opening its own .snapshots() — AdminDashboardScreen and
+    // AdminNewOrdersScreen (both pushed on top of this screen, which stays
+    // alive underneath) now consume this SAME real Firestore listener.
+    _waitingRequestsStream =
+        ServiceRequestsListener.instance.waitingAndReviewStream;
+    _sosKycWaitingStream = FirebaseFirestore.instance
+        .collection('sos_kyc_requests')
+        .where('status', isEqualTo: 'pending')
         .snapshots();
     _alertSub = _waitingRequestsStream.listen(_onWaitingRequestsChanged,
         onError: (Object e) {
@@ -462,10 +475,11 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                                 waitingStream: _waitingRequestsStream,),
                           ),
                         if (item.isSos)
-                          const Positioned(
+                          Positioned(
                             top: -4,
                             right: -8,
-                            child: _SosKycWaitingDot(),
+                            child: _SosKycWaitingDot(
+                                waitingStream: _sosKycWaitingStream,),
                           ),
                       ],
                     ),
@@ -999,20 +1013,20 @@ class _NavWaitingDot extends StatelessWidget {
 }
 
 // Live pending-count dot for the Cus SOS tab — separate collection
-// (sos_kyc_requests) from the service_requests-based badges above, so
-// it gets its own small dedicated listener (only starts once this tab
-// area is actually rendered, which is always — it's a small,
-// deliberately narrow status==pending query, not the whole collection).
+// (sos_kyc_requests) from the service_requests-based badges above.
+// Stream is sourced from the parent's cached _sosKycWaitingStream field
+// (created once in initState()), same pattern as _NavWaitingDot /
+// _AdminReviewBadgeWrapper, so this widget no longer opens its own
+// listener on every parent rebuild.
 class _SosKycWaitingDot extends StatelessWidget {
-  const _SosKycWaitingDot();
+  final Stream<QuerySnapshot<Map<String, dynamic>>> waitingStream;
+
+  const _SosKycWaitingDot({required this.waitingStream});
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('sos_kyc_requests')
-          .where('status', isEqualTo: 'pending')
-          .snapshots(),
+      stream: waitingStream,
       builder: (context, snapshot) {
         final count = snapshot.data?.docs.length ?? 0;
         if (count == 0) return const SizedBox.shrink();

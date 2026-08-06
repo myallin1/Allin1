@@ -28,8 +28,8 @@ import 'screens/guru_chat_screen.dart';
 import 'screens/guru_offer_screen.dart';
 import 'screens/hero_booking_screen.dart';
 import 'screens/intro_video_screen.dart';
+import 'screens/video_splash_screen.dart';
 import 'screens/settings_screen.dart';
-import 'screens/splash_setup_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'services/ai_activation_service.dart';
 import 'services/analytics_service.dart';
@@ -55,19 +55,19 @@ import 'widgets/branded_loading_screen.dart';
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   if (Firebase.apps.isEmpty) {
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true,
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-  );
-
-    // Enable Firestore offline persistence
-    FirebaseFirestore.instance.settings = const Settings(
-      persistenceEnabled: true,
-      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
     );
+    // Enable Firestore offline persistence on web (PWA). Mobile
+    // (Android/iOS) already has persistence on by default, so this is
+    // guarded to web only; a capped 50MB cache (CTO-specified) keeps
+    // browser storage bounded instead of unlimited.
+    if (kIsWeb) {
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
+        cacheSizeBytes: 52428800, // 50MB
+      );
+    }
   }
   debugPrint(
     '[main_customer] Background push received: ${message.messageId} '
@@ -83,10 +83,14 @@ Future<void> _ensureFirebaseInitialized() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    FirebaseFirestore.instance.settings = const Settings(
-      persistenceEnabled: true,
-      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-    );
+    // Enable Firestore offline persistence on web (PWA). Mobile
+    // (Android/iOS) already has persistence on by default.
+    if (kIsWeb) {
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
+        cacheSizeBytes: 52428800, // 50MB
+      );
+    }
     // FIX (Nizam's report — PWA "3 animations every reopen" audit): the
     // admin app already explicitly sets Persistence.LOCAL
     // (main_admin.dart) but the customer app never did — on web, Auth
@@ -700,9 +704,16 @@ class _IntroGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // First launch runs the whole sequence:
-    //   intro video -> welcome (language + sign-in) -> splash -> home
-    // Every launch after that goes straight to splash -> home.
-    const home = SplashSetupScreen(nextScreen: _CustomerHomeGate());
+    //   intro video -> welcome (language + sign-in) -> video splash -> home
+    // Every launch after that goes straight to video splash -> home.
+    // NEW (CTO mandate — Video Splash Screen, every launch): was
+    // SplashSetupScreen (still used as-is by main_hero.dart — do not
+    // touch that file/screen, this Customer-only swap must not affect
+    // Hero). VideoSplashScreen wraps the exact same background
+    // warm-up call, just layers the new splash video on top, capped at
+    // a hard 5s so it can never add more delay than that regardless of
+    // video/network state.
+    const home = VideoSplashScreen(nextScreen: _CustomerHomeGate());
     final afterIntro =
         showWelcome ? const WelcomeScreen(next: home) : home;
 

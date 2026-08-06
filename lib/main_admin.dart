@@ -2,6 +2,7 @@
 // Allin1 — ADMIN Panel Entry Point
 // HIDDEN — Not for public!
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
@@ -80,6 +81,16 @@ void main() {
         if (Firebase.apps.isEmpty) {
           await Firebase.initializeApp(
             options: DefaultFirebaseOptions.currentPlatform,
+          );
+        }
+        // Enable Firestore offline persistence on web (PWA). Mobile
+        // (Android/iOS) already has persistence on by default, so this
+        // is guarded to web only; a capped 50MB cache (CTO-specified)
+        // keeps browser storage bounded instead of unlimited.
+        if (kIsWeb) {
+          FirebaseFirestore.instance.settings = const Settings(
+            persistenceEnabled: true,
+            cacheSizeBytes: 52428800, // 50MB
           );
         }
         await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
