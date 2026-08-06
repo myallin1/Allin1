@@ -25,6 +25,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/service_request_model.dart';
 import '../utils/service_request_labels.dart';
 import 'hero_booking_tracking_screen.dart';
 
@@ -76,14 +77,16 @@ class HeroBookingStatusScreen extends StatelessWidget {
                     child: Text('Could not load your bookings.', style: GoogleFonts.outfit(color: _kMuted)),
                   );
                 }
-                final docs = (snapshot.data?.docs ?? []).toList()
+                final requests = (snapshot.data?.docs ?? [])
+                    .map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id))
+                    .toList()
                   ..sort((a, b) {
-                    final at = a.data()['createdAt'] as Timestamp?;
-                    final bt = b.data()['createdAt'] as Timestamp?;
+                    final at = a.createdAt;
+                    final bt = b.createdAt;
                     if (at == null || bt == null) return 0;
                     return bt.compareTo(at);
                   });
-                if (docs.isEmpty) {
+                if (requests.isEmpty) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
@@ -104,9 +107,9 @@ class HeroBookingStatusScreen extends StatelessWidget {
                 }
                 return ListView.separated(
                   padding: const EdgeInsets.all(16),
-                  itemCount: docs.length,
+                  itemCount: requests.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, i) => _HeroBookingStatusCard(doc: docs[i]),
+                  itemBuilder: (context, i) => _HeroBookingStatusCard(request: requests[i]),
                 );
               },
             ),
@@ -115,15 +118,14 @@ class HeroBookingStatusScreen extends StatelessWidget {
 }
 
 class _HeroBookingStatusCard extends StatelessWidget {
-  final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+  final ServiceRequestModel request;
 
-  const _HeroBookingStatusCard({required this.doc});
+  const _HeroBookingStatusCard({required this.request});
 
   @override
   Widget build(BuildContext context) {
-    final data = doc.data();
-    final details = (data['details'] as Map<String, dynamic>?) ?? const {};
-    final status = (data['status'] as String?) ?? 'pending';
+    final details = request.rawDetails;
+    final status = request.status.isNotEmpty ? request.status : 'pending';
     final statusColor = serviceRequestStatusColor(status);
     final statusLabel = serviceRequestStatusLabel('hero_booking', status);
 
@@ -138,7 +140,7 @@ class _HeroBookingStatusCard extends StatelessWidget {
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => HeroBookingTrackingScreen(requestId: doc.id),
+          builder: (_) => HeroBookingTrackingScreen(requestId: request.requestId),
         ),
       ),
       child: Container(
@@ -184,6 +186,6 @@ class _HeroBookingStatusCard extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<QueryDocumentSnapshot<Map<String, dynamic>>>('doc', doc));
+    properties.add(DiagnosticsProperty<ServiceRequestModel>('request', request));
   }
 }

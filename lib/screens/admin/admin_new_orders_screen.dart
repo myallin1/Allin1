@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../models/service_request_model.dart';
 import '../../services/service_request_service.dart';
 import '../../services/service_requests_listener.dart';
 import '../../widgets/order_photo_gallery.dart';
@@ -130,8 +131,14 @@ class AdminNewOrdersScreen extends StatefulWidget {
 
 class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
     with WidgetsBindingObserver {
-  List<QueryDocumentSnapshot<Map<String, dynamic>>> _pendingReview = [];
-  List<QueryDocumentSnapshot<Map<String, dynamic>>> _adminManagedActive = [];
+  // FIX (CTO mandate — Final UI Migration Sweep): typed models instead
+  // of raw QueryDocumentSnapshots — screens/widgets below now read
+  // request.requestType / request.customerName / etc. instead of
+  // doc.data()['key']. The underlying Firestore queries/subscriptions
+  // are unchanged; only what gets stored in state is now mapped
+  // through ServiceRequestModel.fromFirestore().
+  List<ServiceRequestModel> _pendingReview = [];
+  List<ServiceRequestModel> _adminManagedActive = [];
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _pendingReviewSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _adminManagedSub;
 
@@ -190,15 +197,15 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
       (snapshot) {
         final filtered = snapshot.docs
             .where((d) => d.data()['status'] == 'admin_review')
+            .map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id))
             .toList()
           ..sort((a, b) {
-            final aTs = a.data()['createdAt'];
-            final bTs = b.data()['createdAt'];
+            final aTs = a.createdAt;
+            final bTs = b.createdAt;
             if (aTs == null && bTs == null) return 0;
             if (aTs == null) return 1;
             if (bTs == null) return -1;
-            // Timestamp implements Comparable<Timestamp>.
-            return (bTs as Comparable).compareTo(aTs);
+            return bTs.compareTo(aTs);
           });
         if (mounted) setState(() => _pendingReview = filtered);
       },
@@ -218,7 +225,10 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
         .snapshots()
         .listen(
       (snapshot) {
-        if (mounted) setState(() => _adminManagedActive = snapshot.docs);
+        final models = snapshot.docs
+            .map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id))
+            .toList();
+        if (mounted) setState(() => _adminManagedActive = models);
       },
       onError: (Object e) {
         debugPrint('[AdminNewOrders] Admin-managed listener error: $e');
@@ -278,12 +288,11 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
     );
   }
 
-  Widget _buildPendingReviewCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data();
-    final requestType = data['requestType'] as String? ?? 'hero_booking';
-    final customerName = data['customerName'] as String? ?? 'Customer';
-    final customerPhone = data['customerPhone'] as String? ?? '';
-    final details = Map<String, dynamic>.from(data['details'] as Map? ?? {});
+  Widget _buildPendingReviewCard(ServiceRequestModel request) {
+    final requestType = request.requestType.isNotEmpty ? request.requestType : 'hero_booking';
+    final customerName = request.customerName.isNotEmpty ? request.customerName : 'Customer';
+    final customerPhone = request.customerPhone;
+    final details = request.rawDetails;
 
     return Card(
       color: _card,
@@ -327,13 +336,13 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
                 Expanded(
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: _pink),
-                    onPressed: () => _showAssignSheet(context, doc.id, customerName),
+                    onPressed: () => _showAssignSheet(context, request.requestId, customerName),
                     child: const Text('Assign to Hero', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 ),
                 const SizedBox(width: 8),
                 OutlinedButton(
-                  onPressed: () => _confirmAndCancel(context, doc.id),
+                  onPressed: () => _confirmAndCancel(context, request.requestId),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: _red,
                     side: const BorderSide(color: _red),
@@ -348,13 +357,12 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
     );
   }
 
-  Widget _buildAdminManagedCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data();
-    final requestType = data['requestType'] as String? ?? 'hero_booking';
-    final customerName = data['customerName'] as String? ?? 'Customer';
-    final customerPhone = data['customerPhone'] as String? ?? '';
-    final assignedHeroName = data['assignedHeroName'] as String? ?? 'Hero';
-    final status = data['status'] as String? ?? 'hero_assigned';
+  Widget _buildAdminManagedCard(ServiceRequestModel request) {
+    final requestType = request.requestType.isNotEmpty ? request.requestType : 'hero_booking';
+    final customerName = request.customerName.isNotEmpty ? request.customerName : 'Customer';
+    final customerPhone = request.customerPhone;
+    final assignedHeroName = request.assignedHeroName ?? 'Hero';
+    final status = request.status.isNotEmpty ? request.status : 'hero_assigned';
 
     return Card(
       color: _card,
@@ -388,12 +396,12 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
             Text(customerName, style: const TextStyle(color: _text, fontWeight: FontWeight.w700, fontSize: 14)),
             Text('Hero: $assignedHeroName', style: const TextStyle(color: _muted, fontSize: 11)),
             const SizedBox(height: 10),
-            ServiceRequestManualStatusControl(requestId: doc.id, currentStatus: status),
+            ServiceRequestManualStatusControl(requestId: request.requestId, currentStatus: status),
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
-                onPressed: () => _confirmAndCancel(context, doc.id),
+                onPressed: () => _confirmAndCancel(context, request.requestId),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: _red,
                   side: const BorderSide(color: _red),

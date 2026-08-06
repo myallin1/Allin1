@@ -8,29 +8,35 @@
 // items-as-String / taskDescription) for OLD documents so nothing
 // existing renders blank. All colors from context.colors.* only.
 // ================================================================
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/service_request_model.dart';
 import '../services/theme_context_extensions.dart';
 import 'tracking_timeline.dart';
 
+// FIX (CTO mandate — Model Adoption, Phase 3): this widget now reads
+// from a typed ServiceRequestModel instead of a raw
+// Map<String, dynamic> — same rendering logic and same field-fallback
+// order as before (structured items > legacy text; root amount >
+// details amount > subtotal), just sourced from the model's typed
+// properties (request.items, request.rawDetails, request.displayAmount)
+// instead of map['key'] lookups.
 class DeliveryChallanCard extends StatelessWidget {
   const DeliveryChallanCard({
     super.key,
-    required this.requestData,
-    required this.requestId,
+    required this.request,
   });
 
-  final Map<String, dynamic> requestData;
-  final String requestId;
+  final ServiceRequestModel request;
 
-  String get _shortId =>
-      requestId.length > 6 ? requestId.substring(requestId.length - 6).toUpperCase() : requestId.toUpperCase();
+  String get _shortId => request.requestId.length > 6
+      ? request.requestId.substring(request.requestId.length - 6).toUpperCase()
+      : request.requestId.toUpperCase();
 
-  String _formatDate(dynamic createdAt) {
-    if (createdAt is! Timestamp) return '';
-    final dt = createdAt.toDate();
+  String _formatDate(DateTime? createdAt) {
+    if (createdAt == null) return '';
+    final dt = createdAt;
     final d = dt.day.toString().padLeft(2, '0');
     final m = dt.month.toString().padLeft(2, '0');
     final y = dt.year;
@@ -39,17 +45,9 @@ class DeliveryChallanCard extends StatelessWidget {
     return '$d/$m/$y at $h:$min';
   }
 
-  /// Structured line items if `details['items']` is a List; else null.
-  List<Map<String, dynamic>>? _structuredItems(Map<String, dynamic> details) {
-    final raw = details['items'];
-    if (raw is List) {
-      return raw.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
-    }
-    return null;
-  }
-
   /// Legacy fallback text — first non-empty of listText / items(String) /
-  /// taskDescription, so an old document still shows something.
+  /// taskDescription, so an old document still shows something even
+  /// when it predates the structured `items` list.
   String? _legacyText(Map<String, dynamic> details) {
     final listText = (details['listText'] as String?)?.trim();
     if (listText != null && listText.isNotEmpty) return listText;
@@ -63,39 +61,17 @@ class DeliveryChallanCard extends StatelessWidget {
     return null;
   }
 
-  double? _amount(Map<String, dynamic> details, Map<String, dynamic> data) {
-    final candidates = [
-      data['finalAmount'],
-      data['estimatedAmount'],
-      details['finalAmount'],
-      details['estimatedAmount'],
-      details['subtotal'],
-    ];
-    for (final c in candidates) {
-      if (c is num) return c.toDouble();
-    }
-    return null;
-  }
-
-  String? _deliveryAddress(Map<String, dynamic> details) {
-    final addr = (details['deliveryAddress'] as String?)?.trim();
-    if (addr != null && addr.isNotEmpty) return addr;
-    final loc = (details['location'] as String?)?.trim();
-    if (loc != null && loc.isNotEmpty) return loc;
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final details = (requestData['details'] as Map<String, dynamic>?) ?? const {};
-    final status = (requestData['status'] as String?) ?? 'pending';
-    final requestType = (requestData['requestType'] as String?) ?? 'hero_booking';
-    final createdAt = requestData['createdAt'];
-    final structuredItems = _structuredItems(details);
-    final legacyText = structuredItems == null ? _legacyText(details) : null;
-    final amount = _amount(details, requestData);
-    final deliveryAddress = _deliveryAddress(details);
+    final details = request.rawDetails;
+    final status = request.status;
+    final requestType = request.requestType.isNotEmpty ? request.requestType : 'hero_booking';
+    final createdAt = request.createdAt;
+    final structuredItems = request.items;
+    final legacyText = structuredItems.isEmpty ? _legacyText(details) : null;
+    final amount = request.displayAmount?.toDouble();
+    final deliveryAddress = request.deliveryAddress;
 
     return Container(
       width: double.infinity,
@@ -150,7 +126,7 @@ class DeliveryChallanCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          if (createdAt is Timestamp)
+          if (createdAt != null)
             Padding(
               padding: const EdgeInsets.only(left: 44),
               child: Text(
@@ -168,7 +144,7 @@ class DeliveryChallanCard extends StatelessWidget {
             style: GoogleFonts.outfit(color: colors.mutedText, fontSize: 11.5, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
-          if (structuredItems != null && structuredItems.isNotEmpty) ...[
+          if (structuredItems.isNotEmpty) ...[
             for (var i = 0; i < structuredItems.length; i++)
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
@@ -177,33 +153,31 @@ class DeliveryChallanCard extends StatelessWidget {
                     SizedBox(
                       width: 22,
                       child: Text(
-                        '${structuredItems[i]['sNo'] ?? i + 1}.',
+                        '${structuredItems[i].sNo ?? i + 1}.',
                         style: TextStyle(color: colors.mutedText, fontSize: 12.5),
                       ),
                     ),
                     Expanded(
                       child: Text(
-                        (structuredItems[i]['name'] ?? '').toString(),
+                        structuredItems[i].name,
                         style: TextStyle(color: colors.text, fontSize: 13),
                       ),
                     ),
-                    // NEW — defensive: custom_hotel_order (and
+                    // Defensive: custom_hotel_order (and
                     // catalog_food_order) write real priced-cart line
-                    // items shaped {itemId, name, price, quantity,
-                    // total} rather than the {sNo, name, qty} shape the
-                    // other 3 request types use. Fall back to
-                    // 'quantity' when 'qty' isn't present, and show the
-                    // unit price alongside it when available, so this
-                    // table renders correctly for both shapes without
-                    // any per-requestType branching here.
-                    if (structuredItems[i]['price'] is num) ...[
+                    // items with a `price`/`quantity` shape rather than
+                    // the {sNo, name, qty} shape the other 3 request
+                    // types use — ServiceRequestLineItem carries both
+                    // shapes' fields, so this renders correctly either
+                    // way without any per-requestType branching here.
+                    if (structuredItems[i].price != null) ...[
                       Text(
-                        '₹${(structuredItems[i]['price'] as num).toStringAsFixed(0)} × ',
+                        '₹${structuredItems[i].price!.toStringAsFixed(0)} × ',
                         style: TextStyle(color: colors.mutedText, fontSize: 11.5),
                       ),
                     ],
                     Text(
-                      (structuredItems[i]['qty'] ?? structuredItems[i]['quantity'] ?? '').toString(),
+                      (structuredItems[i].qty ?? structuredItems[i].quantity ?? '').toString(),
                       style: TextStyle(color: colors.text, fontSize: 12.5, fontWeight: FontWeight.w600),
                     ),
                   ],
@@ -229,7 +203,7 @@ class DeliveryChallanCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  (requestData['status'] == 'completed' && requestData['finalAmount'] != null)
+                  (request.status == 'completed' && request.finalAmount != null)
                       ? 'Final Amount'
                       : 'Estimated Amount',
                   style: GoogleFonts.outfit(color: colors.mutedText, fontSize: 12.5, fontWeight: FontWeight.w700),

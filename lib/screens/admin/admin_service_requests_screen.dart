@@ -24,6 +24,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../models/service_request_model.dart';
 import '../../utils/service_request_labels.dart';
 import '../../widgets/order_photo_gallery.dart';
 import '../service_request_tracking_screen.dart';
@@ -66,7 +67,11 @@ class AdminServiceRequestsScreen extends StatefulWidget {
 
 class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
     with WidgetsBindingObserver {
-  List<QueryDocumentSnapshot<Map<String, dynamic>>> _requests = [];
+  // FIX (CTO mandate — Final UI Migration Sweep): typed models instead
+  // of raw QueryDocumentSnapshots — same pattern already applied to
+  // admin_new_orders_screen.dart and hero_home_screen.dart. Query/
+  // subscription itself unchanged.
+  List<ServiceRequestModel> _requests = [];
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _sub;
 
   @override
@@ -118,7 +123,10 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
         .snapshots()
         .listen(
       (snapshot) {
-        if (mounted) setState(() => _requests = snapshot.docs);
+        final models = snapshot.docs
+            .map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id))
+            .toList();
+        if (mounted) setState(() => _requests = models);
       },
       onError: (Object e) {
         debugPrint('[AdminServiceRequests] listener error: $e');
@@ -188,13 +196,17 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
     );
   }
 
-  Widget _buildCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data();
-    final customerName = data['customerName'] as String? ?? 'Customer';
-    final customerPhone = data['customerPhone'] as String? ?? '';
-    final firestoreStatus = data['status'] as String? ?? 'pending';
-    final assignedHeroName = data['assignedHeroName'] as String?;
-    final details = Map<String, dynamic>.from(data['details'] as Map? ?? {});
+  Widget _buildCard(ServiceRequestModel request) {
+    final customerName = request.customerName.isNotEmpty ? request.customerName : 'Customer';
+    final customerPhone = request.customerPhone;
+    final firestoreStatus = request.status.isNotEmpty ? request.status : 'pending';
+    final assignedHeroName = request.assignedHeroName;
+    // Legacy fallback respected here too: rawDetails preserves every
+    // field an older document wrote (listText/items-as-String/
+    // taskDescription/etc.) even though the model doesn't declare a
+    // named property for each one — requestSummary() already knows how
+    // to fall back to those for pre-Quick-Order documents.
+    final details = request.rawDetails;
     final summary = requestSummary(widget.requestType, details);
 
     // FIX (Phase 4b — WhatsApp/Uber transient model): 'in_progress' and
@@ -207,7 +219,7 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
     // service_request_tracking_screen.dart.
     return StreamBuilder<rtdb.DatabaseEvent>(
       stream: rtdb.FirebaseDatabase.instance
-          .ref('active_service_requests/${doc.id}')
+          .ref('active_service_requests/${request.requestId}')
           .onValue,
       builder: (context, rtdbSnapshot) {
         String status = firestoreStatus;
@@ -224,7 +236,7 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
         final needsAssignment = status == 'pending' || status == 'admin_review';
 
         return _buildCardContent(
-          doc: doc,
+          requestId: request.requestId,
           customerName: customerName,
           customerPhone: customerPhone,
           assignedHeroName: assignedHeroName,
@@ -239,7 +251,7 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
   }
 
   Widget _buildCardContent({
-    required QueryDocumentSnapshot<Map<String, dynamic>> doc,
+    required String requestId,
     required String customerName,
     required String customerPhone,
     required String? assignedHeroName,
@@ -259,7 +271,7 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
         borderRadius: BorderRadius.circular(14),
         // Tap anywhere on the card → the same graphical step tracker
         // the customer sees for this request.
-        onTap: () => _openTracking(doc.id),
+        onTap: () => _openTracking(requestId),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -324,7 +336,7 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(backgroundColor: _pink),
                         onPressed: () =>
-                            _showAssignSheet(doc.id, customerName),
+                            _showAssignSheet(requestId, customerName),
                         child: const Text('Assign to Hero',
                             style: TextStyle(
                                 color: Colors.white,
@@ -334,7 +346,7 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
                   else
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => _openTracking(doc.id),
+                        onPressed: () => _openTracking(requestId),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: _pink,
                           side: const BorderSide(color: _pink),

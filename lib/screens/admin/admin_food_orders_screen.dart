@@ -15,6 +15,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../models/service_request_model.dart';
 import '../../utils/service_request_labels.dart';
 import '../../widgets/manual_refresh_header.dart';
 
@@ -39,7 +40,7 @@ class AdminFoodOrdersScreen extends StatefulWidget {
 class _AdminFoodOrdersScreenState extends State<AdminFoodOrdersScreen> {
   bool _loading = false;
   DateTime? _syncedAt;
-  List<QueryDocumentSnapshot<Map<String, dynamic>>> _orders = [];
+  List<ServiceRequestModel> _orders = [];
 
   @override
   void initState() {
@@ -59,16 +60,18 @@ class _AdminFoodOrdersScreenState extends State<AdminFoodOrdersScreen> {
           .where('requestType', whereIn: _kFoodOrderRequestTypes)
           .limit(200)
           .get();
-      final docs = snap.docs.toList()
+      final models = snap.docs
+          .map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id))
+          .toList()
         ..sort((a, b) {
-          final at = a.data()['createdAt'] as Timestamp?;
-          final bt = b.data()['createdAt'] as Timestamp?;
+          final at = a.createdAt;
+          final bt = b.createdAt;
           if (at == null || bt == null) return 0;
           return bt.compareTo(at);
         });
       if (mounted) {
         setState(() {
-          _orders = docs;
+          _orders = models;
           _loading = false;
           _syncedAt = DateTime.now();
         });
@@ -127,14 +130,13 @@ class _AdminFoodOrdersScreenState extends State<AdminFoodOrdersScreen> {
     );
   }
 
-  Widget _orderTile(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data();
-    final requestType = (data['requestType'] as String?) ?? 'custom_food_order';
-    final details = (data['details'] as Map<String, dynamic>?) ?? const {};
-    final status = (data['status'] as String?) ?? 'pending';
+  Widget _orderTile(ServiceRequestModel request) {
+    final requestType = request.requestType.isNotEmpty ? request.requestType : 'custom_food_order';
+    final details = request.rawDetails;
+    final status = request.status.isNotEmpty ? request.status : 'pending';
     final statusColor = serviceRequestStatusColor(status);
     final statusLabel = serviceRequestStatusLabel(requestType, status);
-    final customerName = (data['customerName'] as String?) ?? 'Customer';
+    final customerName = request.customerName.isNotEmpty ? request.customerName : 'Customer';
 
     String shopLabel;
     String itemsLabel;

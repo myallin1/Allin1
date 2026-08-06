@@ -19,6 +19,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/service_request_model.dart';
 import '../utils/service_request_labels.dart';
 import 'service_request_tracking_screen.dart';
 
@@ -75,14 +76,16 @@ class FoodOrderStatusScreen extends StatelessWidget {
                     child: Text('Could not load your orders.', style: GoogleFonts.outfit(color: _kMuted)),
                   );
                 }
-                final docs = (snapshot.data?.docs ?? []).toList()
+                final requests = (snapshot.data?.docs ?? [])
+                    .map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id))
+                    .toList()
                   ..sort((a, b) {
-                    final at = a.data()['createdAt'] as Timestamp?;
-                    final bt = b.data()['createdAt'] as Timestamp?;
+                    final at = a.createdAt;
+                    final bt = b.createdAt;
                     if (at == null || bt == null) return 0;
                     return bt.compareTo(at);
                   });
-                if (docs.isEmpty) {
+                if (requests.isEmpty) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
@@ -103,9 +106,9 @@ class FoodOrderStatusScreen extends StatelessWidget {
                 }
                 return ListView.separated(
                   padding: const EdgeInsets.all(16),
-                  itemCount: docs.length,
+                  itemCount: requests.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, i) => _FoodOrderStatusCard(doc: docs[i]),
+                  itemBuilder: (context, i) => _FoodOrderStatusCard(request: requests[i]),
                 );
               },
             ),
@@ -114,16 +117,15 @@ class FoodOrderStatusScreen extends StatelessWidget {
 }
 
 class _FoodOrderStatusCard extends StatelessWidget {
-  final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+  final ServiceRequestModel request;
 
-  const _FoodOrderStatusCard({required this.doc});
+  const _FoodOrderStatusCard({required this.request});
 
   @override
   Widget build(BuildContext context) {
-    final data = doc.data();
-    final requestType = (data['requestType'] as String?) ?? 'custom_food_order';
-    final details = (data['details'] as Map<String, dynamic>?) ?? const {};
-    final status = (data['status'] as String?) ?? 'pending';
+    final requestType = request.requestType.isNotEmpty ? request.requestType : 'custom_food_order';
+    final details = request.rawDetails;
+    final status = request.status.isNotEmpty ? request.status : 'pending';
     final statusColor = serviceRequestStatusColor(status);
     final statusLabel = serviceRequestStatusLabel(requestType, status);
 
@@ -164,7 +166,7 @@ class _FoodOrderStatusCard extends StatelessWidget {
         context,
         MaterialPageRoute(
           builder: (_) => ServiceRequestTrackingScreen(
-            requestId: doc.id,
+            requestId: request.requestId,
             requestType: requestType,
           ),
         ),
@@ -212,6 +214,6 @@ class _FoodOrderStatusCard extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<QueryDocumentSnapshot<Map<String, dynamic>>>('doc', doc));
+    properties.add(DiagnosticsProperty<ServiceRequestModel>('request', request));
   }
 }

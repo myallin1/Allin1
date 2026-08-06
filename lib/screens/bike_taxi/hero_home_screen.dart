@@ -23,6 +23,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app_navigator.dart';
 import '../../config/city_config.dart';
 import '../../models/ride_model.dart';
+import '../../models/service_request_model.dart';
 import '../../services/app_update_checker.dart';
 import '../../services/db_usage_tracker.dart';
 import '../../services/hero_ride_notification_service.dart';
@@ -650,13 +651,20 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       _activeServiceRequestsStream!
           .listen((s) => DbUsageTracker.instance.recordRead(s.docs.length));
       _serviceRequestBusySub = _activeServiceRequestsStream!.listen((snap) {
+        // FIX (CTO mandate — Final UI Migration Sweep): map to typed
+        // models here so both this busy-gate check and the GPS-tracking
+        // lookup below read `.status`/`.requestId` instead of
+        // `doc.data()['status']`/`doc.id`. The query/stream itself is
+        // unchanged — this only affects how the callback reads results.
+        final models = snap.docs
+            .map((doc) => ServiceRequestModel.fromFirestore(doc.data(), doc.id))
+            .toList();
+
         // Busy = any non-completed doc assigned to this hero (hero_
         // assigned/in_progress/nearing_completion). 'completed' docs
         // stay in the query only for the payment-collection UI (see
         // comment above) — they don't count as "busy" anymore.
-        final activeDocs = snap.docs.where(
-          (doc) => (doc.data()['status'] as String?) != 'completed',
-        );
+        final activeDocs = models.where((m) => m.status != 'completed');
         final hasActive = activeDocs.isNotEmpty;
         if (mounted && hasActive != _hasActiveServiceRequest) {
           setState(() => _hasActiveServiceRequest = hasActive);
@@ -668,17 +676,17 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         // the requestId we were tracking. Mirrors rides' live_locations
         // pattern exactly (_startLocationUpdates/_stopLocationUpdates),
         // just keyed by requestId instead of rideId.
-        QueryDocumentSnapshot<Map<String, dynamic>>? inProgressDoc;
-        for (final doc in snap.docs) {
-          if (doc.data()['status'] == 'in_progress') {
-            inProgressDoc = doc;
+        ServiceRequestModel? inProgressRequest;
+        for (final m in models) {
+          if (m.status == 'in_progress') {
+            inProgressRequest = m;
             break;
           }
         }
-        if (inProgressDoc != null) {
-          if (_trackedServiceRequestId != inProgressDoc.id) {
-            _trackedServiceRequestId = inProgressDoc.id;
-            _startLocationUpdates(inProgressDoc.id);
+        if (inProgressRequest != null) {
+          if (_trackedServiceRequestId != inProgressRequest.requestId) {
+            _trackedServiceRequestId = inProgressRequest.requestId;
+            _startLocationUpdates(inProgressRequest.requestId);
           }
         } else if (_trackedServiceRequestId != null) {
           _trackedServiceRequestId = null;
@@ -1790,7 +1798,12 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         .doc(requestId)
         .snapshots()
         .listen((doc) {
-      final liveStatus = doc.data()?['status'] as String?;
+      // FIX (CTO mandate — Final UI Migration Sweep): only the status
+      // is needed here, so build a model just to read `.status` rather
+      // than indexing the raw map directly.
+      final liveStatus = doc.exists && doc.data() != null
+          ? ServiceRequestModel.fromFirestore(doc.data()!, doc.id).status
+          : null;
       if (liveStatus != null && liveStatus != 'pending') {
         staleSub?.cancel();
         final popContext = navigatorKey.currentContext;
@@ -2627,18 +2640,23 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const SizedBox.shrink();
         }
+        // FIX (CTO mandate — Final UI Migration Sweep): map to typed
+        // models before filtering/rendering — reads below now use
+        // `.status`/`.paymentStatus`/`.customerName`/`.requestType`/
+        // `.requestId` instead of `doc.data()['key']`/`doc.id`.
+        final requests = snapshot.data!.docs
+            .map((doc) => ServiceRequestModel.fromFirestore(doc.data(), doc.id))
+            .toList();
         // 'completed' docs are included in the query (see
         // _activeServiceRequestsStream) so the cash-payment close-out UI
         // is reachable, but a completed-AND-paid task is fully done and
         // should stop showing here — filtered out client-side to avoid
         // a 3rd inequality-filter composite index just for this.
-        final visibleDocs = snapshot.data!.docs.where((doc) {
-          final data = doc.data();
-          final status = data['status'] as String? ?? 'hero_assigned';
-          final paymentStatus = data['paymentStatus'] as String?;
-          return !(status == 'completed' && paymentStatus == 'paid');
+        final visibleRequests = requests.where((r) {
+          final status = r.status.isNotEmpty ? r.status : 'hero_assigned';
+          return !(status == 'completed' && r.paymentStatus == 'paid');
         }).toList();
-        if (visibleDocs.isEmpty) return const SizedBox.shrink();
+        if (visibleRequests.isEmpty) return const SizedBox.shrink();
         // FIX (per Nizam's request — "hero ku yella process um main
         // page nadakama"): this used to render the FULL interactive
         // _ServiceRequestStatusCard (status stepper, Navigate buttons,
@@ -2649,11 +2667,10 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         // for that one task where all of that same interactive body
         // now lives (unchanged logic, just moved off the main page).
         return Column(
-          children: visibleDocs.map((doc) {
-            final data = doc.data();
-            final customerName = data['customerName'] as String? ?? 'Customer';
-            final requestType = data['requestType'] as String? ?? 'hero_booking';
-            final status = data['status'] as String? ?? 'hero_assigned';
+          children: visibleRequests.map((request) {
+            final customerName = request.customerName.isNotEmpty ? request.customerName : 'Customer';
+            final requestType = request.requestType.isNotEmpty ? request.requestType : 'hero_booking';
+            final status = request.status.isNotEmpty ? request.status : 'hero_assigned';
             return Container(
               margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               decoration: BoxDecoration(
@@ -2669,7 +2686,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                   borderRadius: BorderRadius.circular(16),
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => HeroTaskDetailScreen(requestId: doc.id)),
+                    MaterialPageRoute(builder: (_) => HeroTaskDetailScreen(requestId: request.requestId)),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(14),
@@ -4600,9 +4617,16 @@ class HeroTaskDetailScreen extends StatelessWidget {
             });
             return const SizedBox.shrink();
           }
-          final data = doc.data()!;
-          final status = data['status'] as String? ?? 'hero_assigned';
-          final paymentStatus = data['paymentStatus'] as String?;
+          // FIX (CTO mandate — Final UI Migration Sweep): one typed
+          // model built here instead of a raw `data` map — every field
+          // handed to _ServiceRequestStatusCard below now comes from
+          // `request.*` (including estimatedAmount/finalAmount, which
+          // the model already centralizes the root-vs-details lookup
+          // for, eliminating the manual `(data['estimatedAmount'] as
+          // num?)` casts that used to live here).
+          final request = ServiceRequestModel.fromFirestore(doc.data()!, doc.id);
+          final status = request.status.isNotEmpty ? request.status : 'hero_assigned';
+          final paymentStatus = request.paymentStatus;
           // Fully closed out — same terminal condition the home list
           // uses to stop showing a task. Auto-return the hero to the
           // main list right when the task finishes, per "athu
@@ -4616,15 +4640,15 @@ class HeroTaskDetailScreen extends StatelessWidget {
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: _ServiceRequestStatusCard(
-              requestId: doc.id,
-              requestType: data['requestType'] as String? ?? 'hero_booking',
+              requestId: request.requestId,
+              requestType: request.requestType.isNotEmpty ? request.requestType : 'hero_booking',
               status: status,
-              customerName: data['customerName'] as String? ?? 'Customer',
-              estimatedAmount: (data['estimatedAmount'] as num?)?.toDouble(),
-              finalAmount: (data['finalAmount'] as num?)?.toDouble(),
+              customerName: request.customerName.isNotEmpty ? request.customerName : 'Customer',
+              estimatedAmount: request.estimatedAmount?.toDouble(),
+              finalAmount: request.finalAmount?.toDouble(),
               paymentStatus: paymentStatus,
-              estimateApprovedByCustomer: data['estimateApprovedByCustomer'] as bool?,
-              details: (data['details'] as Map<String, dynamic>?) ?? const {},
+              estimateApprovedByCustomer: request.estimateApprovedByCustomer,
+              details: request.rawDetails,
             ),
           );
         },

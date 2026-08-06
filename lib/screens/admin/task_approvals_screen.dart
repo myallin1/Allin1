@@ -124,7 +124,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
+          return Center(
             child: CircularProgressIndicator(color: kPink),
           );
         }
@@ -146,7 +146,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'All caught up. Great job!',
                   style: TextStyle(fontSize: 12, color: kMuted),
                 ),
@@ -198,7 +198,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                             userName.isNotEmpty
                                 ? userName[0].toUpperCase()
                                 : 'U',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
                               color: kPink,
@@ -213,7 +213,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                           children: [
                             Text(
                               userName,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 14,
                                 color: kText,
                                 fontWeight: FontWeight.w700,
@@ -221,7 +221,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                             ),
                             Text(
                               userEmail,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
                                 color: kMuted,
                               ),
@@ -249,7 +249,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                             children: [
                               Text(
                                 adTitle,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 14,
                                   color: kText,
                                   fontWeight: FontWeight.w700,
@@ -258,7 +258,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                               const SizedBox(height: 4),
                               Text(
                                 '🪙 $coinsReward coins',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
                                   color: kGold,
                                   fontWeight: FontWeight.w700,
@@ -269,7 +269,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                         ),
                         Text(
                           time,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 10,
                             color: kMuted,
                           ),
@@ -431,8 +431,8 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('❌ Task rejected. Coins refunded.'),
+          SnackBar(
+            content: const Text('❌ Task rejected. Coins refunded.'),
             backgroundColor: kRed,
             behavior: SnackBarBehavior.floating,
           ),
@@ -462,7 +462,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
+          return Center(
             child: CircularProgressIndicator(color: kGreen),
           );
         }
@@ -507,7 +507,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Heroes will appear here once they start riding',
                   style: TextStyle(fontSize: 12, color: kMuted),
                 ),
@@ -591,7 +591,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                                   children: [
                                     Text(
                                       captainName,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 14,
                                         color: kText,
                                         fontWeight: FontWeight.w700,
@@ -610,7 +610,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                                 ),
                                 Text(
                                   captainEmail,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 10,
                                     color: kMuted,
                                   ),
@@ -625,8 +625,8 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                             ),
                             decoration: BoxDecoration(
                               color: isOnline
-                                  ? _green.withValues(alpha: 0.15)
-                                  : _muted.withValues(alpha: 0.15),
+                                  ? kGreen.withValues(alpha: 0.15)
+                                  : kMuted.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -634,7 +634,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                               style: TextStyle(
                                 fontSize: 9,
                                 fontWeight: FontWeight.w800,
-                                color: isOnline ? _green : _muted,
+                                color: isOnline ? kGreen : kMuted,
                               ),
                             ),
                           ),
@@ -649,7 +649,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: _surface,
+                                color: kSurface,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(color: _border),
                               ),
@@ -657,18 +657,18 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                                 children: [
                                   Text(
                                     '🏍️ $totalRides',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w800,
-                                      color: _green,
+                                      color: kGreen,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
-                                  const Text(
+                                  Text(
                                     'Rides Today',
                                     style: TextStyle(
                                       fontSize: 10,
-                                      color: _muted,
+                                      color: kMuted,
                                     ),
                                   ),
                                 ],
@@ -680,7 +680,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: _surface,
+                                color: kSurface,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(color: _border),
                               ),
@@ -688,18 +688,18 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                                 children: [
                                   Text(
                                     '₹${totalEarnings.toInt()}',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w800,
-                                      color: _gold,
+                                      color: kGold,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
-                                  const Text(
+                                  Text(
                                     'Earnings Today',
                                     style: TextStyle(
                                       fontSize: 10,
-                                      color: _muted,
+                                      color: kMuted,
                                     ),
                                   ),
                                 ],

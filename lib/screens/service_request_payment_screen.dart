@@ -24,6 +24,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/service_request_model.dart';
 import '../services/service_request_service.dart';
 import '../widgets/animated_meter_fare.dart';
 import '../widgets/rating_feedback_sheet.dart';
@@ -140,22 +141,27 @@ class _ServiceRequestPaymentScreenState
                     style: TextStyle(color: _kMuted),),);
           }
 
-          final data = snapshot.data!.data()!;
-          final finalAmount = (data['finalAmount'] as num?)?.toDouble();
-          final estimatedAmount =
-              (data['estimatedAmount'] as num?)?.toDouble();
-          final paymentStatus = data['paymentStatus'] as String? ?? '';
+          final request = ServiceRequestModel.fromFirestore(
+              snapshot.data!.data()!, snapshot.data!.id,);
+          final finalAmount = request.finalAmount?.toDouble();
+          final estimatedAmount = request.estimatedAmount?.toDouble();
+          final paymentStatus = request.paymentStatus ?? '';
           final isPaid = paymentStatus == 'paid';
           // Hero claimed cash was received but the customer hasn't
           // confirmed it yet — see FIX comment on
           // markServiceRequestPaymentReceived() in service_request_service.dart.
           final isHeroMarkedPaid = paymentStatus == 'hero_marked_paid';
           final amount = finalAmount ?? estimatedAmount ?? 0;
-          final assignedHeroId = data['assignedHeroId'] as String?;
+          final assignedHeroId = request.assignedHeroId;
           // Not yet rated — RatingFeedbackSheet itself has no
           // "already submitted" awareness, so this doc-level check is
           // what keeps it from reappearing after the customer rates.
-          final needsRating = isPaid && data['customerRating'] == null;
+          // customerRating has no model field (root-level, not covered
+          // by rawDetails, which is scoped to the `details` submap) —
+          // read it directly off the raw doc, same pattern used in
+          // hero_booking_tracking_screen.dart.
+          final needsRating = isPaid &&
+              snapshot.data!.data()!['customerRating'] == null;
 
           return Padding(
             padding: const EdgeInsets.all(20),

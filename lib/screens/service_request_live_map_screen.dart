@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../models/service_request_model.dart';
 import '../widgets/allin1_map_widget.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
@@ -115,9 +116,9 @@ class _ServiceRequestLiveMapScreenState
                     style: TextStyle(color: _kMuted),),);
           }
 
-          final data = snapshot.data!.data()!;
-          final details =
-              (data['details'] as Map<String, dynamic>?) ?? const {};
+          final request = ServiceRequestModel.fromFirestore(
+              snapshot.data!.data()!, snapshot.data!.id,);
+          final details = request.rawDetails;
           final fromLat = (details['fromLocationLat'] as num?)?.toDouble();
           final fromLng = (details['fromLocationLng'] as num?)?.toDouble();
           final toLat = (details['locationLat'] as num?)?.toDouble();

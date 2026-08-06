@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/food_models.dart';
+import '../models/service_request_model.dart';
 import '../services/food_seller_service.dart';
 import 'seller_custom_hotel_builder_screen.dart';
 import 'seller_electronics_dashboard_screen.dart';
@@ -68,7 +69,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   // clause granting the seller (details.sellerId) access; see
   // firestore.rules.
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _catalogOrdersSub;
-  List<QueryDocumentSnapshot<Map<String, dynamic>>> _catalogOrders = [];
+  List<ServiceRequestModel> _catalogOrders = [];
 
   // NEW (CTO mandate — Custom Hotel Ordering & Checkout Pipeline,
   // Seller Visibility). Mirrors _catalogOrdersSub/_catalogOrders exactly
@@ -78,7 +79,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   // rather than merged into the existing one, so a bug here can never
   // affect the legacy catalog-order listener above.
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _customHotelOrdersSub;
-  List<QueryDocumentSnapshot<Map<String, dynamic>>> _customHotelOrders = [];
+  List<ServiceRequestModel> _customHotelOrders = [];
 
   // FIX (root cause of the seller dashboard sometimes getting stuck
   // showing nothing after registration/login): _loadProfile() used to
@@ -232,7 +233,8 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         .snapshots()
         .listen((snap) {
       if (mounted) {
-        setState(() => _catalogOrders = snap.docs);
+        setState(() => _catalogOrders =
+            snap.docs.map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id)).toList());
       }
     }, onError: (Object e) {
       debugPrint('[SellerDashboard] Catalog orders listener error: $e');
@@ -258,7 +260,8 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         .snapshots()
         .listen((snap) {
       if (mounted) {
-        setState(() => _customHotelOrders = snap.docs);
+        setState(() => _customHotelOrders =
+            snap.docs.map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id)).toList());
       }
     }, onError: (Object e) {
       debugPrint('[SellerDashboard] Custom hotel orders listener error: $e');
@@ -817,10 +820,9 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
     );
   }
 
-  Widget _buildCustomHotelOrderCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data();
-    final details = (data['details'] as Map<String, dynamic>?) ?? {};
-    final customerName = (data['customerName'] as String?) ?? 'Customer';
+  Widget _buildCustomHotelOrderCard(ServiceRequestModel request) {
+    final details = request.rawDetails;
+    final customerName = request.customerName.isNotEmpty ? request.customerName : 'Customer';
     // details['items'] is now written as a structured List<Map>
     // ({itemId, name, price, quantity}) — same priced-cart shape
     // catalog_food_order uses — rather than the plain-String summary
@@ -835,7 +837,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         : (itemsRaw as String?) ?? '';
     final address = (details['deliveryAddress'] as String?) ?? '';
     final total = (details['totalAmount'] as num?)?.toDouble() ?? 0;
-    final status = (data['status'] as String?) ?? 'pending';
+    final status = request.status.isNotEmpty ? request.status : 'pending';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -874,13 +876,12 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
     );
   }
 
-  Widget _buildCatalogOrderCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data();
-    final details = (data['details'] as Map<String, dynamic>?) ?? {};
-    final customerName = (data['customerName'] as String?) ?? 'Customer';
+  Widget _buildCatalogOrderCard(ServiceRequestModel request) {
+    final details = request.rawDetails;
+    final customerName = request.customerName.isNotEmpty ? request.customerName : 'Customer';
     final items = (details['items'] as List<dynamic>?) ?? [];
-    final subtotal = (details['subtotal'] as num?)?.toDouble() ?? 0;
-    final status = (data['status'] as String?) ?? 'pending';
+    final subtotal = (details['subtotal'] as num?)?.toDouble() ?? request.subtotal?.toDouble() ?? 0;
+    final status = request.status.isNotEmpty ? request.status : 'pending';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),

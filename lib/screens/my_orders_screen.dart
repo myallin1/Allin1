@@ -12,11 +12,12 @@
 // needs a Firestore composite index that doesn't exist here. Query
 // with just the `.where()` filter and sort client-side instead.
 // ================================================================
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/service_request_model.dart';
+import '../services/service_request_service.dart';
 import '../services/theme_context_extensions.dart';
 import '../utils/service_request_labels.dart';
 import 'service_request_tracking_screen.dart';
@@ -40,17 +41,15 @@ class MyOrdersScreen extends StatelessWidget {
     'electronics_service': 'Electronics Service',
   };
 
-  String _firstItemLabel(Map<String, dynamic> details) {
-    final raw = details['items'];
-    if (raw is List && raw.isNotEmpty) {
-      final first = raw.first;
-      if (first is Map) {
-        final name = (first['name'] ?? '').toString().trim();
-        if (name.isNotEmpty) return name;
-      }
+  String _firstItemLabel(ServiceRequestModel request) {
+    if (request.items.isNotEmpty) {
+      final name = request.items.first.name.trim();
+      if (name.isNotEmpty) return name;
     }
+    final details = request.rawDetails;
     final listText = (details['listText'] as String?)?.trim();
     if (listText != null && listText.isNotEmpty) return listText;
+    final raw = details['items'];
     if (raw is String && raw.trim().isNotEmpty) return raw.trim();
     final taskDesc = (details['taskDescription'] as String?)?.trim();
     if (taskDesc != null && taskDesc.isNotEmpty) return taskDesc;
@@ -80,11 +79,8 @@ class MyOrdersScreen extends StatelessWidget {
           ? Center(
               child: Text('Please sign in to see your orders.', style: TextStyle(color: colors.mutedText)),
             )
-          : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('service_requests')
-                  .where('customerId', isEqualTo: user.uid)
-                  .snapshots(),
+          : StreamBuilder<List<ServiceRequestModel>>(
+              stream: ServiceRequestService().streamCustomerRequests(user.uid),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(child: CircularProgressIndicator(color: colors.accent));
@@ -94,16 +90,10 @@ class MyOrdersScreen extends StatelessWidget {
                     child: Text('Could not load your orders.', style: TextStyle(color: colors.mutedText)),
                   );
                 }
-                final docs = [...(snapshot.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[])];
-                // Client-side sort — see FIX note above.
-                docs.sort((a, b) {
-                  final aTs = a.data()['createdAt'];
-                  final bTs = b.data()['createdAt'];
-                  if (aTs is! Timestamp || bTs is! Timestamp) return 0;
-                  return bTs.compareTo(aTs);
-                });
+                // Sorting already happens inside streamCustomerRequests().
+                final requests = snapshot.data ?? const <ServiceRequestModel>[];
 
-                if (docs.isEmpty) {
+                if (requests.isEmpty) {
                   return Center(
                     child: Text('No orders yet.', style: TextStyle(color: colors.mutedText, fontSize: 13)),
                   );
@@ -111,28 +101,25 @@ class MyOrdersScreen extends StatelessWidget {
 
                 return ListView.separated(
                   padding: const EdgeInsets.all(16),
-                  itemCount: docs.length,
+                  itemCount: requests.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (context, i) => _orderCard(context, docs[i]),
+                  itemBuilder: (context, i) => _orderCard(context, requests[i]),
                 );
               },
             ),
     );
   }
 
-  Widget _orderCard(BuildContext context, QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+  Widget _orderCard(BuildContext context, ServiceRequestModel request) {
     final colors = context.colors;
-    final data = doc.data();
-    final requestType = (data['requestType'] as String?) ?? 'hero_booking';
-    final details = (data['details'] as Map<String, dynamic>?) ?? const {};
-    final status = (data['status'] as String?) ?? 'pending';
+    final requestType = request.requestType.isNotEmpty ? request.requestType : 'hero_booking';
+    final status = request.status;
     final statusColor = serviceRequestStatusColor(status);
     final statusLabel = serviceRequestStatusLabel(requestType, status);
-    final createdAt = data['createdAt'];
+    final createdAt = request.createdAt;
     String dateLabel = '';
-    if (createdAt is Timestamp) {
-      final dt = createdAt.toDate();
-      dateLabel = '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+    if (createdAt != null) {
+      dateLabel = '${createdAt.day.toString().padLeft(2, '0')}/${createdAt.month.toString().padLeft(2, '0')}/${createdAt.year}';
     }
 
     return InkWell(
@@ -141,7 +128,7 @@ class MyOrdersScreen extends StatelessWidget {
         context,
         MaterialPageRoute(
           builder: (_) => ServiceRequestTrackingScreen(
-            requestId: doc.id,
+            requestId: request.requestId,
             requestType: requestType,
           ),
         ),
@@ -185,7 +172,7 @@ class MyOrdersScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _firstItemLabel(details),
+                    _firstItemLabel(request),
                     style: TextStyle(color: colors.mutedText, fontSize: 12),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

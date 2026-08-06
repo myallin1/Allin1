@@ -10,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../config/food_categories.dart';
+import '../models/service_request_model.dart';
 import '../services/app_palette.dart';
 // Imported with a prefix (rather than a `hide` clause on some other
 // import) because the ambiguity here is with a `Category` symbol from
@@ -620,7 +621,8 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
               physics: const NeverScrollableScrollPhysics(),
               itemCount: docs.length,
               separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, i) => _orderCard(docs[i]),
+              itemBuilder: (context, i) =>
+                  _orderCard(ServiceRequestModel.fromFirestore(docs[i].data(), docs[i].id)),
             );
           },
         ),
@@ -628,9 +630,8 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
     );
   }
 
-  Widget _orderCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data();
-    final details = (data['details'] as Map<String, dynamic>?) ?? const {};
+  Widget _orderCard(ServiceRequestModel request) {
+    final details = request.rawDetails;
     final shop = (details['restaurantOrPreference'] as String?)?.trim();
     // Backward compat: 'items' used to be a plain String; now it's a
     // List<Map> of {sNo, name, qty} line items (see
@@ -646,7 +647,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
     } else if (itemsRaw is String) {
       items = itemsRaw.trim();
     }
-    final status = (data['status'] as String?) ?? 'pending';
+    final status = request.status.isNotEmpty ? request.status : 'pending';
     final statusColor = serviceRequestStatusColor(status);
     final statusLabel = serviceRequestStatusLabel('custom_food_order', status);
 
@@ -656,7 +657,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => ServiceRequestTrackingScreen(
-            requestId: doc.id,
+            requestId: request.requestId,
             requestType: 'custom_food_order',
           ),
         ),

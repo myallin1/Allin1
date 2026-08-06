@@ -21,6 +21,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/service_request_model.dart';
 import '../services/service_request_service.dart';
 import '../utils/service_request_labels.dart';
 import '../widgets/rating_feedback_sheet.dart';
@@ -115,10 +116,13 @@ class HeroBookingTrackingScreen extends StatelessWidget {
 
                 for (final doc in docs) {
                   if (active != null) break;
-                  final docData = doc.data();
-                  final status = docData['status'] as String? ?? 'pending';
-                  final paymentStatus = docData['paymentStatus'] as String?;
-                  final customerRating = docData['customerRating'];
+                  final docModel = ServiceRequestModel.fromFirestore(doc.data(), doc.id);
+                  final status = docModel.status;
+                  final paymentStatus = docModel.paymentStatus;
+                  // customerRating has no model field (not even via
+                  // rawDetails, which only covers the `details` submap) —
+                  // it's written at document root, so read it directly.
+                  final customerRating = doc.data()['customerRating'];
                   // A 'completed' task still counts as "active" here
                   // until it's actually paid — otherwise the customer
                   // could never reach the bill/pay step through this
@@ -154,16 +158,15 @@ class HeroBookingTrackingScreen extends StatelessWidget {
                   );
                 }
 
-                final data = active.data();
-                final status = data['status'] as String? ?? 'pending';
+                final model = ServiceRequestModel.fromFirestore(active.data(), active.id);
+                final status = model.status;
                 final currentIndex = serviceRequestStatusIndex(status);
                 final labels = serviceRequestLabelsFor('hero_booking');
                 final etaLabel = heroBookingEtaLabel(status);
                 final isAdminReview = status == 'admin_review';
-                final heroName = data['assignedHeroName'] as String?;
-                final heroPhone = data['assignedHeroPhone'] as String?;
-                final details =
-                    (data['details'] as Map<String, dynamic>?) ?? const {};
+                final heroName = model.assignedHeroName;
+                final heroPhone = model.assignedHeroPhone;
+                final details = model.rawDetails;
                 final taskDescription =
                     (details['taskDescription'] as String?)?.trim();
                 final categoryLabel =
@@ -179,20 +182,18 @@ class HeroBookingTrackingScreen extends StatelessWidget {
                     (preferredTiming != null && preferredTiming != 'asap')
                         ? DateTime.tryParse(preferredTiming)
                         : null;
-                final createdAt = data['createdAt'] as Timestamp?;
+                final createdAt = model.createdAt;
                 final bookedAtLabel = createdAt != null
-                    ? DateFormat('d MMM yyyy, h:mm a')
-                        .format(createdAt.toDate())
+                    ? DateFormat('d MMM yyyy, h:mm a').format(createdAt)
                     : null;
-                final estimatedAmount =
-                    (data['estimatedAmount'] as num?)?.toDouble();
-                final finalAmount = (data['finalAmount'] as num?)?.toDouble();
-                final paymentStatus = data['paymentStatus'] as String?;
+                final estimatedAmount = model.estimatedAmount?.toDouble();
+                final finalAmount = model.finalAmount?.toDouble();
+                final paymentStatus = model.paymentStatus;
                 final needsPayment =
                     status == 'completed' && paymentStatus != 'paid';
-                final assignedHeroId = data['assignedHeroId'] as String?;
+                final assignedHeroId = model.assignedHeroId;
                 final estimateApprovedByCustomer =
-                    data['estimateApprovedByCustomer'] as bool?;
+                    model.estimateApprovedByCustomer;
                 // Only relevant while the hero hasn't started yet — once
                 // in_progress, the hero already got past the gate (see
                 // hero_home_screen.dart's _advanceTo), so this card
@@ -208,7 +209,7 @@ class HeroBookingTrackingScreen extends StatelessWidget {
                 // returns to) is what surfaces the rating prompt.
                 final needsRating = status == 'completed' &&
                     paymentStatus == 'paid' &&
-                    data['customerRating'] == null;
+                    active.data()['customerRating'] == null;
 
                 // Subtitles are index-aligned with `labels`; only the
                 // currently-active stage's subtitle is ever shown by

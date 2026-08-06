@@ -7,13 +7,14 @@
 // is read live from Firestore, whether the update came from the
 // hero's app or an admin manual override.
 // ================================================================
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart' as rtdb;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/service_request_model.dart';
+import '../services/service_request_service.dart';
 import '../utils/service_request_labels.dart';
 import '../widgets/delivery_challan_card.dart';
 
@@ -50,20 +51,20 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
         title: Text('Track Request', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 18)),
         centerTitle: true,
       ),
-      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance.collection('service_requests').doc(requestId).snapshots(),
+      body: StreamBuilder<ServiceRequestModel?>(
+        stream: ServiceRequestService().streamRequest(requestId),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: _kPink));
           }
-          if (!snapshot.hasData || !snapshot.data!.exists) {
+          if (!snapshot.hasData || snapshot.data == null) {
             return const Center(child: Text('Request not found.', style: TextStyle(color: _kMuted)));
           }
 
-          final data = snapshot.data!.data()!;
-          final firestoreStatus = data['status'] as String? ?? 'pending';
-          final heroName = data['assignedHeroName'] as String?;
-          final heroPhone = data['assignedHeroPhone'] as String?;
+          final model = snapshot.data!;
+          final firestoreStatus = model.status;
+          final heroName = model.assignedHeroName;
+          final heroPhone = model.assignedHeroPhone;
 
           // FIX (Phase 4b — WhatsApp/Uber transient model): 'in_progress'
           // and 'nearing_completion' are now written ONLY to
@@ -94,10 +95,10 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
               final isAdminReview = status == 'admin_review';
 
               // Merge the live (possibly RTDB-overlaid) status into the
-              // data map handed to DeliveryChallanCard so its embedded
+              // model handed to DeliveryChallanCard so its embedded
               // TrackingTimeline reflects the same status this screen's
               // own stepper shows, not a stale Firestore-only value.
-              final mergedData = {...data, 'status': status};
+              final mergedModel = model.copyWith(status: status);
 
               return _buildBody(
                 context,
@@ -105,7 +106,7 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
                 heroName: heroName,
                 heroPhone: heroPhone,
                 currentIndex: currentIndex,
-                requestData: mergedData,
+                requestModel: mergedModel,
               );
             },
           );
@@ -120,7 +121,7 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
     required String? heroName,
     required String? heroPhone,
     required int currentIndex,
-    required Map<String, dynamic> requestData,
+    required ServiceRequestModel requestModel,
   }) {
     final labels = serviceRequestLabelsFor(requestType);
     return SingleChildScrollView(
@@ -128,7 +129,7 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                DeliveryChallanCard(requestData: requestData, requestId: requestId),
+                DeliveryChallanCard(request: requestModel),
                 if (isAdminReview)
                   Container(
                     width: double.infinity,
