@@ -10,7 +10,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 // T3: Admin Mirror — full God's Eye hero profile
-import '../../utils/hero_presence_utils.dart';
 import 'admin_hero_mirror_screen.dart';
 
 // ── Theme (matches admin dashboard) ────────────────────────────
@@ -312,12 +311,11 @@ class _ApprovedHeroCard extends StatelessWidget {
       builder: (context, rtdbSnapshot) {
         final rawRtdbValue = rtdbSnapshot.data?.snapshot.value;
         final rtdbMap = rawRtdbValue is Map ? rawRtdbValue : null;
-        // FIX (presence reliability audit — "admin ku exacta ah
-        // theriyanum yaru real ah online"): node existence alone isn't
-        // proof of a live session — onDisconnect() is best-effort, not
-        // an instant guarantee. Cross-check the heartbeat freshness too
-        // (see hero_presence_utils.dart).
-        final isOnline = rtdbMap != null && isHeroPresenceMapFresh(rtdbMap);
+        // Node existence = online (CTO architecture decision): presence
+        // is governed entirely by onDisconnect() + the `.info/connected`
+        // reconnect watcher in hero_home_screen.dart, no staleness
+        // cross-check needed here.
+        final isOnline = rtdbMap != null;
         final isActiveRide = rtdbMap != null &&
             (rtdbMap['isAvailable'] as bool? ?? true) == false;
         return _buildCard(context, isOnline: isOnline, isActiveRide: isActiveRide, approvedAt: approvedAt);

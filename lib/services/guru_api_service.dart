@@ -109,7 +109,21 @@ class GuruApiService {
       '(after your normal reply text) with a single line in exactly this '
       'format: [SUGGESTIONS: option one | option two | option three] — '
       '2 to 4 short options, separated by " | ". Omit this line entirely '
-      'when there is nothing sensible to suggest.';
+      'when there is nothing sensible to suggest.\n'
+      // NEW (per Nizam's explicit request — "AI oru command kudutha
+      // athuku action la yerangama... instruction and paragraph reply
+      // pannuthu"): this is a strict length/behavior rule, not a
+      // preference. If the customer's request clearly matches an
+      // available tool (booking a service, navigating to a section,
+      // checking for updates), you MUST call that tool immediately in
+      // the SAME turn — do not describe the steps they should take
+      // manually instead of just doing it. Your visible reply text in
+      // that case must be ONE short sentence (under 15 words) — e.g. '
+      "\"Opening Bike Taxi for you now!\" — never a multi-line explainer. "
+      'Only fall back to a longer explanation when NO tool genuinely '
+      'fits (general questions, troubleshooting, or you are unsure which '
+      'option they mean — use the 3-suggestion-chip format for that last '
+      'case, per the rule above, instead of writing a paragraph).';
 
   static const String _apiKey = String.fromEnvironment(
     'GROQ_API_KEY',

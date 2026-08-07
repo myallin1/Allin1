@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -44,6 +45,20 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
   // online right now" instead of showing "No heroes online" for a moment
   // on every screen open before the real data lands.
   bool _heroesLoading = true;
+
+  // NEW (per Nizam's request — "ipo irukura heros list kulla oru
+  // filter vaikanum, all heros and online heros nu"): 'online' keeps
+  // the existing behavior (live online_heroes RTDB stream, already
+  // efficient — single persistent listener, torn down while
+  // backgrounded). 'all' is a ONE-TIME Firestore fetch of every
+  // approved hero (not a live listener — deliberately, per Nizam's
+  // explicit "database reads waste agakudathu" requirement), refreshed
+  // only when this filter is selected or pull-to-refreshed, then
+  // overlaid with whatever's currently in _onlineHeroes for live
+  // online/offline status per card.
+  String _filter = 'online';
+  bool _allHeroesLoading = false;
+  List<Map<String, dynamic>> _allHeroes = [];
 
   final TextEditingController _nameCtrl = TextEditingController();
   final TextEditingController _phoneCtrl = TextEditingController();
@@ -153,6 +168,132 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
           );
         }
       },
+    );
+  }
+
+  Future<void> _loadAllHeroes() async {
+    setState(() => _allHeroesLoading = true);
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('heroes')
+          .where('approvalStatus', isEqualTo: 'approved')
+          .get();
+      if (!mounted) return;
+      setState(() {
+        _allHeroes = snap.docs.map((doc) {
+          final data = doc.data();
+          return <String, dynamic>{
+            'heroId': doc.id,
+            'name': (data['captainName'] as String?) ??
+                (data['name'] as String?) ??
+                'Hero',
+            'phone': (data['phone'] as String?) ?? '',
+            'vehicleType': (data['vehicleType'] as String?) ?? 'bike',
+          };
+        }).toList();
+        _allHeroesLoading = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _allHeroesLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load heroes: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _setFilter(String filter) {
+    if (_filter == filter) return;
+    setState(() => _filter = filter);
+    if (filter == 'all' && _allHeroes.isEmpty && !_allHeroesLoading) {
+      unawaited(_loadAllHeroes());
+    }
+  }
+
+  /// Direct dial — always available regardless of online/available
+  /// status, so admin can reach any hero straight from the list or map
+  /// without going through the full ride-dispatch form.
+  Future<void> _callHero(String? phone) async {
+    if (phone == null || phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No phone number on file for this hero.')),
+      );
+      return;
+    }
+    final url = Uri.parse('tel:$phone');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    }
+  }
+
+  /// FIX (per Nizam's request — map markers should show name + a call
+  /// button, reachable regardless of availability): the old
+  /// onMarkerTap went straight into _selectHero(), which fully blocked
+  /// a busy hero with just an error toast and no way to call them at
+  /// all. This lightweight sheet always shows the name and a call
+  /// button; "Dispatch a Ride" only appears when the hero is actually
+  /// available.
+  void _showHeroInfoSheet(Map<String, dynamic> hero) {
+    final isAvailable = hero['isAvailable'] == true;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: _surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: (isAvailable ? _green : _red).withValues(alpha: 0.2),
+                  child: Text(
+                    ((hero['name'] as String?) ?? 'H')[0].toUpperCase(),
+                    style: TextStyle(color: isAvailable ? _green : _red),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text((hero['name'] as String?) ?? 'Hero',
+                          style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 16),),
+                      Text(
+                        '${hero['vehicleType'] ?? 'bike'} • ${isAvailable ? 'Available' : 'On a task'}',
+                        style: TextStyle(color: isAvailable ? _green : _red, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.call_rounded, color: _green),
+                  onPressed: () => _callHero(hero['phone'] as String?),
+                ),
+              ],
+            ),
+            if (isAvailable) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: _pink),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _selectHero(hero);
+                  },
+                  child: const Text('Dispatch a Ride', style: TextStyle(color: Colors.white)),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -287,7 +428,12 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
                 dropdownColor: _card,
                 style: const TextStyle(color: Colors.white),
                 isExpanded: true,
-                items: ['bike', 'auto', 'car', 'parcel']
+                // FIX (per Nizam's request — "bike,car,auto,truck,
+                // lorry,heros nu yellarayum admin gps valiya map
+                // monitor panni call pandra option irukanum"): added
+                // truck/lorry, matching the full vehicle set heroes can
+                // actually register as.
+                items: ['bike', 'auto', 'car', 'truck', 'lorry', 'parcel']
                     .map((e) => DropdownMenuItem(value: e, child: Text(e.toUpperCase())))
                     .toList(),
                 onChanged: (v) => setSheetState(() => _selectedCategory = v!),
@@ -363,20 +509,79 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
       );
     }
 
+    // Merges the one-time "All Heroes" fetch with live online-status
+    // (and, when present, GPS position) from the already-running
+    // online_heroes stream — no extra reads, just an in-memory join.
+    final onlineById = {
+      for (final h in _onlineHeroes) h['heroId'] as String: h,
+    };
+    final listHeroes = _filter == 'all'
+        ? _allHeroes.map((h) {
+            final live = onlineById[h['heroId']];
+            return <String, dynamic>{
+              ...h,
+              'isOnline': live != null,
+              'isAvailable': live?['isAvailable'] ?? false,
+              'lat': live?['lat'],
+              'lng': live?['lng'],
+              'distanceKm': live?['distanceKm'],
+            };
+          }).toList()
+        : _onlineHeroes;
+
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
         backgroundColor: _surface,
         title: const Text('Dispatch Heroes', style: TextStyle(color: _text, fontWeight: FontWeight.bold)),
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: _pink,
-          labelColor: _pink,
-          unselectedLabelColor: _muted,
-          tabs: const [
-            Tab(icon: Icon(Icons.list_rounded), text: 'List'),
-            Tab(icon: Icon(Icons.map_rounded), text: 'Map'),
-          ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(96),
+          child: Column(
+            children: [
+              // NEW (per Nizam's request — All/Online filter): only
+              // meaningfully affects the List tab below (heroes without
+              // a live GPS fix can't be plotted on the Map tab, so that
+              // one always shows current online_heroes regardless).
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: Row(
+                  children: [
+                    ChoiceChip(
+                      label: const Text('Online Heroes'),
+                      selected: _filter == 'online',
+                      onSelected: (_) => _setFilter('online'),
+                      selectedColor: _pink.withValues(alpha: 0.25),
+                      labelStyle: TextStyle(color: _filter == 'online' ? _pink : _muted, fontSize: 12),
+                      backgroundColor: _card,
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: const Text('All Heroes'),
+                      selected: _filter == 'all',
+                      onSelected: (_) => _setFilter('all'),
+                      selectedColor: _pink.withValues(alpha: 0.25),
+                      labelStyle: TextStyle(color: _filter == 'all' ? _pink : _muted, fontSize: 12),
+                      backgroundColor: _card,
+                    ),
+                    if (_filter == 'all' && _allHeroesLoading) ...[
+                      const SizedBox(width: 10),
+                      const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: _pink)),
+                    ],
+                  ],
+                ),
+              ),
+              TabBar(
+                controller: _tabController,
+                indicatorColor: _pink,
+                labelColor: _pink,
+                unselectedLabelColor: _muted,
+                tabs: const [
+                  Tab(icon: Icon(Icons.list_rounded), text: 'List'),
+                  Tab(icon: Icon(Icons.map_rounded), text: 'Map'),
+                ],
+              ),
+            ],
+          ),
         ),
         actions: [
           Container(
@@ -400,41 +605,71 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          if (_onlineHeroes.isEmpty) const Center(child: Text('No heroes online', style: TextStyle(color: _muted))) else ListView.builder(
+          if (listHeroes.isEmpty)
+            Center(
+              child: Text(
+                _filter == 'all' ? 'No approved heroes found' : 'No heroes online',
+                style: const TextStyle(color: _muted),
+              ),
+            )
+          else
+            ListView.builder(
                   padding: const EdgeInsets.all(8),
-                  itemCount: _onlineHeroes.length,
+                  itemCount: listHeroes.length,
                   itemBuilder: (ctx, i) {
-                    final hero = _onlineHeroes[i];
+                    final hero = listHeroes[i];
+                    final isOnline = _filter == 'all' ? (hero['isOnline'] == true) : true;
                     final isAvailable = hero['isAvailable'] == true;
-                    final distanceKm = hero['distanceKm'] as double;
+                    final distanceKm = hero['distanceKm'] as double?;
+                    final statusColor = !isOnline ? _muted : (isAvailable ? _green : _red);
                     return Card(
                       color: _card,
                       margin: const EdgeInsets.symmetric(vertical: 4),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       child: ListTile(
-                        onTap: () => _selectHero(hero),
+                        // Only online, available heroes go straight into
+                        // the ride-dispatch flow — anyone else is still
+                        // fully reachable via the call button below,
+                        // just not dispatchable right now.
+                        onTap: isOnline ? () => _selectHero(hero) : null,
                         leading: CircleAvatar(
-                          backgroundColor: isAvailable ? _green.withValues(alpha: 0.2) : _red.withValues(alpha: 0.2),
+                          backgroundColor: statusColor.withValues(alpha: 0.2),
                           child: Text(
                             ((hero['name'] as String?) ?? 'H')[0].toUpperCase(),
-                            style: TextStyle(color: isAvailable ? _green : _red),
+                            style: TextStyle(color: statusColor),
                           ),
                         ),
                         title: Text((hero['name'] as String?) ?? 'Hero', style: const TextStyle(color: _text)),
                         subtitle: Text(
-                          '${hero['vehicleType'] ?? 'bike'} - ${distanceKm.toStringAsFixed(1)}km away',
+                          distanceKm != null
+                              ? '${hero['vehicleType'] ?? 'bike'} • ${distanceKm.toStringAsFixed(1)}km away'
+                              : '${hero['vehicleType'] ?? 'bike'}',
                           style: const TextStyle(color: _muted, fontSize: 11),
                         ),
-                        trailing: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: isAvailable ? _green.withValues(alpha: 0.2) : _red.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            isAvailable ? 'AVAILABLE' : 'ON RIDE',
-                            style: TextStyle(color: isAvailable ? _green : _red, fontSize: 9, fontWeight: FontWeight.bold),
-                          ),
+                        // NEW (per Nizam's request — "name ku pakkathula
+                        // call button irukanum, atha thotta antha hero
+                        // ku nera call poganum"): call icon always
+                        // reachable, regardless of online/available
+                        // status.
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: statusColor.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                !isOnline ? 'OFFLINE' : (isAvailable ? 'AVAILABLE' : 'ON RIDE'),
+                                style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.call_rounded, color: _green, size: 20),
+                              onPressed: () => _callHero(hero['phone'] as String?),
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -459,7 +694,7 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
                           color: (hero['isAvailable'] as bool?) ?? false ? _green : _red,
                         );
                       }).toList(),
-                      onMarkerTap: (index) => _selectHero(_onlineHeroes[index]),
+                      onMarkerTap: (index) => _showHeroInfoSheet(_onlineHeroes[index]),
                     ),
                   ),
                 ),

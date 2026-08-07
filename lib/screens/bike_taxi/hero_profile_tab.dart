@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/update_service.dart';
+import '../../services/usage_tracking_service.dart';
 import '../../widgets/hero_premium_loader.dart';
 import 'hero_settings_screen.dart';
 import 'hero_wallet_screen.dart';
@@ -188,10 +189,16 @@ class _HeroProfileTabState extends State<HeroProfileTab>
     }
   }
 
-  // T2: Direct APK download — CEO drops hero_app.apk into Firebase hosting
-  // and runs `firebase deploy`. This URL auto-serves the latest build.
+  // FIX (per Nizam's bug report): this used to point at a stale/dead
+  // Firebase Hosting URL (my-allin1.web.app/hero_app.apk) that nobody
+  // has deployed to in this session — a totally different, unmaintained
+  // path from the canonical GitHub Releases source every other download
+  // button in the app already uses (UpdateService.fallbackApkUrl).
+  // Switched to the same canonical source for consistency and because
+  // the old URL almost certainly 404s or serves a stale build.
   Future<void> _downloadHeroApp() async {
-    const apkUrl = 'https://my-allin1.web.app/hero_app.apk';
+    unawaited(UsageTrackingService.instance.trackApkDownload('hero'));
+    final apkUrl = UpdateService().fallbackApkUrl('hero');
     final messenger = ScaffoldMessenger.of(context);
     final launched = await launchUrl(
       Uri.parse(apkUrl),

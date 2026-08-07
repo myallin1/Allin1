@@ -59,33 +59,34 @@ android {
         multiDexEnabled = true
     }
 
-    // NEW (CTO mandate — Naming Standardization): all 4 flavors renamed
-    // from the old, inconsistent com.njtech.<role>allin1 pattern
-    // (myallin1 / heroallin1 / admininallin1 / sellerallin1 — the admin
-    // one even had a stray extra "in") to a single uniform
-    // com.njtech.allin1.<role> dot-notation family, matching `namespace`
-    // below. None of these 4 apps are live on the Play Store yet, so
-    // this is a clean rename with no existing installs to migrate.
-    // CTO will register these exact 4 new package names in Firebase
-    // Console and replace android/app/google-services.json himself —
-    // that file is intentionally NOT touched by this patch (a
-    // hand-edited google-services.json would be invalid; it must come
-    // from Firebase's own download).
+    // REVERTED (build was failing — "No matching client found... in
+    // google-services.json"): the full com.njtech.allin1.<role> rename
+    // was only half-done on the Firebase side (only "seller" got
+    // registered under the new scheme so far; customer/hero/admin were
+    // never re-registered in Firebase Console under their new names).
+    // Per instruction, we're matching code to what already exists in
+    // Firebase/Firestore right now instead of renaming everything today:
+    // customer/hero/admin go back to their ORIGINAL applicationIds
+    // (already present in google-services.json), and seller keeps the
+    // new com.njtech.allin1.seller id since that's the one actually
+    // registered in Firebase Console (see screenshot: App ID
+    // 1:357526153693:android:04dc889017e1a6774aee34). Full naming
+    // standardization across all 4 flavors can be revisited later.
     productFlavors {
         create("customer") {
             dimension = "app"
-            applicationId = "com.njtech.allin1.customer"
+            applicationId = "com.njtech.allin1"
             manifestPlaceholders["appName"] = "my allin1"
         }
         create("hero") {
             dimension = "app"
-            applicationId = "com.njtech.allin1.hero"
+            applicationId = "com.njtech.heroallin1"
             manifestPlaceholders["appName"] = "hero allin1"
         }
         // Task 2: Admin flavor for assembleAdminRelease
         create("admin") {
             dimension = "app"
-            applicationId = "com.njtech.allin1.admin"
+            applicationId = "com.njtech.admininallin1"
             manifestPlaceholders["appName"] = "admin allin1"
         }
         // Seller flavor for assembleSellerRelease (lib/main_seller.dart)

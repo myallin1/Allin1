@@ -4,7 +4,7 @@
  * Entry Point
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifyHeroOnRideAssigned = exports.manageHeroApproval = exports.checkDeviceFingerprint = exports.verifyAndProcessPayment = exports.affiliatePostbackWebhook = void 0;
+exports.notifyHeroOnServicePing = exports.notifyHeroOnPing = exports.notifyHeroOnRideAssigned = exports.manageHeroApproval = exports.checkDeviceFingerprint = exports.verifyAndProcessPayment = exports.affiliatePostbackWebhook = void 0;
 var affiliatePostbackWebhook_1 = require("./affiliatePostbackWebhook");
 Object.defineProperty(exports, "affiliatePostbackWebhook", { enumerable: true, get: function () { return affiliatePostbackWebhook_1.affiliatePostbackWebhook; } });
 var verifyAndProcessPayment_1 = require("./verifyAndProcessPayment");
@@ -15,4 +15,15 @@ var manageHeroApproval_1 = require("./manageHeroApproval");
 Object.defineProperty(exports, "manageHeroApproval", { enumerable: true, get: function () { return manageHeroApproval_1.manageHeroApproval; } });
 var notifyHeroOnRideAssigned_1 = require("./notifyHeroOnRideAssigned");
 Object.defineProperty(exports, "notifyHeroOnRideAssigned", { enumerable: true, get: function () { return notifyHeroOnRideAssigned_1.notifyHeroOnRideAssigned; } });
+// FCM Data Push Layer 2 (CTO mandate). Unlike notifyHeroOnRideAssigned
+// above (a Firestore `rides` onUpdate trigger keyed off `targeted_hero_id`
+// — a field nothing in the app actually writes, confirmed dead in
+// practice), these two trigger off the RTDB `hero_pings`/
+// `hero_service_pings` writes every existing dispatch path already
+// makes, so they're reachable by construction rather than requiring a
+// specific write shape no caller produces.
+var notifyHeroOnPing_1 = require("./notifyHeroOnPing");
+Object.defineProperty(exports, "notifyHeroOnPing", { enumerable: true, get: function () { return notifyHeroOnPing_1.notifyHeroOnPing; } });
+var notifyHeroOnServicePing_1 = require("./notifyHeroOnServicePing");
+Object.defineProperty(exports, "notifyHeroOnServicePing", { enumerable: true, get: function () { return notifyHeroOnServicePing_1.notifyHeroOnServicePing; } });
 //# sourceMappingURL=index.js.map

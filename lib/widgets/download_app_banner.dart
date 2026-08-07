@@ -20,6 +20,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/localization_service.dart';
 import '../services/update_service.dart';
+import '../services/usage_tracking_service.dart';
 
 /// Same visual language as the Customer app's drawer CTA (purple
 /// gradient card, rocket emoji, download pill) — tapping it downloads
@@ -89,6 +90,7 @@ class DownloadAppBanner extends StatelessWidget {
 
   Future<void> _downloadApk(BuildContext context) async {
     if (context.mounted) Navigator.of(context).maybePop(); // close the drawer first
+    unawaited(UsageTrackingService.instance.trackApkDownload(appVariant));
     final url = UpdateService().fallbackApkUrl(appVariant);
     final uri = Uri.parse(url);
     try {

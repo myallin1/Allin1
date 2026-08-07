@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'firebase_options.dart';
+import 'screens/app_splash_video_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/seller_dashboard_screen.dart';
 import 'screens/seller_home_kitchen_menu_screen.dart';
@@ -110,13 +111,19 @@ class SellerApp extends StatelessWidget {
       theme: themeService.currentTheme,
       initialRoute: '/',
       routes: {
-        '/': (_) => const LoginScreen(
-              presetUserType: UserType.customer,
-              lockUserType: true,
-              title: 'Seller Login',
-              subtitle: 'Manage your Allin1 store',
-              lockedUserLabel: 'Seller',
-              postLoginRoute: '/seller-home',
+        // NEW (per Nizam's request — shared splash video, all 4 apps):
+        // plays app_splash.mp4 (audio, full-screen stretch, hard-capped)
+        // before landing on the existing Seller LoginScreen — purely a
+        // visual layer, the login route itself is unchanged.
+        '/': (_) => const AppSplashVideoScreen(
+              nextScreen: LoginScreen(
+                presetUserType: UserType.customer,
+                lockUserType: true,
+                title: 'Seller Login',
+                subtitle: 'Manage your Allin1 store',
+                lockedUserLabel: 'Seller',
+                postLoginRoute: '/seller-home',
+              ),
             ),
         '/seller-home': (_) => const SellerDashboardScreen(),
         '/seller-store': (_) => const SellerScreen(),

@@ -8,9 +8,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/db_usage_tracker.dart';
+import '../../services/pwa_cache_platform_stub.dart'
+    if (dart.library.html) '../../services/pwa_cache_platform_web.dart';
 import '../../services/service_requests_listener.dart';
+import '../../services/web_version_checker.dart';
 import '../../widgets/download_app_banner.dart';
 import 'admin_ai_settings_screen.dart';
 import 'admin_dashboard_screen.dart';
@@ -19,6 +23,7 @@ import 'admin_service_requests_screen.dart';
 import 'admin_sos_kyc_approvals_screen.dart';
 import 'admin_ux_audit_screen.dart';
 import 'commission_settings_screen.dart';
+import 'customer_usage_tracking_screen.dart';
 import 'erode_offers_management_screen.dart';
 
 class SuperAdminHomeScreen extends StatefulWidget {
@@ -824,15 +829,39 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 );
               },
             ),
+            // NEW (per Nizam's request, final pre-launch testing stage):
+            // "customer usage tracking" — landing page visits + APK
+            // downloads (per app) + total signups, to monitor organic
+            // link usage outside the Play Store.
+            ListTile(
+              leading: const Icon(Icons.query_stats_rounded, color: Color(0xFF00E5FF)),
+              title: const Text('Customer Usage Tracking', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Landing page visits, downloads, signups',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const CustomerUsageTrackingScreen()),
+                );
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.update_rounded, color: _purple),
               title: const Text('Check for Updates', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              // FIX (per Nizam's bug report — "checking update kudutha
+              // athu hero app or customer app ah open pannividuthu,
+              // admin pwa update pannala"): this used to just
+              // pushReplacement back to this same screen — not a real
+              // update check at all, so the Admin PWA genuinely never
+              // updated no matter how many times this was tapped. Now
+              // calls the real WebVersionChecker + PWA-cache-clear-and-
+              // reload mechanism (same one the Customer app's drawer
+              // uses) — it reloads THIS tab's own URL (Uri.base), so it
+              // can never accidentally jump to the Hero/Customer PWA.
               onTap: () {
                 Navigator.pop(context);
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute<void>(builder: (_) => const SuperAdminHomeScreen()),
-                );
+                unawaited(_runAdminManualUpdateCheck(context));
               },
             ),
             ListTile(
@@ -1156,5 +1185,98 @@ class _AdminReviewBadgeWrapper extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<Stream<QuerySnapshot<Map<String, dynamic>>>>('waitingStream', waitingStream));
+  }
+}
+
+// ================================================================
+// ADMIN "CHECK FOR UPDATE" — real implementation
+// ================================================================
+// FIX (per Nizam's bug report): Admin's ListTile used to just
+// pushReplacement back to itself — never actually checked anything, so
+// the Admin PWA could never update this way. Mirrors
+// dashboard_screen.dart's _runManualUpdateCheck exactly: fetch
+// /version.json (WebVersionChecker — deploy-agnostic, no appVariant
+// awareness needed), and if it differs from what this tab loaded with,
+// clear the PWA cache and reload THIS tab's own URL (Uri.base) — never
+// a hardcoded URL, so it can never jump to a different app's PWA.
+// Native (non-web) builds: WebVersionChecker.checkNow() is a no-op
+// (kIsWeb guard inside it), so this just reports "already latest".
+Future<void> _runAdminManualUpdateCheck(BuildContext context) async {
+  final navigator = Navigator.of(context, rootNavigator: true);
+
+  showDialog<void>(
+    context: navigator.context,
+    barrierDismissible: false,
+    builder: (_) => const AlertDialog(
+      backgroundColor: Color(0xFF1A1A26),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
+      content: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2.4, color: Color(0xFF6C63FF)),
+          ),
+          SizedBox(width: 18),
+          Flexible(
+            child: Text('Checking for updates…', style: TextStyle(color: Colors.white, fontSize: 14)),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  await WebVersionChecker.instance.checkNow();
+  if (!context.mounted) return;
+  await Future<void>.delayed(const Duration(milliseconds: 900));
+  if (!context.mounted) return;
+
+  if (!WebVersionChecker.instance.isUpdateAvailable) {
+    navigator.pop();
+    ScaffoldMessenger.of(navigator.context).showSnackBar(
+      const SnackBar(
+        content: Text('You already have the latest version.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+    return;
+  }
+
+  navigator.pop();
+  showDialog<void>(
+    context: navigator.context,
+    barrierDismissible: false,
+    builder: (_) => const AlertDialog(
+      backgroundColor: Color(0xFF1A1A26),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
+      content: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2.4, color: Color(0xFF6C63FF)),
+          ),
+          SizedBox(width: 18),
+          Flexible(
+            child: Text('Updating…', style: TextStyle(color: Colors.white, fontSize: 14)),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  await Future<void>.delayed(const Duration(milliseconds: 600));
+  if (!context.mounted) return;
+
+  try {
+    await PwaCachePlatform().clearAndReload();
+  } catch (e) {
+    debugPrint('[AdminManualUpdate] cache clear failed, reloading anyway: $e');
+    final uri = Uri.parse(Uri.base.toString());
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 }

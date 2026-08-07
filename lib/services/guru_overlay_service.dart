@@ -114,6 +114,18 @@ class GuruOverlayService extends ChangeNotifier {
   bool get autoSpeak => _autoSpeak;
   Offset get position => _position;
 
+  // NEW (per Nizam's request — "AI button single tap ku mic connect
+  // pannividu"): one-shot flag consumed by _GuruOverlayPanelState right
+  // after it mounts, so a single tap on the FAB both opens the panel
+  // AND starts listening immediately — no second tap on the inner mic
+  // icon needed. Reset back to false the instant it's consumed.
+  bool _autoStartMicOnOpen = false;
+  bool consumeAutoStartMic() {
+    final value = _autoStartMicOnOpen;
+    _autoStartMicOnOpen = false;
+    return value;
+  }
+
   void toggleAutoSpeak() {
     _autoSpeak = !_autoSpeak;
     if (!_autoSpeak) unawaited(_tts.stop());
@@ -174,10 +186,15 @@ class GuruOverlayService extends ChangeNotifier {
   /// Inserts the single global overlay entry. Safe to call repeatedly —
   /// a second call while already showing just brings it back from
   /// minimized instead of inserting a duplicate entry.
-  void show() {
+  void show({bool autoStartMic = false}) {
+    if (autoStartMic) _autoStartMicOnOpen = true;
     if (_entry != null) {
       if (_minimized) {
         _minimized = false;
+        notifyListeners();
+      } else if (autoStartMic) {
+        // Already open and expanded — still honor the mic request by
+        // notifying so the panel's build picks up consumeAutoStartMic().
         notifyListeners();
       }
       return;
@@ -702,7 +719,12 @@ class GlobalGuruFab extends StatelessWidget {
             child: FloatingActionButton(
               heroTag: 'guru_global_fab',
               backgroundColor: const Color(0xFFB44CFF),
-              onPressed: () => GuruOverlayService.instance.show(),
+              // FIX (per Nizam's request — "AI button single tap ku mic
+              // button connect pannividu"): single tap now opens the
+              // panel AND starts listening immediately, instead of
+              // opening a quiet text panel that needed a second tap on
+              // its own mic icon.
+              onPressed: () => GuruOverlayService.instance.show(autoStartMic: true),
               child: const Icon(Icons.auto_awesome, color: Colors.white),
             ),
           ),
@@ -733,6 +755,20 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
   bool _speechReady = false;
   bool _isListening = false;
   bool _voiceResultHandled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // FIX (per Nizam's request — single-tap-to-listen): if the FAB
+    // requested auto-mic, kick off listening right after this panel's
+    // first frame (can't call it synchronously in initState — mic
+    // permission/speech init needs a real BuildContext + widget tree).
+    if (GuruOverlayService.instance.consumeAutoStartMic()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_onMicTapped());
+      });
+    }
+  }
 
   @override
   void dispose() {

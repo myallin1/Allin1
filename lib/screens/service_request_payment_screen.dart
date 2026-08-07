@@ -25,7 +25,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/service_request_model.dart';
-import '../services/service_request_service.dart';
 import '../widgets/animated_meter_fare.dart';
 import '../widgets/rating_feedback_sheet.dart';
 
@@ -54,59 +53,16 @@ class ServiceRequestPaymentScreen extends StatefulWidget {
 
 class _ServiceRequestPaymentScreenState
     extends State<ServiceRequestPaymentScreen> {
-  bool _submitting = false;
-
-  Future<void> _pay(String method) async {
-    setState(() => _submitting = true);
-    try {
-      await ServiceRequestService()
-          .markServiceRequestPaid(widget.requestId, method: method);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Payment recorded. Thank you!')),
-        );
-        Navigator.pop(context);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not record payment: $e'),
-              backgroundColor: Colors.red,),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
-
-  // FIX (payment-trust audit, per Nizam's request): the hero's own
-  // "Mark Payment Received (Cash)" button (hero_home_screen.dart) now
-  // only writes the interim paymentStatus:'hero_marked_paid' — it can no
-  // longer unlock rating by itself. The customer must explicitly confirm
-  // here before this becomes the real 'paid' status. "No" just leaves
-  // the task in this state; the customer can still pick Cash/UPI
-  // themselves below if the hero's claim was wrong.
-  Future<void> _confirmHeroMarkedPaid() async {
-    setState(() => _submitting = true);
-    try {
-      await ServiceRequestService()
-          .markServiceRequestPaid(widget.requestId, method: 'cash');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Payment confirmed. Thank you!')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not confirm payment: $e'),
-              backgroundColor: Colors.red,),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
+  // FIX (per Nizam's explicit request — reversing the earlier
+  // "customer confirms" design): the customer used to be able to tap
+  // "UPI"/"Cash" here and unilaterally set the task to 'paid' — closing
+  // it and unlocking their own rating screen with zero confirmation
+  // from the hero, which let a customer walk away without ever paying.
+  // The self-attest buttons and their handlers (_pay,
+  // _confirmHeroMarkedPaid) are removed entirely; only the hero's own
+  // "Payment Received" action (hero_home_screen.dart ->
+  // markServiceRequestPaymentReceived) can now set 'paid'. This screen
+  // is now read-only for the customer until that happens.
 
   @override
   Widget build(BuildContext context) {
@@ -147,10 +103,6 @@ class _ServiceRequestPaymentScreenState
           final estimatedAmount = request.estimatedAmount?.toDouble();
           final paymentStatus = request.paymentStatus ?? '';
           final isPaid = paymentStatus == 'paid';
-          // Hero claimed cash was received but the customer hasn't
-          // confirmed it yet — see FIX comment on
-          // markServiceRequestPaymentReceived() in service_request_service.dart.
-          final isHeroMarkedPaid = paymentStatus == 'hero_marked_paid';
           final amount = finalAmount ?? estimatedAmount ?? 0;
           final assignedHeroId = request.assignedHeroId;
           // Not yet rated — RatingFeedbackSheet itself has no
@@ -214,7 +166,12 @@ class _ServiceRequestPaymentScreenState
                   ),
                 ),
                 const Spacer(),
-                if (isHeroMarkedPaid) ...[
+                // FIX (per Nizam's explicit request): this screen is now
+                // read-only for the customer regarding payment — only
+                // the hero's own "Payment Received" action
+                // (hero_home_screen.dart) can set paymentStatus:'paid'.
+                // No self-attest buttons here anymore.
+                if (!isPaid && finalAmount != null) ...[
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -222,67 +179,18 @@ class _ServiceRequestPaymentScreenState
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: const Color(0xFFFFD980)),
                     ),
-                    child: Column(
-                      children: [
-                        Text(
-                          'Your hero marked this task as Cash paid. '
-                          'Did you actually pay ₹${amount.toStringAsFixed(0)}?',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.outfit(
-                              color: _kText,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,),
-                        ),
-                        const SizedBox(height: 14),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 48,
-                          child: ElevatedButton(
-                            onPressed:
-                                _submitting ? null : _confirmHeroMarkedPaid,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _kGreen,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),),
-                            ),
-                            child: Text('Yes, I paid this',
-                                style: GoogleFonts.outfit(
-                                    fontWeight: FontWeight.w800,),),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'No? Pick how you actually paid below.',
-                          style: GoogleFonts.outfit(
-                              color: _kMuted, fontSize: 11,),
-                        ),
-                      ],
+                    child: Text(
+                      'Please pay your hero ₹${amount.toStringAsFixed(0)} '
+                      'directly (Cash or UPI). This task will close and '
+                      'your rating page will appear as soon as your hero '
+                      'confirms the payment was received.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.outfit(
+                          color: _kText,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                ],
-                if ((!isPaid && !isHeroMarkedPaid) &&
-                    finalAmount != null) ...[
-                  Text('Choose how you paid',
-                      style: GoogleFonts.outfit(
-                          color: _kText,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,),),
-                  const SizedBox(height: 10),
-                  _payMethodButton('UPI', Icons.qr_code_rounded, 'upi'),
-                  const SizedBox(height: 10),
-                  _payMethodButton('Cash', Icons.payments_rounded, 'cash'),
-                ] else if (!isPaid && isHeroMarkedPaid && finalAmount != null) ...[
-                  Text('Or choose how you paid',
-                      style: GoogleFonts.outfit(
-                          color: _kText,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,),),
-                  const SizedBox(height: 10),
-                  _payMethodButton('UPI', Icons.qr_code_rounded, 'upi'),
-                  const SizedBox(height: 10),
-                  _payMethodButton('Cash', Icons.payments_rounded, 'cash'),
                 ] else if (!isPaid) ...[
                   const Text(
                     'Waiting for the hero to complete the task and generate the final bill.',
@@ -319,23 +227,4 @@ class _ServiceRequestPaymentScreenState
     );
   }
 
-  Widget _payMethodButton(String label, IconData icon, String method) {
-    return SizedBox(
-      width: double.infinity,
-      height: 52,
-      child: OutlinedButton.icon(
-        onPressed: _submitting ? null : () => _pay(method),
-        icon: Icon(icon, color: _kPink),
-        label: Text(label,
-            style: GoogleFonts.outfit(
-                color: _kText, fontWeight: FontWeight.w700,),),
-        style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: _kBorder),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
-      ),
-    );
-  }
 }

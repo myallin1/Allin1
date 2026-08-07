@@ -34,17 +34,26 @@ class UpdateService {
         _stringValue(data['version_name']).isNotEmpty;
   }
 
+  // FIX (per Nizam's bug report — "Hero app la check for update kudutha
+  // Hero update agama Customer app update agi athukulla kutitu
+  // poiduthu"): every appVariant case here already resolves to the
+  // correct distinct URL (verified: hero -> allin1-hero.apk, customer
+  // -> allin1-customer.apk, no mix-up in this switch). The actual
+  // mechanism is almost certainly Android's browser/download-manager
+  // reusing a cached response or a previously-downloaded file with a
+  // similar name/path when the exact same GitHub "latest" URL was hit
+  // before for a different app — appending a cache-busting query
+  // param forces every tap to be treated as a genuinely new download,
+  // never silently reopening whatever the last APK on disk was.
   String fallbackApkUrl(String appVariant) {
-    switch (appVariant) {
-      case 'hero':
-        return heroApkUrl;
-      case 'admin':
-        return adminApkUrl;
-      case 'seller':
-        return sellerApkUrl;
-      default:
-        return customerApkUrl;
-    }
+    final base = switch (appVariant) {
+      'hero' => heroApkUrl,
+      'admin' => adminApkUrl,
+      'seller' => sellerApkUrl,
+      _ => customerApkUrl,
+    };
+    final cacheBust = DateTime.now().millisecondsSinceEpoch;
+    return '$base?v=$cacheBust';
   }
 
   Map<String, dynamic> buildNotificationPayload({

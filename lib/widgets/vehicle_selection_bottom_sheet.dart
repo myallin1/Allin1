@@ -114,8 +114,16 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
           ],
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.only(top: 8, bottom: 24, left: 24, right: 24),
+          // FIX (per Nizam's request — "vehichle select confirmation
+          // pandra screen la irukurathum big ah iruku so athayum scrool
+          // panni pakkama single view la paathu vehichle confirm
+          // pandramari antha size um optimize panni cute pannanum"):
+          // swapped the SingleChildScrollView for a plain Column so the
+          // whole sheet (header + vehicle list + confirm button) fits
+          // in one static view — every size/spacing below was shrunk to
+          // make that fit without scrolling for a typical ride catalog.
+          child: Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 16, left: 18, right: 18),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -123,15 +131,15 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                 // Enhanced Drag Handle
                 Center(
                   child: Container(
-                    width: 56,
-                    height: 6,
+                    width: 44,
+                    height: 5,
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 14),
 
                 // Modern Header with Distance
                 Row(
@@ -143,17 +151,17 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                         Text(
                           'Choose your ride',
                           style: GoogleFonts.outfit(
-                            fontSize: 24,
+                            fontSize: 17,
                             fontWeight: FontWeight.w800,
                           color: _brandText,
-                            letterSpacing: -0.8,
+                            letterSpacing: -0.6,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
                           '${widget.distanceKm.toStringAsFixed(1)} km trip',
                           style: GoogleFonts.outfit(
-                            fontSize: 14,
+                            fontSize: 12,
                             color: _brandMuted,
                             fontWeight: FontWeight.w500,
                           ),
@@ -161,36 +169,39 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                       ],
                     ),
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         color: _brandPink.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(14),
                       ),
                       child: const Icon(
                         Icons.directions_car_rounded,
                         color: _brandPink,
-                        size: 24,
+                        size: 18,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 10),
 
                 // Enhanced Vehicle List
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: kRideCatalog.length,
-                  itemBuilder: (context, index) => _buildVehicleCard(kRideCatalog[index]),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: kRideCatalog.length,
+                    itemBuilder: (context, index) => _buildVehicleCard(kRideCatalog[index]),
+                  ),
                 ),
 
-                const SizedBox(height: 32),
+                const SizedBox(height: 12),
 
                 // Premium Confirm Button
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
                   curve: Curves.easeOutCubic,
-                  height: 50,
+                  height: 44,
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [_brandPink, _brandPurple],
@@ -252,7 +263,6 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
     final String title = vehicle.sheetTitle;
     final String eta = vehicle.eta;
     final String subtitle = vehicle.subtitle;
-    final String description = vehicle.description;
     final int capacity = vehicle.capacity;
     final Color accentColor = vehicle.color;
     final Color bgColor = vehicle.bgColor;
@@ -263,10 +273,10 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOutCubic,
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 8),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(18),
         child: InkWell(
           onTap: () {
             setState(() {
@@ -275,11 +285,11 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
             // Add haptic feedback if available
             // HapticFeedback.selectionClick();
           },
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(18),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutCubic,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               gradient: isSelected
                   ? LinearGradient(
@@ -287,23 +297,23 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                     )
                   : null,
               color: isSelected ? bgColor.withValues(alpha: 0.16) : Colors.white,
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(18),
               border: Border.all(
                 color: isSelected ? accentColor.withValues(alpha: 0.6) : _brandBorder,
-                width: isSelected ? 2.5 : 1.5,
+                width: isSelected ? 2 : 1,
               ),
               boxShadow: isSelected
                   ? [
                       BoxShadow(
                         color: accentColor.withValues(alpha: 0.2),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
+                        blurRadius: 12,
+                        offset: const Offset(0, 5),
                       ),
                     ]
                   : [
                       BoxShadow(
                         color: _brandPink.withValues(alpha: 0.08),
-                        blurRadius: 8,
+                        blurRadius: 6,
                         offset: const Offset(0, 2),
                       ),
                     ],
@@ -312,31 +322,31 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
               children: [
                 // Enhanced Vehicle Icon with Gradient Background
                 Container(
-                  width: 56,
-                  height: 56,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     gradient: isSelected
                         ? LinearGradient(colors: [accentColor, accentColor.withValues(alpha: 0.8)])
                         : const LinearGradient(colors: [Color(0xFFFFEEF7), Colors.white]),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(
                         color: isSelected
                             ? accentColor.withValues(alpha: 0.3)
                             : _brandPink.withValues(alpha: 0.08),
-                        blurRadius: 12,
-                        offset: const Offset(0, 6),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
                   child: Center(
                     child: Text(
                       icon,
-                      style: const TextStyle(fontSize: 28),
+                      style: const TextStyle(fontSize: 20),
                     ),
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 10),
 
                 // Enhanced Details Section
                 Expanded(
@@ -346,29 +356,31 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            title,
-                            style: GoogleFonts.outfit(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: _brandText,
-                              letterSpacing: -0.4,
+                          Expanded(
+                            child: Text(
+                              title,
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: _brandText,
+                                letterSpacing: -0.3,
+                              ),
                             ),
                           ),
                           // Enhanced Price Display
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
                               gradient: isSelected
                                   ? LinearGradient(colors: [accentColor, accentColor.withValues(alpha: 0.8)])
                                   : const LinearGradient(colors: [Color(0xFFFFEEF7), Colors.white]),
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(12),
                               boxShadow: [
                                 BoxShadow(
                                   color: isSelected
                                       ? accentColor.withValues(alpha: 0.2)
                                       : _brandPink.withValues(alpha: 0.08),
-                                  blurRadius: 8,
+                                  blurRadius: 6,
                                   offset: const Offset(0, 2),
                                 ),
                               ],
@@ -376,66 +388,59 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                             child: Text(
                               '₹${fare.toStringAsFixed(0)}',
                               style: GoogleFonts.outfit(
-                                fontSize: 18,
+                                fontSize: 14,
                                 fontWeight: FontWeight.w800,
                                 color: isSelected ? Colors.white : _brandPink,
-                                letterSpacing: -0.3,
+                                letterSpacing: -0.2,
                               ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 3),
                       Row(
                         children: [
                           Icon(
                             Icons.access_time_rounded,
-                            size: 14,
+                            size: 11,
                             color: isSelected ? accentColor : _brandMuted,
                           ),
-                          const SizedBox(width: 4),
+                          const SizedBox(width: 3),
                           Text(
                             eta,
                             style: GoogleFonts.outfit(
-                              fontSize: 13,
+                              fontSize: 11,
                               color: isSelected ? accentColor : _brandMuted,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 8),
                           const Icon(
                             Icons.person_rounded,
-                            size: 14,
+                            size: 11,
                             color: _brandMuted,
                           ),
-                          const SizedBox(width: 4),
+                          const SizedBox(width: 3),
                           Text(
                             '$capacity seats',
                             style: GoogleFonts.outfit(
-                              fontSize: 13,
+                              fontSize: 11,
                               color: _brandMuted,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Text(
                         subtitle,
                         style: GoogleFonts.outfit(
-                          fontSize: 14,
+                          fontSize: 11,
                           color: _brandMuted,
                           fontWeight: FontWeight.w500,
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        description,
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          color: _brandMuted,
-                          fontWeight: FontWeight.w400,
-                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -443,25 +448,25 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
 
                 // Selection Indicator
                 if (isSelected) ...[
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 10),
                   Container(
-                    width: 32,
-                    height: 32,
+                    width: 22,
+                    height: 22,
                     decoration: BoxDecoration(
                       color: accentColor,
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
                           color: accentColor.withValues(alpha: 0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
+                          blurRadius: 6,
+                          offset: const Offset(0, 3),
                         ),
                       ],
                     ),
                     child: const Icon(
                       Icons.check_rounded,
                       color: Colors.white,
-                      size: 20,
+                      size: 14,
                     ),
                   ),
                 ],

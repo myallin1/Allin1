@@ -14,6 +14,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'app_navigator.dart';
 import 'firebase_options.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
+import 'screens/app_splash_video_screen.dart';
 import 'screens/admin/ads_management_screen.dart';
 import 'screens/admin/credentials_admin_screen.dart';
 import 'screens/admin/fare_management_screen.dart';
@@ -203,24 +204,30 @@ class AdminApp extends StatelessWidget {
       // this mount entirely for a returning admin, and the waiting-state
       // fallback now reuses BrandedLoadingScreen instead of a different-
       // looking bare spinner for the rare genuine cold-cache case.
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        initialData: FirebaseAuth.instance.currentUser,
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const BrandedLoadingScreen();
-          }
-          if (snap.hasData && snap.data != null) {
-            return const SuperAdminHomeScreen();
-          }
-          return const LoginScreen(
-             presetUserType: UserType.admin,
-             lockUserType: true,
-             title: '🔐 Admin Access',
-             subtitle: 'Authorized personnel only',
-             lockedUserLabel: 'Admin',
-           );
-        },
+      // NEW (per Nizam's request — shared splash video, all 4 apps):
+      // app_splash.mp4 plays first (audio, full-screen stretch, hard-
+      // capped) as a purely visual layer wrapped around this exact same
+      // StreamBuilder auth gate — none of its own logic changed.
+      home: AppSplashVideoScreen(
+        nextScreen: StreamBuilder<User?>(
+          stream: FirebaseAuth.instance.authStateChanges(),
+          initialData: FirebaseAuth.instance.currentUser,
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const BrandedLoadingScreen();
+            }
+            if (snap.hasData && snap.data != null) {
+              return const SuperAdminHomeScreen();
+            }
+            return const LoginScreen(
+               presetUserType: UserType.admin,
+               lockUserType: true,
+               title: '🔐 Admin Access',
+               subtitle: 'Authorized personnel only',
+               lockedUserLabel: 'Admin',
+             );
+          },
+        ),
       ),
       // NEW (CTO mandate — Task 1: The Admin Confirmation Gate): the
       // "Quick Task Chatbox" FAB, laid over every admin screen exactly

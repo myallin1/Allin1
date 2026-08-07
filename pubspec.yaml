@@ -1,7 +1,7 @@
 ﻿name: erode_superapp
 description: Erode All-in-One Super App - Multi-vendor Commerce MVP by NJ TECH
 publish_to: 'none'
-version: 1.0.9+101
+version: 1.0.9+105
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -105,6 +105,18 @@ dependencies:
   open_filex: ^4.7.0
   path_provider: ^2.1.5
   flutter_local_notifications: ^21.0.0
+  # NEW (CTO mandate — FCM Layer 2 alternative, Option D): Android
+  # foreground service so the Hero app's process (and therefore the
+  # existing in-process RTDB hero_pings/hero_service_pings listeners in
+  # main_hero.dart/hero_home_screen.dart) survives being backgrounded
+  # while a hero is Online, instead of the OS killing it and silently
+  # losing Layer 1 dispatch. Shows the required persistent "You are
+  # Online" notification while active. Android-only usage (see
+  # hero_foreground_service.dart) — other flavors (Customer/Seller/
+  # Admin) never call into this. Run `flutter pub get` after this
+  # change; verify the pinned version against pub.dev, since this
+  # sandbox can't run pub get to confirm it resolves.
+  flutter_foreground_task: ^8.13.0
   audioplayers: ^6.6.0
   video_player:
   carousel_slider:

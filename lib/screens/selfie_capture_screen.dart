@@ -26,9 +26,11 @@
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart' as ph;
 
 const Color _kBg = Color(0xFF0A0A1A);
 const Color _kPink = Color(0xFFFF4FA3);
@@ -53,6 +55,19 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
   Future<void>? _initFuture;
   bool _capturing = false;
   String? _initError;
+  // FIX (per Nizam's bug report — "selfie upload button permission
+  // ilathanala open agathama"): root cause is that this screen used to
+  // let the `camera` plugin implicitly request the OS permission
+  // inside CameraController.initialize() with no explicit request/
+  // status check of our own first. On a device where the permission
+  // was previously denied (or a manufacturer-specific permission-flow
+  // quirk), that implicit path can silently fail or hang instead of
+  // showing anything actionable — from the hero's point of view, the
+  // button just "does nothing". Now explicitly requests
+  // Permission.camera up front and shows a distinct, clearly-labelled
+  // "Open Settings" recovery path when it's been permanently denied,
+  // instead of leaving the hero stuck on a spinner or a vague error.
+  bool _permissionPermanentlyDenied = false;
 
   @override
   void initState() {
@@ -62,6 +77,22 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
 
   Future<void> _initCamera() async {
     try {
+      if (!kIsWeb) {
+        var status = await ph.Permission.camera.status;
+        if (!status.isGranted) {
+          status = await ph.Permission.camera.request();
+        }
+        if (!status.isGranted) {
+          if (!mounted) return;
+          setState(() {
+            _permissionPermanentlyDenied = status.isPermanentlyDenied;
+            _initError = status.isPermanentlyDenied
+                ? 'Camera permission was denied. Please enable it from Settings to take your selfie.'
+                : 'Camera permission is required to take a live selfie.';
+          });
+          return;
+        }
+      }
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
         setState(() => _initError = 'No camera found on this device.');
@@ -240,6 +271,17 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
               style: GoogleFonts.outfit(color: _kText, fontSize: 13),
             ),
             const SizedBox(height: 20),
+            if (_permissionPermanentlyDenied)
+              ElevatedButton.icon(
+                onPressed: () => ph.openAppSettings(),
+                style: ElevatedButton.styleFrom(backgroundColor: _kPink),
+                icon: const Icon(Icons.settings_rounded, color: Colors.white),
+                label: Text(
+                  'Open Settings to allow Camera',
+                  style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
+                ),
+              ),
+            const SizedBox(height: 10),
             ElevatedButton.icon(
               onPressed: _useGalleryFallback,
               style: ElevatedButton.styleFrom(backgroundColor: _kPink),

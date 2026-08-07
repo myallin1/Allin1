@@ -144,12 +144,46 @@ class _HeroDashboardShellState extends State<HeroDashboardShell> {
       child: Scaffold(
       backgroundColor: _bg,
       // NEW (CTO mandate — Universal Side Tray Banner): Hero app had no
-      // drawer at all before this. Edge-swipe opens it (no AppBar here
-      // to host a hamburger icon).
+      // drawer at all before this.
       drawer: const HeroSideDrawer(),
-      body: IndexedStack(
-        index: _tabIndex,
-        children: _tabs,
+      body: Stack(
+        children: [
+          IndexedStack(
+            index: _tabIndex,
+            children: _tabs,
+          ),
+          // FIX (per Nizam's report — "hamburger tray... ila", drawer
+          // was edge-swipe-only since this shell has no AppBar to host
+          // Flutter's automatic hamburger icon): a visible floating
+          // menu button, top-left, safe-area aware, opens the same
+          // HeroSideDrawer (which carries the "Download App 10x
+          // faster" banner) on every tab.
+          Positioned(
+            top: 0,
+            left: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Builder(
+                  builder: (context) => Material(
+                    color: _surface,
+                    shape: const CircleBorder(),
+                    elevation: 4,
+                    shadowColor: const Color(0x33FF4FA3),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () => Scaffold.of(context).openDrawer(),
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Icon(Icons.menu_rounded, color: _pink, size: 24),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: DecoratedBox(
         decoration: const BoxDecoration(

@@ -66,20 +66,22 @@ class _VideoSplashScreenState extends State<VideoSplashScreen> {
     // timer" requirement. Fires no matter what the video is doing
     // (plays fine, blocked by autoplay policy, fails to load, still
     // buffering on a slow connection).
-    _safetyTimer = Timer(const Duration(seconds: 5), _goNext);
+    _safetyTimer = Timer(const Duration(seconds: 11), _goNext);
 
     try {
-      final controller = VideoPlayerController.asset('assets/videos/customer_splash.mp4');
+      // UPDATED (per Nizam's request): swapped to the new shared
+      // splash clip (assets/videos/app_splash.mp4 — has real audio,
+      // ~11s), same one now used by all 4 apps via
+      // app_splash_video_screen.dart. Audio is now UNMUTED per
+      // request. Safety timer bumped from 5s to 11s below to cover
+      // this longer clip's actual duration.
+      final controller = VideoPlayerController.asset('assets/videos/app_splash.mp4');
       _controller = controller;
       controller.addListener(_onTick);
       controller.initialize().then((_) {
         if (!mounted) return;
         setState(() => _ready = true);
-        // Muted autoplay is allowed by every major browser without a
-        // user gesture; unmuted autoplay often isn't. This clip has no
-        // audio track anyway (stripped during compression), so this is
-        // just defensive consistency with intro_video_screen.dart.
-        controller.setVolume(0).then((_) => controller.play()).catchError((Object e) {
+        controller.setVolume(1.0).then((_) => controller.play()).catchError((Object e) {
           debugPrint('[VideoSplash] play() failed: $e');
         });
       }).catchError((Object e) {
@@ -137,12 +139,17 @@ class _VideoSplashScreenState extends State<VideoSplashScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: _ready && _controller != null
-          ? FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: _controller!.value.size.width,
-                height: _controller!.value.size.height,
-                child: VideoPlayer(_controller!),
+          ? SizedBox.expand(
+              // Stretches to the full device screen (per request:
+              // "full screen kum video stretch agi irukanum") rather
+              // than letterboxing/cropping like BoxFit.cover.
+              child: FittedBox(
+                fit: BoxFit.fill,
+                child: SizedBox(
+                  width: _controller!.value.size.width,
+                  height: _controller!.value.size.height,
+                  child: VideoPlayer(_controller!),
+                ),
               ),
             )
           : const SizedBox.shrink(),

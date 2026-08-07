@@ -409,6 +409,24 @@ class ServiceRequestService {
     }
 
     if (newStatus == 'in_progress' || newStatus == 'nearing_completion') {
+      // FIX (per Nizam's bug report — "hero task ah start pannamudila"):
+      // this used to write ONLY to RTDB active_service_requests, never
+      // touching the Firestore service_requests doc's `status` field —
+      // but every customer-facing read (streamRequest() above,
+      // MyOrdersScreen, ServiceRequestTrackingScreen) reads Firestore,
+      // not RTDB. So a hero tapping "Start" would silently succeed on
+      // the RTDB side while the customer's screen stayed frozen on
+      // 'hero_assigned' forever — from the hero's point of view this
+      // looked exactly like "couldn't start the task" even though no
+      // actual error occurred. Now writes both, matching the
+      // Firestore-only branch below for every OTHER status.
+      await FirebaseFirestore.instance
+          .collection('service_requests')
+          .doc(requestId)
+          .update({
+        'status': newStatus,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
       await rtdb.FirebaseDatabase.instance
           .ref('active_service_requests/$requestId')
           .update({
@@ -456,6 +474,10 @@ class ServiceRequestService {
       // needs a fresh approval rather than inheriting a stale decision.
       'estimateApprovedByCustomer': null,
       'estimateRespondedAt': null,
+      // Clears any pending customer counter-offer — the hero has just
+      // responded to it with a fresh number, so it shouldn't keep
+      // showing as "still pending" once this new estimate is out.
+      'customerCounterOffer': null,
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -484,7 +506,14 @@ class ServiceRequestService {
   /// setEstimatedAmount()'s reset above. A simple negotiate loop, no
   /// cap on rejection count (can be added later if repeated rejection
   /// turns out to be a real problem in practice).
-  Future<void> rejectEstimate(String requestId) async {
+  // FIX (per Nizam's request — Accept/Reject renamed to
+  // Accept/Negotiate): unchanged reset behavior, plus an optional
+  // customer counter-offer amount so the hero sees what price the
+  // customer actually wants instead of just an unexplained blank
+  // "enter an estimate again" prompt. Kept the same method name since
+  // every existing behavior (reset estimate, let hero resend) is still
+  // exactly what "Negotiate" does under the hood.
+  Future<void> rejectEstimate(String requestId, {double? counterOffer}) async {
     await FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
@@ -492,6 +521,7 @@ class ServiceRequestService {
       'estimatedAmount': null,
       'estimateApprovedByCustomer': null,
       'estimateRespondedAt': null,
+      'customerCounterOffer': counterOffer,
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -550,39 +580,67 @@ class ServiceRequestService {
     });
   }
 
-  /// Hero-side: hero claims cash payment was collected. FIX (per
-  /// Nizam's request): this used to write paymentStatus:'paid' directly
-  /// — the exact same terminal value markServiceRequestPaid() writes
-  /// when the CUSTOMER themselves confirms payment. That meant a hero
-  /// could unilaterally flip a task to "paid" with zero input from the
-  /// customer, which immediately unlocked the rating prompt on the
-  /// customer's screen even if the customer never actually paid or
-  /// never tapped anything — a trust/fraud gap ("hero ve thane
-  /// solliduvaru, customer ku theriyaame rating varum"). Now this only
-  /// writes an INTERIM status; service_request_payment_screen.dart
-  /// shows the customer an explicit "Hero says Cash payment received —
-  /// confirm?" step, and only the customer's own confirmation (which
-  /// calls markServiceRequestPaid, the method above) sets the real
-  /// 'paid' status that unlocks rating. Does not change `status`
-  /// (already 'completed') — only paymentStatus.
-  Future<void> markServiceRequestPaymentReceived(String requestId) async {
+  /// Hero-side: hero confirms cash/UPI payment was actually collected.
+  ///
+  /// FIX (per Nizam's explicit, later request — reversing the earlier
+  /// "customer confirms" design below): the previous version wrote only
+  /// an INTERIM status and made the CUSTOMER'S own confirmation the
+  /// real terminal 'paid' write — but that let a customer tap "I paid"
+  /// themselves the instant the task completed, closing the task and
+  /// unlocking their own rating screen WITHOUT the hero ever actually
+  /// receiving payment ("hero kita pay pannama avare task close
+  /// pannikuramari iruku"). Nizam explicitly decided the opposite
+  /// trust direction is the correct one for this business: only the
+  /// HERO physically holding the cash/confirming the UPI transfer can
+  /// know payment genuinely happened, so this now IS the terminal
+  /// write — sets the real 'paid' status directly, which is what
+  /// unlocks the customer's rating prompt. The customer-side
+  /// self-attestation buttons in service_request_payment_screen.dart
+  /// were removed to match (see that file's comments). Does not change
+  /// `status` (already 'completed') — only paymentStatus/paidAt.
+  Future<void> markServiceRequestPaymentReceived(
+    String requestId, {
+    String method = 'cash',
+  }) async {
     await FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
         .update({
-      'paymentStatus': 'hero_marked_paid',
+      'paymentStatus': 'paid',
+      'paymentMethod': method,
+      'paidAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
   /// Admin manually assigns a hero after confirming by phone — no
   /// broadcast ping needed since the admin already coordinated directly.
+  ///
+  /// FIX (CTO mandate — FCM Data Push Layer 2, Task 2): this used to
+  /// ONLY write Firestore + `active_service_requests` — it never wrote
+  /// a `hero_service_pings/{heroId}/{requestId}` node at all, which
+  /// means the hero's already-built, already-proven accept-dialog UI
+  /// (driven entirely by that RTDB path — see hero_home_screen.dart's
+  /// _listenForServicePings) never fired for an admin-manual
+  /// assignment. The hero would only ever find out via passively
+  /// noticing the task appear in their own list — no dialog, no
+  /// ringtone, no lock-screen alert, and (until this change) no FCM
+  /// push either, since the send-side Cloud Function is triggered off
+  /// this exact ping write. Writing a single-target ping here closes
+  /// that gap and reuses the same proven mechanism every other
+  /// dispatch path already relies on.
   Future<void> adminAssignHero({
     required String requestId,
     required String heroId,
     required String heroName,
     required String heroPhone,
   }) async {
+    final requestDoc = await FirebaseFirestore.instance
+        .collection('service_requests')
+        .doc(requestId)
+        .get();
+    final requestData = requestDoc.data();
+
     await FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
@@ -606,6 +664,27 @@ class ServiceRequestService {
       'acceptedHeroId': heroId,
       'acceptedHeroName': heroName,
       'acceptedHeroPhone': heroPhone,
+    });
+
+    // See method-level doc comment above — reuses the exact ping shape
+    // _broadcastToEligibleHeroes() writes, with a generous window since
+    // this is a single specific hero the admin already confirmed by
+    // phone, not a race against other heroes.
+    await rtdb.FirebaseDatabase.instance
+        .ref('hero_service_pings/$heroId/$requestId')
+        .set({
+      'requestId': requestId,
+      'requestType': requestData?['requestType'] as String? ?? '',
+      'customerName': requestData?['customerName'] as String? ?? '',
+      'customerPhone': requestData?['customerPhone'] as String? ?? '',
+      'details': requestData?['details'] ?? const <String, dynamic>{},
+      'pingExpiresAt': DateTime.now().toUtc().millisecondsSinceEpoch +
+          kServiceRequestPingExpirySeconds * 1000,
+      // Matches _broadcastToEligibleHeroes()'s ping shape exactly —
+      // nothing reads this field for branching logic today, but
+      // keeping the value consistent avoids introducing a second,
+      // unexplained status vocabulary for the same RTDB node shape.
+      'status': 'pinging',
     });
   }
 

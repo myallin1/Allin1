@@ -26,6 +26,7 @@ import '../../models/ride_model.dart';
 import '../../models/service_request_model.dart';
 import '../../services/app_update_checker.dart';
 import '../../services/db_usage_tracker.dart';
+import '../../services/hero_foreground_service.dart';
 import '../../services/hero_ride_notification_service.dart';
 import '../../services/hero_usage_accumulator_service.dart';
 import '../../services/hero_wallet_service.dart';
@@ -61,6 +62,11 @@ class HeroHomeScreen extends StatefulWidget {
 class _HeroHomeScreenState extends State<HeroHomeScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   static const String _pendingHeroRideIdKey = 'pending_hero_ride_id';
+  // FCM Data Push Layer 2 counterpart — mirrors kPendingHeroServiceRequestIdKey
+  // in main_hero.dart's background handler (same string, duplicated
+  // locally same as _pendingHeroRideIdKey/kPendingHeroRideIdKey already
+  // are, to avoid an extra cross-file import for a single constant).
+  static const String _pendingHeroServiceRequestIdKey = 'pending_hero_service_request_id';
   // T1: Corrected to Erode Bus Stand (was Mullamparappu at 11.2825, 77.7275)
   static const LatLng _erodeBusStandCenter = LatLng(11.3418, 77.7171);
   static const double _serviceZoneRadiusMeters = 5000;
@@ -730,6 +736,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     _loadHeroData();
     unawaited(_initializeNotifications());
     unawaited(_consumePendingRidePush());
+    unawaited(_consumePendingServiceRequestPush());
   }
 
   @override
@@ -748,11 +755,24 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         break;
       case AppLifecycleState.resumed:
         debugPrint('Hero: resumed — reconfirming ONLINE');
-        setState(() {});
-        setState(() => _mapRefreshGen++);
+        // FIX (per Nizam's bug report — "online vachu vera apps ku
+        // poitu varrathukullaye offline poiduthu"): root cause is
+        // platform-level, not an app bug — switching away suspends the
+        // RTDB WebSocket (aggressively on mobile browsers/PWA, and
+        // sometimes even natively under battery optimization), which
+        // fires the server-side onDisconnect() hook and removes
+        // online_heroes/{uid} while the hero is away, exactly the
+        // presence-without-heartbeat tradeoff the CTO explicitly chose.
+        // Can't prevent the brief drop without reintroducing the
+        // rejected heartbeat, but we CAN make recovery on return as
+        // fast as possible: explicitly nudge the SDK to reconnect
+        // (goOnline()) rather than only waiting on its own automatic
+        // reconnect logic, right before re-arming presence.
+        FirebaseDatabase.instance.goOnline();
         _syncOnlineStatus(true);
         unawaited(_loadHeroData());
         unawaited(_consumePendingRidePush());
+        unawaited(_consumePendingServiceRequestPush());
         // Re-attach broadcast stream in case it dropped on background
         if (_isOnline) {}
         break;
@@ -872,6 +892,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         _listenForServicePings();
 
         unawaited(_consumePendingRidePush());
+        unawaited(_consumePendingServiceRequestPush());
         debugPrint('🔄 Hero online state restored — live tracking restarted');
       }
 
@@ -1078,6 +1099,13 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       if (online) {
         _listenForHeroPings();
         _listenForServicePings();
+        _startPresenceConnectionWatcher();
+        // CTO mandate — FCM Layer 2 alternative, Option D: keeps the
+        // app process (and the two listeners started just above) alive
+        // in the background via a persistent "You are Online"
+        // notification, instead of relying on FCM to wake a killed
+        // process. Best-effort — never blocks going online.
+        unawaited(HeroForegroundService.start());
         // APP INFRA COST RECOVERY (per Nizam's instruction): start the
         // in-memory "active minutes" clock the moment the hero is
         // genuinely online. Idempotent -- a lifecycle-resume that just
@@ -1090,6 +1118,8 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         _heroPingSub?.cancel();
         _heroPingSub = null;
         _stopServicePingListening();
+        _stopPresenceConnectionWatcher();
+        unawaited(HeroForegroundService.stop());
         // APP INFRA COST RECOVERY: flush the accumulated online-minutes
         // usage fee the moment the hero goes Offline -- this is one of
         // only two flush points in the whole design (the other is ride
@@ -1142,10 +1172,76 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       _heroPingSub?.cancel();
       _heroPingSub = null;
       _stopServicePingListening();
+      _stopPresenceConnectionWatcher();
+      unawaited(HeroForegroundService.stop());
       if (mounted) {
         setState(() => _isOnline = false);
       }
     }
+  }
+
+  // ── `.info/connected` reconnect watcher ──────────────────────────
+  // FIX (CTO architecture review — presence, take 2): onDisconnect()
+  // is armed against the CURRENT RTDB session only. If that session
+  // drops and silently reconnects (network blip, carrier handover, a
+  // backgrounded PWA tab resuming its socket) the old onDisconnect()
+  // hook is gone with the dead session, and nothing re-arms it on the
+  // new one unless we explicitly do so — a hero could stay "online" in
+  // Firestore/UI terms but have zero disconnect protection until they
+  // next move enough to trigger a radar write (which, correctly, no
+  // longer happens on any fixed timer).
+  //
+  // `.info/connected` is RTDB's own connection-state stream: free (not
+  // a real read/write against the database, just local connection
+  // state), and event-driven — it only fires on an actual connect or
+  // disconnect transition, never on a timer. Re-writing presence +
+  // re-arming onDisconnect() on every `true` transition (the official
+  // Firebase presence pattern) closes the reconnect gap with zero
+  // polling and zero writes while the hero simply stays connected and
+  // stationary.
+  void _startPresenceConnectionWatcher() {
+    _presenceConnectedSub?.cancel();
+    final uid = _user?.uid;
+    if (uid == null) return;
+    _presenceConnectedSub = FirebaseDatabase.instance
+        .ref('.info/connected')
+        .onValue
+        .listen((event) {
+      final connected = event.snapshot.value == true;
+      // Also covers the very first connect right after _syncOnlineStatus's
+      // own write above — a harmless, one-time redundant write, not a
+      // recurring one, since this only re-fires on genuine
+      // connect/disconnect transitions.
+      if (!connected || !_isOnline) return;
+      final onlineHeroRef = FirebaseDatabase.instance.ref('online_heroes/$uid');
+      final pos = _latestPosition;
+      final payload = <String, dynamic>{
+        'name': _captainName,
+        'vehicleType': _normalizeHeroVehicleType(_vehicleType),
+        'isAvailable': _activeRideId.isEmpty,
+        'category': _normalizeHeroVehicleType(_vehicleType).toLowerCase(),
+        'city': _heroCity,
+        'lastUpdated': ServerValue.timestamp,
+        if (pos != null) 'lat': pos.latitude,
+        if (pos != null) 'lng': pos.longitude,
+        if (pos != null) 'latitude': pos.latitude,
+        if (pos != null) 'longitude': pos.longitude,
+      };
+      unawaited(
+        onlineHeroRef.update(payload).then((_) {
+          return onlineHeroRef.onDisconnect().remove();
+        }).catchError((Object e) {
+          debugPrint('[HeroHomeScreen] .info/connected re-arm failed: $e');
+        }),
+      );
+    }, onError: (Object e) {
+      debugPrint('[HeroHomeScreen] .info/connected listener error: $e');
+    });
+  }
+
+  void _stopPresenceConnectionWatcher() {
+    _presenceConnectedSub?.cancel();
+    _presenceConnectedSub = null;
   }
 
   // ── GLOBAL LOCATION TRACKING (Radar) ─────────────────────────
@@ -1287,6 +1383,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     _foregroundMessageSub?.cancel();
     _messageOpenedSub?.cancel();
     _serviceRequestBusySub?.cancel();
+    _presenceConnectedSub?.cancel();
     // Cancel Firestore/RTDB popup streams — background FCM replaces them.
     _stopBroadcastRideStream();
     // Dispose UI-only animation controllers.
@@ -1367,7 +1464,10 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       return;
     }
     try {
-      if (_user == null || !_isOnline) {
+      // FIX (killed-app notification-tap dead end, same root cause as
+      // _fetchTargetedRideOnce): removed `!_isOnline` — this is the
+      // exact cold-start path where _isOnline hasn't restored yet.
+      if (_user == null) {
         return;
       }
       final prefs = await SharedPreferences.getInstance();
@@ -1406,6 +1506,35 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     }
   }
 
+  /// FCM Data Push Layer 2 counterpart to _consumePendingRidePush() —
+  /// picks up a service-request push that arrived while the app was
+  /// fully killed (main_hero.dart's background handler wrote the
+  /// pending key to SharedPreferences since there was no live Dart
+  /// isolate to show the accept dialog directly at that moment).
+  Future<void> _consumePendingServiceRequestPush() async {
+    if (!mounted) {
+      return;
+    }
+    try {
+      // FIX (same root cause as above): removed `!_isOnline`.
+      if (_user == null) {
+        return;
+      }
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) {
+        return;
+      }
+      final requestId = prefs.getString(_pendingHeroServiceRequestIdKey);
+      if (requestId == null || requestId.trim().isEmpty) {
+        return;
+      }
+      await _fetchTargetedServiceRequestOnce(requestId.trim());
+      await prefs.remove(_pendingHeroServiceRequestIdKey);
+    } catch (e) {
+      debugPrint('[HeroHomeScreen] Pending service-request push restore failed: $e');
+    }
+  }
+
   String? _rideIdFromPush(RemoteMessage message) {
     for (final key in const <String>[
       'rideId',
@@ -1413,6 +1542,16 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       'rideDocId',
       'ride_doc_id',
     ]) {
+      final value = message.data[key];
+      if (value is String && value.trim().isNotEmpty) {
+        return value.trim();
+      }
+    }
+    return null;
+  }
+
+  String? _serviceRequestIdFromPush(RemoteMessage message) {
+    for (final key in const <String>['requestId', 'request_id']) {
       final value = message.data[key];
       if (value is String && value.trim().isNotEmpty) {
         return value.trim();
@@ -1433,6 +1572,22 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     if (rideId != null) {
       await _fetchTargetedRideOnce(
         rideId,
+        showLocalNotification: !openedByUser,
+      );
+      if (!mounted) {
+        return;
+      }
+      return;
+    }
+    // FCM Data Push Layer 2 — generic service_requests dispatch
+    // (hero_booking/custom_food_order/grocery_order/etc.), keyed by
+    // requestId rather than rideId. Same "targeted push" shape as the
+    // ride branch above, just routed into _showServiceRequestDialog
+    // instead of _showRideRequestDialog.
+    final requestId = _serviceRequestIdFromPush(message);
+    if (requestId != null) {
+      await _fetchTargetedServiceRequestOnce(
+        requestId,
         showLocalNotification: !openedByUser,
       );
       if (!mounted) {
@@ -1465,8 +1620,17 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     String rideId, {
     bool showLocalNotification = false,
   }) async {
+    // FIX (per Nizam's bug report — "ride enquiry never reaches Hero
+    // PWA/app, notification tap does nothing"): dropped the `!_isOnline`
+    // check here. Root cause found: _isOnline defaults false and only
+    // flips true asynchronously after a hero-status restore completes,
+    // which races against a cold-start notification tap or an app-resume
+    // ping — the exact moment a ride is most likely to arrive. But the
+    // fact a targeted push/ping exists for THIS rideId already proves the
+    // server-side dispatch (which reads online_heroes) considered this
+    // hero online when it sent it; re-checking the local (possibly still
+    // stale) _isOnline flag here just silently swallowed real rides.
     if (_user == null ||
-        !_isOnline ||
         _activeRideId.isNotEmpty ||
         _hasActiveServiceRequest) {
       return;
@@ -1507,6 +1671,69 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       }
     } catch (e) {
       debugPrint('[HeroHomeScreen] Single ride fetch failed: $e');
+    }
+  }
+
+  /// FCM Data Push Layer 2 counterpart to _fetchTargetedRideOnce(), for
+  /// the generic service_requests dispatch pipeline. Deliberately reads
+  /// back the `hero_service_pings/{uid}/{requestId}` RTDB node (rather
+  /// than the Firestore service_requests doc) — that node is already in
+  /// exactly the shape _showServiceRequestDialog() expects (same shape
+  /// every existing ping-based dispatch path writes), so this reuses
+  /// the proven accept-dialog flow with zero reshaping/duplication. If
+  /// the node is gone (another hero already accepted it, or it expired
+  /// before the push was opened) this is a silent no-op — the hero
+  /// simply sees nothing to accept, same as a stale/expired ping today.
+  Future<void> _fetchTargetedServiceRequestOnce(
+    String requestId, {
+    bool showLocalNotification = false,
+  }) async {
+    // FIX (same root cause as _fetchTargetedRideOnce): removed
+    // `!_isOnline` — a targeted service-request push already proves the
+    // dispatcher considered this hero online; the local flag can still
+    // be lagging false right after cold start/resume.
+    final uid = _user?.uid;
+    if (uid == null ||
+        _activeRideId.isNotEmpty ||
+        _hasActiveServiceRequest ||
+        _isShowingServiceDialog) {
+      return;
+    }
+    try {
+      final snap = await FirebaseDatabase.instance
+          .ref('hero_service_pings/$uid/$requestId')
+          .get();
+      if (!mounted || !snap.exists || snap.value is! Map) {
+        return;
+      }
+      final data = Map<String, dynamic>.from(snap.value! as Map);
+      final pingExpiresAt = (data['pingExpiresAt'] as num?)?.toInt();
+      if (pingExpiresAt != null &&
+          DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
+        debugPrint('[HeroHomeScreen] Ignored expired service-request push: $requestId');
+        return;
+      }
+      if (showLocalNotification && !kIsWeb) {
+        try {
+          unawaited(
+            HeroRideNotificationService.showRideAssigned(
+              rideId: requestId,
+              data: data,
+              playAlertTone: false,
+              title: 'New Service Request',
+              channelDescription:
+                  'Lock-screen ride and service-request alerts with ACCEPT action and ringtone.',
+              ticker: 'New service request assigned',
+              emptyBodyFallback: 'Tap ACCEPT to open the request.',
+            ),
+          );
+        } catch (e) {
+          debugPrint('[HeroHomeScreen] Notification error (ignored): $e');
+        }
+      }
+      _showServiceRequestDialog(requestId, data);
+    } catch (e) {
+      debugPrint('[HeroHomeScreen] Single service-request fetch failed: $e');
     }
   }
 
@@ -1613,8 +1840,15 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         .ref('hero_pings/$uid')
         .onChildAdded
         .listen((event) async {
+      // FIX (same root cause as _fetchTargetedRideOnce above): removed
+      // the `!_isOnline` guard. hero_pings/$uid only ever receives an
+      // entry because the write side (ride_search_screen.dart) already
+      // found this hero inside online_heroes and pinged them by uid —
+      // by the time this listener fires, the ping's existence IS the
+      // online proof. Gating on the local _isOnline flag (which can lag
+      // true by several seconds after app resume/cold start) was
+      // silently dropping real, valid ride pings.
       if (!mounted ||
-          !_isOnline ||
           _activeRideId.isNotEmpty ||
           _hasActiveServiceRequest) {
         return;
@@ -1710,8 +1944,8 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         .ref('hero_service_pings/$uid')
         .onChildAdded
         .listen((event) async {
+      // FIX (same root cause as _listenForHeroPings): removed `!_isOnline`.
       if (!mounted ||
-          !_isOnline ||
           _activeRideId.isNotEmpty ||
           _hasActiveServiceRequest) {
         return;
@@ -4683,6 +4917,12 @@ class HeroTaskDetailScreen extends StatelessWidget {
               finalAmount: request.finalAmount?.toDouble(),
               paymentStatus: paymentStatus,
               estimateApprovedByCustomer: request.estimateApprovedByCustomer,
+              // NEW (per Nizam's request — Negotiate flow): read
+              // straight off the raw doc root, same pattern already used
+              // for customerRating elsewhere — not yet promoted into
+              // ServiceRequestModel since this is the only reader.
+              customerCounterOffer:
+                  (doc.data()!['customerCounterOffer'] as num?)?.toDouble(),
               details: request.rawDetails,
             ),
           );
@@ -4722,6 +4962,12 @@ class _ServiceRequestStatusCard extends StatefulWidget {
   /// back to null in the same write, so `false` is never actually
   /// observed here in practice, only null/true).
   final bool? estimateApprovedByCustomer;
+  /// NEW (per Nizam's request — Negotiate flow): set when the customer
+  /// tapped "Negotiate" instead of "Approve" on the hero's estimate —
+  /// the amount they'd rather pay, shown to the hero as a starting
+  /// point for a revised quote. Cleared automatically once the hero
+  /// submits a new estimate (see setEstimatedAmount()).
+  final double? customerCounterOffer;
   /// NEW (per Nizam's request): raw `details` map off the service_
   /// requests doc — used to pull whatever pickup/drop coordinates that
   /// particular request type actually captured, to power the
@@ -4738,6 +4984,7 @@ class _ServiceRequestStatusCard extends StatefulWidget {
     this.finalAmount,
     this.paymentStatus,
     this.estimateApprovedByCustomer,
+    this.customerCounterOffer,
     this.details = const {},
   });
 
@@ -4761,6 +5008,23 @@ class _ServiceRequestStatusCard extends StatefulWidget {
 
 class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
   bool _updating = false;
+
+  // FIX (per Nizam's bug report — hero saw a silent failure when
+  // trying to "Start" a task and described it as "permission error"):
+  // every catch block below used to only debugPrint the exception,
+  // never actually telling the hero anything went wrong. Now shows the
+  // real error text so a genuine Firestore/RTDB permission-denied (or
+  // any other failure) is visible and actionable instead of invisible.
+  void _showActionError(Object e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Could not update task: $e'),
+        backgroundColor: const Color(0xFFE05555),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
 
   // ── NAVIGATE-TO-LOCATION (per Nizam's request) ────────────────────
   // Opens the External Google Maps app/site in navigation mode — same
@@ -4883,6 +5147,7 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
           await ServiceRequestService().advanceStatus(widget.requestId, newStatus);
         } catch (e) {
           debugPrint('[ServiceRequestStatusCard] advanceStatus error: $e');
+          _showActionError(e);
         } finally {
           if (mounted) setState(() => _updating = false);
         }
@@ -4895,12 +5160,20 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
       // requirement). setEstimatedAmount() resets
       // estimateApprovedByCustomer to null, which flips build() into
       // the waiting state until Firestore reports true.
+      // FIX (per Nizam's request — Negotiate flow): if the customer
+      // countered instead of approving, show that number and pre-fill
+      // it so the hero can immediately see and match/adjust it instead
+      // of guessing what price will actually get approved this time.
+      final counter = widget.customerCounterOffer;
       final amount = await _promptForAmount(
         context,
-        title: 'Estimated amount',
-        message: 'Enter what you expect to charge for this task. '
-            'The customer needs to approve this before you can start.',
-        initialValue: widget.estimatedAmount,
+        title: counter != null ? 'Customer offered ₹${counter.toStringAsFixed(0)}' : 'Estimated amount',
+        message: counter != null
+            ? 'The customer asked for a lower price — ₹${counter.toStringAsFixed(0)}. '
+                'Enter the amount you can actually do this task for.'
+            : 'Enter what you expect to charge for this task. '
+                'The customer needs to approve this before you can start.',
+        initialValue: counter ?? widget.estimatedAmount,
       );
       if (amount == null) return; // cancelled — stay on current status
       setState(() => _updating = true);
@@ -4908,6 +5181,7 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
         await ServiceRequestService().setEstimatedAmount(widget.requestId, amount);
       } catch (e) {
         debugPrint('[ServiceRequestStatusCard] setEstimatedAmount error: $e');
+        _showActionError(e);
       } finally {
         if (mounted) setState(() => _updating = false);
       }
@@ -4931,6 +5205,7 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
             .completeWithFinalAmount(widget.requestId, amount);
       } catch (e) {
         debugPrint('[ServiceRequestStatusCard] completeWithFinalAmount error: $e');
+        _showActionError(e);
       } finally {
         if (mounted) setState(() => _updating = false);
       }
@@ -4943,6 +5218,7 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
       await ServiceRequestService().advanceStatus(widget.requestId, newStatus);
     } catch (e) {
       debugPrint('[ServiceRequestStatusCard] advanceStatus error: $e');
+      _showActionError(e);
     } finally {
       if (mounted) setState(() => _updating = false);
     }
@@ -5061,14 +5337,21 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
           // ASSIGNMENT" section and the admin_review badges.
           if (widget.status == 'hero_assigned') ...[
             const SizedBox(height: 8),
+            // FIX (per Nizam's request — "font colors la konjam
+            // disturbed ah iruku, pink and white theme ku yeththamathiri
+            // irukanum"): was flat Colors.black54/black26, which read
+            // as visually out of place surrounded by pink CTAs and the
+            // pink-accented card border. Switched to the same muted-pink
+            // tone the rest of this card already uses for secondary
+            // actions.
             SizedBox(
               width: double.infinity,
               height: 34,
               child: OutlinedButton(
                 onPressed: _updating ? null : _releaseTask,
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.black54,
-                  side: const BorderSide(color: Colors.black26),
+                  foregroundColor: const Color(0xFF8F5A78),
+                  side: BorderSide(color: const Color(0xFFFF4FA3).withValues(alpha: 0.35)),
                 ),
                 child: const Text('Release Task',
                     style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),),
@@ -5086,9 +5369,16 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
             if (widget.finalAmount != null)
               Text(
                 'Final bill: ₹${widget.finalAmount!.toStringAsFixed(0)}',
-                style: const TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.w700),
+                style: GoogleFonts.outfit(color: const Color(0xFF3D1230), fontSize: 12, fontWeight: FontWeight.w700),
               ),
             const SizedBox(height: 6),
+            // FIX (per Nizam's explicit request — payment authority now
+            // lives entirely with the hero, see
+            // markServiceRequestPaymentReceived()): the old interim
+            // 'hero_marked_paid' state (and its "waiting for customer to
+            // confirm" badge) is gone — tapping "Payment Received" below
+            // now sets 'paid' directly, so there are only two states to
+            // show here.
             if (widget.paymentStatus == 'paid')
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -5098,24 +5388,6 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
                 ),
                 child: const Text('Payment Received ✓',
                     style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.w800),),
-              )
-            // FIX (payment-trust audit, per Nizam's request): tapping
-            // "Mark Payment Received (Cash)" no longer immediately closes
-            // the task — it now sets an interim 'hero_marked_paid' status
-            // that waits for the CUSTOMER to confirm on their own screen
-            // (service_request_payment_screen.dart). Previously this
-            // button flipped straight to 'paid' and the badge above would
-            // show "Payment Received ✓" even though the customer never
-            // confirmed anything — a hero could falsely claim payment.
-            else if (widget.paymentStatus == 'hero_marked_paid')
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFBB00).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: const Text('Waiting for customer to confirm…',
-                    style: TextStyle(color: Color(0xFFB8860B), fontSize: 11, fontWeight: FontWeight.w800),),
               )
             else
               SizedBox(
@@ -5129,7 +5401,7 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
                   ),
                   child: _updating
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00C853)))
-                      : const Text('Mark Payment Received (Cash)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11)),
+                      : const Text('Payment Received (Cash/UPI)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11)),
                 ),
               ),
           ],

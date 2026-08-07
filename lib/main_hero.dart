@@ -14,19 +14,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app_navigator.dart';
 import 'config/api_config.dart';
 import 'firebase_options.dart';
+import 'screens/app_splash_video_screen.dart';
 import 'screens/bike_taxi/hero_dashboard_shell.dart';
 import 'screens/hero_login_screen.dart';
 import 'screens/hero_pending_screen.dart';
 import 'screens/hero_register_screen.dart';
 import 'screens/splash_setup_screen.dart';
 import 'services/db_usage_tracker.dart';
+import 'services/hero_foreground_service.dart';
 import 'services/hero_ride_notification_service.dart';
 import 'services/hero_web_audio_service.dart';
 import 'services/localization_service.dart';
 import 'services/map_service.dart';
 import 'services/theme_service.dart';
 import 'widgets/branded_loading_screen.dart';
-import 'widgets/hero_premium_loader.dart';
 
 String? _rideIdFromPushData(Map<String, dynamic> data) {
   for (final key in const <String>[
@@ -42,6 +43,26 @@ String? _rideIdFromPushData(Map<String, dynamic> data) {
   }
   return null;
 }
+
+// FCM Data Push Layer 2 (CTO mandate — instant dispatch to a killed
+// app): the generic (non-bike-taxi) service_requests dispatch payload
+// carries `requestId`/`requestType` rather than a ride ID — see the
+// new Cloud Functions notifyHeroOnPing/notifyHeroOnServicePing in
+// functions/, which fire on the exact same hero_pings/
+// hero_service_pings RTDB writes every existing dispatch path
+// (broadcast, admin manual assign, call-center pre-assign) already
+// makes, so no client dispatch code needed to change.
+String? _serviceRequestIdFromPushData(Map<String, dynamic> data) {
+  for (final key in const <String>['requestId', 'request_id']) {
+    final value = data[key];
+    if (value is String && value.trim().isNotEmpty) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+const String kPendingHeroServiceRequestIdKey = 'pending_hero_service_request_id';
 
 Future<void> _ensureFirebaseInitialized() async {
   if (Firebase.apps.isNotEmpty) {
@@ -150,6 +171,48 @@ class _BootFailedApp extends StatelessWidget {
 StreamSubscription<DatabaseEvent>? _globalHeroPingSub;
 StreamSubscription<DatabaseEvent>? _globalServicePingSub;
 StreamSubscription<User?>? _authSub;
+StreamSubscription<String>? _fcmTokenRefreshSub;
+
+// FCM Data Push Layer 2 (CTO mandate — Task 1: entry-point setup):
+// the Cloud Function send path (functions/notifyHeroOnPing.ts et al.)
+// reads `heroes/{uid}.fcmToken` — nothing in the app wrote that field
+// before this, so every send attempt would silently no-op on a missing
+// token regardless of how well the send/receive plumbing worked.
+// Captures the token once per auth session and keeps it current via
+// onTokenRefresh (a real device can get a new token at any time — app
+// reinstall, token rotation, etc.). Best-effort: a failure here must
+// never block hero login/boot.
+Future<void> _syncFcmTokenForHero(String uid) async {
+  try {
+    final token = await FirebaseMessaging.instance.getToken();
+    if (token != null && token.trim().isNotEmpty) {
+      // .set(merge:true) rather than .update() — a hero mid-registration
+      // (auth session exists, heroes/{uid} doc doesn't yet) must not
+      // silently fail the token write with a not-found error.
+      await FirebaseFirestore.instance.collection('heroes').doc(uid).set({
+        'fcmToken': token,
+        'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      debugPrint('[FCM] Token synced for hero $uid');
+    }
+  } catch (e) {
+    debugPrint('[FCM] Token sync failed for hero $uid: $e');
+  }
+
+  _fcmTokenRefreshSub?.cancel();
+  _fcmTokenRefreshSub = FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+    unawaited(
+      FirebaseFirestore.instance.collection('heroes').doc(uid).set({
+        'fcmToken': newToken,
+        'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)).catchError((Object e) {
+        debugPrint('[FCM] Token refresh write failed for hero $uid: $e');
+      }),
+    );
+  }, onError: (Object e) {
+    debugPrint('[FCM] onTokenRefresh listener error: $e');
+  });
+}
 
 void _initGlobalHeroPingListener() {
   _authSub?.cancel();
@@ -159,10 +222,13 @@ void _initGlobalHeroPingListener() {
 
     if (user == null) {
       debugPrint('[GlobalPing] User logged out — stopping listener');
+      _fcmTokenRefreshSub?.cancel();
+      _fcmTokenRefreshSub = null;
       return;
     }
 
     final uid = user.uid;
+    unawaited(_syncFcmTokenForHero(uid));
     debugPrint('[GlobalPing] Attaching global hero_pings/$uid listener');
 
     _globalHeroPingSub = FirebaseDatabase.instance
@@ -274,17 +340,45 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
   final rideId = _rideIdFromPushData(message.data);
   if (rideId != null) {
-    // ✅ FIX: When app is KILLED, FCM already shows a system notification.
-    // Show local notification but suppress the loud ringtone to avoid
-    // duplicate sound with the FCM system tray notification.
+    // FIX (per Nizam's bug report — "app close pannitu vachurunthalum
+    // high ringtone adikka mattingithu"): this used to assume FCM's
+    // system tray already plays a sound for a killed app, so it
+    // suppressed our own ringtone to "avoid a duplicate". That's only
+    // true for a `notification`-block FCM message — this pipeline
+    // sends DATA-ONLY payloads specifically so the app controls the
+    // whole UX (see the FCM Data Push Layer 2 comments elsewhere in
+    // this file); Android never auto-plays any sound for a data-only
+    // message on its own. Suppressing our own tone meant NOTHING ever
+    // played when the app was killed. Now always plays it.
     await HeroRideNotificationService.showRideAssigned(
       rideId: rideId,
       data: message.data,
-      playAlertTone: false,
+      playAlertTone: true,
       showDetails: false,
     );
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(kPendingHeroRideIdKey, rideId);
+  } else {
+    // FCM Data Push Layer 2 — same killed-app wake path as the ride
+    // branch above, for the generic service_requests dispatch pipeline
+    // (hero_booking / custom_food_order / grocery_order / etc.), keyed
+    // by requestId instead of rideId.
+    final requestId = _serviceRequestIdFromPushData(message.data);
+    if (requestId != null) {
+      await HeroRideNotificationService.showRideAssigned(
+        rideId: requestId,
+        data: message.data,
+        playAlertTone: true,
+        showDetails: false,
+        title: 'New Service Request',
+        channelDescription:
+            'Lock-screen ride and service-request alerts with ACCEPT action and ringtone.',
+        ticker: 'New service request assigned',
+        emptyBodyFallback: 'Tap ACCEPT to open the request.',
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(kPendingHeroServiceRequestIdKey, requestId);
+    }
   }
   debugPrint(
     '[main_hero] Background push received: ${message.messageId} '
@@ -338,6 +432,12 @@ void main() async {
       }
       DbUsageTracker.instance.init('hero');
       await HeroRideNotificationService.initialize();
+      // CTO mandate — FCM Layer 2 alternative, Option D: registers the
+      // "You are Online" foreground-service notification channel.
+      // Cheap/synchronous, does not start the service itself (that
+      // only happens when a hero actually goes Online — see
+      // hero_home_screen.dart's _syncOnlineStatus).
+      HeroForegroundService.initialize();
 
       // Start global RTDB ping listener reacting to Auth changes
       _initGlobalHeroPingListener();
@@ -409,7 +509,15 @@ class HeroApp extends StatelessWidget {
             themeMode: ThemeMode.light,
             initialRoute: '/',
             routes: {
-              '/': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
+              // NEW (per Nizam's request — shared splash video, all 4
+              // apps): AppSplashVideoScreen plays app_splash.mp4 first
+              // (with audio, full-screen stretch, hard-capped so it can
+              // never add real delay), THEN hands off to the existing
+              // SplashSetupScreen exactly as before — its own warm-up/
+              // auth-gating logic is completely untouched.
+              '/': (_) => const AppSplashVideoScreen(
+                    nextScreen: SplashSetupScreen(nextScreen: _HeroSetupGate()),
+                  ),
               '/hero-home': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
               '/hero-ride': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
             },
@@ -470,12 +578,26 @@ class _HeroSetupGateState extends State<_HeroSetupGate> {
         FirebaseFirestore.instance.collection('heroes').doc(uid).get();
   }
 
+  // FIX (per Nizam's request — Hero app startup speed): this used to
+  // mount HeroPremiumLoader for both the 'profile-check-loading' and
+  // 'hero-approval-check-loading' gate states below — each one runs
+  // its own continuous, indefinitely-repeating AnimationController
+  // (2.8s pulse/glow/light-streak loop, see hero_premium_loader.dart)
+  // the entire time its Firestore .get() is in flight. On a genuinely
+  // warm/already-signed-in reopen the 'auth-loading' state is skipped
+  // (StreamBuilder's initialData short-circuits it), so in practice
+  // these two heavy loaders were the ones actually flashing back-to-
+  // back on every cold start — exactly the "2 unwanted animations"
+  // slowing the app open. Swapped for the same lightweight, static
+  // BrandedLoadingScreen already used for the very first boot frame
+  // (_BootLoadingApp above) — one continuous, un-animated look across
+  // the whole startup sequence instead of two different animated
+  // cards flashing by. HeroPremiumLoader itself is untouched and still
+  // used as designed for its other, legitimate in-app loading states
+  // (hero_home_screen.dart, hero_history_screen.dart,
+  // hero_profile_tab.dart) — this only stops using it during boot.
   Widget _buildLoadingScaffold(String title, String subtitle) {
-    return HeroPremiumLoader(
-      title: title,
-      subtitle: subtitle,
-      icon: Icons.electric_bike_rounded,
-    );
+    return BrandedLoadingScreen(statusText: subtitle);
   }
 
   Widget _buildFadingChild(String key, Widget child) {

@@ -754,7 +754,22 @@ class AdminQuickTaskFab extends StatelessWidget {
                   shape: BoxShape.circle,
                   boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 6, offset: Offset(0, 3))],
                 ),
-                child: const Icon(Icons.support_agent_rounded, color: Colors.white),
+                // FIX (per Nizam's request — "rewards kulla iruka ai boy
+                // icon asset la irukum athaye admin ai ku buttona
+                // maathiru"): same assistant.gif used by the Customer
+                // app's Rewards screen AI card, swapped in here instead
+                // of the generic support_agent icon.
+                child: ClipOval(
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Image.asset(
+                      'assets/images/assistant.gif',
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) =>
+                          const Icon(Icons.support_agent_rounded, color: Colors.white),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),

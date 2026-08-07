@@ -90,6 +90,35 @@
     },
     {
       "client_info": {
+        "mobilesdk_app_id": "1:357526153693:android:04dc889017e1a6774aee34",
+        "android_client_info": {
+          "package_name": "com.njtech.allin1.seller"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "357526153693-02b0behmsf3k720jujg3e8j82frj04q7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC_GWgATZDWeKL0rk9YJAtA6ubWdUP7ROY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "357526153693-02b0behmsf3k720jujg3e8j82frj04q7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:357526153693:android:7e71dc52bbaec2e74aee34",
         "android_client_info": {
           "package_name": "com.njtech.heroallin1"

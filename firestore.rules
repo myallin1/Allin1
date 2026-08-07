@@ -305,6 +305,35 @@ service cloud.firestore {
     }
 
     // ==============================================================
+    // APP_USAGE_STATS COLLECTION (single "funnel" doc — per Nizam's
+    // request, Customer Usage Tracking admin feature)
+    // ==============================================================
+    // Tracks 3 lightweight counters: how many times the pre-login PWA
+    // landing page loaded, how many times each app's APK download link
+    // was tapped, and (read separately via a Firestore count()
+    // aggregation on `users`, not stored here) how many actually signed
+    // up. Deliberately UNAUTHENTICATED-writable — the whole point is
+    // measuring visitors who haven't logged in yet, landing_page.dart
+    // runs before any sign-in. Scoped tightly: a write may only ever
+    // touch the known counter field names (enforced via affectedKeys()
+    // below), so even an anonymous abuser can only inflate a vanity
+    // metric, never write arbitrary data. Read is admin-only.
+    match /app_usage_stats/{docId} {
+      allow read: if isAdminAny();
+      allow create: if true;
+      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            'landingPageVisits',
+            'download_customer',
+            'download_hero',
+            'download_admin',
+            'download_seller',
+            'updatedAt',
+          ]);
+      allow delete: if isAdminAny();
+    }
+
+    // ==============================================================
     // HEROES_PENDING COLLECTION (legacy admin-side mirror)
     // ==============================================================
     // FIX: zero rule coverage (same class of bug as heroes/rides/

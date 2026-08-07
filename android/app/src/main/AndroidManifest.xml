@@ -19,6 +19,19 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <!-- AUDIT FIX: Required for full-screen notification on lock screen -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <!-- NEW (CTO mandate — Hero app "You are Online" foreground service,
+         FCM Layer 2 alternative Option D): Android 14+ requires a
+         specific foreground-service-type permission alongside the
+         generic one above. "location" is the accurate/defensible type
+         here — while a hero is Online this service exists precisely to
+         keep the app process (and its ongoing GPS position uploads to
+         RTDB online_heroes/{uid}) alive in the background, not an
+         unrelated use dressed up as location. Only the Hero flavor
+         actually starts this service (see hero_foreground_service.dart)
+         — Customer/Seller/Admin builds declare the permission
+         (harmless, unused) since this manifest is shared across all 4
+         flavors. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>

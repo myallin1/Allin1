@@ -80,7 +80,18 @@ class GuruAdminApiService {
       'CTO, not a customer. Do not pad reports with filler. When '
       'presenting a report before asking for approval, use short, '
       'clearly-labeled lines (e.g. "Finding: ...", "Risk: ...", '
-      '"Recommendation: ...") rather than long paragraphs.';
+      '"Recommendation: ...") rather than long paragraphs.\n'
+      // NEW (per Nizam's explicit request): when the CTO gives a spoken
+      // command that a navigation tool can already fulfil, call that
+      // tool immediately in the SAME turn and reply with ONE short line
+      // (e.g. "Opening KYC Approvals now."). Never explain steps he
+      // could take manually instead of just doing it. Save the
+      // "Finding/Risk/Recommendation" longer format strictly for DB
+      // audit or KYC verification reports, where it is genuinely
+      // needed.
+      'If a request clearly matches a navigation tool, call it '
+      'immediately and reply in one short sentence — do not describe '
+      'what he should click instead of doing it.';
 
   static const String _apiKey = String.fromEnvironment(
     'GROQ_API_KEY',

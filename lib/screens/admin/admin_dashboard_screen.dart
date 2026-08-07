@@ -16,7 +16,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/db_usage_tracker.dart';
 import '../../services/service_requests_listener.dart';
-import '../../utils/hero_presence_utils.dart';
+import '../../services/update_service.dart';
+import '../../services/usage_tracking_service.dart';
 import '../../widgets/manual_refresh_header.dart';
 import 'admin_detailed_reports_screen.dart';
 import 'admin_hero_dispatch_screen.dart';
@@ -625,10 +626,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // T2: Admin APK download — CEO drops admin_app.apk into Firebase hosting
-  // web public dir and runs `firebase deploy` to push the latest build.
+  // FIX (per Nizam's bug report — "admin android app download button
+  // la nera admin app ah git la irunthu download pannunthu paru"): this
+  // used to point at a stale, never-deployed Firebase Hosting URL
+  // (my-allin1.web.app/admin_app.apk) — completely disconnected from
+  // the canonical GitHub Releases source every other download button
+  // in the app (DownloadAppBanner, Hero's own download buttons) uses.
+  // Switched to the same canonical UpdateService source.
   Future<void> _downloadAdminApp() async {
-    const apkUrl = 'https://my-allin1.web.app/admin_app.apk';
+    unawaited(UsageTrackingService.instance.trackApkDownload('admin'));
+    final apkUrl = UpdateService().fallbackApkUrl('admin');
     final messenger = ScaffoldMessenger.of(context);
     final launched = await launchUrl(
       Uri.parse(apkUrl),
@@ -1054,19 +1061,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 int activeNow = 0;
                 if (rtdbSnap.hasData && rtdbSnap.data!.snapshot.value != null) {
                   final val = rtdbSnap.data!.snapshot.value;
-                  if (val is Map) {
-                    // FIX (presence reliability audit — "admin ku exacta
-                    // ah theriyanum yaru real ah online"): a node still
-                    // existing in online_heroes isn't proof the hero is
-                    // actually reachable right now — onDisconnect() is
-                    // best-effort, not an instant guarantee. Only count
-                    // heroes whose lastUpdated heartbeat is recent (see
-                    // hero_presence_utils.dart); a lingering node whose
-                    // heartbeat went stale almost certainly belongs to a
-                    // hero whose app closed without the cleanup hook
-                    // completing.
-                    activeNow = val.values.where(isHeroPresenceMapFresh).length;
-                  }
+                  // Trust RTDB node existence alone (CTO architecture
+                  // decision): presence is governed entirely by
+                  // onDisconnect() + the `.info/connected` reconnect
+                  // watcher in hero_home_screen.dart — no client
+                  // heartbeat, no staleness timeout here. A hero stays
+                  // counted online indefinitely until they manually go
+                  // offline or RTDB's own connection-drop detection
+                  // removes the node server-side.
+                  if (val is Map) activeNow = val.length;
                 }
                 return _statCard(
                   '⚡',
@@ -1161,13 +1164,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   // ── Online Heroes Live Feed ────────────────────────────────────
   Widget _buildOnlineHeroes() {
-    // FIX (presence reliability audit): filter out stale entries here
-    // too, same reasoning as the "Active Now" stat card above — a
-    // node's mere existence doesn't mean the hero is actually online
-    // right now, only that onDisconnect() hasn't cleaned it up yet.
-    final entries = (_onlineHeroesData?.entries.toList() ?? [])
-        .where((e) => isHeroPresenceMapFresh(e.value))
-        .toList();
+    // Node existence = online (CTO architecture decision — see the
+    // "Active Now" stat card comment above for the reasoning).
+    final entries = _onlineHeroesData?.entries.toList() ?? [];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

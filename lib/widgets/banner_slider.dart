@@ -11,12 +11,19 @@ class BannerTextSlide {
   final String subtitle;
   final List<Color> gradient;
   final IconData icon;
+  // NEW (per Nizam's request — "internet offer option thotta nammaloda
+  // internet option kulla poganum"): optional tap target so a text
+  // slide (e.g. "Internet Offers 🌐") can actually navigate somewhere.
+  // Purely additive — slides that don't pass this stay non-interactive,
+  // same as before.
+  final VoidCallback? onTap;
 
   const BannerTextSlide({
     required this.title,
     this.subtitle = '',
     this.gradient = const [Color(0xFFFF4FA3), Color(0xFF7B2FF7)],
     this.icon = Icons.local_offer_rounded,
+    this.onTap,
   });
 }
 
@@ -89,7 +96,7 @@ class _BannerAdsSliderState extends State<BannerAdsSlider> {
         itemBuilder: (context, index) {
           if (index < widget.textSlides.length) {
             final slide = widget.textSlides[index];
-            return Container(
+            final card = Container(
               margin: const EdgeInsets.symmetric(horizontal: 6),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
@@ -138,6 +145,9 @@ class _BannerAdsSliderState extends State<BannerAdsSlider> {
                 ),
               ),
             );
+            return slide.onTap == null
+                ? card
+                : GestureDetector(onTap: slide.onTap, child: card);
           }
           final imageIndex = index - widget.textSlides.length;
           return Container(

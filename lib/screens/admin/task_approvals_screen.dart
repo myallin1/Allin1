@@ -8,7 +8,6 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_palette.dart';
-import '../../utils/hero_presence_utils.dart';
 
 class TaskApprovalsScreen extends StatefulWidget {
   const TaskApprovalsScreen({super.key});
@@ -543,23 +542,24 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                 final captainName =
                     captainData?['captainName'] as String? ?? 'Hero';
                 final captainEmail = captainData?['email'] as String? ?? '';
-                // FIX (presence reliability audit — "admin ku exacta ah
-                // theriyanum yaru real ah online"): this used to read
-                // `captainData['status']` from the Firestore `captains`
-                // doc — a field the hero app no longer writes at all
-                // (see hero_home_screen.dart's WhatsApp-model presence
-                // migration), so this card would always show "OFFLINE"
-                // regardless of reality. Switched to the same RTDB
-                // online_heroes/{uid} presence node (backed by
-                // onDisconnect() + a heartbeat, cross-checked for
-                // staleness) every other admin screen already uses.
+                // FIX: this used to read `captainData['status']` from
+                // the Firestore `captains` doc — a field the hero app no
+                // longer writes at all (see hero_home_screen.dart's
+                // WhatsApp-model presence migration), so this card would
+                // always show "OFFLINE" regardless of reality. Switched
+                // to the same RTDB online_heroes/{uid} presence node
+                // every other admin screen uses, trusting node existence
+                // alone (CTO architecture decision — presence is
+                // governed entirely by onDisconnect() + the
+                // `.info/connected` reconnect watcher, no staleness
+                // cross-check needed).
                 return StreamBuilder<DatabaseEvent>(
                   stream: FirebaseDatabase.instance
                       .ref('online_heroes/$captainId')
                       .onValue,
                   builder: (context, presenceSnap) {
                     final rawPresence = presenceSnap.data?.snapshot.value;
-                    final isOnline = isHeroPresenceMapFresh(rawPresence);
+                    final isOnline = rawPresence is Map;
 
                     return Container(
                   margin: const EdgeInsets.only(bottom: 12),

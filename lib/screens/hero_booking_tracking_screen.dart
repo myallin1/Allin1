@@ -635,6 +635,30 @@ class _EstimateApprovalCard extends StatefulWidget {
 class _EstimateApprovalCardState extends State<_EstimateApprovalCard> {
   bool _submitting = false;
 
+  // FIX (per Nizam's request): "Reject" is now "Negotiate" — instead of
+  // just clearing the estimate with no context, this asks the customer
+  // what amount they'd rather pay and sends that back to the hero as a
+  // counter-offer, so the hero knows exactly what to aim for on their
+  // revised quote.
+  Future<void> _negotiate() async {
+    final counter = await _promptForCounterOffer(context, widget.amount);
+    if (counter == null || !mounted) return; // cancelled
+    setState(() => _submitting = true);
+    try {
+      await ServiceRequestService()
+          .rejectEstimate(widget.requestId, counterOffer: counter);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not send your offer: $e'),
+              backgroundColor: Colors.red,),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
   Future<void> _respond(bool approve) async {
     setState(() => _submitting = true);
     try {
@@ -678,7 +702,7 @@ class _EstimateApprovalCardState extends State<_EstimateApprovalCard> {
                   color: _kPink, fontSize: 26, fontWeight: FontWeight.w900,),),
           const SizedBox(height: 4),
           const Text(
-            'Approve to let your Hero start the task, or reject if the amount seems off.',
+            'Approve to let your Hero start the task, or negotiate if you\'d like a lower price.',
             style: TextStyle(color: _kMuted, fontSize: 11),
           ),
           const SizedBox(height: 12),
@@ -686,15 +710,15 @@ class _EstimateApprovalCardState extends State<_EstimateApprovalCard> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _submitting ? null : () => _respond(false),
+                  onPressed: _submitting ? null : _negotiate,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red),
+                    foregroundColor: _kPink,
+                    side: BorderSide(color: _kPink),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),),
                   ),
-                  child: const Text('Reject'),
+                  child: const Text('Negotiate'),
                 ),
               ),
               const SizedBox(width: 10),
@@ -722,4 +746,44 @@ class _EstimateApprovalCardState extends State<_EstimateApprovalCard> {
       ),
     );
   }
+}
+
+/// Small dialog letting the customer type the amount they'd rather pay
+/// when tapping "Negotiate" — optional, defaults pre-filled just below
+/// the hero's quoted amount as a reasonable starting suggestion.
+Future<double?> _promptForCounterOffer(
+  BuildContext context,
+  double currentAmount,
+) async {
+  final suggested = (currentAmount * 0.85).roundToDouble();
+  final controller = TextEditingController(
+    text: suggested > 0 ? suggested.toStringAsFixed(0) : '',
+  );
+  return showDialog<double>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('What amount would you like to offer?'),
+      content: TextField(
+        controller: controller,
+        keyboardType: const TextInputType.numberWithOptions(decimal: false),
+        autofocus: true,
+        decoration: const InputDecoration(prefixText: '₹ '),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            final value = double.tryParse(controller.text.trim());
+            if (value == null || value <= 0) return;
+            Navigator.pop(ctx, value);
+          },
+          style: ElevatedButton.styleFrom(backgroundColor: _kPink),
+          child: const Text('Send Offer', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    ),
+  );
 }

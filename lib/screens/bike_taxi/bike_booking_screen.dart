@@ -3603,16 +3603,21 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
               _primeSearchMap();
             },
             onChanged: _onSearchChanged,
+            // FIX (per Nizam's request — "location typing box font size
+            // perusa iruku... cute aakkanum"): trimmed down from 14 to
+            // 13, and gave the hint text its own explicit (smaller)
+            // size instead of inheriting the same size as typed text.
             style: GoogleFonts.outfit(
               color: _textPrimary,
-              fontSize: 14,
+              fontSize: 13,
               fontWeight: FontWeight.w500,
             ),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: GoogleFonts.outfit(color: _textSecondary),
+              hintStyle: GoogleFonts.outfit(color: _textSecondary, fontSize: 12.5),
               border: InputBorder.none,
               contentPadding: EdgeInsets.zero,
+              isDense: true,
             ),
           ),
         ),

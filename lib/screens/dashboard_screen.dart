@@ -30,9 +30,11 @@ import '../services/pwa_cache_platform_stub.dart'
     if (dart.library.html) '../services/pwa_cache_platform_web.dart';
 import '../services/theme_service.dart';
 import '../services/update_service.dart';
+import '../services/usage_tracking_service.dart';
 import '../services/web_version_checker.dart';
 import '../widgets/banner_slider.dart';
 import '../widgets/coach_mark_overlay.dart';
+import '../widgets/download_app_banner.dart';
 import '../widgets/promo_overlay.dart';
 import 'bike_taxi/bike_booking_screen.dart';
 import 'car_wash_screen.dart';
@@ -1058,14 +1060,19 @@ class _HomeTab extends StatelessWidget {
         const SizedBox(height: 10),
         _buildPromoCards(context),
         const SizedBox(height: 20),
-        const BannerAdsSlider(
+        BannerAdsSlider(
           height: 240,
           textSlides: [
             BannerTextSlide(
               title: 'Internet Offers 🌐',
               subtitle: 'Fast recharge plans & broadband deals — tap to explore',
-              gradient: [Color(0xFFFF4FA3), Color(0xFF7B2FF7)],
+              gradient: const [Color(0xFFFF4FA3), Color(0xFF7B2FF7)],
               icon: Icons.wifi_rounded,
+              // FIX (per Nizam's request — "internet offer option thotta
+              // nammaloda internet option kulla poganum"): reuses the
+              // exact same _launchBroadband() flow the "Other Services"
+              // mega card's own Internet tile already calls.
+              onTap: () => onTileTap('broadband'),
             ),
           ],
           imageUrls: [
@@ -1085,29 +1092,38 @@ class _HomeTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      SvgPicture.string(FluentEmojiFlat.taxi, width: 20, height: 20),
-                      const SizedBox(width: 6),
-                      Text(
-                        context.watch<LocalizationService>().t('taxi_mega_title'),
-                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    '  ${context.watch<LocalizationService>().t('taxi_mega_subtitle')}',
-                    style: TextStyle(color: kMuted, fontSize: 11),
-                  ),
-                ],
-              ),
-            ],
+          GestureDetector(
+            // FIX (per Nizam's request — tappable section headings):
+            // heading now opens the same screen as the tile below,
+            // matching the tile's own onTap exactly.
+            onTap: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const BikeBookingScreen()),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        SvgPicture.string(FluentEmojiFlat.taxi, width: 20, height: 20),
+                        const SizedBox(width: 6),
+                        Text(
+                          context.watch<LocalizationService>().t('taxi_mega_title'),
+                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '  ${context.watch<LocalizationService>().t('taxi_mega_subtitle')}',
+                      style: TextStyle(color: kMuted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           GestureDetector(
@@ -1152,29 +1168,35 @@ class _HomeTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      SvgPicture.string(FluentEmojiFlat.hamburger, width: 20, height: 20),
-                      const SizedBox(width: 6),
-                      Text(
-                        context.watch<LocalizationService>().t('food_delivery_title'),
-                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    '  ${context.watch<LocalizationService>().t('food_mega_subtitle')}',
-                    style: TextStyle(color: kMuted, fontSize: 11),
-                  ),
-                ],
-              ),
-            ],
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const FoodHubScreen()),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        SvgPicture.string(FluentEmojiFlat.hamburger, width: 20, height: 20),
+                        const SizedBox(width: 6),
+                        Text(
+                          context.watch<LocalizationService>().t('food_delivery_title'),
+                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '  ${context.watch<LocalizationService>().t('food_mega_subtitle')}',
+                      style: TextStyle(color: kMuted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           GestureDetector(
@@ -1216,29 +1238,35 @@ class _HomeTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      SvgPicture.string(FluentEmojiFlat.shopping_cart, width: 20, height: 20),
-                      const SizedBox(width: 6),
-                      Text(
-                        context.watch<LocalizationService>().t('grocery_mega_title'),
-                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    '  ${context.watch<LocalizationService>().t('grocery_mega_subtitle')}',
-                    style: TextStyle(color: kMuted, fontSize: 11),
-                  ),
-                ],
-              ),
-            ],
+          GestureDetector(
+            onTap: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const GroceryOrderScreen()),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        SvgPicture.string(FluentEmojiFlat.shopping_cart, width: 20, height: 20),
+                        const SizedBox(width: 6),
+                        Text(
+                          context.watch<LocalizationService>().t('grocery_mega_title'),
+                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '  ${context.watch<LocalizationService>().t('grocery_mega_subtitle')}',
+                      style: TextStyle(color: kMuted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           GestureDetector(
@@ -1280,29 +1308,35 @@ class _HomeTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      SvgPicture.string(FluentEmojiFlat.mobile_phone, width: 20, height: 20),
-                      const SizedBox(width: 6),
-                      Text(
-                        context.watch<LocalizationService>().t('electronics_mega_title'),
-                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    '  ${context.watch<LocalizationService>().t('electronics_mega_subtitle')}',
-                    style: TextStyle(color: kMuted, fontSize: 11),
-                  ),
-                ],
-              ),
-            ],
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const NJTechStoreScreen()),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        SvgPicture.string(FluentEmojiFlat.mobile_phone, width: 20, height: 20),
+                        const SizedBox(width: 6),
+                        Text(
+                          context.watch<LocalizationService>().t('electronics_mega_title'),
+                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '  ${context.watch<LocalizationService>().t('electronics_mega_subtitle')}',
+                      style: TextStyle(color: kMuted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           GestureDetector(
@@ -1344,29 +1378,35 @@ class _HomeTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      SvgPicture.string(FluentEmojiFlat.oncoming_taxi, width: 20, height: 20),
-                      const SizedBox(width: 6),
-                      Text(
-                        context.watch<LocalizationService>().t('carservice_mega_title'),
-                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    '  ${context.watch<LocalizationService>().t('carservice_mega_subtitle')}',
-                    style: TextStyle(color: kMuted, fontSize: 11),
-                  ),
-                ],
-              ),
-            ],
+          GestureDetector(
+            onTap: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const CarWashScreen()),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        SvgPicture.string(FluentEmojiFlat.oncoming_taxi, width: 20, height: 20),
+                        const SizedBox(width: 6),
+                        Text(
+                          context.watch<LocalizationService>().t('carservice_mega_title'),
+                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '  ${context.watch<LocalizationService>().t('carservice_mega_subtitle')}',
+                      style: TextStyle(color: kMuted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           GestureDetector(
@@ -1407,29 +1447,35 @@ class _HomeTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      SvgPicture.string(FluentEmojiFlat.building_construction, width: 20, height: 20),
-                      const SizedBox(width: 6),
-                      Text(
-                        context.watch<LocalizationService>().t('construction_mega_title'),
-                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    '  ${context.watch<LocalizationService>().t('construction_mega_subtitle')}',
-                    style: TextStyle(color: kMuted, fontSize: 11),
-                  ),
-                ],
-              ),
-            ],
+          GestureDetector(
+            onTap: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const ConstructionScreen()),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        SvgPicture.string(FluentEmojiFlat.building_construction, width: 20, height: 20),
+                        const SizedBox(width: 6),
+                        Text(
+                          context.watch<LocalizationService>().t('construction_mega_title'),
+                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '  ${context.watch<LocalizationService>().t('construction_mega_subtitle')}',
+                      style: TextStyle(color: kMuted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           GestureDetector(
@@ -1470,29 +1516,35 @@ class _HomeTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      SvgPicture.string(FluentEmojiFlat.man_superhero, width: 20, height: 20),
-                      const SizedBox(width: 6),
-                      Text(
-                        context.watch<LocalizationService>().t('hero_booking_mega_title'),
-                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    '  ${context.watch<LocalizationService>().t('hero_booking_mega_subtitle')}',
-                    style: TextStyle(color: kMuted, fontSize: 11),
-                  ),
-                ],
-              ),
-            ],
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const HeroBookingScreen()),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        SvgPicture.string(FluentEmojiFlat.man_superhero, width: 20, height: 20),
+                        const SizedBox(width: 6),
+                        Text(
+                          context.watch<LocalizationService>().t('hero_booking_mega_title'),
+                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '  ${context.watch<LocalizationService>().t('hero_booking_mega_subtitle')}',
+                      style: TextStyle(color: kMuted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           GestureDetector(
@@ -1533,29 +1585,37 @@ class _HomeTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      SvgPicture.string(FluentEmojiFlat.printer, width: 20, height: 20),
-                      const SizedBox(width: 6),
-                      Text(
-                        context.watch<LocalizationService>().t('printing_mega_title'),
-                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    '  ${context.watch<LocalizationService>().t('printing_mega_subtitle')}',
-                    style: TextStyle(color: kMuted, fontSize: 11),
-                  ),
-                ],
-              ),
-            ],
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PrintingServiceScreen()),
+              );
+            },
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        SvgPicture.string(FluentEmojiFlat.printer, width: 20, height: 20),
+                        const SizedBox(width: 6),
+                        Text(
+                          context.watch<LocalizationService>().t('printing_mega_title'),
+                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '  ${context.watch<LocalizationService>().t('printing_mega_subtitle')}',
+                      style: TextStyle(color: kMuted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           GestureDetector(
@@ -1942,48 +2002,16 @@ class _ProfileDrawer extends StatelessWidget {
 
               const SizedBox(height: 20),
 
-              // Growth Hack: Download App CTA
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: GestureDetector(
-                  onTap: () {
-                    Navigator.pop(context);
-                    _showApkSheet(context);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [kPurple, const Color(0xFF5A50C8)],
-                        begin: Alignment.topLeft, end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [BoxShadow(color: kPurple.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))],
-                    ),
-                    child: Row(
-                      children: [
-                        const Text('🚀', style: TextStyle(fontSize: 32)),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(t('drawer_download_app_title'), style: GoogleFonts.outfit(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
-                              const SizedBox(height: 2),
-                              Text(t('drawer_download_app_subtitle'), style: const TextStyle(color: Colors.white70, fontSize: 10)),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
-                          child: const Icon(Icons.download_rounded, color: Colors.white, size: 16),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              // Growth Hack: Download App CTA — now the shared
+              // DownloadAppBanner widget (appVariant: 'customer'), so
+              // this drawer button is self-referential just like Hero/
+              // Seller/Admin's own drawers: tapping it downloads ONLY
+              // the Customer APK directly, instead of opening the old
+              // Customer+Hero choice sheet (_showApkSheet, left intact
+              // below for any other remaining callers). This does NOT
+              // touch the separate automatic-update-detection button
+              // above (the `if (kIsWeb) drawer_check_update` item).
+              const DownloadAppBanner(appVariant: 'customer'),
 
               const SizedBox(height: 20),
               Divider(color: kBorder, height: 1),
@@ -2424,6 +2452,7 @@ void _showApkSheet(BuildContext context) {
           label: t('download_customer_app_label'),
           gradient: [kPink, kPinkDark],
           url: UpdateService().fallbackApkUrl('customer'),
+          appVariant: 'customer',
         ),
         const SizedBox(height: 10),
         _apkBtn(
@@ -2431,6 +2460,7 @@ void _showApkSheet(BuildContext context) {
           label: t('download_hero_app_label'),
           gradient: [kPurple, const Color(0xFF5A50C8)],
           url: UpdateService().fallbackApkUrl('hero'),
+          appVariant: 'hero',
         ),
         const SizedBox(height: 16),
         GestureDetector(
@@ -2447,9 +2477,11 @@ Widget _apkBtn({
     required BuildContext context,
     required String label,
     required List<Color> gradient,
-    required String url,}) {
+    required String url,
+    required String appVariant,}) {
   return GestureDetector(
     onTap: () async {
+      unawaited(UsageTrackingService.instance.trackApkDownload(appVariant));
       // FIX (root cause of "tap Download App and nothing happens — the
       // sheet just sits there, only Back works"): canLaunchUrl() can
       // return false on some mobile browser / installed-PWA contexts for
