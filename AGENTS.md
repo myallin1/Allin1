@@ -79,7 +79,47 @@ have to re-derive them from source:
   when the hero backgrounds and then reopens the app shortly after a
   push already arrived.
 
-## 9. Closeout & Verification Protocol
+## 9. Notification Architecture Contracts (read before touching any push/alert code)
+
+- **No Cloud Functions / no Blaze plan — deliberate decision, not TODO.**
+  Two dormant Cloud Function files exist (`functions/notifyAdminOnNewRide.ts`,
+  `functions/notifyAdminOnNewServiceRequest.ts`, exported from
+  `functions/index.ts`) but must NOT be deployed unless Nizam explicitly
+  says he's upgraded to Blaze. `firebase deploy --only functions` should
+  not be run casually.
+- **Admin app notifications are 100% client-side, free-tier**: a
+  low-priority Android foreground service
+  (`lib/services/admin_foreground_service.dart`) keeps the process alive
+  while an admin is logged in, so a live Firestore listener
+  (`lib/services/admin_live_alert_service.dart`, watching `rides`/
+  `service_requests` for docs created after the listener started) can
+  fire a local notification
+  (`lib/services/admin_alert_notification_service.dart`) even with the
+  app closed. Ceiling: force-stopping the app from Android Settings, or
+  a device reboot without reopening the app, stops this until the app
+  is opened again — accepted trade-off, do not "fix" by silently
+  re-introducing Cloud Functions.
+- **Hero's ride/service-request alert channel** already plays a loud
+  custom tone (`ride_alert.mp3`) through the Android ALARM audio stream
+  (`audioAttributesUsage: AudioAttributesUsage.alarm` in
+  `AndroidNotificationDetails`) — this alone bypasses silent mode/DND.
+  Never add a second, separate `FlutterRingtonePlayer`/system-alarm call
+  alongside a notification that already has this — that's a
+  double-sound bug already found and fixed once this project
+  (`hero_ride_notification_service.dart`'s `showRideAssigned`).
+- **`flutter_local_notifications` v21 API**: `_plugin.show()` takes
+  NAMED parameters (`id:`, `title:`, `body:`, `notificationDetails:`),
+  not positional ones. A positional call is a build error, not a
+  runtime warning.
+- **RTDB rules discipline**: `database.rules.json` defaults to
+  `.read: false, .write: false` at the top level. Every `.ref('...')`
+  path used anywhere in `lib/` needs its own explicit rule block, or
+  every write to it silently permission-denies. When a hero/customer
+  reports a "permission error" or a write that "does nothing," check
+  this file FIRST — grep every `.ref('` path against the rules file's
+  top-level keys before looking anywhere else.
+
+## 10. Closeout & Verification Protocol
 
 1. Run `flutter analyze` and ensure ZERO errors.
 2. Run `graphify update .` to keep the AST graph current (as per Section 4).

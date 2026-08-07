@@ -293,21 +293,50 @@ service cloud.firestore {
         || (isAuth() && resource.data.assignedHeroId == request.auth.uid)
         || (isAuth() && resource.data.details.sellerId == request.auth.uid);
 
-      // FIX: this rule only ever covered admin + the assigned hero —
-      // the CUSTOMER (owner of the request) was never allowed to update
-      // their own doc at all. That's exactly what
-      // service_request_payment_screen.dart needs (markServiceRequestPaid
-      // sets paymentStatus/paymentMethod/paidAt) and what
-      // RatingFeedbackSheet needs (customerRating) — both customer-side
-      // writes to a doc they own. Added the same customerId-ownership
-      // clause already used for create/read above.
+      // FIX (F-3 correction, audit 2026-08-07 — the prior "fix" here was
+      // verified WRONG and would have broken every hero's ability to
+      // accept a new request): acceptServiceRequest()
+      // (service_request_service.dart) writes assignedHeroId DIRECTLY
+      // from the accepting hero's own client — there is no admin-
+      // dispatched accept path for hero_booking/custom_order/
+      // custom_food_order/grocery_order. A rule that only lets an
+      // ALREADY-assigned hero keep assignedHeroId unchanged blocks the
+      // very first accept, since resource.data.assignedHeroId is null
+      // at that point, matching neither the hero nor customer clause.
+      //
+      // Correct fix — four strictly isolated clauses:
+      //   1. Admin: full update access.
+      //   2. First-time accept ("claim"): assignedHeroId is currently
+      //      unset/null, and the new value equals the caller's own uid.
+      //      This is the ONLY way assignedHeroId may move away from
+      //      null — an already-assigned request can never be reclaimed
+      //      this way, since resource.data.assignedHeroId == null fails
+      //      once a hero has accepted it. Closes the original hijack
+      //      vector (stealing/reassigning an ALREADY-assigned request)
+      //      while keeping the real accept flow working.
+      //   3. Already-assigned hero: may update progress fields (status,
+      //      paymentStatus, etc.) but cannot change assignedHeroId or
+      //      customerId.
+      //   4. Customer-owner: may update payment/rating fields on their
+      //      own request but cannot change assignedHeroId or
+      //      customerId — no self-assigning, no ownership transfer.
       allow update: if isAdminAny()
-        || (isAuth() && resource.data.assignedHeroId == request.auth.uid)
-        || (isAuth() && request.resource.data.assignedHeroId == request.auth.uid)
-        || (isAuth() && resource.data.customerId == request.auth.uid);
+        || (isAuth()
+            && resource.data.assignedHeroId == null
+            && request.resource.data.assignedHeroId == request.auth.uid
+            && request.resource.data.customerId == resource.data.customerId)
+        || (isAuth()
+            && resource.data.assignedHeroId == request.auth.uid
+            && request.resource.data.assignedHeroId == resource.data.assignedHeroId
+            && request.resource.data.customerId == resource.data.customerId)
+        || (isAuth()
+            && resource.data.customerId == request.auth.uid
+            && request.resource.data.assignedHeroId == resource.data.assignedHeroId
+            && request.resource.data.customerId == resource.data.customerId);
 
       allow delete: if isAdminAny();
     }
+
 
     // ==============================================================
     // LOCATION_SEARCH_LOGS COLLECTION (demand monitoring)
@@ -341,7 +370,12 @@ service cloud.firestore {
     // metric, never write arbitrary data. Read is admin-only.
     match /app_usage_stats/{docId} {
       allow read: if isAdminAny();
-      allow create: if true;
+      // Scoped to docId == 'funnel' only: the landing page visitor (who
+      // hasn't signed in yet) can create or increment ONLY the single known
+      // funnel tracking document — not an arbitrary number of new docs.
+      // Before this fix: `allow create: if true` let any anonymous requester
+      // spam-create unlimited documents in this collection.
+      allow create: if docId == 'funnel';
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly([
             'landingPageVisits',
@@ -353,6 +387,7 @@ service cloud.firestore {
           ]);
       allow delete: if isAdminAny();
     }
+
 
     // ==============================================================
     // HEROES_PENDING COLLECTION (legacy admin-side mirror)
@@ -715,9 +750,16 @@ service cloud.firestore {
     // ==============================================================
     match /quiz_participants/{participantId} {
       allow read: if isAuth();
-      allow create: if isAuth();
+      // FIX (F-2, audit 2026-08-07): was `allow create: if isAuth()` with no
+      // ownership pin — any authenticated user could submit an entry with an
+      // arbitrary userId field, potentially submitting as another user's
+      // hashed Aadhaar identity. Pinned to request.auth.uid so a user can
+      // only ever create an entry tagged with their own uid.
+      allow create: if isAuth()
+        && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdminAny();
     }
+
 
     // ==============================================================
     // DB_USAGE_STATS COLLECTION (per-app Firestore usage monitor)

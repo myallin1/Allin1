@@ -654,6 +654,19 @@ class _RideSearchScreenState extends State<RideSearchScreen>
           .ref('hero_pings/$_assignedHeroId/$_requestId')
           .remove();
     }
+    // T-3 FIX (audit 2026-08-07): mark the stub Firestore rides doc as
+    // 'timeout' so it doesn't stay orphaned with status 'searching'.
+    // Fire-and-forget — if this fails (network loss) it's non-critical;
+    // never block or throw from the timeout path.
+    if (_rideDocId.isNotEmpty) {
+      FirebaseFirestore.instance
+          .collection('rides')
+          .doc(_rideDocId)
+          .update({'status': 'timeout', 'cancelledAt': FieldValue.serverTimestamp()})
+          .catchError((Object e) {
+        debugPrint('[RideSearch] Firestore ride timeout-cleanup failed (non-fatal): $e');
+      });
+    }
     if (mounted) {
       setState(() {
         _searchTimedOut = true;
@@ -661,6 +674,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       });
     }
   }
+
 
   Future<void> _cancelRide() async {
     setState(() => _cancelled = true);
@@ -677,8 +691,21 @@ class _RideSearchScreenState extends State<RideSearchScreen>
           .ref('hero_pings/$_assignedHeroId/$_requestId')
           .remove();
     }
+    // T-3 FIX (audit 2026-08-07): mark the stub Firestore rides doc as
+    // 'cancelled' so it doesn't stay orphaned with status 'searching'.
+    // Fire-and-forget — never block or throw from the cancel path.
+    if (_rideDocId.isNotEmpty) {
+      FirebaseFirestore.instance
+          .collection('rides')
+          .doc(_rideDocId)
+          .update({'status': 'cancelled', 'cancelledAt': FieldValue.serverTimestamp()})
+          .catchError((Object e) {
+        debugPrint('[RideSearch] Firestore ride cancel-cleanup failed (non-fatal): $e');
+      });
+    }
     if (mounted) Navigator.pop(context);
   }
+
 
   Future<void> _selectEncourageTip(int amount) async {
     setState(() => _selectedTipAmount = amount);
