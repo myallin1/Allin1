@@ -76,6 +76,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   StreamSubscription<Position>? _locationSubscription;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
       _rideDocSubscription;
+  StreamSubscription<DatabaseEvent>? _activeRideStatusSub;
   final MapController _mapController = MapController();
   final MapService _mapService = MapService();
   bool _rideMapReady = false;
@@ -147,7 +148,34 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
     _mapService.initialize();
     _startLocationUpdates();
     _fetchRideStatus();
+    _listenActiveRideStatus();
     unawaited(_loadRoadRoute());
+  }
+
+  // NEW (belt-and-suspenders alongside the optimistic setState() in
+  // _arriveTrip()/_startTrip()): self-heals _rideStatus from RTDB's
+  // active_rides/{rideDocId} node directly, same source of truth
+  // ride_tracking_screen.dart (the customer's screen) already reads.
+  // Covers the case the optimistic local set alone can't — hero force-
+  // closes/reopens this screen mid-ride, or two devices somehow end up
+  // on the same ride — where a fresh widget instance would otherwise
+  // start back at widget.ride.status ('accepted') until Firestore
+  // eventually says otherwise (which, per the Phase 4a migration, is
+  // never, for 'arrived'/'in_progress').
+  void _listenActiveRideStatus() {
+    if (widget.rideDocId.isEmpty) return;
+    _activeRideStatusSub = FirebaseDatabase.instance
+        .ref('active_rides/${widget.rideDocId}')
+        .onValue
+        .listen((event) {
+      if (!mounted) return;
+      final raw = event.snapshot.value;
+      final rtdbStatus = raw is Map ? raw['status'] as String? : null;
+      if (rtdbStatus == null || rtdbStatus == _rideStatus) return;
+      setState(() => _rideStatus = rtdbStatus);
+    }, onError: (Object e) {
+      debugPrint('[HeroRideScreen] active_rides listener error: $e');
+    });
   }
 
   @override
@@ -190,6 +218,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
     WidgetsBinding.instance.removeObserver(this);
     _locationSubscription?.cancel();
     _rideDocSubscription?.cancel();
+    _activeRideStatusSub?.cancel();
     _disposeCaptainMarkerAnimation();
     _otpController.dispose();
 
@@ -616,7 +645,22 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         'updatedAt': ServerValue.timestamp,
       });
       if (mounted) {
-        setState(() => _verifyingOtp = false);
+        // FIX (root cause of "OTP verified, Start Trip tapped, hero
+        // screen just sits on the same page"): _arriveTrip() right
+        // above this method optimistically sets _rideStatus locally
+        // right after its RTDB write — this method never did the same
+        // for the 'in_progress' transition, and (per the Phase 4a
+        // migration) neither Firestore nor any RTDB listener on this
+        // screen ever feeds 'in_progress' back in any other way. Local
+        // _rideStatus was silently stuck at 'arrived' forever after a
+        // successful Start Trip, so the UI never advanced past the OTP
+        // step to the drop-off/navigate controls, even though the RTDB
+        // write itself (now that active_rides has a rule — see the
+        // earlier database.rules.json fix) succeeded correctly.
+        setState(() {
+          _verifyingOtp = false;
+          _rideStatus = 'in_progress';
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Trip started! Navigate to destination'),

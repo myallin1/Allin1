@@ -21,6 +21,7 @@ import 'admin_dashboard_screen.dart';
 import 'admin_food_orders_screen.dart';
 import 'admin_service_requests_screen.dart';
 import 'admin_sos_kyc_approvals_screen.dart';
+import 'admin_taxi_rides_screen.dart';
 import 'admin_ux_audit_screen.dart';
 import 'commission_settings_screen.dart';
 import 'customer_usage_tracking_screen.dart';
@@ -826,6 +827,27 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute<void>(builder: (_) => const AdminUxAuditScreen()),
+                );
+              },
+            ),
+            // NEW (per Nizam's bug report — "new ride vanthurukku, atha
+            // vera hero ku assign pandra step yenga irukunu therila"):
+            // AdminTaxiRidesScreen already existed (live rides list +
+            // manual hero reassignment for VIP/timed-out bookings) but
+            // had ZERO navigation entry point anywhere in the app —
+            // genuinely unreachable except by editing code. This is the
+            // fix, and it's also exactly where the new ride-alert
+            // notification's tap now navigates to.
+            ListTile(
+              leading: const Icon(Icons.local_taxi_rounded, color: Color(0xFFFF9800)),
+              title: const Text('Taxi Rides', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Live rides + manual hero assignment',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const AdminTaxiRidesScreen()),
                 );
               },
             ),

@@ -509,21 +509,94 @@ class HeroApp extends StatelessWidget {
             themeMode: ThemeMode.light,
             initialRoute: '/',
             routes: {
-              // NEW (per Nizam's request — shared splash video, all 4
-              // apps): AppSplashVideoScreen plays app_splash.mp4 first
-              // (with audio, full-screen stretch, hard-capped so it can
-              // never add real delay), THEN hands off to the existing
-              // SplashSetupScreen exactly as before — its own warm-up/
-              // auth-gating logic is completely untouched.
-              '/': (_) => const AppSplashVideoScreen(
-                    nextScreen: SplashSetupScreen(nextScreen: _HeroSetupGate()),
-                  ),
+              // FIX (per Nizam's bug report — "3 animations before the
+              // splash", "unwanted splash marachutu app open aganum on
+              // repeat opens"): the video used to play unconditionally on
+              // EVERY launch, adding up to its full duration on top of
+              // whatever the auth/profile gate below was already doing —
+              // that's the actual source of the "3 loaders back to back"
+              // feeling on a warm relaunch. Now gated through
+              // _HeroSplashGate: plays the branded video only the very
+              // FIRST time this device ever opens the Hero app, then
+              // persists a flag so every later open skips straight to
+              // SplashSetupScreen/_HeroSetupGate (which already has its
+              // own initialData/cached-Future fast-path for a signed-in,
+              // already-setup hero — see the comments on
+              // _HeroSetupGateState above).
+              '/': (_) => const _HeroSplashGate(),
               '/hero-home': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
               '/hero-ride': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
             },
           ),
         ),
       ),
+    );
+  }
+}
+
+// NEW (per Nizam's bug report — first-launch-only splash video): decides,
+// once per app open, whether to play the branded app_splash.mp4 at all.
+// Reads a persisted "have we ever shown this device the splash" flag
+// from shared_preferences — that read is a few milliseconds on-device
+// (no network), so it never itself becomes a 4th loader.
+const String kHeroSplashSeenKey = 'hero_splash_video_seen_v1';
+
+class _HeroSplashGate extends StatefulWidget {
+  const _HeroSplashGate();
+
+  @override
+  State<_HeroSplashGate> createState() => _HeroSplashGateState();
+}
+
+class _HeroSplashGateState extends State<_HeroSplashGate> {
+  bool? _shouldShowSplash;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkSplashSeen();
+  }
+
+  Future<void> _checkSplashSeen() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final seen = prefs.getBool(kHeroSplashSeenKey) ?? false;
+      if (!mounted) return;
+      setState(() => _shouldShowSplash = !seen);
+    } catch (e) {
+      // On any storage failure, default to NOT re-showing the splash —
+      // a returning hero getting straight into the app is the safer
+      // failure mode than accidentally replaying the intro forever.
+      debugPrint('[HeroSplashGate] prefs read failed: $e');
+      if (!mounted) return;
+      setState(() => _shouldShowSplash = false);
+    }
+  }
+
+  Future<void> _markSplashSeen() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(kHeroSplashSeenKey, true);
+    } catch (e) {
+      debugPrint('[HeroSplashGate] prefs write failed: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Brief synchronous-feeling gap (single on-device prefs read) —
+    // render nothing rather than a competing loader/animation here.
+    if (_shouldShowSplash == null) {
+      return const Scaffold(backgroundColor: Colors.black, body: SizedBox.shrink());
+    }
+    if (!_shouldShowSplash!) {
+      // Returning hero — skip the video entirely, straight to the
+      // already-fast auth/setup gate below.
+      return const SplashSetupScreen(nextScreen: _HeroSetupGate());
+    }
+    return AppSplashVideoScreen(
+      onFinished: _markSplashSeen,
+      nextScreen: const SplashSetupScreen(nextScreen: _HeroSetupGate()),
     );
   }
 }

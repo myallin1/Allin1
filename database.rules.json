@@ -30,6 +30,14 @@
         ".write": "auth != null"
       }
     },
+    "active_rides": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$rideId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
     "hero_service_pings": {
       ".read": "auth != null",
       ".write": "auth != null",

@@ -4,7 +4,7 @@
  * Entry Point
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifyHeroOnServicePing = exports.notifyHeroOnPing = exports.notifyHeroOnRideAssigned = exports.manageHeroApproval = exports.checkDeviceFingerprint = exports.verifyAndProcessPayment = exports.affiliatePostbackWebhook = void 0;
+exports.notifyAdminOnNewServiceRequest = exports.notifyAdminOnNewRide = exports.notifyHeroOnServicePing = exports.notifyHeroOnPing = exports.notifyHeroOnRideAssigned = exports.manageHeroApproval = exports.checkDeviceFingerprint = exports.verifyAndProcessPayment = exports.affiliatePostbackWebhook = void 0;
 var affiliatePostbackWebhook_1 = require("./affiliatePostbackWebhook");
 Object.defineProperty(exports, "affiliatePostbackWebhook", { enumerable: true, get: function () { return affiliatePostbackWebhook_1.affiliatePostbackWebhook; } });
 var verifyAndProcessPayment_1 = require("./verifyAndProcessPayment");
@@ -26,4 +26,13 @@ var notifyHeroOnPing_1 = require("./notifyHeroOnPing");
 Object.defineProperty(exports, "notifyHeroOnPing", { enumerable: true, get: function () { return notifyHeroOnPing_1.notifyHeroOnPing; } });
 var notifyHeroOnServicePing_1 = require("./notifyHeroOnServicePing");
 Object.defineProperty(exports, "notifyHeroOnServicePing", { enumerable: true, get: function () { return notifyHeroOnServicePing_1.notifyHeroOnServicePing; } });
+// NEW (per Nizam's request — Admin app "WhatsApp model" closed-app
+// alerts): mirrors notifyHeroOnRideAssigned's send pattern, but fans
+// out to every doc in admins/ instead of one hero, triggered on
+// creation of rides/service_requests (always happens exactly once per
+// booking, unlike the deprecated targeted_hero_id onUpdate path).
+var notifyAdminOnNewRide_1 = require("./notifyAdminOnNewRide");
+Object.defineProperty(exports, "notifyAdminOnNewRide", { enumerable: true, get: function () { return notifyAdminOnNewRide_1.notifyAdminOnNewRide; } });
+var notifyAdminOnNewServiceRequest_1 = require("./notifyAdminOnNewServiceRequest");
+Object.defineProperty(exports, "notifyAdminOnNewServiceRequest", { enumerable: true, get: function () { return notifyAdminOnNewServiceRequest_1.notifyAdminOnNewServiceRequest; } });
 //# sourceMappingURL=index.js.map

@@ -2,9 +2,12 @@
 // Allin1 — ADMIN Panel Entry Point
 // HIDDEN — Not for public!
 
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -21,12 +24,91 @@ import 'screens/admin/fare_management_screen.dart';
 import 'screens/admin/super_admin_home_screen.dart';
 import 'screens/admin/task_approvals_screen.dart';
 import 'screens/login_screen.dart';
+import 'services/admin_alert_notification_service.dart';
+import 'services/admin_foreground_service.dart';
+import 'services/admin_live_alert_service.dart';
 import 'services/admin_quick_task_service.dart';
 import 'services/db_usage_tracker.dart';
 import 'services/localization_service.dart';
 import 'services/session_service.dart';
 import 'services/theme_service.dart';
 import 'widgets/branded_loading_screen.dart';
+
+// NEW (per Nizam's request — Admin "WhatsApp model" closed-app alerts):
+// mirrors main_hero.dart's _firebaseMessagingBackgroundHandler. Must be
+// a top-level/static function with this exact pragma — FCM invokes it
+// on a separate background isolate that has no access to any app
+// state, so it can only do isolate-safe work (here: nothing extra is
+// needed, since the paired Cloud Functions send a `notification` block
+// that Android displays automatically when the app is backgrounded/
+// killed; this handler exists so the OS actually wakes/registers the
+// background messaging pipeline at all).
+@pragma('vm:entry-point')
+Future<void> _adminFirebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  debugPrint('[main_admin] Background push received: ${message.messageId}');
+}
+
+StreamSubscription<User?>? _adminAuthSub;
+StreamSubscription<String>? _adminFcmTokenRefreshSub;
+
+// NEW: same fcmToken-sync pattern as main_hero.dart's
+// _syncFcmTokenForHero — writes to admins/{uid}.fcmToken, which is
+// exactly the field notifyAdminOnNewRide.ts / notifyAdminOnNewService
+// Request.ts read to know which device(s) to push to. Without this,
+// the Cloud Functions would always find zero tokens and no-op.
+Future<void> _syncFcmTokenForAdmin(String uid) async {
+  try {
+    final token = await FirebaseMessaging.instance.getToken();
+    if (token != null && token.trim().isNotEmpty) {
+      await FirebaseFirestore.instance.collection('admins').doc(uid).set({
+        'fcmToken': token,
+        'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      debugPrint('[FCM] Token synced for admin $uid');
+    }
+  } catch (e) {
+    debugPrint('[FCM] Token sync failed for admin $uid: $e');
+  }
+
+  _adminFcmTokenRefreshSub?.cancel();
+  _adminFcmTokenRefreshSub =
+      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+    unawaited(
+      FirebaseFirestore.instance.collection('admins').doc(uid).set({
+        'fcmToken': newToken,
+        'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)).catchError((Object e) {
+        debugPrint('[FCM] Token refresh write failed for admin $uid: $e');
+      }),
+    );
+  }, onError: (Object e) {
+    debugPrint('[FCM] onTokenRefresh listener error: $e');
+  });
+}
+
+void _initAdminFcmAuthListener() {
+  _adminAuthSub?.cancel();
+  _adminAuthSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+    if (user == null) {
+      _adminFcmTokenRefreshSub?.cancel();
+      _adminFcmTokenRefreshSub = null;
+      // FIX (per Nizam's request — free alternative, no Blaze/billing):
+      // the FCM-token sync above only matters if Cloud Functions ever
+      // get deployed later; the actual FREE, working notification path
+      // is this foreground-service + live-Firestore-listener pair
+      // (admin_foreground_service.dart / admin_live_alert_service.dart)
+      // — start it whenever an admin is signed in, stop it on logout so
+      // a signed-out phone doesn't keep a persistent notification/
+      // listener running for no reason.
+      AdminLiveAlertService.instance.stop();
+      unawaited(AdminForegroundService.stop());
+      return;
+    }
+    unawaited(_syncFcmTokenForAdmin(user.uid));
+    AdminLiveAlertService.instance.start();
+    unawaited(AdminForegroundService.start());
+  });
+}
 
 // FIX (Nizam's "jet-speed startup" request, task #108, same fix as
 // main_customer.dart/main_hero.dart/main_seller.dart): paint this
@@ -109,6 +191,35 @@ void main() {
         return;
       }
       DbUsageTracker.instance.init('admin');
+
+      // NEW (per Nizam's request — Admin "WhatsApp model" closed-app
+      // alerts): registers the background handler + local-notification
+      // channel BEFORE runApp, same ordering main_hero.dart uses, and
+      // starts syncing this admin's FCM token the moment they're
+      // signed in (works for both a fresh login and an already-warm
+      // session restored from disk).
+      FirebaseMessaging.onBackgroundMessage(_adminFirebaseMessagingBackgroundHandler);
+      await AdminAlertNotificationService.initialize();
+      AdminForegroundService.initialize();
+      await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      _initAdminFcmAuthListener();
+      // Foreground messages are NOT auto-displayed by Android/FCM (only
+      // background/killed states get that for free from the
+      // `notification` block) — this is the foreground-only path.
+      FirebaseMessaging.onMessage.listen((message) {
+        final notification = message.notification;
+        if (notification == null) return;
+        unawaited(AdminAlertNotificationService.showForegroundAlert(
+          title: notification.title ?? 'Allin1 Admin',
+          body: notification.body ?? 'New activity',
+          payloadId: message.messageId ?? DateTime.now().toIso8601String(),
+        ));
+      });
+
       runApp(const AdminApp());
     },
   );

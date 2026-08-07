@@ -62,6 +62,27 @@ service cloud.firestore {
     }
 
     // ==============================================================
+    // ADMINS COLLECTION
+    // ==============================================================
+    // FIX (root cause of "admin app whatsapp-model notifications never
+    // arrive when closed/locked", per Nizam's request): this collection
+    // had NO rule block at all anywhere in this file — every read/write
+    // to admins/{uid} was silently hitting the file's implicit default
+    // deny. That meant main_admin.dart could never save the signed-in
+    // admin's FCM token to admins/{uid}.fcmToken (needed so the new
+    // notifyAdminOnNewRide/notifyAdminOnNewServiceRequest Cloud
+    // Functions have somewhere to read a token FROM), on top of the
+    // Admin app itself never having had any FCM/background-notification
+    // code to begin with. An existing admin can read/update their own
+    // doc (fcmToken sync); any admin can manage the full collection
+    // (provisioning new admins, same pattern as isAdminAny() elsewhere).
+    match /admins/{adminId} {
+      allow read: if isAdminAny();
+      allow update: if isAdminAny() && (isAdmin() || request.auth.uid == adminId);
+      allow create, delete: if isAdminAny();
+    }
+
+    // ==============================================================
     // SELLERS COLLECTION
     // ==============================================================
     // Customers:   read only

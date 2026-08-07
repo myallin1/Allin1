@@ -6422,15 +6422,24 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
         (widget.pingData['estimatedFare'] as num?)?.toDouble() ?? 0.0;
     final tipAmount = (widget.pingData['tipAmount'] as num?)?.toDouble() ?? 0.0;
     final double boostedFare = estimatedFare + tipAmount;
+    // FIX (per Nizam's request — "2 popup notificationla irukura good
+    // things yeduthu final ah oru notification popup align pandrom"):
+    // this dialog used to be dark-themed (bg #0A0A12, cards #1A1A2E,
+    // white text) while the hero_booking dialog (_doShowServiceDialog
+    // above) was already the correct pink/white "cute" look the user
+    // wants everywhere. Purely a color swap here — every data binding
+    // (pickup/drop/fare/tip/countdown/actions) is completely untouched,
+    // same as before, per the explicit "backend logic yethume maathi
+    // app crash paniratha" instruction.
     return AlertDialog(
-      backgroundColor: const Color(0xFF0A0A12),
+      backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(22),
         side: const BorderSide(color: Color(0x33FF4FA3)),
       ),
       titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 0),
       contentPadding: const EdgeInsets.fromLTRB(24, 18, 24, 10),
-      title: const Text('U0001f680 New Ride Request',
+      title: const Text('🚀 New Ride Request',
           style:
               TextStyle(color: Color(0xFFFF4FA3), fontWeight: FontWeight.w800),),
       content: Column(
@@ -6441,11 +6450,11 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-                color: const Color(0xFF1A1A2E),
+                color: const Color(0xFFFFF1F8),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0x26FF4FA3)),),
+                border: Border.all(color: const Color(0x33FF4FA3)),),
             child: Row(children: [
-              const Text('U0001f7e2', style: TextStyle(fontSize: 14)),
+              const Text('🟢', style: TextStyle(fontSize: 14)),
               const SizedBox(width: 10),
               Expanded(
                   child: Column(
@@ -6459,7 +6468,7 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
                   const SizedBox(height: 4),
                   Text(pickup,
                       style: const TextStyle(
-                          color: Colors.white,
+                          color: Colors.black87,
                           fontSize: 13,
                           fontWeight: FontWeight.w700,),),
                 ],
@@ -6471,11 +6480,11 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-                color: const Color(0xFF1A1A2E),
+                color: const Color(0xFFFFF1F8),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0x26FF4FA3)),),
+                border: Border.all(color: const Color(0x33FF4FA3)),),
             child: Row(children: [
-              const Text('U0001f534', style: TextStyle(fontSize: 14)),
+              const Text('🔴', style: TextStyle(fontSize: 14)),
               const SizedBox(width: 10),
               Expanded(
                   child: Column(
@@ -6489,7 +6498,7 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
                   const SizedBox(height: 4),
                   Text(drop,
                       style: const TextStyle(
-                          color: Colors.white,
+                          color: Colors.black87,
                           fontSize: 13,
                           fontWeight: FontWeight.w700,),),
                 ],
@@ -6501,12 +6510,12 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A1A2E),
+              color: const Color(0xFFFFF1F8),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
                   color: tipAmount > 0
                       ? const Color(0xFF00A86B).withValues(alpha: 0.45)
-                      : const Color(0x26FF4FA3),),
+                      : const Color(0x33FF4FA3),),
             ),
             child: Row(children: [
               Expanded(

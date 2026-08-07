@@ -28,11 +28,19 @@ class AppSplashVideoScreen extends StatefulWidget {
   final Widget nextScreen;
   final String assetPath;
   final Duration maxDuration;
+  // NEW (per Nizam's request — first-launch-only splash): callback fired
+  // exactly once, the moment this screen hands off to nextScreen (either
+  // the video finished, or the safety timer fired). Callers use this to
+  // persist a "seen the splash" flag so subsequent app opens can skip
+  // straight past this screen entirely instead of replaying the video
+  // every single launch.
+  final VoidCallback? onFinished;
 
   const AppSplashVideoScreen({
     required this.nextScreen,
     this.assetPath = 'assets/videos/app_splash.mp4',
     this.maxDuration = const Duration(seconds: 11),
+    this.onFinished,
     super.key,
   });
 
@@ -92,6 +100,7 @@ class _AppSplashVideoScreenState extends State<AppSplashVideoScreen> {
     if (_navigated || !mounted) return;
     _navigated = true;
     _safetyTimer?.cancel();
+    widget.onFinished?.call();
     setState(() {});
   }
 

@@ -17,3 +17,11 @@ export { notifyHeroOnRideAssigned } from './notifyHeroOnRideAssigned';
 // specific write shape no caller produces.
 export { notifyHeroOnPing } from './notifyHeroOnPing';
 export { notifyHeroOnServicePing } from './notifyHeroOnServicePing';
+
+// NEW (per Nizam's request — Admin app "WhatsApp model" closed-app
+// alerts): mirrors notifyHeroOnRideAssigned's send pattern, but fans
+// out to every doc in admins/ instead of one hero, triggered on
+// creation of rides/service_requests (always happens exactly once per
+// booking, unlike the deprecated targeted_hero_id onUpdate path).
+export { notifyAdminOnNewRide } from './notifyAdminOnNewRide';
+export { notifyAdminOnNewServiceRequest } from './notifyAdminOnNewServiceRequest';

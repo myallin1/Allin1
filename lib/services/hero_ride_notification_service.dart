@@ -225,9 +225,19 @@ class HeroRideNotificationService {
       notificationDetails: details,
       payload: jsonEncode(<String, String>{'rideId': rideId}),
     );
-    if (playAlertTone) {
-      await playWakeAlertRingtone();
-    }
+    // FIX (root cause of "our own ringtone AND the phone's stock alarm
+    // tone both play at once", per Nizam's bug report): the
+    // AndroidNotificationDetails above already plays our custom
+    // ride_alert.mp3 through the ALARM audio stream
+    // (audioAttributesUsage: AudioAttributesUsage.alarm), which alone
+    // already bypasses silent mode/DND and plays loud on the lock
+    // screen — that's the "namma app kulla vachurukka ringtone" the
+    // user wants to keep. playWakeAlertRingtone() below used to ALSO
+    // fire FlutterRingtonePlayer's separate AndroidSounds.alarm (the
+    // phone's own stock system alarm tone) on top of it — two
+    // independent sounds playing simultaneously. Removed; the
+    // `playAlertTone` param is kept (unused here now) so every call
+    // site elsewhere in the codebase keeps compiling unchanged.
   }
 
   // ── Cancel Ride Notification (Kill Signal) ────────────────

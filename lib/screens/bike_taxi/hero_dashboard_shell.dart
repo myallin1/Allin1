@@ -3,9 +3,9 @@ import 'package:flutter/services.dart';
 
 import 'hero_history_screen.dart';
 import 'hero_home_screen.dart';
-import 'hero_profile_tab.dart';
 import 'hero_side_drawer.dart';
 import 'hero_sos_screen.dart';
+import 'hero_wallet_screen.dart';
 
 class HeroDashboardShell extends StatefulWidget {
   const HeroDashboardShell({super.key});
@@ -48,10 +48,15 @@ class _HeroDashboardShellState extends State<HeroDashboardShell> {
     });
   }
 
+  // FIX (per Nizam's request — "hero profile options yellathayum side
+  // tray kulla kondu poiru, wallet button ah profile 3rd place la
+  // replace pannu"): tab slot 2 used to be HeroProfileTab (settings,
+  // help, logout, etc.) — all of that moved into HeroSideDrawer. This
+  // slot is now Hero Wallet directly.
   List<Widget> get _tabs => <Widget>[
         const HeroHomeScreen(embedded: true),
         if (_visitedTabs.contains(1)) const HeroHistoryScreen() else _placeholder.first,
-        if (_visitedTabs.contains(2)) const HeroProfileTab() else _placeholder.first,
+        if (_visitedTabs.contains(2)) const HeroWalletScreen() else _placeholder.first,
         if (_visitedTabs.contains(3)) const HeroSosScreen() else _placeholder.first,
       ];
 
@@ -227,9 +232,9 @@ class _HeroDashboardShellState extends State<HeroDashboardShell> {
                 label: 'Earnings',
               ),
               BottomNavigationBarItem(
-                icon: _inactiveIcon(Icons.account_circle_outlined),
-                activeIcon: _activeIcon(Icons.account_circle_rounded),
-                label: 'Profile',
+                icon: _inactiveIcon(Icons.account_balance_wallet_outlined),
+                activeIcon: _activeIcon(Icons.account_balance_wallet_rounded),
+                label: 'Wallet',
               ),
               BottomNavigationBarItem(
                 icon: _inactiveIcon(Icons.emergency_rounded),
