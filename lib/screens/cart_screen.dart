@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../providers/cart_provider.dart';
+import '../services/auth_service.dart';
 
 const Color kSurface = Color(0xFF0D0D18);
 const Color kCard = Color(0xFF141420);
@@ -403,6 +404,7 @@ class _CartScreenState extends State<CartScreen> {
 
     try {
       final orderId = const Uuid().v4();
+      final resolvedCustomerPhone = await AuthService().resolveCustomerPhone(user);
 
       await FirebaseFirestore.instance.collection('orders').doc(orderId).set({
         'items': cart.items.map((i) => i.toJson()).toList(),
@@ -413,7 +415,7 @@ class _CartScreenState extends State<CartScreen> {
         'status': 'pending',
         'category': 'food', // Default category
         'customerId': user.uid,
-        'customerPhone': user.phoneNumber ?? '',
+        'customerPhone': resolvedCustomerPhone,
         'paymentStatus': 'pending',
         'estimatedTime': '30-45 minutes',
         'createdAt': FieldValue.serverTimestamp(),

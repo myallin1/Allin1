@@ -14,6 +14,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/food_models.dart';
 import '../models/service_request_model.dart';
+import '../services/db_usage_tracker.dart';
 import '../services/food_seller_service.dart';
 import 'seller_custom_hotel_builder_screen.dart';
 import 'seller_electronics_dashboard_screen.dart';
@@ -232,6 +233,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         ],)
         .snapshots()
         .listen((snap) {
+      DbUsageTracker.instance.recordRead(snap.docs.length);
       if (mounted) {
         setState(() => _catalogOrders =
             snap.docs.map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id)).toList());
@@ -259,6 +261,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         ],)
         .snapshots()
         .listen((snap) {
+      DbUsageTracker.instance.recordRead(snap.docs.length);
       if (mounted) {
         setState(() => _customHotelOrders =
             snap.docs.map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id)).toList());

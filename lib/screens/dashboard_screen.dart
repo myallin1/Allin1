@@ -1949,8 +1949,35 @@ class _ProfileDrawer extends StatelessWidget {
                     fontWeight: FontWeight.w800,),
                     overflow: TextOverflow.ellipsis,),
                 const SizedBox(height: 3),
-                Text(phone, style: const TextStyle(
-                    color: Colors.white70, fontSize: 12,),),
+                // FIX (audit: customer/hero number wiring): user?.phoneNumber
+                // is only populated by real phone-OTP auth — a Google-Sign-In
+                // customer's typed-in signup number lives in Firestore
+                // users/{uid}.phoneNumber (with .phone kept in sync), not on
+                // the Auth object, so this drawer showed "Phone not added"
+                // for every such customer even though the number was
+                // correctly stored. StreamBuilder falls back to the plain
+                // `phone` local (Auth-derived) while the Firestore doc loads.
+                if (user == null)
+                  Text(phone, style: const TextStyle(
+                      color: Colors.white70, fontSize: 12,),)
+                else
+                  StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(user!.uid)
+                        .snapshots(),
+                    builder: (context, snap) {
+                      final data = snap.data?.data();
+                      final resolvedPhone =
+                          (data?['phoneNumber'] as String?)?.trim().isNotEmpty ?? false
+                              ? (data!['phoneNumber'] as String).trim()
+                              : ((data?['phone'] as String?)?.trim().isNotEmpty ?? false
+                                  ? (data!['phone'] as String).trim()
+                                  : phone);
+                      return Text(resolvedPhone, style: const TextStyle(
+                          color: Colors.white70, fontSize: 12,),);
+                    },
+                  ),
               ],),),
             ],),
           ),

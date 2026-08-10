@@ -35,6 +35,7 @@ class CustomerUsageTrackingScreen extends StatefulWidget {
 class _CustomerUsageTrackingScreenState
     extends State<CustomerUsageTrackingScreen> {
   int? _totalSignups;
+  int? _posterSignups;
   bool _loadingSignups = true;
   String? _signupError;
 
@@ -48,13 +49,25 @@ class _CustomerUsageTrackingScreenState
     try {
       // Single server-side aggregation read — never scans/downloads
       // the actual user documents.
-      final agg = await FirebaseFirestore.instance
+      final aggFuture = FirebaseFirestore.instance
           .collection('users')
           .count()
           .get();
+      
+      final posterAggFuture = FirebaseFirestore.instance
+          .collection('users')
+          .where('source', isEqualTo: 'poster_campaign')
+          .count()
+          .get();
+
+      final results = await Future.wait([aggFuture, posterAggFuture]);
+      final agg = results[0];
+      final posterAgg = results[1];
+
       if (!mounted) return;
       setState(() {
         _totalSignups = agg.count ?? 0;
+        _posterSignups = posterAgg.count ?? 0;
         _loadingSignups = false;
       });
     } catch (e) {
@@ -100,6 +113,7 @@ class _CustomerUsageTrackingScreenState
         builder: (context, snapshot) {
           final data = snapshot.data?.data() ?? <String, dynamic>{};
           final visits = (data['landingPageVisits'] as num?)?.toInt() ?? 0;
+          final posterScans = (data['poster_qr_scans'] as num?)?.toInt() ?? 0;
           final dlCustomer = (data['download_customer'] as num?)?.toInt() ?? 0;
           final dlHero = (data['download_hero'] as num?)?.toInt() ?? 0;
           final dlAdmin = (data['download_admin'] as num?)?.toInt() ?? 0;
@@ -118,6 +132,47 @@ class _CustomerUsageTrackingScreenState
                 ),
               ),
               const SizedBox(height: 16),
+              _funnelRow(
+                icon: Icons.qr_code_2_rounded,
+                iconColor: Colors.blueAccent,
+                label: 'Total QR Poster Scans',
+                value: posterScans,
+                subtitle: 'From ?source=poster_campaign links',
+              ),
+              _funnelArrow(),
+              _funnelRow(
+                icon: Icons.install_mobile_rounded,
+                iconColor: Colors.tealAccent,
+                label: 'Poster PWA Installs',
+                value: (data['poster_qr_pwa_installs'] as num?)?.toInt() ?? 0,
+                subtitle: posterScans == 0
+                    ? null
+                    : '${((((data['poster_qr_pwa_installs'] as num?)?.toInt() ?? 0) / posterScans) * 100).clamp(0, 999).toStringAsFixed(1)}% of scans installed',
+              ),
+              _funnelArrow(),
+              _funnelRow(
+                icon: Icons.how_to_reg_rounded,
+                iconColor: Colors.amberAccent,
+                label: 'Poster Registrations',
+                value: _posterSignups ?? 0,
+                loading: _loadingSignups,
+                errorText: _signupError,
+                subtitle: posterScans == 0 || _posterSignups == null
+                    ? null
+                    : '${((_posterSignups! / posterScans) * 100).clamp(0, 999).toStringAsFixed(1)}% of scans registered\n(Tap to view users)',
+                onTap: () {
+                  showModalBottomSheet(
+                    context: context,
+                    backgroundColor: _card,
+                    isScrollControlled: true,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                    ),
+                    builder: (context) => const _PosterSignupsSheet(),
+                  );
+                },
+              ),
+              _funnelArrow(),
               _funnelRow(
                 icon: Icons.link_rounded,
                 iconColor: _purple,
@@ -175,14 +230,18 @@ class _CustomerUsageTrackingScreenState
     bool loading = false,
     String? errorText,
     String? subtitle,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: iconColor.withValues(alpha: 0.25)),
-      ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: iconColor.withValues(alpha: 0.25)),
+        ),
       child: Row(
         children: [
           Container(
@@ -244,6 +303,7 @@ class _CustomerUsageTrackingScreenState
                 ),
         ],
       ),
+      ),
     );
   }
 
@@ -280,6 +340,146 @@ class _CustomerUsageTrackingScreenState
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PosterSignupsSheet extends StatefulWidget {
+  const _PosterSignupsSheet();
+
+  @override
+  State<_PosterSignupsSheet> createState() => _PosterSignupsSheetState();
+}
+
+class _PosterSignupsSheetState extends State<_PosterSignupsSheet> {
+  final List<DocumentSnapshot> _users = [];
+  bool _loading = false;
+  bool _hasMore = true;
+  DocumentSnapshot? _lastDoc;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUsers();
+  }
+
+  Future<void> _fetchUsers() async {
+    if (_loading || !_hasMore) return;
+    setState(() => _loading = true);
+    try {
+      var query = FirebaseFirestore.instance
+          .collection('users')
+          .where('source', isEqualTo: 'poster_campaign')
+          .limit(50);
+      
+      if (_lastDoc != null) {
+        query = query.startAfterDocument(_lastDoc!);
+      }
+      
+      final snap = await query.get();
+      if (!mounted) return;
+      setState(() {
+        if (snap.docs.isNotEmpty) {
+          _lastDoc = snap.docs.last;
+          _users.addAll(snap.docs);
+        }
+        if (snap.docs.length < 50) {
+          _hasMore = false;
+        }
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint('Error fetching poster users: $e');
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.5,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) {
+        scrollController.addListener(() {
+          if (scrollController.position.pixels >=
+              scrollController.position.maxScrollExtent - 50) {
+            _fetchUsers();
+          }
+        });
+
+        return Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              height: 4,
+              width: 40,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Text(
+              'Poster Campaign Signups',
+              style: GoogleFonts.outfit(
+                color: _text,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: _users.isEmpty && _loading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: _gold),
+                    )
+                  : _users.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No signups found.',
+                            style: TextStyle(color: _text.withValues(alpha: 0.5)),
+                          ),
+                        )
+                      : ListView.builder(
+                          controller: scrollController,
+                          itemCount: _users.length + (_hasMore ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (index == _users.length) {
+                              return const Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    color: _gold,
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              );
+                            }
+                            final doc = _users[index];
+                            final data = doc.data() as Map<String, dynamic>?;
+                            final email = data?['email'] as String? ?? 'No email';
+                            final phone = data?['phone'] as String? ?? 'No phone';
+                            final name = data?['name'] as String? ?? 'Unknown';
+
+                            return ListTile(
+                              leading: const CircleAvatar(
+                                backgroundColor: Colors.white10,
+                                child: Icon(Icons.person, color: _gold),
+                              ),
+                              title: Text(name,
+                                  style: const TextStyle(color: _text)),
+                              subtitle: Text('$email\n$phone',
+                                  style: TextStyle(
+                                      color: _text.withValues(alpha: 0.6),
+                                      fontSize: 12)),
+                            );
+                          },
+                        ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

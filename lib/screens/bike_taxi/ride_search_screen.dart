@@ -132,7 +132,41 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   // After:  await _startSequentialPinging() ← properly sequential
   // ================================================================
   Future<void> _startRideCreation() async {
-    final user = FirebaseAuth.instance.currentUser;
+    // FIX (root cause, Aug 10 2026 — "Customer PWA books a bike ride,
+    // it never reaches Hero at all, neither PWA nor native"): this
+    // used to do a single synchronous `currentUser` null-check and
+    // then immediately call `_fetchNearbyHeroes()`, which reads RTDB
+    // `online_heroes` — a node that requires `auth != null` per
+    // database.rules.json. bike_booking_screen.dart's own
+    // `_listenToNearbyCaptains()` (see that file's detailed comment)
+    // was already fixed for exactly this: on a fresh Customer PWA load,
+    // Firebase Auth's session restore from IndexedDB is measurably
+    // slower than native, so `currentUser` can still be non-null (the
+    // uid is known) while the underlying RTDB auth token hasn't
+    // finished propagating — or this screen can simply be reached
+    // before restore finishes at all. `ride_search_screen.dart` was
+    // never given that same fix, so a PWA customer's very first ride
+    // request after a fresh page load could hit `online_heroes` before
+    // auth was truly ready, get a silent permission-denied (swallowed
+    // by `_fetchNearbyHeroes`'s catch block below, logged only via
+    // debugPrint), and the whole broadcast never happened — the
+    // customer just saw "no heroes found," not a real error, and Hero
+    // never received anything to be silent about.
+    //
+    // Fix: wait for a real authStateChanges() event before proceeding,
+    // same pattern as bike_booking_screen.dart, with a short timeout so
+    // a genuinely signed-out customer isn't stuck waiting forever.
+    var user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      try {
+        user = await FirebaseAuth.instance
+            .authStateChanges()
+            .firstWhere((u) => u != null)
+            .timeout(const Duration(seconds: 6));
+      } catch (_) {
+        user = null;
+      }
+    }
     if (user == null) {
       if (mounted) Navigator.pop(context);
       return;
@@ -144,6 +178,20 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       debugPrint('[RideSearch] No nearby heroes found within 3km');
       if (mounted) {
         setState(() => _searchTimedOut = true);
+        if (_fetchNearbyHeroesError != null) {
+          // FIX: previously a permission-denied/network error while
+          // fetching heroes looked IDENTICAL to "genuinely nobody is
+          // online" — both just silently landed on the same timeout
+          // screen. Now surfaces the real error so it's diagnosable
+          // instead of looking like "no heroes in the area."
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Could not search for heroes: $_fetchNearbyHeroesError'),
+              backgroundColor: const Color(0xFFFF5252),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
       return;
     }
@@ -153,10 +201,9 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     _listenForAcceptance();
     debugPrint('🔥 [DEBUG-TRACE] About to call _startSequentialPinging()...');
 
-    // ✅ FIX: await ensures the loop runs strictly sequentially
-    // Without await, Dart fires the loop async and all pings go out
-    // simultaneously because Future.delayed yields control immediately.
-    await _startSequentialPinging();
+    // TASK 2 (Aug 8 2026): sequential per-hero pinging replaced with a
+    // single 5km simultaneous broadcast — see _startBroadcastPinging.
+    await _startBroadcastPinging();
   }
 
   /// Must match the canonical keys used in hero registration:
@@ -186,7 +233,10 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     }
   }
 
+  String? _fetchNearbyHeroesError;
+
   Future<void> _fetchNearbyHeroes() async {
+    _fetchNearbyHeroesError = null;
     try {
       final pickupLat = widget.ride.pickupLatitude ?? 11.3410;
       final pickupLng = widget.ride.pickupLongitude ?? 77.7172;
@@ -213,7 +263,11 @@ class _RideSearchScreenState extends State<RideSearchScreen>
 
       print('[RideSearch] RTDB returned ${onlineData.length} online hero entries');
 
-      const double rangeKm = 3;
+      // TASK 2 (broadcast dispatch, Aug 8 2026): widened 3km -> 5km per
+      // "fastest finger first" redesign — more heroes candidates now get
+      // pinged simultaneously (see _startBroadcastPinging below), so the
+      // wider net is intentional, not a leftover.
+      const double rangeKm = 5;
       const double earthRadius = 6371;
       const double latDelta = rangeKm / earthRadius * (180.0 / pi);
       final double lngDelta = rangeKm / earthRadius * (180.0 / pi) /
@@ -307,6 +361,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       debugPrint('[RideSearch] Found ${validHeroes.length} heroes within 3km');
     } catch (e) {
       debugPrint('🔥 [REJECTED] _fetchNearbyHeroes error: $e');
+      _fetchNearbyHeroesError = e.toString();
       _heroesQueue = [];
     }
   }
@@ -410,44 +465,56 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   // FIX: Changed to Future<void> + caller now awaits it.
   //      The loop now BLOCKS at each hero's 10s window before moving on.
   // ================================================================
-  Future<void> _startSequentialPinging() async {
-    debugPrint('🔥 [SEQUENTIAL] _startSequentialPinging started. Queue: ${_heroesQueue.length}');
+  // ================================================================
+  // TASK 2 (Aug 8 2026) — Broadcast dispatch ("fastest finger first")
+  //
+  // REPLACES the old one-hero-at-a-time _startSequentialPinging (each
+  // hero got a private 15s window; slow if the nearest hero ignored
+  // it). Now ALL heroes within 5km get pinged AT ONCE, for the full
+  // 90s customer search window. First hero to tap Accept wins.
+  //
+  // Why this was a small patch, not a rewrite: hero_home_screen.dart's
+  // _acceptRide() ALREADY does everything a broadcast model needs on
+  // the winning side — an atomic RTDB runTransaction on
+  // active_ride_requests/$requestId (only one hero's write can commit,
+  // rtdb.Transaction.abort() for everyone else), followed by a sweep
+  // that removes hero_pings/{everyOtherOnlineHero}/$requestId so their
+  // Accept dialog auto-closes (_listenForHeroPings' onChildRemoved/
+  // onValue drop fires when their own ping node disappears — that IS
+  // the "auto-dismiss for losing heroes" mechanism, no separate
+  // "already claimed" snackbar plumbing was needed since the dialog
+  // just goes away). So this method only had to change WHO gets
+  // pinged and WHEN — write to every hero's inbox in the same tick
+  // instead of looping with a delay between each.
+  // ================================================================
+  Future<void> _startBroadcastPinging() async {
+    debugPrint('🔥 [BROADCAST] _startBroadcastPinging started. Candidates: ${_heroesQueue.length}');
     if (_heroesQueue.isEmpty || _requestId.isEmpty) return;
 
     _isPinging = true;
-    _currentHeroIndex = 0;
 
-    while (
-      _currentHeroIndex < _heroesQueue.length &&
-      !_captainFound &&
-      !_cancelled &&
-      !_rideFinalized &&
-      mounted
-    ) {
-      final hero = _heroesQueue[_currentHeroIndex];
+    // Matches the customer-facing search timer (_searchTimeoutSeconds = 90).
+    const int broadcastWindowSeconds = 90;
+    final pingExpiresAt =
+        DateTime.now().toUtc().millisecondsSinceEpoch + broadcastWindowSeconds * 1000;
+
+    if (mounted) {
+      setState(() {
+        _assignedHeroId = '';
+        _pingSeconds = broadcastWindowSeconds;
+      });
+    }
+
+    // ── Step 1: mark the request as broadcasting (no single "current" hero) ──
+    await FirebaseDatabase.instance
+        .ref('active_ride_requests/$_requestId')
+        .update({'currentPingHeroId': '', 'dispatchMode': 'broadcast'});
+
+    // ── Step 2: write the SAME ping to every candidate hero's inbox, simultaneously ──
+    final Map<String, dynamic> multiPathUpdate = {};
+    for (final hero in _heroesQueue) {
       final heroId = hero['id'] as String;
-
-      debugPrint('🔥 [SEQUENTIAL] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      debugPrint('🔥 [SEQUENTIAL] Pinging hero #$_currentHeroIndex: $heroId');
-      debugPrint('🔥 [SEQUENTIAL] Distance: ${(hero['distance'] as num).toStringAsFixed(2)}km');
-
-      if (mounted) {
-        setState(() {
-          _assignedHeroId = heroId;
-          _pingSeconds = 10;
-        });
-      }
-
-      // ── Step 1: Tell RTDB who we're pinging right now ─────────
-      await FirebaseDatabase.instance
-          .ref('active_ride_requests/$_requestId')
-          .update({'currentPingHeroId': heroId});
-
-      // ── Step 2: Write ping to hero's inbox ────────────────────
-      final pingExpiresAt = DateTime.now().toUtc().millisecondsSinceEpoch + 15000;
-      await FirebaseDatabase.instance
-          .ref('hero_pings/$heroId/$_requestId')
-          .set({
+      multiPathUpdate['hero_pings/$heroId/$_requestId'] = {
         'requestId': _requestId,
         'customerId': FirebaseAuth.instance.currentUser?.uid ?? '',
         'firestoreDocId': _rideDocId,
@@ -464,62 +531,58 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         'category': _normalizeCategoryKey(widget.ride.vehicleType ?? 'bike'),
         'pingExpiresAt': pingExpiresAt,
         'status': 'pinging',
-      });
+      };
+    }
+    await FirebaseDatabase.instance.ref().update(multiPathUpdate);
+    debugPrint('🔥 [BROADCAST] Ping broadcast to ${_heroesQueue.length} heroes — waiting up to ${broadcastWindowSeconds}s...');
 
-      debugPrint('🔥 [SEQUENTIAL] Ping sent to hero $heroId — waiting 10s...');
+    // ── Step 3: wait for the full window, checking every 1s for acceptance ──
+    // (_rtdbRequestSub, already listening on active_ride_requests/$_requestId,
+    // flips _rideFinalized/_captainFound the instant any hero's transaction
+    // commits — see the acceptance handler further down this file.)
+    for (int w = 0; w < broadcastWindowSeconds; w++) {
+      await Future.delayed(const Duration(seconds: 1));
 
-      // ── Step 3: Wait 10 seconds — check every 1s for acceptance ─
-      // FIX: This loop now ACTUALLY BLOCKS because _startSequentialPinging
-      // is awaited by _startRideCreation. Each 1-second delay is real.
-      for (int w = 0; w < 15; w++) {
-        await Future.delayed(const Duration(seconds: 1));
-
-        // Early exit if ride was accepted/cancelled while waiting
-        if (_rideFinalized || _captainFound) {
-          debugPrint('🔥 [SEQUENTIAL] ✅ Ride finalized during wait at second $w — stopping loop');
-          break;
-        }
-        if (_cancelled || !mounted) {
-          debugPrint('🔥 [SEQUENTIAL] ❌ Cancelled during wait at second $w — stopping loop');
-          break;
-        }
-
-        debugPrint('🔥 [SEQUENTIAL] Hero $heroId wait: ${w + 1}/10s');
-      }
-
-      // ── Step 4: Clean up ping regardless of outcome ───────────
-      try {
-        await FirebaseDatabase.instance
-            .ref('hero_pings/$heroId/$_requestId')
-            .remove();
-        debugPrint('🔥 [SEQUENTIAL] Ping cleaned up for hero $heroId');
-      } catch (e) {
-        debugPrint('🔥 [SEQUENTIAL] Ping cleanup error: $e');
-      }
-
-      // ── Step 5: Check final state before moving to next hero ──
-      if (_rideFinalized || _captainFound || _cancelled || !mounted) {
-        debugPrint('🔥 [SEQUENTIAL] Loop exit — finalized=$_rideFinalized found=$_captainFound cancelled=$_cancelled');
+      if (_rideFinalized || _captainFound) {
+        debugPrint('🔥 [BROADCAST] ✅ Ride finalized during wait at second $w — stopping');
         break;
       }
-
-      // Hero did not respond — move to next
-      debugPrint('🔥 [SEQUENTIAL] Hero $heroId timed out — moving to next hero');
-      _currentHeroIndex++;
+      if (_cancelled || !mounted) {
+        debugPrint('🔥 [BROADCAST] ❌ Cancelled during wait at second $w — stopping');
+        break;
+      }
+      if (mounted) {
+        setState(() => _pingSeconds = broadcastWindowSeconds - w - 1);
+      }
     }
 
-    // ── Loop exhausted — no hero accepted ─────────────────────
-    if (!_captainFound && !_cancelled && !_rideFinalized && mounted) {
-      debugPrint('🔥 [SEQUENTIAL] All ${_heroesQueue.length} heroes pinged — no acceptance');
+    // ── Step 4: cleanup — remove any surviving ping nodes for this request ──
+    // (the winning hero's _acceptRide already sweeps every OTHER online
+    // hero's node; this is belt-and-suspenders for heroes who went
+    // offline mid-broadcast and weren't in that sweep's online_heroes
+    // snapshot, and for the plain-timeout/no-winner case below.)
+    try {
+      final Map<String, dynamic> cleanup = {};
+      for (final hero in _heroesQueue) {
+        cleanup['hero_pings/${hero['id']}/$_requestId'] = null;
+      }
+      await FirebaseDatabase.instance.ref().update(cleanup);
+      debugPrint('🔥 [BROADCAST] Ping nodes cleared for all ${_heroesQueue.length} candidates');
+    } catch (e) {
+      debugPrint('🔥 [BROADCAST] Ping cleanup error: $e');
+    }
 
-      // Mark RTDB request as timeout
+    // ── Step 5: no one accepted within the window ──
+    if (!_captainFound && !_cancelled && !_rideFinalized && mounted) {
+      debugPrint('🔥 [BROADCAST] Window expired — no acceptance from ${_heroesQueue.length} heroes');
+
       if (_requestId.isNotEmpty) {
         try {
           await FirebaseDatabase.instance
               .ref('active_ride_requests/$_requestId')
               .update({'status': 'timeout'});
         } catch (e) {
-          debugPrint('🔥 [SEQUENTIAL] Timeout update error: $e');
+          debugPrint('🔥 [BROADCAST] Timeout update error: $e');
         }
       }
 
@@ -534,7 +597,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     }
 
     _isPinging = false;
-    debugPrint('🔥 [SEQUENTIAL] _startSequentialPinging complete.');
+    debugPrint('🔥 [BROADCAST] _startBroadcastPinging complete.');
   }
 
   void _listenForAcceptance() {
@@ -742,8 +805,10 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     if (_heroesQueue.isNotEmpty) {
       _startCountTimer();
       _listenForAcceptance();
-      // ✅ Listeners must start BEFORE the blocking await
-      await _startSequentialPinging();
+      // ✅ Listeners must start BEFORE the blocking await.
+      // TASK 2: "Try Again" now fires a fresh 5km broadcast, per spec
+      // item 6 ("simply fire a fresh broadcast to all nearby heroes").
+      await _startBroadcastPinging();
     } else {
       setState(() => _searchTimedOut = true);
     }

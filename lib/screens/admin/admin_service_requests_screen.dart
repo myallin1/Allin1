@@ -18,7 +18,6 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_database/firebase_database.dart' as rtdb;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -209,44 +208,38 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
     final details = request.rawDetails;
     final summary = requestSummary(widget.requestType, details);
 
-    // FIX (Phase 4b — WhatsApp/Uber transient model): 'in_progress' and
-    // 'nearing_completion' are now written only to
-    // active_service_requests/{requestId} in RTDB (see advanceStatus()
-    // in service_request_service.dart), so a Firestore-only card would
-    // never show those two live steps to admin. Overlay a per-card RTDB
-    // listener and prefer its status while it reports one of those two
-    // transient values — same merge rule used in
-    // service_request_tracking_screen.dart.
-    return StreamBuilder<rtdb.DatabaseEvent>(
-      stream: rtdb.FirebaseDatabase.instance
-          .ref('active_service_requests/${request.requestId}')
-          .onValue,
-      builder: (context, rtdbSnapshot) {
-        String status = firestoreStatus;
-        final raw = rtdbSnapshot.data?.snapshot.value;
-        if (raw is Map) {
-          final rtdbStatus = raw['status'] as String?;
-          if (rtdbStatus == 'in_progress' || rtdbStatus == 'nearing_completion') {
-            status = rtdbStatus!;
-          }
-        }
-        final statusColor = serviceRequestStatusColor(status);
-        final statusLabel = serviceRequestStatusLabel(widget.requestType, status);
-        // No hero has this yet — offer the manual-assign path.
-        final needsAssignment = status == 'pending' || status == 'admin_review';
+    // TASK 2 (Aug 8 2026) — Database Cost Control / lazy loading.
+    // This used to be a StreamBuilder opening a LIVE RTDB listener on
+    // active_service_requests/{requestId} for every single rendered
+    // card — N cards on screen meant N permanently-open RTDB
+    // connections just to catch the 'in_progress'/'nearing_completion'
+    // transient states that only exist in RTDB, not Firestore. Per
+    // Nizam's explicit spec ("just show the basic list/notification,
+    // only fetch full live data when admin taps in to monitor"), the
+    // list now shows only the cheap Firestore-derived status (already
+    // covered by the one shared, capped `.limit(100)` listener in
+    // _listen() above) and does NOT open any per-card RTDB connection.
+    // Tapping a card still opens ServiceRequestTrackingScreen via
+    // _openTracking(), which is where the real live
+    // in_progress/nearing_completion RTDB merge already correctly
+    // happens, now scoped to exactly the one request the admin is
+    // actually monitoring.
+    final status = firestoreStatus;
+    final statusColor = serviceRequestStatusColor(status);
+    final statusLabel = serviceRequestStatusLabel(widget.requestType, status);
+    // No hero has this yet — offer the manual-assign path.
+    final needsAssignment = status == 'pending' || status == 'admin_review';
 
-        return _buildCardContent(
-          requestId: request.requestId,
-          customerName: customerName,
-          customerPhone: customerPhone,
-          assignedHeroName: assignedHeroName,
-          summary: summary,
-          details: details,
-          statusColor: statusColor,
-          statusLabel: statusLabel,
-          needsAssignment: needsAssignment,
-        );
-      },
+    return _buildCardContent(
+      requestId: request.requestId,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      assignedHeroName: assignedHeroName,
+      summary: summary,
+      details: details,
+      statusColor: statusColor,
+      statusLabel: statusLabel,
+      needsAssignment: needsAssignment,
     );
   }
 

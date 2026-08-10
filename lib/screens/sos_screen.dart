@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/auth_service.dart';
 import 'sos_kyc_verification_screen.dart';
 
 class SosScreen extends StatefulWidget {
@@ -109,10 +110,15 @@ class _SosScreenState extends State<SosScreen> {
         ),
       );
 
+      // FIX (audit: customer/hero number wiring — SOS is life-safety, so
+      // this matters more than most): user.phoneNumber is only populated
+      // by real phone-OTP auth, not a Google-Sign-In customer's typed-in
+      // signup number (which lives in Firestore users/{uid}.phoneNumber).
+      final resolvedUserPhone = await AuthService().resolveCustomerPhone(user);
       await FirebaseFirestore.instance.collection('sos_alerts').add({
         'userId': user.uid,
         'userName': user.displayName ?? user.email ?? 'Customer',
-        'userPhone': user.phoneNumber ?? '',
+        'userPhone': resolvedUserPhone,
         'location': GeoPoint(position.latitude, position.longitude),
         'status': 'active',
         'timestamp': FieldValue.serverTimestamp(),

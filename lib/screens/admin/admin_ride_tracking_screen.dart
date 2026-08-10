@@ -24,8 +24,52 @@ const List<String> _activeStatuses = [
   'active',
 ];
 
-class AdminRideTrackingScreen extends StatelessWidget {
+// TASK 2 (Aug 8 2026) — Database Cost Control / lazy loading.
+// This list used to be a permanent `.snapshots()` listener on the
+// `rides` collection with no `.limit()` — every write to ANY active
+// ride re-pushed the entire result set to every admin who merely had
+// this screen open, whether or not they were actively watching it.
+// Per Nizam's explicit spec ("admin isn't watching constantly, so
+// don't push data to admin constantly — just show the basic
+// list/notification, only fetch full data when admin taps in"), this
+// is now a StatefulWidget doing a one-time `.get()` (capped with
+// `.limit()`) on load + pull-to-refresh + a manual refresh button,
+// instead of an always-on stream. The per-ride LIVE location/status
+// join (the actually expensive read pattern) already only happens in
+// AdminRideTrackingDetailScreen, which only starts listening once the
+// admin taps into a specific ride — that lazy-on-tap pattern was
+// already correct and is unchanged here.
+class AdminRideTrackingScreen extends StatefulWidget {
   const AdminRideTrackingScreen({super.key});
+
+  @override
+  State<AdminRideTrackingScreen> createState() =>
+      _AdminRideTrackingScreenState();
+}
+
+class _AdminRideTrackingScreenState extends State<AdminRideTrackingScreen> {
+  static const int _maxResults = 50;
+  Future<QuerySnapshot<Map<String, dynamic>>>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  void _load() {
+    _future = FirebaseFirestore.instance
+        .collection('rides')
+        .where('status', whereIn: _activeStatuses)
+        .orderBy('createdAt', descending: true)
+        .limit(_maxResults)
+        .get();
+  }
+
+  Future<void> _refresh() async {
+    setState(_load);
+    await _future;
+  }
 
   double _readFare(Map<String, dynamic> d) {
     final finalFare = (d['finalFare'] as num?)?.toDouble();
@@ -85,13 +129,19 @@ class AdminRideTrackingScreen extends StatelessWidget {
           'Active Rides',
           style: TextStyle(color: _text, fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, color: _text),
+            tooltip: 'Refresh',
+            onPressed: () => setState(_load),
+          ),
+        ],
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('rides')
-            .where('status', whereIn: _activeStatuses)
-            .orderBy('createdAt', descending: true)
-            .snapshots(),
+      body: RefreshIndicator(
+        color: _pink,
+        onRefresh: _refresh,
+        child: FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        future: _future,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(
@@ -112,11 +162,18 @@ class AdminRideTrackingScreen extends StatelessWidget {
           }
           final docs = snapshot.data!.docs;
           if (docs.isEmpty) {
-            return const Center(
-              child: Text(
-                'No active rides right now',
-                style: TextStyle(color: _muted),
-              ),
+            // ListView (not Center) so RefreshIndicator's pull gesture
+            // still works on an empty result.
+            return ListView(
+              children: const [
+                SizedBox(height: 160),
+                Center(
+                  child: Text(
+                    'No active rides right now',
+                    style: TextStyle(color: _muted),
+                  ),
+                ),
+              ],
             );
           }
           return ListView.builder(
@@ -217,6 +274,7 @@ class AdminRideTrackingScreen extends StatelessWidget {
             },
           );
         },
+        ),
       ),
     );
   }

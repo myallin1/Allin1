@@ -25,6 +25,7 @@ import '../services/shared_location_inbox.dart';
 import '../utils/location_link_parser.dart';
 import '../utils/service_request_labels.dart';
 import '../widgets/quick_order_line_items.dart';
+import '../services/auth_service.dart';
 import '../widgets/server_busy_dialog.dart';
 import 'hero_booking_status_screen.dart';
 import 'hero_booking_tracking_screen.dart';
@@ -496,11 +497,12 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
 
     setState(() => _submitting = true);
     try {
+      final resolvedCustomerPhone = await AuthService().resolveCustomerPhone(user);
       final requestId = await ServiceRequestService().createServiceRequest(
         requestType: 'hero_booking',
         customerId: user.uid,
         customerName: user.displayName ?? 'Customer',
-        customerPhone: user.phoneNumber ?? '',
+        customerPhone: resolvedCustomerPhone,
         details: {
           'category': _selectedCategory,
           'taskDescription': taskDescriptionJoined,

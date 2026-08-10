@@ -12,6 +12,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../services/auth_service.dart';
 import '../services/service_request_service.dart';
 import '../widgets/location_capture_field.dart';
 import '../widgets/server_busy_dialog.dart';
@@ -63,11 +64,12 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
 
     setState(() => _submitting = true);
     try {
+      final resolvedCustomerPhone = await AuthService().resolveCustomerPhone(user);
       final requestId = await ServiceRequestService().createServiceRequest(
         requestType: 'custom_order',
         customerId: user.uid,
         customerName: user.displayName ?? 'Customer',
-        customerPhone: user.phoneNumber ?? '',
+        customerPhone: resolvedCustomerPhone,
         details: {
           'orderDescription': _orderCtrl.text.trim(),
           if (_deliveryAddressCtrl.text.trim().isNotEmpty)

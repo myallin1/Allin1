@@ -11,6 +11,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/food_models.dart';
+import 'db_usage_tracker.dart';
 
 class FoodSellerService {
   factory FoodSellerService() => _instance;
@@ -52,6 +53,7 @@ class FoodSellerService {
     try {
       updates['updatedAt'] = FieldValue.serverTimestamp();
       await _sellerDocRef(sellerId).update(updates);
+      DbUsageTracker.instance.recordWrite();
       debugPrint('[FoodSellerService] Seller profile updated: $sellerId');
     } catch (e) {
       debugPrint('[FoodSellerService] Failed to update seller profile: $e');
@@ -218,6 +220,7 @@ class FoodSellerService {
         timelineField: FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      DbUsageTracker.instance.recordWrite();
       debugPrint(
           '[FoodSellerService] Order $orderId status updated to: $newStatus',);
     } catch (e) {
@@ -234,6 +237,7 @@ class FoodSellerService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
+      DbUsageTracker.instance.recordRead(snapshot.docs.length);
       return snapshot.docs.map((doc) {
         final data = doc.data()! as Map<String, dynamic>;
         return FoodOrderModel.fromJson(data);
@@ -248,6 +252,7 @@ class FoodSellerService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
+      DbUsageTracker.instance.recordRead(snapshot.docs.length);
       return snapshot.docs.map((doc) {
         final data = doc.data()! as Map<String, dynamic>;
         return FoodOrderModel.fromJson(data);
@@ -262,6 +267,7 @@ class FoodSellerService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
+      DbUsageTracker.instance.recordRead(snapshot.docs.length);
       return snapshot.docs.map((doc) {
         final data = doc.data()! as Map<String, dynamic>;
         return FoodOrderModel.fromJson(data);

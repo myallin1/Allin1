@@ -542,6 +542,51 @@ class AuthService {
   }
 
   // ================================================================
+  // FIX (audit: "customer/hero number wiring" — Nizam: some order/
+  // booking screens showed no phone number for a customer who signed
+  // up with Google + a typed-in mobile number): FirebaseAuth's own
+  // `user.phoneNumber` is ONLY populated by real phone-OTP auth, never
+  // by a mobile number entered manually at signup for a Google/email
+  // account — that number lives in Firestore users/{uid}.phoneNumber
+  // (with .phone kept in sync). Several order-creation screens
+  // (hero_booking_screen, grocery_order_screen, custom_food_order_screen,
+  // cart_screen, custom_order_screen, seller_detail_screen,
+  // nj_tech_store_screen) were reading `user.phoneNumber` directly and
+  // writing an empty customerPhone for every such customer. This is the
+  // same Firestore-first, Auth-field-fallback pattern already used
+  // correctly by ride_search_screen.dart's _resolveCustomerPhone —
+  // centralized here so every screen can share it.
+  Future<String> resolveCustomerPhone(User user) async {
+    try {
+      final data = await getUserData(user.uid);
+      final resolved = _normalizedPhone(data, user).trim();
+      if (resolved.isNotEmpty) {
+        return resolved;
+      }
+    } catch (_) {
+      // fall through to Auth-field fallback below
+    }
+    return user.phoneNumber?.trim() ?? '';
+  }
+
+  // Same fallback chain as resolveCustomerPhone above, but reads
+  // heroes/{uid} instead of users/{uid} — for the hero side of the same
+  // "Auth phoneNumber only set by real phone-OTP auth" gap.
+  Future<String> resolveHeroPhone(User user) async {
+    try {
+      final doc = await _firestore.collection('heroes').doc(user.uid).get();
+      final data = doc.data();
+      final resolved = _normalizedPhone(data, user).trim();
+      if (resolved.isNotEmpty) {
+        return resolved;
+      }
+    } catch (_) {
+      // fall through to Auth-field fallback below
+    }
+    return user.phoneNumber?.trim() ?? '';
+  }
+
+  // ================================================================
   // Private: Get Auth Error Message
   // ================================================================
   String _getAuthErrorMessage(String code) {

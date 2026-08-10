@@ -17,7 +17,6 @@ import 'package:provider/provider.dart';
 import '../../config/fare_rates.dart';
 import '../../config/ride_catalog.dart';
 import '../../models/ride_model.dart';
-import '../../services/category_gateway_service.dart';
 import '../../services/city_service.dart';
 import '../../services/localization_service.dart';
 import '../../services/location_service.dart';
@@ -408,7 +407,14 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _mapService.initialize();
-    _loadFareConfig();
+    // Fare numbers are hardcoded (lib/config/fare_rates.dart) per
+    // Nizam's MVP decision — no Firestore read needed here anymore.
+    // _fares is populated directly from that single source of truth
+    // instead of _loadFareConfig()'s old CategoryGatewayService
+    // .loadRideFares() Firestore/cache round-trip, which would have
+    // spent a DB read on a value nothing actually uses for fare math
+    // anymore (RideModel.calculateFare() ignores its `fares` param).
+    _fares = RideModel.defaultFares;
     _listenToNearbyCaptains();
     _initLocationTracking();
     unawaited(_restoreActiveRideIfNeeded());
@@ -1028,17 +1034,13 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   // ── Fare Config ───────────────────────────────────────────────
-  // CategoryGatewayService.loadRideFares() is already cache-backed (in-memory +
-  // Firestore persistence), so fares are available from disk on the first frame
-  // after the initial install and do not block the UI.
-  Future<void> _loadFareConfig() async {
-    try {
-      final fares = await CategoryGatewayService().loadRideFares();
-      if (mounted) setState(() => _fares = fares);
-    } catch (e) {
-      debugPrint('Fare load error: $e');
-    }
-  }
+  // Formerly _loadFareConfig() fetched CategoryGatewayService
+  // .loadRideFares() (Firestore-backed, settings/ride_fares) on every
+  // screen load. Removed: fares are hardcoded in
+  // lib/config/fare_rates.dart per Nizam's MVP decision, so _fares is
+  // now just set synchronously from RideModel.defaultFares in
+  // initState() — no network/cache round-trip, no wasted Firestore
+  // read.
 
   /// Resolves the pre-ride fare estimate for the currently-selected
   /// vehicle type at [distanceKm].

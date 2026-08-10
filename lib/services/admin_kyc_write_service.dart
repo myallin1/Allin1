@@ -46,10 +46,53 @@ class AdminKycWriteResult {
 class AdminKycWriteService {
   AdminKycWriteService._();
 
+  // TASK 3 (Aug 8 2026) — KYC & Selfie Guard, AI co-pilot path.
+  // Byte-for-byte mirror of hero_approvals_screen.dart's
+  // _missingKycItems() — MUST be kept in sync with that check. Unlike
+  // the human screen (which already has the hero's data map in hand
+  // from its list StreamBuilder), this path only receives a uid, so it
+  // fetches the doc itself before deciding.
+  static List<String> _missingKycItems(Map<String, dynamic> data) {
+    bool empty(String key) {
+      final v = data[key];
+      return v == null || (v is String && v.trim().isEmpty);
+    }
+
+    final missing = <String>[];
+    if (empty('selfieUrl')) missing.add('Selfie photo');
+    if (empty('aadhaarDocUrl')) missing.add('Aadhaar document');
+    if (empty('panDocUrl')) missing.add('PAN document');
+    if (empty('licenseDocUrl')) missing.add('License document');
+    if (empty('name')) missing.add('Name');
+    if (empty('phone')) missing.add('Phone number');
+    return missing;
+  }
+
   // ---- Hero -----------------------------------------------------
   static Future<AdminKycWriteResult> approveHero(String uid) async {
     try {
       final firestore = FirebaseFirestore.instance;
+
+      // TASK 3: hard block, same as the human approvals screen — the
+      // AI co-pilot must never be able to approve an incomplete hero
+      // just because it wasn't told to check.
+      final heroSnap = await firestore.collection('heroes').doc(uid).get();
+      final heroData = heroSnap.data() ?? <String, dynamic>{};
+      Map<String, dynamic> pendingData = <String, dynamic>{};
+      final pendingSnap =
+          await firestore.collection('heroes_pending').doc(uid).get();
+      if (pendingSnap.exists) pendingData = pendingSnap.data() ?? {};
+      // A field may live on either doc depending on registration path —
+      // check whichever one actually has it.
+      final merged = <String, dynamic>{...pendingData, ...heroData};
+      final missing = _missingKycItems(merged);
+      if (missing.isNotEmpty) {
+        return AdminKycWriteResult(
+          success: false,
+          error: 'Cannot approve — hero is missing: ${missing.join(', ')}.',
+        );
+      }
+
       final batch = firestore.batch();
       final heroRef = firestore.collection('heroes').doc(uid);
       final pendingRef = firestore.collection('heroes_pending').doc(uid);

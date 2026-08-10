@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/auth_service.dart';
 import '../../services/location_service.dart';
 
 class HeroSosScreen extends StatefulWidget {
@@ -113,11 +114,16 @@ class _HeroSosScreenState extends State<HeroSosScreen> {
         return;
       }
 
+      // FIX (audit: customer/hero number wiring — SOS is life-safety):
+      // user.phoneNumber is only populated by real phone-OTP auth, not a
+      // Google-Sign-In hero's manually typed signup number (which lives
+      // in Firestore heroes/{uid}.phone / .phoneNumber).
+      final resolvedHeroPhone = await AuthService().resolveHeroPhone(user);
       // Send SOS alert to Firestore
       await FirebaseFirestore.instance.collection('sos_alerts').add({
         'heroId': user.uid,
         'heroName': user.displayName ?? 'Hero',
-        'heroPhone': user.phoneNumber ?? '',
+        'heroPhone': resolvedHeroPhone,
         'location': GeoPoint(pos.latitude, pos.longitude),
         'address': '',
         'status': 'active',

@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:provider/provider.dart';
 
+import '../config/app_variant.dart';
 import '../services/theme_service.dart';
 import '../services/update_service.dart';
 
@@ -192,10 +193,15 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     final currentPatch = (data['shorebird_current_patch'] as num?)?.toInt();
     final nextPatch = (data['shorebird_next_patch'] as num?)?.toInt();
     final binaryUpdateAvailable = data['binary_update_available'] == true;
+    // FIX (audit finding): was hardcoded 'customer' whenever an admin's
+    // push notification doc omitted app_variant — a Hero user reading
+    // that notification would be sent the Customer APK. Falls back to
+    // THIS running app's own flavor (see lib/config/app_variant.dart,
+    // set once at boot by each main_X.dart) instead of guessing.
     final effectiveApkUrl = apkUrl.isNotEmpty
         ? apkUrl
         : UpdateService().fallbackApkUrl(
-            appVariant.isNotEmpty ? appVariant : 'customer',
+            appVariant.isNotEmpty ? appVariant : currentAppVariant,
           );
     final isUpdateNotification = data['update_available'] == true ||
         apkUrl.isNotEmpty ||

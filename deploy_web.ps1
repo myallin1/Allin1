@@ -117,7 +117,34 @@ function Build-And-Deploy {
 
     if (-not (Clear-BuildWeb)) { return $false }
 
-    flutter build web -t $Entry
+    # REVERTED (Aug 9 2026): --no-wasm-dry-run was added here to skip
+    # the "Wasm dry run succeeded..." message's extra compile pass,
+    # believing it would speed builds back up. It did the opposite —
+    # this is a confirmed Flutter SDK bug (flutter/flutter#174149):
+    # passing --no-wasm-dry-run doesn't skip the dry run at all, it
+    # makes the build compile a FULL Wasm build in addition to the
+    # normal JS build, which is far slower, not faster. That's exactly
+    # what turned this build even slower after the "fix." Removed the
+    # flag entirely — back to plain `flutter build web -t $Entry`. The
+    # "Wasm dry run succeeded" message is cosmetic/informational only
+    # (the dry run itself is cheap); it is NOT the real slowdown cause.
+    # If build time is still a genuine problem, the real levers are:
+    # (1) build only the flavor(s) actually changed via
+    # `.\deploy_web.ps1 -Only <flavor>` instead of all 4 every time,
+    # (2) investigate disk/antivirus contention on Clear-BuildWeb's
+    # wipe-and-rewrite of build\web on Windows, (3) check whether the
+    # Flutter/Dart SDK itself was recently upgraded to a slower version.
+    # SAFE speed lever (Aug 10 2026, added instead of the reverted
+    # --no-wasm-dry-run): --no-tree-shake-icons skips the pass that
+    # scans every icon-font glyph reference to strip unused ones. That
+    # scan is real, measurable compile time on apps with a lot of
+    # Icons.* usage (this app has hundreds across 4 flavors) — skipping
+    # it trades a slightly larger icon-font file (kept full, not
+    # per-app-trimmed) for faster builds. Safe: it does not change
+    # which icons render, only whether unused ones are pruned from the
+    # font file. If bundle size ever becomes the bottleneck instead of
+    # build time, remove this flag to get tree-shaking back.
+    flutter build web -t $Entry --no-tree-shake-icons
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""

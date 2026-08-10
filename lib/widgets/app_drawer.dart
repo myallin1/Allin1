@@ -13,13 +13,21 @@ const Color _drawerBorder = Color(0x33FF4FA3);
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({
-    required this.user, required this.displayName, required this.phoneNumber, required this.photoUrl, required this.onLoginTap, required this.onMyProfileTap, required this.onRideHistoryTap, required this.onWalletTap, required this.onPaymentMethodsTap, required this.onNotificationsTap, required this.onLanguageTap, required this.onDownloadMobileAppTap, required this.onSavedAddressesTap, required this.onHelpSupportTap, required this.onSettingsTap, required this.onLogoutTap, super.key,
+    required this.user, required this.displayName, required this.phoneNumber, required this.photoUrl, required this.onLoginTap, required this.onMyProfileTap, required this.onRideHistoryTap, required this.onWalletTap, required this.onPaymentMethodsTap, required this.onNotificationsTap, required this.onLanguageTap, required this.onDownloadMobileAppTap, required this.onSavedAddressesTap, required this.onHelpSupportTap, required this.onSettingsTap, required this.onLogoutTap, this.appVariant = 'customer', super.key,
   });
 
   final User? user;
   final String displayName;
   final String phoneNumber;
   final String photoUrl;
+  // FIX (organization pass): this widget is currently unused/dead code,
+  // but was found hardcoding 'customer' into UpdateService().fallbackApkUrl
+  // below regardless of who ends up using this drawer, which is exactly
+  // the cross-app-contamination bug pattern that hit Hero's own "Check
+  // for Updates" button elsewhere this session. If this widget is ever
+  // wired up for Hero/Admin/Seller, pass the real flavor here instead of
+  // relying on the 'customer' default.
+  final String appVariant;
   final VoidCallback onLoginTap;
   final VoidCallback onMyProfileTap;
   final VoidCallback onRideHistoryTap;
@@ -184,7 +192,7 @@ class AppDrawer extends StatelessWidget {
                             );
                           } else {
                             final targetUri = Uri.parse(
-                              UpdateService().fallbackApkUrl('customer'),
+                              UpdateService().fallbackApkUrl(appVariant),
                             );
                             final launched = await launchUrl(
                               targetUri,

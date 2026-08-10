@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../config/payment_config.dart';
 import '../services/localization_service.dart';
 import '../widgets/animated_meter_fare.dart';
 import '../widgets/rating_feedback_sheet.dart';
@@ -368,19 +369,27 @@ class _PaymentScreenState extends State<PaymentScreen>
   }
 
   Future<void> _launchUpi() async {
-    final rideDocId = _rideDocId ?? '';
-    final safeRideId = rideDocId.replaceAll(RegExp('[^A-Za-z0-9]'), '');
-    final transactionRef =
-        'NJTECH${safeRideId.isNotEmpty ? safeRideId : DateTime.now().millisecondsSinceEpoch}';
-    final uri = Uri.parse(
-      'upi://pay?pa=919597879191@ybl'
-      '&pn=NJTECH'
-      '&mc=0000'
-      '&tr=$transactionRef'
-      '&tn=RidePayment'
-      '&am=${_fare.toStringAsFixed(2)}'
-      '&cu=INR',
-    );
+    // FIX (Aug 10 2026 — "customer PWA la pay panna pona bare number
+    // mattum kaatuthu, romba suththal"): a bare `upi://pay` scheme
+    // cannot be opened by a browser at all — see payment_config.dart's
+    // buildUpiIntentUri() header comment for the full explanation. On
+    // web (kIsWeb), use the Android `intent://` form instead, which
+    // Chrome-on-Android resolves into the native "Pay with GPay/
+    // PhonePe/Paytm/..." app chooser with the amount pre-filled — the
+    // actual "tap Pay, pick your UPI app, enter PIN" experience that
+    // was planned. Native app builds keep using the plain `upi://`
+    // scheme as before (already correct there, url_launcher on
+    // Android/iOS native handles it natively without needing the
+    // intent:// wrapper).
+    final uri = kIsWeb
+        ? PaymentConfig.buildUpiIntentUri(
+            amount: _fare,
+            referenceId: _rideDocId,
+          )
+        : PaymentConfig.buildUpiUri(
+            amount: _fare,
+            referenceId: _rideDocId,
+          );
 
     try {
       final launched = await launchUrl(
@@ -397,8 +406,16 @@ class _PaymentScreenState extends State<PaymentScreen>
           _gold,
         );
       } else {
+        // FIX: on iOS Safari / desktop web, intent:// isn't supported
+        // at all and this branch is expected to be hit — the manual
+        // copy-number UI below (_buildUpiSection's fallback card) is
+        // the deliberate safety net for exactly this case, so the
+        // message now points the customer at it instead of just
+        // saying "no UPI app" with no next step.
         _snack(
-          'No UPI app opened. Please install or enable a UPI app.',
+          kIsWeb
+              ? 'Could not open a UPI app automatically. Use "Or pay manually" below.'
+              : 'No UPI app opened. Please install or enable a UPI app.',
           _orange,
         );
       }
@@ -407,7 +424,12 @@ class _PaymentScreenState extends State<PaymentScreen>
       if (!mounted) {
         return;
       }
-      _snack('Unable to open UPI app right now.', _red);
+      _snack(
+        kIsWeb
+            ? 'Could not open a UPI app automatically. Use "Or pay manually" below.'
+            : 'Unable to open UPI app right now.',
+        _red,
+      );
     }
   }
 

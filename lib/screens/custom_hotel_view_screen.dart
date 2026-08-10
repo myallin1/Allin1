@@ -22,11 +22,14 @@
 // 'custom_food_order' type, so hero broadcast + the admin dispatch
 // screen's existing `service_requests` listeners pick this up with
 // zero changes to either of those files.
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../services/auth_service.dart';
 import '../services/custom_hotel_service.dart';
 import '../services/service_request_service.dart';
 
@@ -297,6 +300,21 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     final user = FirebaseAuth.instance.currentUser;
     _nameCtrl.text = user?.displayName ?? '';
     _phoneCtrl.text = user?.phoneNumber ?? '';
+    // FIX (audit: customer/hero number wiring): user.phoneNumber above is
+    // only populated by real phone-OTP auth — for a Google-Sign-In
+    // customer it's null, leaving this field blank until they retype it.
+    // Best-effort backfill from Firestore users/{uid} (where the manually
+    // entered signup number actually lives) once it resolves, but only if
+    // the customer hasn't already started typing their own value.
+    if (user != null) {
+      unawaited(
+        AuthService().resolveCustomerPhone(user).then((phone) {
+          if (mounted && _phoneCtrl.text.trim().isEmpty && phone.isNotEmpty) {
+            _phoneCtrl.text = phone;
+          }
+        }),
+      );
+    }
   }
 
   @override
@@ -337,7 +355,9 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
               })
           .toList();
       final customerName = _nameCtrl.text.trim().isNotEmpty ? _nameCtrl.text.trim() : (user.displayName ?? 'Customer');
-      final customerPhone = _phoneCtrl.text.trim().isNotEmpty ? _phoneCtrl.text.trim() : (user.phoneNumber ?? '');
+      final customerPhone = _phoneCtrl.text.trim().isNotEmpty
+          ? _phoneCtrl.text.trim()
+          : await AuthService().resolveCustomerPhone(user);
 
       // Step 1 (CTO mandate #2 — Isolated Order Database): the
       // definitive order/receipt record, in its own collection.

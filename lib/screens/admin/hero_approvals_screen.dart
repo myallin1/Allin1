@@ -32,6 +32,17 @@ class HeroApprovalsScreen extends StatefulWidget {
 }
 
 class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
+  // NEW (Aug 8 2026 — "rejected hero has nowhere to be re-approved"):
+  // this screen used to ONLY ever query approvalStatus == 'pending'.
+  // The moment admin rejected a hero, that hero's doc had
+  // approvalStatus: 'rejected' and simply vanished from view forever —
+  // there was no "undo" anywhere in the admin app. Meanwhile
+  // hero_pending_screen.dart signs a rejected hero straight out with a
+  // "Contact Admin" message and no in-app path back in either. Added a
+  // second tab here so admin can find that hero again and reverse the
+  // decision, without touching the existing Pending tab/flow at all.
+  int _selectedTab = 0; // 0 = Pending, 1 = Rejected
+
   List<QueryDocumentSnapshot> _sortByTimestampDesc(
     Iterable<QueryDocumentSnapshot> docs,
     String field,
@@ -75,14 +86,49 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
           ],
         ),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: _border),
+          preferredSize: const Size.fromHeight(53),
+          child: Column(
+            children: [
+              // NEW: Pending / Rejected segmented toggle — Rejected tab
+              // is the "undo" section requested above. Everything below
+              // (query, list, card, buttons) is 100% shared with the
+              // existing Pending flow; only the `where` clause changes.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _ApprovalTabChip(
+                        label: 'Pending',
+                        icon: Icons.hourglass_top_rounded,
+                        selected: _selectedTab == 0,
+                        onTap: () => setState(() => _selectedTab = 0),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _ApprovalTabChip(
+                        label: 'Rejected',
+                        icon: Icons.block_rounded,
+                        selected: _selectedTab == 1,
+                        onTap: () => setState(() => _selectedTab = 1),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(height: 1, color: _border),
+            ],
+          ),
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('heroes')
-            .where('approvalStatus', isEqualTo: 'pending')
+            .where(
+              'approvalStatus',
+              isEqualTo: _selectedTab == 0 ? 'pending' : 'rejected',
+            )
             .snapshots(),
         builder: (context, snap) {
           // Handle errors FIRST — missing Firestore index causes blank screen
@@ -141,14 +187,15 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
             'createdAt',
           );
           if (docs.isEmpty) {
+            final isPendingTab = _selectedTab == 0;
             return Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('✅', style: TextStyle(fontSize: 56)),
+                  Text(isPendingTab ? '✅' : '🗂️', style: const TextStyle(fontSize: 56)),
                   const SizedBox(height: 16),
                   Text(
-                    'No pending hero requests',
+                    isPendingTab ? 'No pending hero requests' : 'No rejected heroes',
                     style: GoogleFonts.outfit(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -157,7 +204,7 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'All heroes are approved!',
+                    isPendingTab ? 'All heroes are approved!' : 'Nobody has been rejected — nothing to review here.',
                     style: GoogleFonts.notoSansTamil(
                       fontSize: 12,
                       color: _muted,
@@ -416,9 +463,69 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
         ),
       );
 
+  // TASK 3 (Aug 8 2026) — KYC & Selfie Guard.
+  // There's no single stored "kycComplete" boolean on the hero doc, so
+  // completeness is derived from the actual required fields written by
+  // hero_register_screen.dart at registration: the selfie photo plus
+  // the 3 KYC documents, plus the core identity fields the approvals
+  // list already displays. Returns the list of missing item labels —
+  // empty list means the hero is fully complete and safe to approve.
+  // MUST be kept in sync with the identical check duplicated in
+  // AdminKycWriteService.approveHero() (admin_kyc_write_service.dart),
+  // which that file's own header comment calls a "byte-for-byte
+  // mirror" of this screen's approve logic.
+  List<String> _missingKycItems(Map<String, dynamic> data) {
+    bool empty(String key) {
+      final v = data[key];
+      return v == null || (v is String && v.trim().isEmpty);
+    }
+
+    final missing = <String>[];
+    if (empty('selfieUrl')) missing.add('Selfie photo');
+    if (empty('aadhaarDocUrl')) missing.add('Aadhaar document');
+    if (empty('panDocUrl')) missing.add('PAN document');
+    if (empty('licenseDocUrl')) missing.add('License document');
+    if (empty('name')) missing.add('Name');
+    if (empty('phone')) missing.add('Phone number');
+    return missing;
+  }
+
   // ── Approve ────────────────────────────────────────────────────
   Future<void> _approveHero(String uid, Map<String, dynamic> data) async {
     if (!mounted) return;
+
+    // TASK 3: hard block — an admin cannot even reach the confirm
+    // dialog if the hero's selfie or KYC form isn't complete. This is
+    // a strict guard per Nizam's explicit "must NOT be able to
+    // approve" requirement, not a warning that can be dismissed.
+    final missing = _missingKycItems(data);
+    if (missing.isNotEmpty) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: _surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Cannot Approve — Incomplete KYC',
+            style: TextStyle(color: _red, fontWeight: FontWeight.w700),
+          ),
+          content: Text(
+            '"${data['name'] ?? uid}" is missing:\n\n'
+            '${missing.map((m) => '• $m').join('\n')}\n\n'
+            'Ask the hero to complete these in the app/PWA before approving.',
+            style: const TextStyle(color: _muted),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(backgroundColor: _gold),
+              child: const Text('OK', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -664,6 +771,60 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
         ),
       );
     }
+  }
+}
+
+// ── Pending / Rejected tab chip ──────────────────────────────────
+class _ApprovalTabChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+  const _ApprovalTabChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? _gold.withValues(alpha: 0.18) : _card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: selected ? _gold : _border),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 15, color: selected ? _gold : _muted),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: selected ? _gold : _muted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('label', label));
+    properties.add(DiagnosticsProperty<IconData>('icon', icon));
+    properties.add(DiagnosticsProperty<bool>('selected', selected));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }
 

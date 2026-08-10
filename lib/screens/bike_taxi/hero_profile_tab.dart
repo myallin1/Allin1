@@ -8,8 +8,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/pwa_cache_platform_stub.dart'
+    if (dart.library.html) '../../services/pwa_cache_platform_web.dart';
 import '../../services/update_service.dart';
 import '../../services/usage_tracking_service.dart';
+import '../../services/web_version_checker.dart';
 import '../../widgets/hero_premium_loader.dart';
 import 'hero_settings_screen.dart';
 import 'hero_wallet_screen.dart';
@@ -172,8 +175,60 @@ class _HeroProfileTabState extends State<HeroProfileTab>
     );
   }
 
+  // FIX (per Nizam's recurring bug report — Hero "Check for Updates"
+  // still ended up downloading/updating a different app): this used to
+  // unconditionally launchUrl() the Hero APK release link, on web AND
+  // native alike. On the Hero PWA that meant tapping "Check for
+  // Updates" never actually checked anything — it just kicked the
+  // customer out to an external APK download every single time,
+  // completely bypassing the self-referential /version.json check that
+  // dashboard_screen.dart (customer) and super_admin_home_screen.dart
+  // (admin) already use for their own "Check for Updates" buttons. That
+  // inconsistency (this screen alone skipping the WebVersionChecker
+  // path) is what looked like "updating the wrong app": a web PWA user
+  // was being routed to a downloadable-APK flow that has nothing to do
+  // with the page they were actually running.
+  //
+  // Now mirrors the other two flavors exactly: on web, poll THIS tab's
+  // own same-origin /version.json (WebVersionChecker never touches any
+  // other app's URL) and clear-cache-and-reload in place if it differs;
+  // only on native (where version.json isn't served) does it fall back
+  // to the GitHub APK link, and even then always via
+  // UpdateService().fallbackApkUrl('hero') — never a hardcoded/cross-
+  // copied variant string.
   Future<void> _openHeroUpdateUrl() async {
     final messenger = ScaffoldMessenger.of(context);
+
+    if (kIsWeb) {
+      await WebVersionChecker.instance.checkNow();
+      if (!mounted) return;
+
+      if (!WebVersionChecker.instance.isUpdateAvailable) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('You already have the latest version.'),
+            backgroundColor: Color(0xFF6C63FF),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Updating…'),
+          backgroundColor: Color(0xFF6C63FF),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      try {
+        await PwaCachePlatform().clearAndReload();
+      } catch (e) {
+        debugPrint('[HeroCheckUpdate] cache clear failed: $e');
+      }
+      return;
+    }
+
     final launched = await launchUrl(
       Uri.parse(UpdateService().fallbackApkUrl('hero')),
       mode: LaunchMode.externalApplication,

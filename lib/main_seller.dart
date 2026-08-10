@@ -1,6 +1,8 @@
 // lib/main_seller.dart
 // Allin1 — SELLER App Entry Point (Food/E-commerce Pipeline)
 
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
@@ -8,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
+import 'config/app_variant.dart';
 import 'firebase_options.dart';
 import 'screens/app_splash_video_screen.dart';
 import 'screens/login_screen.dart';
@@ -21,24 +24,38 @@ import 'services/session_service.dart';
 import 'services/theme_service.dart';
 import 'widgets/branded_loading_screen.dart';
 
-// FIX (Nizam's "jet-speed startup" request, task #108, same fix as
-// main_customer.dart/main_hero.dart): paint this instantly, before
-// Firebase even starts, so Flutter's first frame fires in milliseconds
-// instead of after a Firebase network round-trip.
+// FIX (Nizam's "video as natural visual buffer" request, task #108, same
+// fix as main_customer.dart/main_hero.dart): paint app_splash.mp4 first,
+// before Firebase even starts, so Flutter's first frame fires in
+// milliseconds instead of after a Firebase network round-trip, AND the
+// video itself becomes the boot buffer while Firebase inits in parallel
+// behind it. Previously the video was shown AFTER Firebase, at the
+// SellerApp '/' route below — moved here and removed there (see
+// SellerApp.build for that change) so it's no longer a second screen
+// stacked after this one. BrandedLoadingScreen is now only a rare
+// fallback frame, shown only if Firebase init somehow outlasts the video.
 class _BootLoadingApp extends StatelessWidget {
-  const _BootLoadingApp();
+  const _BootLoadingApp({required this.onVideoFinished});
+
+  final VoidCallback onVideoFinished;
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: BrandedLoadingScreen(),
+      home: AppSplashVideoScreen(
+        nextScreen: const BrandedLoadingScreen(),
+        onFinished: onVideoFinished,
+      ),
     );
   }
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // FIX (audit finding — notifications_screen.dart hardcoded
+  // 'customer' fallback): see lib/config/app_variant.dart.
+  currentAppVariant = 'seller';
 
   await SentryFlutter.init(
     (options) {
@@ -47,7 +64,13 @@ void main() async {
       options.tracesSampleRate = 1.0;
     },
     appRunner: () async {
-      runApp(const _BootLoadingApp());
+      // videoDone completes when app_splash.mp4 finishes playing; the
+      // second runApp() below (SellerApp) awaits it so the video is never
+      // cut short by a fast Firebase init.
+      final videoDone = Completer<void>();
+      runApp(_BootLoadingApp(onVideoFinished: () {
+        if (!videoDone.isCompleted) videoDone.complete();
+      }));
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
@@ -75,6 +98,11 @@ void main() async {
       // still sees the login FORM on every relaunch instead of skipping
       // straight to SellerDashboardScreen — a real UX gap, but a
       // different issue from the boot flicker asked about here.)
+      //
+      // Gate the real-app swap on the video having finished playing (it
+      // almost always has, by now — Firebase init is the fast side of
+      // this race) so the boot video is never truncated mid-playback.
+      await videoDone.future;
       runApp(const SellerApp());
     },
   );
@@ -111,19 +139,19 @@ class SellerApp extends StatelessWidget {
       theme: themeService.currentTheme,
       initialRoute: '/',
       routes: {
-        // NEW (per Nizam's request — shared splash video, all 4 apps):
-        // plays app_splash.mp4 (audio, full-screen stretch, hard-capped)
-        // before landing on the existing Seller LoginScreen — purely a
-        // visual layer, the login route itself is unchanged.
-        '/': (_) => const AppSplashVideoScreen(
-              nextScreen: LoginScreen(
-                presetUserType: UserType.customer,
-                lockUserType: true,
-                title: 'Seller Login',
-                subtitle: 'Manage your Allin1 store',
-                lockedUserLabel: 'Seller',
-                postLoginRoute: '/seller-home',
-              ),
+        // FIX (video-as-natural-buffer, per Nizam's request): app_splash.mp4
+        // now plays pre-Firebase as the very first boot frame (see
+        // _BootLoadingApp above) instead of here — this route used to wrap
+        // LoginScreen in a second AppSplashVideoScreen play, which would
+        // have shown the same video twice back to back on every launch.
+        // Now goes straight to LoginScreen.
+        '/': (_) => const LoginScreen(
+              presetUserType: UserType.customer,
+              lockUserType: true,
+              title: 'Seller Login',
+              subtitle: 'Manage your Allin1 store',
+              lockedUserLabel: 'Seller',
+              postLoginRoute: '/seller-home',
             ),
         '/seller-home': (_) => const SellerDashboardScreen(),
         '/seller-store': (_) => const SellerScreen(),

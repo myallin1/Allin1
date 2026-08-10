@@ -605,12 +605,47 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
        // write below via `...selfieUrl` exactly like `...docUrls`.
        final selfieUrl = await _uploadSelfiePhoto(user.uid);
 
-       // Save to heroes collection
-       await FirebaseFirestore.instance.collection('heroes').doc(user.uid).set({
+       // Save to heroes collection AND mark users/{uid}.isSetupComplete —
+       // FIX (Aug 8 2026 — root cause of "already-registered pending hero
+       // sent back to the registration form"): these used to be two
+       // independent await FirebaseFirestore....set() calls. If the app
+       // was killed, lost connection, or the second call simply failed
+       // right after the first one succeeded, heroes/{uid} would already
+       // have a real 'pending' application while users/{uid}.isSetupComplete
+       // stayed false/missing forever — and _HeroSetupGate in
+       // main_hero.dart reads isSetupComplete FIRST, so that hero got
+       // routed straight back to a blank registration form on every
+       // reopen, even though admin could already see and approve them.
+       // A WriteBatch makes both writes succeed or fail together, so that
+       // particular desync can no longer happen for a brand-new
+       // submission (main_hero.dart also got an independent self-heal
+       // fallback for any hero who already hit this before today).
+       //
+       // FIX (Aug 8 2026): added SetOptions(merge:true) on the heroes
+       // write — this used to be a full overwrite, which would silently
+       // wipe out any fields hero_login_screen.dart's earlier identity-
+       // sync had already set on this same doc (created at first sign-in,
+       // before this form is ever reached). merge:true makes this a true
+       // "fill in the rest" write instead of a blind replace. Paired with
+       // the firestore.rules fix on the heroes/{heroId} update rule,
+       // which was rejecting this exact write with permission-denied
+       // because the pre-created stub doc has no approvalStatus field yet.
+       final registrationBatch = FirebaseFirestore.instance.batch();
+       final heroDocRef =
+           FirebaseFirestore.instance.collection('heroes').doc(user.uid);
+       registrationBatch.set(heroDocRef, {
          'heroId': user.uid,
          'uid': user.uid,
          'name': _nameController.text.trim(),
+         // FIX (audit: customer/hero number wiring — heroes/{uid} was only
+         // ever getting 'phone' written here, never 'phoneNumber', even
+         // though hero_profile_tab.dart and other screens read
+         // heroData['phoneNumber'] from this same collection. Matches the
+         // dual-field convention (both kept in sync) already used on
+         // users/{uid} a few lines below and in hero_login_screen.dart's
+         // _syncHeroIdentityFields.
          'phone': user.phoneNumber ?? _phoneController.text.trim(),
+         'phoneNumber': user.phoneNumber ?? _phoneController.text.trim(),
          'email': user.email ?? '',
          // T1: New fields per CEO directive
          'dob': _dobController.text.trim(),
@@ -641,7 +676,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
          'status': 'offline',
          'onboardingMethod': docUrls.isEmpty ? 'manual_whatsapp' : 'in_app_upload',
          'createdAt': FieldValue.serverTimestamp(),
-       });
+       }, SetOptions(merge: true));
 
        // FIX: main_hero.dart's _HeroSetupGate decides whether to show this
        // registration form again by reading users/{uid}.isSetupComplete —
@@ -650,8 +685,12 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
        // open (before admin even had a chance to approve them), instead
        // of the pending-status tracker. Mirrors what
        // AuthService.completeProfileSetup does for the customer/Google
-       // path.
-       await FirebaseFirestore.instance.collection('users').doc(user.uid).set(
+       // path. Now part of the same batch as the heroes/{uid} write above
+       // — see the batch comment for why.
+       final usersDocRef =
+           FirebaseFirestore.instance.collection('users').doc(user.uid);
+       registrationBatch.set(
+         usersDocRef,
          {
            'phone': user.phoneNumber ?? _phoneController.text.trim(),
            'phoneNumber': user.phoneNumber ?? _phoneController.text.trim(),
@@ -661,6 +700,8 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
          },
          SetOptions(merge: true),
        );
+
+       await registrationBatch.commit();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

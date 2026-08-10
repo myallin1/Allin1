@@ -19,6 +19,8 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../config/fare_rates.dart';
+import '../../config/payment_config.dart';
 import '../../models/ride_model.dart';
 import '../../utils/otp_utils.dart';
 import '../../widgets/allin1_map_widget.dart';
@@ -495,6 +497,19 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     } catch (e) {
       _hasNavigatedToPayment = false;
       debugPrint('[RideTrackingScreen] Payment navigation failed: $e');
+      // FIX (Step 2, infrastructure audit — silent failures): this used
+      // to fail silently with only a debugPrint, so the customer would
+      // just sit on the tracking screen with no payment button and no
+      // idea why. Now surfaces it so they know to retry.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open the payment screen. Please try again.'),
+            backgroundColor: Color(0xFFFF5252),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -525,18 +540,69 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       );
     } catch (e) {
       debugPrint('Payment intent update failed: $e');
+      // FIX (Step 2, infrastructure audit — silent failures): this write
+      // (recording which payment method the customer picked) used to
+      // fail with only a debugPrint. Now the customer sees it instead of
+      // assuming their selection went through when it didn't.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not save your payment method. Please try again.'),
+            backgroundColor: Color(0xFFFF5252),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _openGenericUpi() async {
     await _selectPaymentMethod('upi');
-    const candidateUris = <String>[
-      'upi://pay',
-      'upi://',
+
+    // FIX (infrastructure audit, Step 1 — UPI routing, HIGH priority):
+    // this used to launch a completely BARE `upi://pay` with no payee,
+    // no amount, no reference — the intent opened whatever UPI app was
+    // installed with nothing pre-filled, forcing the customer to scan
+    // the hero's own personal QR code manually instead of paying the
+    // company account. Now builds the exact same fully-parameterized
+    // deeplink payment_screen.dart's (already-correct) _launchUpi()
+    // uses, via the shared lib/config/payment_config.dart — same VPA,
+    // same payee name, and the amount comes from _totalToCollect(),
+    // this screen's own single source of truth for "what the customer
+    // actually owes" (already used for the on-screen total display —
+    // see that method's own comment for why it's preferred over the
+    // stale pre-ride estimate).
+    // FIX (Aug 10 2026 — same root cause fixed in payment_screen.dart's
+    // _launchUpi(): a bare `upi://pay` scheme cannot be opened by a
+    // browser at all, so this screen's customer-side UPI button was
+    // silently failing on the PWA every time, same as the other
+    // payment entry point). On web, lead with the `intent://` form —
+    // see payment_config.dart's buildUpiIntentUri() for why this is
+    // what actually triggers Android Chrome's native "Pay with
+    // GPay/PhonePe/..." app chooser with the amount pre-filled.
+    final primaryUri = kIsWeb
+        ? PaymentConfig.buildUpiIntentUri(
+            amount: _totalToCollect(),
+            referenceId: widget.rideDocId,
+          )
+        : PaymentConfig.buildUpiUri(
+            amount: _totalToCollect(),
+            referenceId: widget.rideDocId,
+          );
+
+    // Bare `upi://` kept ONLY as a last-resort fallback — some UPI
+    // apps' intent filters are registered narrower than others and
+    // may not match the fully-parameterized URI on every device/OS
+    // version; opening the app at all (even with nothing pre-filled)
+    // is still better than the "No UPI apps installed" dead end below.
+    // Not meaningful on web (browsers can't open bare custom schemes
+    // regardless), so only added as a fallback candidate on native.
+    final candidateUris = <Uri>[
+      primaryUri,
+      if (!kIsWeb) Uri.parse('upi://'),
     ];
 
-    for (final candidate in candidateUris) {
-      final uri = Uri.parse(candidate);
+    for (final uri in candidateUris) {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
         return;
@@ -1798,13 +1864,15 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     return baseToCharge + tip;
   }
 
+  // FIX: this was a bike-only hardcoded fallback (baseFare 25 /
+  // baseDistance 1 / perKm 6) applied regardless of the ride's actual
+  // vehicleType — a 6th disagreeing fare table, and wrong for every
+  // non-bike category. Now delegates to the single central
+  // lib/config/fare_rates.dart source of truth, keyed by this ride's
+  // real vehicleType.
   double _calculateFareFromDistance(double km) {
-    if (km <= 0) return 25;
-    const double baseFare = 25;
-    const double baseDistance = 1;
-    const double perKm = 6;
-    if (km <= baseDistance) return baseFare;
-    return (baseFare + ((km - baseDistance) * perKm)).roundToDouble();
+    if (km <= 0) return FareRates.minFareFor(widget.ride.vehicleType ?? 'bike');
+    return FareRates.calculateFare(widget.ride.vehicleType ?? 'bike', km);
   }
 
   double _bearingBetween(LatLng start, LatLng end) {

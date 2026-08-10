@@ -221,6 +221,40 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   String get _avatarLetter =>
       _captainName.isNotEmpty ? _captainName[0].toUpperCase() : 'H';
 
+  // FIX (audit: "customer/hero number wiring" — same root cause as
+  // ride_search_screen.dart's _resolveCustomerPhone): FirebaseAuth's own
+  // `user.phoneNumber` is ONLY populated by actual phone-OTP auth, never
+  // by a mobile number a Google-Sign-In hero types in manually at
+  // hero_register_screen.dart. That number is written to Firestore
+  // heroes/{uid}.phone (and .phoneNumber), so it must be read from there
+  // — not straight off the Auth user object — before stamping it onto a
+  // ride/service-request doc for the customer to call. Cached per
+  // session since it won't change mid-shift.
+  String? _resolvedHeroPhone;
+  Future<String> _resolveHeroPhone(User user) async {
+    if (_resolvedHeroPhone != null && _resolvedHeroPhone!.isNotEmpty) {
+      return _resolvedHeroPhone!;
+    }
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('heroes')
+          .doc(user.uid)
+          .get();
+      final data = doc.data();
+      final phone = (data?['phoneNumber'] as String?)?.trim();
+      final phoneAlt = (data?['phone'] as String?)?.trim();
+      final resolved = (phone != null && phone.isNotEmpty)
+          ? phone
+          : (phoneAlt != null && phoneAlt.isNotEmpty
+              ? phoneAlt
+              : (user.phoneNumber ?? ''));
+      _resolvedHeroPhone = resolved;
+      return resolved;
+    } catch (_) {
+      return user.phoneNumber ?? '';
+    }
+  }
+
   // Stream subscriptions
   StreamSubscription<Position>? _locationSubscription;
   StreamSubscription<Position>? _globalLocationSub;
@@ -742,7 +776,30 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    if (!_isOnline || _user == null) {
+    // BUG B2 FIX (Aug 8 2026 — "tapped the notification, app opened, but
+    // the accept popup never showed"): this used to be
+    // `if (!_isOnline || _user == null) return;` — the ENTIRE resumed-case
+    // body, including _consumePendingRidePush()/
+    // _consumePendingServiceRequestPush() below, was skipped whenever
+    // the hero's local `_isOnline` flag happened to read false at the
+    // exact moment of resume. That's extremely common right after a
+    // background→foreground transition, since (per the comment on the
+    // `resumed` case below) the RTDB WebSocket — and therefore presence —
+    // routinely drops while backgrounded and hasn't resynced yet by the
+    // time this callback fires. So the most common real-world path
+    // (hero backgrounds the app, gets a push, taps the notification to
+    // bring it forward) was exactly the one this guard silently broke.
+    // Comments elsewhere in this file already claim the `!_isOnline`
+    // guard was "removed" as the fix for a near-identical bug — that
+    // removal only reached the inner method bodies
+    // (_consumePendingRidePush/_fetchTargetedRideOnce/
+    // _fetchTargetedServiceRequestOnce), never this outer gate. Dropping
+    // `_isOnline` from this check entirely: pending-push consumption
+    // must always run on resume, and the resumed-case body already
+    // handles re-establishing online status itself (goOnline() +
+    // _syncOnlineStatus(true) below) regardless of what _isOnline read
+    // going in.
+    if (_user == null) {
       return;
     }
     switch (state) {
@@ -976,17 +1033,55 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     try {
       Position? currentPos;
       if (online) {
+        // FIX (root cause of "Hero PWA foreground tab open+focused but
+        // NO ride popup ever appears"): getCurrentLocation() returning
+        // null used to silently flip _isOnline back to false and show
+        // one generic SnackBar — critically, this happens BEFORE
+        // _listenForHeroPings()/_listenForServicePings() are ever
+        // attached (they're only called further down, inside the
+        // `if (online)` branch at the end of this method). So on a web
+        // browser where location permission was previously denied
+        // (browsers do NOT re-prompt once denied — Geolocator.
+        // requestPermission() just returns `denied` again silently),
+        // the hero's toggle visually flips back off almost instantly
+        // and NO ping listener is ever attached for that session — the
+        // hero looks "online" for a split second then silently isn't,
+        // with no persistent indication anything is wrong. The old
+        // message ("Enable high-accuracy location...") didn't say HOW
+        // on a browser (there's no OS Settings app to open), and
+        // auto-dismissed in a few seconds.
+        //
+        // Fix: distinguish deniedForever (needs a browser-level fix,
+        // give exact steps) from a one-off failure (timeout / GPS not
+        // ready yet — offer an immediate Retry action), and make both
+        // messages persist until the hero dismisses them or the action
+        // fires, instead of auto-hiding.
+        final permission = await Geolocator.checkPermission();
         currentPos = await LocationService().getCurrentLocation();
         if (currentPos == null) {
           if (mounted) {
             setState(() => _isOnline = false);
+            final isBrowserBlocked = kIsWeb &&
+                (permission == LocationPermission.deniedForever ||
+                    permission == LocationPermission.denied);
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
+              SnackBar(
                 content: Text(
-                  'Enable high-accuracy location to go online and receive rides.',
+                  isBrowserBlocked
+                      ? 'Location is blocked for this site. Click the lock/info icon next to the address bar, allow Location, then tap Online again.'
+                      : 'Could not get your location. Check GPS is on and try again.',
                 ),
                 backgroundColor: _red,
                 behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 8),
+                action: SnackBarAction(
+                  label: 'RETRY',
+                  textColor: Colors.white,
+                  onPressed: () {
+                    setState(() => _isOnline = true);
+                    unawaited(_syncOnlineStatus(true));
+                  },
+                ),
               ),
             );
           }
@@ -1467,8 +1562,26 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       // FIX (killed-app notification-tap dead end, same root cause as
       // _fetchTargetedRideOnce): removed `!_isOnline` — this is the
       // exact cold-start path where _isOnline hasn't restored yet.
+      //
+      // FIX 2 (Aug 10 2026 — "notification tap opens app, hero lands on
+      // a blank dummy screen, no way to start the ride"): a plain
+      // `if (_user == null) return;` used to bail out for good right
+      // here on a cold/killed-app launch triggered by tapping the
+      // notification — Firebase Auth restore hasn't necessarily
+      // finished by the time this runs on a fresh process start, so
+      // `_user` (this State's own field, kept in sync by a separate
+      // auth listener elsewhere) can still be null at this exact
+      // moment even though the hero IS actually signed in and about to
+      // be recognized a beat later. Previously that one null check
+      // permanently dropped the pending accept — nothing ever retried
+      // it, so the hero opened the app to whatever the default boot
+      // screen is, with zero indication a ride was waiting. Now waits
+      // briefly for auth to catch up before giving up for real.
       if (_user == null) {
-        return;
+        final becameReady = await _waitForUserReady();
+        if (!becameReady) {
+          return;
+        }
       }
       final prefs = await SharedPreferences.getInstance();
       if (!mounted) {
@@ -1506,6 +1619,26 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     }
   }
 
+  /// Shared helper (Aug 10 2026 fix) for both _consumePendingRidePush()
+  /// and _consumePendingServiceRequestPush(): on a cold/killed-app
+  /// launch triggered by a notification tap, `_user` (kept in sync by
+  /// this State's own auth listener) can lag a beat behind Firebase
+  /// Auth's actual session restore. Polls briefly instead of giving up
+  /// on the very first check — cheap (a few in-memory field reads, no
+  /// network calls), and short enough (2s max) that it never makes a
+  /// genuinely-signed-out cold open hang.
+  Future<bool> _waitForUserReady({
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      if (!mounted) return false;
+      if (_user != null) return true;
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    }
+    return _user != null;
+  }
+
   /// FCM Data Push Layer 2 counterpart to _consumePendingRidePush() —
   /// picks up a service-request push that arrived while the app was
   /// fully killed (main_hero.dart's background handler wrote the
@@ -1517,8 +1650,23 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     }
     try {
       // FIX (same root cause as above): removed `!_isOnline`.
+      // FIX 2 (same root cause as _consumePendingRidePush's FIX 2,
+      // above — this is the exact bug reported: "hero_booking
+      // notification ACCEPT opens the app to a blank dummy screen with
+      // no way to start the ride"): was a hard `if (_user == null)
+      // return;` with no retry. Service-request accept has no
+      // fast-path the way ride-accept does (see the comment where
+      // kPendingHeroAcceptRideIdKey is written) — it depends entirely
+      // on this method successfully reaching
+      // _fetchTargetedServiceRequestOnce() to open the accept dialog.
+      // If auth wasn't ready yet on a cold launch, this used to just
+      // silently give up forever, which is exactly why the hero saw
+      // nothing happen after tapping ACCEPT.
       if (_user == null) {
-        return;
+        final becameReady = await _waitForUserReady();
+        if (!becameReady) {
+          return;
+        }
       }
       final prefs = await SharedPreferences.getInstance();
       if (!mounted) {
@@ -1720,6 +1868,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               rideId: requestId,
               data: data,
               playAlertTone: false,
+              pushType: 'service_request',
               title: 'New Service Request',
               channelDescription:
                   'Lock-screen ride and service-request alerts with ACCEPT action and ringtone.',
@@ -1867,8 +2016,16 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       }
 
       // ✅ FIX: Ignore pings that existed before this listener attached
-      // Prevents stale pings from re-triggering on app resume
-      final pingCreatedAt = pingExpiresAt - 10000; // expiresAt - 10s window
+      // Prevents stale pings from re-triggering on app resume.
+      // TASK 2 (Aug 8 2026): was `- 10000`, matching the old sequential
+      // model's 15s-per-hero ping window. Ride pings now use the same
+      // 90s broadcast window as service-request pings (see
+      // _startBroadcastPinging in ride_search_screen.dart) — this MUST
+      // track that window, or every fresh broadcast ping's derived
+      // "created at" lands far in the future and this dedup check goes
+      // silent, letting an already-seen/dismissed ping re-trigger the
+      // Accept dialog on every app resume for the rest of the window.
+      final pingCreatedAt = pingExpiresAt - 90000; // expiresAt - 90s broadcast window
       if (pingCreatedAt < listenerAttachedAt - 18000) {
         debugPrint('[HeroHomeScreen] Ignoring pre-existing ping: $requestId');
         return;
@@ -1967,7 +2124,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       // guard as ride pings — prevents stale-ping re-trigger on resume).
       // 90s broadcast window, same reasoning as the 10s ride window.
       final pingCreatedAt = pingExpiresAt - kServiceRequestPingExpirySeconds * 1000;
-      if (pingCreatedAt < listenerAttachedAt - 18000) {
+      if (pingCreatedAt < listenerAttachedAt - 90000) {
         debugPrint('[HeroHomeScreen] Ignoring pre-existing service ping: $requestId');
         return;
       }
@@ -1984,6 +2141,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           HeroRideNotificationService.showRideAssigned(
             rideId: requestId,
             data: Map<String, dynamic>.from(pingData),
+            pushType: 'service_request',
             title: 'New Service Request',
             channelDescription:
                 'Lock-screen ride and service-request alerts with ACCEPT action and ringtone.',
@@ -2087,6 +2245,14 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       }
     });
 
+    // FIX (same root cause/fix as the taxi ping dialog's
+    // _showDialogNow — see that method's comment for the full
+    // explanation): an uncaught showDialog() error here would leave
+    // `_isShowingServiceDialog` stuck true forever, silently blocking
+    // every future hero-booking/food/grocery popup for the rest of the
+    // session. Wrapped defensively for the same reason, applying the
+    // "unified fix across all 4 request types" requirement.
+    try {
     showDialog<void>(
       context: dialogContext,
       barrierDismissible: false,
@@ -2094,13 +2260,62 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(_serviceRequestTitle(requestType), style: GoogleFonts.outfit(fontWeight: FontWeight.w800)),
-        content: Column(
+        content: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('From: $customerName', style: const TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             Text(summary, style: const TextStyle(color: Colors.black54)),
+            // UNIFIED POPUP SPEC (Aug 8 2026): grocery/food/hero-booking
+            // requests DO capture pinned pickup/delivery locations at
+            // creation time (grocery_order_screen.dart's
+            // LocationCaptureField, custom_food_order_screen.dart's shop +
+            // delivery picker, hero_booking_screen.dart's from/to picker)
+            // and that data already reaches this dialog intact inside
+            // `details` (service_request_service.dart's
+            // createServiceRequest/_broadcastToEligibleHeroes writes the
+            // whole `details` map verbatim into the RTDB ping). The gap
+            // was purely that this dialog never rendered it — fixed by
+            // _serviceRequestLocationLines() below, styled to match the
+            // taxi dialog's pink PICKUP/DROP rows for a consistent look.
+            for (final line in _serviceRequestLocationLines(requestType, details)) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF1F8),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0x33FF4FA3)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(line.emoji, style: const TextStyle(fontSize: 16)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(line.label,
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF8F5A78),),),
+                          Text(line.value,
+                              style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,),),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             // NEW (per Nizam's "screenshot the DMart cart, hero fulfills
             // manually" workflow — details['listImageUrls']/'listImageUrl'
             // written by grocery_order_screen.dart): the hero must
@@ -2115,14 +2330,25 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               ),
             ],
           ],
+          ),
         ),
         actions: [
+          TextButton(
+            onPressed: () {
+              // MINIMIZE (Aug 8 2026 unified-popup spec): same contract
+              // as the taxi dialog's MINIMIZE — just closes the dialog,
+              // does NOT remove the hero_service_pings node, so the
+              // request stays valid for the rest of its broadcast window.
+              Navigator.pop(ctx);
+            },
+            child: const Text('Minimize', style: TextStyle(color: Colors.grey)),
+          ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               _rejectServiceRequest(requestId);
             },
-            child: const Text('Decline', style: TextStyle(color: Colors.grey)),
+            child: const Text('Reject', style: TextStyle(color: Color(0xFFFF5252))),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4FA3)),
@@ -2137,6 +2363,23 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     ).then((_) {
       staleSub?.cancel();
       if (mounted) setState(() => _isShowingServiceDialog = false);
+    }).catchError((Object e, StackTrace st) {
+      debugPrint('[HeroHomeScreen] Service dialog showDialog() future error: $e\n$st');
+      staleSub?.cancel();
+      if (mounted) setState(() => _isShowingServiceDialog = false);
+    });
+    } catch (e, st) {
+      debugPrint('[HeroHomeScreen] Service dialog showDialog() threw synchronously: $e\n$st');
+      staleSub?.cancel();
+      if (mounted) setState(() => _isShowingServiceDialog = false);
+      return;
+    }
+    // Belt-and-braces safety net — same rationale as the taxi dialog's.
+    Future.delayed(const Duration(seconds: 20), () {
+      if (mounted && _isShowingServiceDialog) {
+        debugPrint('[HeroHomeScreen] Safety-net: force-clearing stuck _isShowingServiceDialog');
+        setState(() => _isShowingServiceDialog = false);
+      }
     });
   }
 
@@ -2196,6 +2439,48 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     }
   }
 
+  // UNIFIED POPUP SPEC (Aug 8 2026): exact field names captured per
+  // request type, confirmed against source:
+  //   grocery_order        (grocery_order_screen.dart)     -> details['deliveryAddress'] (single point, no separate pickup)
+  //   custom_food_order    (custom_food_order_screen.dart) -> details['shopAddress'] (from/pickup), details['deliveryAddress'] (to/drop)
+  //   hero_booking         (hero_booking_screen.dart)      -> details['fromLocation'] (from, only if pickup-delivery task), details['location'] (to/task address)
+  // Returns [] (renders nothing) when a type has no location concept
+  // (e.g. plain 'custom_order') or the customer's picker didn't
+  // capture anything for this particular request.
+  List<_ServiceRequestLocationLine> _serviceRequestLocationLines(
+      String requestType, Map details,) {
+    String? s(String key) {
+      final v = details[key];
+      if (v is String && v.trim().isNotEmpty) return v.trim();
+      return null;
+    }
+
+    switch (requestType) {
+      case 'grocery_order':
+        final delivery = s('deliveryAddress');
+        return [
+          if (delivery != null)
+            _ServiceRequestLocationLine('🔴', 'DELIVER TO', delivery),
+        ];
+      case 'custom_food_order':
+        final shop = s('shopAddress');
+        final delivery = s('deliveryAddress');
+        return [
+          if (shop != null) _ServiceRequestLocationLine('🟢', 'PICKUP (SHOP)', shop),
+          if (delivery != null) _ServiceRequestLocationLine('🔴', 'DELIVER TO', delivery),
+        ];
+      case 'hero_booking':
+        final from = s('fromLocation');
+        final to = s('location');
+        return [
+          if (from != null) _ServiceRequestLocationLine('🟢', 'FROM', from),
+          if (to != null) _ServiceRequestLocationLine('🔴', 'TO', to),
+        ];
+      default:
+        return const [];
+    }
+  }
+
   Future<void> _acceptServiceRequest(String requestId, Map<String, dynamic> data) async {
     if (_user == null) return;
 
@@ -2211,11 +2496,12 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     }
 
     try {
+      final resolvedHeroPhone = await _resolveHeroPhone(_user!);
       final won = await ServiceRequestService().acceptServiceRequest(
         requestId: requestId,
         heroId: _user!.uid,
         heroName: _captainName,
-        heroPhone: _user!.phoneNumber ?? '',
+        heroPhone: resolvedHeroPhone,
       );
       if (!won) {
         debugPrint('[HeroHomeScreen] Service request already accepted by another hero — aborting');
@@ -2351,19 +2637,65 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       });
     }
 
-    showDialog<void>(
-      context: dialogContext,
-      barrierDismissible: false,
-      barrierColor: Colors.black.withValues(alpha: 0.78),
-      builder: (context) {
-        return _buildPingDialog(rideId.toString(), rideData);
-      },
-    ).then((_) {
+    // FIX (root cause of "Hero PWA popup never visible, for ANY
+    // future ping, not just this one"): showDialog() here was not
+    // wrapped in try/catch. If it throws synchronously — which on Web
+    // can happen if navigatorKey.currentContext resolves to a context
+    // whose Overlay/Navigator ancestor is momentarily in an
+    // inconsistent state (route transition mid-flight, hot-reload-like
+    // rebuild triggered by the video-first boot swap, etc. — timing
+    // windows that are far more common on a browser tab's event loop
+    // than on native) — the exception used to propagate uncaught, the
+    // `.then()` below never got attached (since showDialog() never
+    // returned a Future to attach it to), and `_isShowingRideDialog`
+    // stayed `true` FOREVER. Every _listenForHeroPings() callback after
+    // that point silently no-ops on its `if (_isShowingRideDialog)
+    // return;` guard — meaning ONE failed dialog-open, ever, in a
+    // session permanently blocks every future ride/service popup for
+    // that hero until they refresh the tab. This exactly matches "no
+    // popup at all, even foreground, even repeated tests" — the first
+    // failure poisons the rest of the session.
+    //
+    // Fix: catch it, log the real error (visible in the browser
+    // console via debugPrint/print on web) so the exact cause is
+    // diagnosable next time, and unconditionally reset the flag so the
+    // NEXT ping still gets a fresh attempt instead of being silently
+    // eaten forever.
+    try {
+      showDialog<void>(
+        context: dialogContext,
+        barrierDismissible: false,
+        barrierColor: Colors.black.withValues(alpha: 0.78),
+        builder: (context) {
+          return _buildPingDialog(rideId.toString(), rideData);
+        },
+      ).then((_) {
+        unawaited(takenSub?.cancel());
+        if (!kIsWeb) {
+          unawaited(HeroRideNotificationService.stopWakeAlertRingtone());
+        }
+        if (mounted) setState(() => _isShowingRideDialog = false);
+      }).catchError((Object e, StackTrace st) {
+        debugPrint('[HeroHomeScreen] showDialog() future error: $e\n$st');
+        unawaited(takenSub?.cancel());
+        if (mounted) setState(() => _isShowingRideDialog = false);
+      });
+    } catch (e, st) {
+      debugPrint('[HeroHomeScreen] showDialog() threw synchronously: $e\n$st');
       unawaited(takenSub?.cancel());
-      if (!kIsWeb) {
-        unawaited(HeroRideNotificationService.stopWakeAlertRingtone());
-      }
       if (mounted) setState(() => _isShowingRideDialog = false);
+      return;
+    }
+    // Belt-and-braces safety net: even if the above somehow still
+    // leaves the flag stuck (an error path we haven't anticipated),
+    // force it back to false after the ping's own 15s countdown would
+    // have expired anyway, so the hero is never permanently stuck
+    // silently missing every future ride for the rest of the session.
+    Future.delayed(const Duration(seconds: 20), () {
+      if (mounted && _isShowingRideDialog) {
+        debugPrint('[HeroHomeScreen] Safety-net: force-clearing stuck _isShowingRideDialog');
+        setState(() => _isShowingRideDialog = false);
+      }
     });
     // Start looping ringtone AFTER dialog is visible (not before).
     // This ensures the alert plays continuously while the hero sees the dialog,
@@ -2415,6 +2747,8 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
     try {
       final uid = _user!.uid;
+      final resolvedHeroPhone = await _resolveHeroPhone(_user!);
+      mark('STEP-0 resolveHeroPhone');
 
       // ── P0 FIX 1: Clock-skew-tolerant expiry check (5s buffer) ──
       final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt() ?? 0;
@@ -2439,7 +2773,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             'status': 'accepted',
             'acceptedHeroId': uid,
             'acceptedHeroName': _captainName,
-            'acceptedHeroPhone': _user!.phoneNumber ?? '',
+            'acceptedHeroPhone': resolvedHeroPhone,
             'acceptedHeroVehicle': _normalizeHeroVehicleType(_vehicleType),
           });
         }
@@ -2459,7 +2793,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         data['status'] = 'accepted';
         data['acceptedHeroId'] = uid;
         data['acceptedHeroName'] = _captainName;
-        data['acceptedHeroPhone'] = _user!.phoneNumber ?? '';
+        data['acceptedHeroPhone'] = resolvedHeroPhone;
         data['acceptedHeroVehicle'] = _normalizeHeroVehicleType(_vehicleType);
 
         return rtdb.Transaction.success(data);
@@ -3337,10 +3671,11 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         ),
       );
 
+      final resolvedSosHeroPhone = await _resolveHeroPhone(user);
       await FirebaseFirestore.instance.collection('sos_alerts').add({
         'userId': user.uid,
         'userName': user.displayName ?? user.email ?? 'Hero',
-        'userPhone': user.phoneNumber ?? '',
+        'userPhone': resolvedSosHeroPhone,
         'userType': 'hero',
         'location': GeoPoint(position.latitude, position.longitude),
         'status': 'active',
@@ -6622,11 +6957,18 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
                       borderRadius: BorderRadius.circular(14),),
                   padding: const EdgeInsets.symmetric(vertical: 14),),
               onPressed: () {
+                // MINIMIZE (Aug 8 2026 unified-popup spec): unlike
+                // REJECT, this does NOT touch the RTDB ping — the
+                // request stays valid/active for the rest of its
+                // broadcast window, this just closes the dialog so the
+                // hero isn't blocked from using the app. No reopen
+                // surface exists yet for a minimized ping (tracked
+                // separately); tapping the original lock-screen
+                // notification still works as a reopen path.
                 _countdownTimer?.cancel();
-                widget.onReject(widget.requestId);
                 Navigator.pop(context);
               },
-              child: const Text('SKIP',
+              child: const Text('MINIMIZE',
                   style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11),),
             ),
           ),
@@ -6739,4 +7081,15 @@ class _PingCountdownDialogState extends State<_PingCountdownDialog> {
       ],
     );
   }
+}
+
+// UNIFIED POPUP SPEC (Aug 8 2026): tiny data holder for one address row
+// (emoji marker, label like "FROM"/"DELIVER TO", the address string) in
+// the grocery/food/hero-booking Accept dialog — see
+// _serviceRequestLocationLines() above.
+class _ServiceRequestLocationLine {
+  final String emoji;
+  final String label;
+  final String value;
+  const _ServiceRequestLocationLine(this.emoji, this.label, this.value);
 }

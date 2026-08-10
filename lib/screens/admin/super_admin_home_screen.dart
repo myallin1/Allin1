@@ -25,6 +25,7 @@ import 'admin_taxi_rides_screen.dart';
 import 'admin_ux_audit_screen.dart';
 import 'commission_settings_screen.dart';
 import 'customer_usage_tracking_screen.dart';
+import 'payments_received_screen.dart';
 import 'erode_offers_management_screen.dart';
 
 class SuperAdminHomeScreen extends StatefulWidget {
@@ -865,6 +866,27 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute<void>(builder: (_) => const CustomerUsageTrackingScreen()),
+                );
+              },
+            ),
+            // NEW (per Nizam's "Self vs MyAllin1" payment-split
+            // request): when a hero marks a ride paid via the company's
+            // own MyAllin1 UPI, that money never touches the hero's
+            // wallet — it needs its own admin-facing verify/reconcile
+            // page. Also surfaces the pre-existing "Payment Not
+            // Received" dispute flag (hero_ride_screen.dart /
+            // hero_history_screen.dart), which had zero admin
+            // visibility before this screen.
+            ListTile(
+              leading: const Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF00C853)),
+              title: const Text('Payments Received', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('MyAllin1 UPI collections + unpaid-ride disputes',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const PaymentsReceivedScreen()),
                 );
               },
             ),

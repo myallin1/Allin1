@@ -48,16 +48,20 @@ class CaptainRideScreen extends StatefulWidget {
 class _CaptainRideScreenState extends State<CaptainRideScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   // ── Theme ────────────────────────────────────────────────────
-  static const Color _bg = Color(0xFF0A0A12);
-  static const Color _surface = Color(0xFF12121E);
-  static const Color _card = Color(0xFF1A1A2A);
+  static const Color _bg = Color(0xFFFFF6FA);
+  static const Color _surface = Color(0xFFFFFFFF);
+  static const Color _card = Color(0xFFFFEAF3);
   static const Color _green = Color(0xFF00C853);
   static const Color _gold = Color(0xFFFFBB00);
   static const Color _red = Color(0xFFFF5252);
   static const Color _purple = Color(0xFF6C63FF);
-  static const Color _text = Color(0xFFEEEEF5);
-  static const Color _muted = Color(0xFF7777A0);
-  static const Color _border = Color(0x1AFFFFFF);
+  static const Color _text = Color(0xFF201A22);
+  static const Color _muted = Color(0xFF8C7A88);
+  static const Color _border = Color(0xFFF0DCE8);
+  static const Color _amber = Color(0xFFFFA000); // "Arrived" state button
+  static const Color _darkRed =
+      Color(0xFFC62828); // "End Ride" state button — distinct from _red
+  // (#FF5252), which stays reserved for error SnackBars only.
 
   bool get _isCargoRide {
     final type = (widget.ride.vehicleType ?? '').trim().toLowerCase();
@@ -140,7 +144,15 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
     _rideStatus = widget.ride.status ?? 'accepted';
     _pickupAddress = widget.ride.pickupAddress ?? '---';
     _dropAddress = widget.ride.dropAddress ?? '---';
-    _customerPhone = widget.ride.heroPhone ?? 'Contact available';
+    // FIX (audit: customer/hero number wiring): this was reading
+    // `widget.ride.heroPhone` as a placeholder for the CUSTOMER's phone —
+    // that's the hero's own number (the Ride model has no customerPhone
+    // field at all), so the hero briefly saw their own number labeled as
+    // the customer's until the Firestore listener below overwrote it a
+    // moment later. Use a neutral placeholder instead; the real
+    // customerPhone always arrives via the _fetchRideStatus() listener
+    // right after this runs.
+    _customerPhone = 'Contact available';
     _estimatedFare = widget.ride.estimatedFare?.toDouble() ??
         widget.ride.fare?.toDouble() ??
         0;
@@ -750,14 +762,23 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         // .dart's _createRide()), using each category's real rate from
         // RideModel.defaultFares — previously these fields were never
         // written for non-bike rides at all, so this always silently
-        // fell back to the hardcoded defaults below (25.0 / 6.0 — bike's
-        // rate, not this category's real rate). The ?? fallbacks stay
-        // in place only for pre-existing ride docs created before this
-        // fix shipped.
-        final baseFare = (rideData?['baseFare'] as num?)?.toDouble() ?? 25.0;
-        final farePerKm =
-            (rideData?['farePerKm'] as num?)?.toDouble() ?? 6.0;
-        const double legacyBaseDistance = 1;
+        // fell back to hardcoded defaults (25.0 / 6.0 — bike's rate, not
+        // this category's real rate) that also disagreed with the
+        // booking-time baseDistance (2.0 in the old table vs 1.0 here).
+        // The ?? fallbacks stay in place only for pre-existing legacy
+        // ride docs created before the booking-time snapshot fix
+        // shipped — but they now read from the SAME central FareRates
+        // table used everywhere else (lib/config/fare_rates.dart)
+        // instead of a second, separately hardcoded set of numbers, so
+        // a legacy ride's fallback fare terms can never again disagree
+        // with what booking-time would have quoted for this category.
+        final baseFare = (rideData?['baseFare'] as num?)?.toDouble() ??
+            FareRates.baseFareFor(vehicleType);
+        final farePerKm = (rideData?['farePerKm'] as num?)?.toDouble() ??
+            FareRates.resolvePerKm(vehicleType, DateTime.now());
+        final double legacyBaseDistance =
+            (rideData?['baseDistance'] as num?)?.toDouble() ??
+                FareRates.baseDistanceKmFor(vehicleType);
         // Same Option C distance-floor fix as the bike branch above,
         // now extended to every other category: bill on whichever is
         // larger, the hero's GPS-tracked distance or the road-route
@@ -988,7 +1009,31 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   }
 
   // ── Navigation ───────────────────────────────────────────────
-  Future<void> _markPaymentReceived() async {
+  // FIX (Nizam's "Self vs MyAllin1" payment-collection split): this
+  // used to be a single "BILL RECEIVED" button that always assumed the
+  // hero personally collected cash. Now the hero picks which of the two
+  // real-world outcomes happened before this method runs:
+  //   'self'     — hero collected cash/GPay/etc into their OWN hand or
+  //                account. Unchanged from the old behavior: fare is
+  //                credited to heroes/{uid}.walletBalance as the hero's
+  //                own earnings, AND the usage-charge (infra cost
+  //                recovery) is flushed from hero_wallets — the hero
+  //                really did receive money, so both ledgers move.
+  //   'myallin1' — customer paid straight to the company's own UPI
+  //                (PaymentConfig.companyUpiId), so the hero never
+  //                touched the money at all. heroes/{uid}.walletBalance
+  //                and hero_wallets are BOTH left untouched (crediting
+  //                "earnings" for cash the hero never received would be
+  //                wrong, and charging an infra fee out of a wallet
+  //                that received nothing would be unfair) — instead a
+  //                record goes to `company_payments_received` for the
+  //                Admin app to verify/reconcile (see
+  //                lib/screens/admin/payments_received_screen.dart).
+  // Deliberately "Fast mode" per Nizam's explicit instruction: no proof/
+  // reference-number field, hero visually confirms the customer's
+  // screen and taps. This is a trust-based control, same trust level as
+  // the pre-existing cash flow already had.
+  Future<void> _markPaymentReceived(String method) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
@@ -1021,21 +1066,12 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       const double commission = 0;
       // ZERO Commission for launch
       final double netEarnings = fare;
-      // Hero keeps 100% of the fare
-
-      final heroRef =
-          FirebaseFirestore.instance.collection('heroes').doc(user.uid);
-      final heroSnap = await heroRef.get();
-      final currentBalance =
-          (heroSnap.data()?['walletBalance'] as num?)?.toDouble() ??
-          0.0;
-      final totalEarnings =
-          (heroSnap.data()?['totalEarnings'] as num?)?.toDouble() ?? 0.0;
-      final totalRides = (heroSnap.data()?['totalRides'] as num?)?.toInt() ?? 0;
+      // Hero keeps 100% of the fare (only credited for the 'self' path)
 
       await rideRef.update({
         'status': 'paid',
         'paymentStatus': 'settled',
+        'paymentCollectionMethod': method, // 'self' | 'myallin1'
         'actualFare': rideFare,
         'tipAmount': tipAmount,
         'finalFare': fare,
@@ -1044,23 +1080,104 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         'archivedAt': FieldValue.serverTimestamp(),
         'archivedForHero': true,
       });
-      // FIX (RTDB Phase 3 Step 1 cleanup leftover, found during Phase 4a
-      // work): this write used to also set 'status': 'online' on the
-      // heroes doc. Presence is no longer sourced from Firestore at all —
-      // online_heroes/{uid} in RTDB is the sole source of truth — so that
-      // field was stale/dead and has been removed here to match the same
-      // fix already applied in _reportPaymentIssue().
-      await heroRef.set(
-        {
-          'isAvailable': true,
-          'activeRideId': null,
-          'walletBalance': currentBalance + netEarnings,
-          'totalEarnings': totalEarnings + netEarnings,
-          'totalRides': totalRides + 1,
-          'lastRideCompletedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
+
+      bool walletEligible = true;
+
+      if (method == 'myallin1') {
+        // Money already sits in the company UPI account — do NOT touch
+        // heroes/{uid}.walletBalance or hero_wallets at all. Just leave
+        // an admin-verifiable record.
+        await FirebaseFirestore.instance
+            .collection('company_payments_received')
+            .add({
+          'rideId': widget.rideDocId,
+          'heroId': user.uid,
+          'heroName': widget.ride.heroName ?? '',
+          'customerId': rideData['customerId'] ?? widget.ride.customerId,
+          'fare': rideFare,
+          'tip': tipAmount,
+          'amount': fare,
+          'paymentMethod': 'myallin1_upi',
+          'collectedAt': FieldValue.serverTimestamp(),
+          'verified': false,
+        });
+      } else {
+        // 'self' — hero physically collected the money. Unchanged from
+        // the original single-button behavior.
+        final heroRef =
+            FirebaseFirestore.instance.collection('heroes').doc(user.uid);
+        final heroSnap = await heroRef.get();
+        final currentBalance =
+            (heroSnap.data()?['walletBalance'] as num?)?.toDouble() ?? 0.0;
+        final totalEarnings =
+            (heroSnap.data()?['totalEarnings'] as num?)?.toDouble() ?? 0.0;
+        final totalRides =
+            (heroSnap.data()?['totalRides'] as num?)?.toInt() ?? 0;
+
+        // FIX (RTDB Phase 3 Step 1 cleanup leftover, found during Phase
+        // 4a work): this write used to also set 'status': 'online' on
+        // the heroes doc. Presence is no longer sourced from Firestore
+        // at all — online_heroes/{uid} in RTDB is the sole source of
+        // truth — so that field was stale/dead and stays removed here.
+        await heroRef.set(
+          {
+            'isAvailable': true,
+            'activeRideId': null,
+            'walletBalance': currentBalance + netEarnings,
+            'totalEarnings': totalEarnings + netEarnings,
+            'totalRides': totalRides + 1,
+            'lastRideCompletedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+        await FirebaseFirestore.instance
+            .collection('wallet_transactions')
+            .add({
+          'heroId': user.uid,
+          'type': 'credit',
+          'amount': netEarnings,
+          'commission': commission,
+          'grossAmount': fare,
+          'balanceBefore': currentBalance,
+          'balanceAfter': currentBalance + netEarnings,
+          'rideId': widget.rideDocId,
+          'description': 'Payment collected for completed ride',
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+
+        // APP INFRA COST RECOVERY (per Nizam's explicit instruction --
+        // REPLACES the flat % commission model entirely): no cut of the
+        // hero's fare is taken here at all. Instead, a minimal
+        // usage-proportional fee (minutes spent Online + this ride) is
+        // flushed from the in-memory accumulator to the hero's PREPAID
+        // wallet in ONE batched write -- see HeroUsageAccumulatorService
+        // / HeroWalletService.flushUsageCost() for the full rationale.
+        // Only runs on the 'self' path per Nizam's explicit "self ah
+        // select panna wallet-la deduct pannanum" instruction — a hero
+        // who never touched the money (myallin1 path, above) doesn't
+        // get charged out of a wallet that received nothing this ride.
+        try {
+          HeroUsageAccumulatorService().recordRideHandled();
+          final activeMinutes =
+              HeroUsageAccumulatorService().consumeActiveMinutes();
+          final ridesHandled =
+              HeroUsageAccumulatorService().consumeRidesHandled();
+          await HeroWalletService().flushUsageCost(
+            heroId: user.uid,
+            activeMinutes: activeMinutes,
+            ridesHandled: ridesHandled,
+          );
+          final walletSnap = await FirebaseFirestore.instance
+              .collection('hero_wallets')
+              .doc(user.uid)
+              .get();
+          walletEligible =
+              (walletSnap.data()?['isEligibleForRequests'] as bool?) ?? true;
+        } catch (e) {
+          debugPrint('[HeroRideScreen] Wallet usage-fee flush failed (non-fatal): $e');
+        }
+      }
+
       // FIX (Phase 4a defensive cleanup): _completeTrip() already deletes
       // active_rides/{rideDocId} in the normal flow, but this method can
       // be reached via a separate payment-collection path. Removing here
@@ -1071,55 +1188,6 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
             .ref('active_rides/${widget.rideDocId}')
             .remove(),
       );
-      await FirebaseFirestore.instance.collection('wallet_transactions').add({
-        'heroId': user.uid,
-        'type': 'credit',
-        'amount': netEarnings,
-        'commission': commission,
-        'grossAmount': fare,
-        'balanceBefore': currentBalance,
-        'balanceAfter': currentBalance + netEarnings,
-        'rideId': widget.rideDocId,
-        'description': 'Payment collected for completed ride',
-        'timestamp': FieldValue.serverTimestamp(),
-       });
-
-      // APP INFRA COST RECOVERY (per Nizam's explicit instruction --
-      // REPLACES the flat % commission model entirely): no cut of the
-      // hero's fare is taken here at all. Instead, a minimal
-      // usage-proportional fee (minutes spent Online + this ride) is
-      // flushed from the in-memory accumulator to the hero's PREPAID
-      // wallet in ONE batched write -- see HeroUsageAccumulatorService /
-      // HeroWalletService.flushUsageCost() for the full rationale
-      // (batching keeps OUR OWN Firestore costs bounded by hero
-      // activity, not wall-clock time). This is intentionally a
-      // SEPARATE wallet/ledger from `heroes/{uid}.walletBalance` /
-      // `wallet_transactions` just written above (that's the hero's own
-      // collected-cash earnings bookkeeping, untouched). Non-fatal by
-      // design: a hero who already collected cash for this ride should
-      // never get stuck here because of a wallet-service hiccup.
-      bool walletEligible = true;
-      try {
-        HeroUsageAccumulatorService().recordRideHandled();
-        final activeMinutes =
-            HeroUsageAccumulatorService().consumeActiveMinutes();
-        final ridesHandled =
-            HeroUsageAccumulatorService().consumeRidesHandled();
-        await HeroWalletService().flushUsageCost(
-          heroId: user.uid,
-          activeMinutes: activeMinutes,
-          ridesHandled: ridesHandled,
-        );
-        final walletSnap = await FirebaseFirestore.instance
-            .collection('hero_wallets')
-            .doc(user.uid)
-            .get();
-        walletEligible =
-            (walletSnap.data()?['isEligibleForRequests'] as bool?) ?? true;
-      } catch (e) {
-        debugPrint('[HeroRideScreen] Wallet usage-fee flush failed (non-fatal): $e');
-      }
-
       await FirebaseDatabase.instance
           .ref('live_locations/${widget.rideDocId}')
           .remove();
@@ -1384,26 +1452,61 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
               ),
             ),
             const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _markPaymentReceived,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _green,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+            // FIX (Nizam's "Self vs MyAllin1" split): a single "BILL
+            // RECEIVED" button couldn't tell whether the hero personally
+            // collected the money or the customer paid the company's own
+            // UPI directly — both need different wallet/admin handling
+            // (see _markPaymentReceived's header comment). Hero picks
+            // which actually happened; no proof/reference number asked
+            // for, per Nizam's explicit "Fast mode, trust the click".
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _markPaymentReceived('self'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'PAID AS CASH\n(SELF)',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        height: 1.2,
+                      ),
+                    ),
                   ),
                 ),
-                child: const Text(
-                  'BILL RECEIVED',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _markPaymentReceived('myallin1'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _purple,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'PAID TO\nMYALLIN1 (UPI)',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        height: 1.2,
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -1512,7 +1615,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
                       : (isArrived ? _startTrip : _completeTrip),
               style: ElevatedButton.styleFrom(
                 backgroundColor:
-                    isAccepted ? _purple : (isArrived ? _green : _gold),
+                    isAccepted ? _amber : (isArrived ? _green : _darkRed),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(

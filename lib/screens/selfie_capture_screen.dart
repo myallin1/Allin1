@@ -26,6 +26,7 @@
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -76,6 +77,27 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
   }
 
   Future<void> _initCamera() async {
+    // WEB FIX (Aug 8 2026) — persistent MissingPluginException on
+    // `camera`/`image_picker` in the deployed Hero PWA, isolated after
+    // extensive investigation: `file_picker` — a THIRD, separate plugin
+    // — is what the 3 KYC document uploads use on this exact same
+    // screen's parent flow (hero_register_screen.dart's _pickDocPhoto),
+    // and those upload correctly on web. Rather than keep chasing why
+    // camera_web/image_picker_for_web specifically won't register in
+    // this deployment despite every structural check coming back
+    // clean, skip both of them entirely on web and go straight to the
+    // proven-working file_picker path — same package, same call
+    // pattern as the docs, just for the selfie. Native (Android/iOS)
+    // behavior is completely untouched below.
+    if (kIsWeb) {
+      if (mounted) {
+        setState(() {
+          _initError =
+              'Live camera preview isn\'t available in this browser — select a selfie photo instead.';
+        });
+      }
+      return;
+    }
     try {
       if (!kIsWeb) {
         var status = await ph.Permission.camera.status;
@@ -160,9 +182,39 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
 
   // Only reachable once the live camera has genuinely failed to
   // initialize — not a standing bypass button sitting next to a
-  // working camera preview.
+  // working camera preview. On web this is the ONLY path (see
+  // _initCamera's kIsWeb early-return above).
   Future<void> _useGalleryFallback() async {
     try {
+      if (kIsWeb) {
+        // WEB FIX (Aug 8 2026): image_picker also throws
+        // MissingPluginException in this deployment (same root cause
+        // as the camera plugin) — use file_picker instead, the exact
+        // same package + call pattern already proven working for the
+        // 3 KYC document uploads on the parent registration screen.
+        final result = await FilePicker.platform
+            .pickFiles(type: FileType.image, withData: true);
+        if (result == null || result.files.isEmpty || !mounted) return;
+        final file = result.files.first;
+        final bytes = file.bytes;
+        if (bytes == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Could not read the selected photo — try a different file.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+        Navigator.pop(
+          context,
+          SelfieCaptureResult(bytes: bytes, fileName: file.name),
+        );
+        return;
+      }
+
       final picked = await ImagePicker().pickImage(
         source: ImageSource.gallery,
         imageQuality: 70,
@@ -287,7 +339,7 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
               style: ElevatedButton.styleFrom(backgroundColor: _kPink),
               icon: const Icon(Icons.photo_library_outlined, color: Colors.white),
               label: Text(
-                'Camera not available — use gallery instead',
+                kIsWeb ? 'Select Selfie Photo' : 'Camera not available — use gallery instead',
                 style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
               ),
             ),

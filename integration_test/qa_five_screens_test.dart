@@ -48,8 +48,6 @@
 // so a capture failure never blocks the actual widget assertions or
 // the Firestore report — verify this specific part on your target
 // device before relying on `screenshotUrl` showing up in reports.
-import 'dart:typed_data';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:erode_superapp/main_customer.dart' show CustomerApp;
 import 'package:erode_superapp/services/cloudinary_upload_service.dart';
@@ -165,7 +163,7 @@ void main() {
 
   group('Synthetic QA Test-Bot — 5 core screens', () {
     testWidgets('Dashboard: service tiles present and tappable', (tester) async {
-      await tester.pumpWidget(const CustomerApp(showIntro: false, showWelcome: false));
+      await tester.pumpWidget(const CustomerApp());
       await tester.pumpAndSettle(const Duration(seconds: 5));
 
       final bikeTile = find.byKey(const Key('dashboard_tile_bike'));
@@ -194,7 +192,7 @@ void main() {
     });
 
     testWidgets('Bike Booking: opens and vehicle category is selectable', (tester) async {
-      await tester.pumpWidget(const CustomerApp(showIntro: false, showWelcome: false));
+      await tester.pumpWidget(const CustomerApp());
       await tester.pumpAndSettle(const Duration(seconds: 5));
 
       final bikeTile = find.byKey(const Key('dashboard_tile_bike'));
@@ -232,7 +230,7 @@ void main() {
     });
 
     testWidgets('Grocery: list field + Send Order button respond correctly', (tester) async {
-      await tester.pumpWidget(const CustomerApp(showIntro: false, showWelcome: false));
+      await tester.pumpWidget(const CustomerApp());
       await tester.pumpAndSettle(const Duration(seconds: 5));
 
       final groceryTile = find.byKey(const Key('dashboard_tile_grocery'));
@@ -290,7 +288,7 @@ void main() {
     });
 
     testWidgets('Food: hub screen opens and shop grid renders', (tester) async {
-      await tester.pumpWidget(const CustomerApp(showIntro: false, showWelcome: false));
+      await tester.pumpWidget(const CustomerApp());
       await tester.pumpAndSettle(const Duration(seconds: 5));
 
       final foodTile = find.byKey(const Key('dashboard_tile_food'));
@@ -321,7 +319,7 @@ void main() {
     });
 
     testWidgets('Profile: screen opens without crashing for the QA account', (tester) async {
-      await tester.pumpWidget(const CustomerApp(showIntro: false, showWelcome: false));
+      await tester.pumpWidget(const CustomerApp());
       await tester.pumpAndSettle(const Duration(seconds: 5));
 
       // Reached via the drawer (see dashboard_screen.dart's

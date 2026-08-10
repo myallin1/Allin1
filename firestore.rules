@@ -153,9 +153,28 @@ service cloud.firestore {
         || (isAuth() && request.auth.uid == heroId
             && request.resource.data.approvalStatus == 'pending');
 
+      // FIX (Aug 8 2026 — registration submit "permission-denied"):
+      // hero_login_screen.dart pre-creates heroes/{uid} at first sign-in
+      // (identity-sync merge that never touches approvalStatus), so by
+      // the time hero_register_screen.dart's _submitRegistration() runs
+      // its heroes/{uid}.set() with approvalStatus:'pending', the doc
+      // already exists — Firestore classifies that as an UPDATE, not a
+      // create. The old rule required
+      // request.resource.data.approvalStatus == resource.data.approvalStatus,
+      // which is 'pending' == null (missing field) on that pre-created
+      // stub -> false -> every hero's first-ever registration submit was
+      // rejected. Added an explicit exception: a hero may complete their
+      // OWN initial registration (set approvalStatus to 'pending') as
+      // long as an admin hasn't already decided it (i.e. it isn't
+      // currently 'approved' or 'rejected') — this still blocks a hero
+      // from self-approving or reversing a rejection, which was the
+      // actual point of this rule.
       allow update: if isAdminAny()
         || (isAuth() && request.auth.uid == heroId
-            && request.resource.data.approvalStatus == resource.data.approvalStatus);
+            && (request.resource.data.approvalStatus == resource.data.approvalStatus
+                || (request.resource.data.approvalStatus == 'pending'
+                    && resource.data.approvalStatus != 'approved'
+                    && resource.data.approvalStatus != 'rejected')));
 
       allow delete: if isAdminAny();
 
@@ -254,6 +273,25 @@ service cloud.firestore {
         || (isAuth() && resource.data.heroId == request.auth.uid)
         || (isAuth() && request.resource.data.heroId == request.auth.uid);
       allow delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // COMPANY_PAYMENTS_RECEIVED COLLECTION
+    // ==============================================================
+    // NEW (Nizam's "Self vs MyAllin1" payment-split): written by
+    // hero_ride_screen.dart's _markPaymentReceived('myallin1') when a
+    // customer pays the company's own MyAllin1 UPI directly (money
+    // never touches the hero's wallet). Read/verify by Admin's new
+    // payments_received_screen.dart. A hero may create their OWN
+    // collection record (heroId pinned to their own uid, can't write
+    // as someone else); only admin can update (the "Verify" action) or
+    // delete.
+    match /company_payments_received/{docId} {
+      allow read: if isAdminAny()
+        || (isAuth() && resource.data.heroId == request.auth.uid);
+      allow create: if isAdminAny()
+        || (isAuth() && request.resource.data.heroId == request.auth.uid);
+      allow update, delete: if isAdminAny();
     }
 
     // ==============================================================
@@ -383,6 +421,8 @@ service cloud.firestore {
             'download_hero',
             'download_admin',
             'download_seller',
+            'poster_qr_scans',
+            'poster_qr_pwa_installs',
             'updatedAt',
           ]);
       allow delete: if isAdminAny();

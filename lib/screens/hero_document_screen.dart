@@ -454,11 +454,27 @@ class _CaptainDocumentScreenState extends State<CaptainDocumentScreen> {
       final heroRef =
           FirebaseFirestore.instance.collection('heroes').doc(user.uid);
 
+      // FIX (audit: customer/hero number wiring): this used to write
+      // 'phone': user.phoneNumber ?? '' unconditionally — for a hero
+      // whose FirebaseAuth session has no phoneNumber (Google sign-in),
+      // that silently WIPED an already-correct 'phone' value on the
+      // heroes/{uid} doc (merge:true still overwrites a key that's
+      // present, even with an empty string). Now falls back to whatever
+      // is already stored on the doc before ever writing an empty value.
+      final existingHeroSnap = await heroRef.get();
+      final existingHeroData = existingHeroSnap.data();
+      final resolvedHeroPhone = (user.phoneNumber?.trim().isNotEmpty ?? false)
+          ? user.phoneNumber!.trim()
+          : ((existingHeroData?['phone'] as String?)?.trim().isNotEmpty ?? false)
+              ? (existingHeroData!['phone'] as String).trim()
+              : ((existingHeroData?['phoneNumber'] as String?)?.trim() ?? '');
+
       // Update main hero document
       await heroRef.set(
         {
           'name': user.displayName ?? '',
-          'phone': user.phoneNumber ?? '',
+          'phone': resolvedHeroPhone,
+          'phoneNumber': resolvedHeroPhone,
           'upiId': _upiController.text.trim(),
           'documentsSubmitted': true,
           'verificationStatus': 'under_review',

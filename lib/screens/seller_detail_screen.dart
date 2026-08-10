@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../services/auth_service.dart';
 import '../services/cart_service.dart';
 import '../services/category_gateway_service.dart';
 import '../services/service_request_service.dart';
@@ -587,11 +588,12 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
               },)
           .toList();
 
+      final resolvedCustomerPhone = await AuthService().resolveCustomerPhone(user);
       final requestId = await ServiceRequestService().createServiceRequest(
         requestType: kCatalogFoodOrderRequestType,
         customerId: user.uid,
         customerName: user.displayName ?? 'Customer',
-        customerPhone: user.phoneNumber ?? '',
+        customerPhone: resolvedCustomerPhone,
         details: {
           'sellerId': sellerId,
           'sellerName': sellerName,

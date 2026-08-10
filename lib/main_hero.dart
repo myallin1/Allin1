@@ -13,13 +13,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_navigator.dart';
 import 'config/api_config.dart';
+import 'config/app_variant.dart';
+import 'config/web_push_config.dart';
 import 'firebase_options.dart';
 import 'screens/app_splash_video_screen.dart';
 import 'screens/bike_taxi/hero_dashboard_shell.dart';
 import 'screens/hero_login_screen.dart';
 import 'screens/hero_pending_screen.dart';
 import 'screens/hero_register_screen.dart';
-import 'screens/splash_setup_screen.dart';
 import 'services/db_usage_tracker.dart';
 import 'services/hero_foreground_service.dart';
 import 'services/hero_ride_notification_service.dart';
@@ -110,14 +111,26 @@ Future<void> _ensureFirebaseInitialized() async {
 // "app takes a while to open with some animation running" symptom.
 // Reuses BrandedLoadingScreen (already dependency-free, no Provider
 // needed) rather than inventing a hero-specific one.
+// FIX (Nizam's "video as natural visual buffer" request, same pattern as
+// main_customer.dart): this now paints app_splash.mp4 FIRST, before
+// Firebase/Hive even start, instead of a static BrandedLoadingScreen — the
+// video plays with zero Firebase dependency, so it doubles as the boot
+// buffer while Firebase/Hive init in parallel behind it. BrandedLoadingScreen
+// is now only a rare fallback frame (nextScreen), shown only if init somehow
+// outlasts the video.
 class _BootLoadingApp extends StatelessWidget {
-  const _BootLoadingApp();
+  const _BootLoadingApp({required this.onVideoFinished});
+
+  final VoidCallback onVideoFinished;
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: BrandedLoadingScreen(),
+      home: AppSplashVideoScreen(
+        nextScreen: const BrandedLoadingScreen(),
+        onFinished: onVideoFinished,
+      ),
     );
   }
 }
@@ -184,7 +197,14 @@ StreamSubscription<String>? _fcmTokenRefreshSub;
 // never block hero login/boot.
 Future<void> _syncFcmTokenForHero(String uid) async {
   try {
-    final token = await FirebaseMessaging.instance.getToken();
+    // FIX (root cause of "Hero PWA background pings never arrive"):
+    // getToken() on web requires a vapidKey or it fails outright — see
+    // web_push_config.dart's header comment for how to get the real
+    // value from the Firebase Console. Native Android/iOS ignore this
+    // parameter entirely, so passing it there is a harmless no-op.
+    final token = await FirebaseMessaging.instance.getToken(
+      vapidKey: kIsWeb ? WebPushConfig.vapidKey : null,
+    );
     if (token != null && token.trim().isNotEmpty) {
       // .set(merge:true) rather than .update() — a hero mid-registration
       // (auth session exists, heroes/{uid} doc doesn't yet) must not
@@ -259,13 +279,23 @@ void _initGlobalHeroPingListener() {
       // Fire local notification using the new v5 channel configuration
       // Note: playAlertTone: false here — ringtone will be triggered by _showRideRequestDialog
       // AFTER the dialog is visible, so it loops continuously while the hero sees it.
+      // FIX (Aug 8 2026 — "notification has no 3 buttons" live-device bug):
+      // this is a GLOBAL listener, always attached from main() regardless of
+      // whether hero_home_screen.dart's own richer (showDetails:true) RTDB
+      // listener is also attached — and because this one is registered at
+      // app boot, it almost always wins the shouldProcessRideNotification
+      // dedup race and is the notification the hero actually sees, even
+      // while the app is in the foreground. Passing showDetails:false here
+      // meant the hero essentially NEVER saw the View/Accept/Minimize
+      // buttons in practice — the exact bug reported. Now always shows full
+      // details/actions, matching hero_home_screen.dart's own calls.
       if (!kIsWeb) {
         try {
           await HeroRideNotificationService.showRideAssigned(
             rideId: requestId,
             data: Map<String, dynamic>.from(pingData),
             playAlertTone: false,
-            showDetails: false,
+            showDetails: true,
           );
           debugPrint('[GlobalPing] 🔔 Notification fired for: $requestId');
         } catch (e) {
@@ -311,7 +341,12 @@ void _initGlobalHeroPingListener() {
             rideId: requestId,
             data: Map<String, dynamic>.from(pingData),
             playAlertTone: false,
-            showDetails: false,
+            // FIX (same root cause as the ride-ping listener above): this
+            // global listener wins the dedup race almost every time, so a
+            // quiet showDetails:false here meant the hero effectively never
+            // saw the 3-button notification for service requests either.
+            showDetails: true,
+            pushType: 'service_request',
             title: 'New Service Request',
             channelDescription:
                 'Lock-screen ride and service-request alerts with ACCEPT action and ringtone.',
@@ -350,11 +385,18 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     // this file); Android never auto-plays any sound for a data-only
     // message on its own. Suppressing our own tone meant NOTHING ever
     // played when the app was killed. Now always plays it.
+    // FIX (Aug 8 2026 — "notification has no 3 buttons" live-device bug):
+    // this is the killed-app FCM background handler — the OS notification
+    // IS the only UI a hero has at this moment (no live Dart isolate to
+    // fall back on for an in-app dialog), so this is exactly the path
+    // that most needs the View/Accept/Minimize buttons. showDetails:false
+    // here meant a hero receiving a ride while the app was fully closed
+    // got zero action buttons, matching the reported bug.
     await HeroRideNotificationService.showRideAssigned(
       rideId: rideId,
       data: message.data,
       playAlertTone: true,
-      showDetails: false,
+      showDetails: true,
     );
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(kPendingHeroRideIdKey, rideId);
@@ -365,11 +407,14 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     // by requestId instead of rideId.
     final requestId = _serviceRequestIdFromPushData(message.data);
     if (requestId != null) {
+      // FIX (same root cause as the ride branch above): killed-app path,
+      // OS notification is the only UI available — must show the buttons.
       await HeroRideNotificationService.showRideAssigned(
         rideId: requestId,
         data: message.data,
         playAlertTone: true,
-        showDetails: false,
+        showDetails: true,
+        pushType: 'service_request',
         title: 'New Service Request',
         channelDescription:
             'Lock-screen ride and service-request alerts with ACCEPT action and ringtone.',
@@ -388,6 +433,10 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // FIX (audit finding — notifications_screen.dart hardcoded 'customer'
+  // fallback): declare this app instance as 'hero' so shared screens
+  // can read it instead of guessing. See lib/config/app_variant.dart.
+  currentAppVariant = 'hero';
 
   // Sentry wraps the rest of main() as its appRunner — same pattern as
   // main_customer.dart. Firebase init, the ping listener, runApp(), and
@@ -399,9 +448,15 @@ void main() async {
       options.tracesSampleRate = 1.0;
     },
     appRunner: () async {
-      // FIX (task #108, jet-speed startup): see _BootLoadingApp's comment
-      // above -- this must run before anything Firebase/Hive-related.
-      runApp(const _BootLoadingApp());
+      // FIX (task #108, jet-speed startup / video-as-buffer): see
+      // _BootLoadingApp's comment above -- this must run before anything
+      // Firebase/Hive-related. videoDone completes when app_splash.mp4
+      // finishes playing; the second runApp() below (HeroApp) awaits it so
+      // the video is never cut short by a fast Firebase init.
+      final videoDone = Completer<void>();
+      runApp(_BootLoadingApp(onVideoFinished: () {
+        if (!videoDone.isCompleted) videoDone.complete();
+      }));
 
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
@@ -441,6 +496,11 @@ void main() async {
 
       // Start global RTDB ping listener reacting to Auth changes
       _initGlobalHeroPingListener();
+
+      // Gate the real-app swap on the video having finished playing (it
+      // almost always has, by now — Firebase/Hive init is the fast side of
+      // this race) so the boot video is never truncated mid-playback.
+      await videoDone.future;
 
       runApp(const HeroApp());
       unawaited(_warmHeroServices());
@@ -524,8 +584,17 @@ class HeroApp extends StatelessWidget {
               // already-setup hero — see the comments on
               // _HeroSetupGateState above).
               '/': (_) => const _HeroSplashGate(),
-              '/hero-home': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
-              '/hero-ride': (_) => const SplashSetupScreen(nextScreen: _HeroSetupGate()),
+              // BOOT-SEQUENCE CONSOLIDATION (per CTO mandate — exactly ONE
+              // splash screen between boot frame and home, all 4 apps):
+              // these used to wrap the destination in SplashSetupScreen, a
+              // decorative pass-through widget whose only job
+              // (ApiConfig.ensureEnvLoaded() + MapService().initialize())
+              // is already fired unawaited() from main()'s
+              // _warmHeroServices() immediately after runApp() — see that
+              // function below. Routing straight to _HeroSetupGate drops
+              // the redundant extra widget without losing any warm-up.
+              '/hero-home': (_) => const _HeroSetupGate(),
+              '/hero-ride': (_) => const _HeroSetupGate(),
             },
           ),
         ),
@@ -549,28 +618,23 @@ class _HeroSplashGate extends StatefulWidget {
 }
 
 class _HeroSplashGateState extends State<_HeroSplashGate> {
-  bool? _shouldShowSplash;
-
   @override
   void initState() {
     super.initState();
-    _checkSplashSeen();
-  }
-
-  Future<void> _checkSplashSeen() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final seen = prefs.getBool(kHeroSplashSeenKey) ?? false;
-      if (!mounted) return;
-      setState(() => _shouldShowSplash = !seen);
-    } catch (e) {
-      // On any storage failure, default to NOT re-showing the splash —
-      // a returning hero getting straight into the app is the safer
-      // failure mode than accidentally replaying the intro forever.
-      debugPrint('[HeroSplashGate] prefs read failed: $e');
-      if (!mounted) return;
-      setState(() => _shouldShowSplash = false);
-    }
+    // FIX (video-as-natural-buffer redundancy, per Nizam's request): the
+    // boot video (app_splash.mp4) now ALWAYS plays once, unconditionally,
+    // as the very first frame in main() — before Firebase is even ready
+    // (see _BootLoadingApp above). That makes this gate's original
+    // first-launch-only replay of the SAME video redundant for every
+    // hero, not just returning ones: without this change, a first-time
+    // hero would see app_splash.mp4 TWICE back to back (once pre-Firebase,
+    // once here), reintroducing the exact "2 splash screens" bug this
+    // whole fix is meant to eliminate. So the "seen" flag is now marked
+    // true unconditionally, the very first time this gate mounts (which
+    // only happens after Firebase is ready and the real HeroApp tree is
+    // live), and this gate never shows the video itself anymore — it just
+    // passes straight through to _HeroSetupGate.
+    unawaited(_markSplashSeen());
   }
 
   Future<void> _markSplashSeen() async {
@@ -584,20 +648,7 @@ class _HeroSplashGateState extends State<_HeroSplashGate> {
 
   @override
   Widget build(BuildContext context) {
-    // Brief synchronous-feeling gap (single on-device prefs read) —
-    // render nothing rather than a competing loader/animation here.
-    if (_shouldShowSplash == null) {
-      return const Scaffold(backgroundColor: Colors.black, body: SizedBox.shrink());
-    }
-    if (!_shouldShowSplash!) {
-      // Returning hero — skip the video entirely, straight to the
-      // already-fast auth/setup gate below.
-      return const SplashSetupScreen(nextScreen: _HeroSetupGate());
-    }
-    return AppSplashVideoScreen(
-      onFinished: _markSplashSeen,
-      nextScreen: const SplashSetupScreen(nextScreen: _HeroSetupGate()),
-    );
+    return const _HeroSetupGate();
   }
 }
 
@@ -767,17 +818,87 @@ class _HeroSetupGateState extends State<_HeroSetupGate> {
             final needsSetup = phone.isEmpty || !isSetupComplete;
 
             if (needsSetup) {
-              // FIX (merge duplicate registration forms): this branch used
-              // to route to ProfileSetupScreen — a lightweight generic form
-              // (phone + vehicle category only) shared with the customer
-              // app, which wrote a heroes/{uid} doc with zero identity
-              // fields for admin to actually verify against. HeroRegisterScreen
-              // (the full form with name/DOB/address/license/aadhaar/pan +
-              // mandatory doc photos, used by the phone-OTP hero login path)
-              // is now the single source of truth for hero onboarding.
-              return _buildFadingChild(
-                'hero-profile-setup',
-                const HeroRegisterScreen(),
+              // FIX (Aug 8 2026 — "already-registered pending hero sent
+              // back to the registration form on reopen"): _submitRegistration()
+              // in hero_register_screen.dart does two SEPARATE, non-atomic
+              // writes — heroes/{uid} first, then users/{uid}.isSetupComplete
+              // second. If the second write never lands (dropped connection
+              // right after submit, app killed mid-flow, etc.), heroes/{uid}
+              // already has a real 'pending' (or even 'approved') application
+              // that admin can see and act on, but this gate used to look at
+              // users/{uid}.isSetupComplete ALONE and route straight back to
+              // a blank HeroRegisterScreen — forcing the hero through the
+              // entire form again, including a second selfie/KYC upload,
+              // even though they're already in the approval queue.
+              //
+              // Fix: before concluding "needs setup", check heroes/{uid}
+              // too. If it already has ANY approvalStatus, registration was
+              // genuinely already submitted — route to the pending/dashboard
+              // screen like normal, and self-heal the missing
+              // isSetupComplete flag in the background so this fallback
+              // only ever has to fire once per affected hero.
+              return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                future: _heroDocFuture,
+                builder: (context, heroSnapshot) {
+                  if (heroSnapshot.connectionState == ConnectionState.waiting &&
+                      !heroSnapshot.hasData) {
+                    return _buildFadingChild(
+                      'profile-check-loading',
+                      _buildLoadingScaffold(
+                        'Checking Hero Access',
+                        'Verifying your dashboard profile and routing your workspace',
+                      ),
+                    );
+                  }
+
+                  final heroDoc = heroSnapshot.data;
+                  final heroData = heroDoc?.data();
+                  final existingApprovalStatus =
+                      heroData?['approvalStatus']?.toString().trim();
+                  final alreadyRegistered = (heroDoc?.exists ?? false) &&
+                      existingApprovalStatus != null &&
+                      existingApprovalStatus.isNotEmpty;
+
+                  if (!alreadyRegistered) {
+                    // FIX (merge duplicate registration forms): this branch used
+                    // to route to ProfileSetupScreen — a lightweight generic form
+                    // (phone + vehicle category only) shared with the customer
+                    // app, which wrote a heroes/{uid} doc with zero identity
+                    // fields for admin to actually verify against. HeroRegisterScreen
+                    // (the full form with name/DOB/address/license/aadhaar/pan +
+                    // mandatory doc photos, used by the phone-OTP hero login path)
+                    // is now the single source of truth for hero onboarding.
+                    return _buildFadingChild(
+                      'hero-profile-setup',
+                      const HeroRegisterScreen(),
+                    );
+                  }
+
+                  // Self-heal: fire-and-forget, don't block routing on it.
+                  unawaited(
+                    FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(user.uid)
+                        .set(
+                      {'isSetupComplete': true},
+                      SetOptions(merge: true),
+                    ).catchError((Object e) {
+                      debugPrint('[HeroSetupGate] self-heal isSetupComplete failed: $e');
+                    }),
+                  );
+
+                  final normalizedStatus = existingApprovalStatus!.toLowerCase();
+                  if (normalizedStatus == 'approved') {
+                    return _buildFadingChild(
+                      'hero-dashboard',
+                      const HeroDashboardShell(),
+                    );
+                  }
+                  return _buildFadingChild(
+                    'hero-pending',
+                    const HeroPendingScreen(),
+                  );
+                },
               );
             }
 

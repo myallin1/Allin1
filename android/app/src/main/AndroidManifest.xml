@@ -17,6 +17,16 @@
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+    <!-- TASK 1 (Aug 8 2026): required for
+         Permission.ignoreBatteryOptimizations in
+         hero_ride_notification_service.dart's
+         requestBatteryOptimizationExemption() — without this manifest
+         entry, permission_handler's request silently fails on real
+         devices (works fine on some emulators, which is why this was
+         easy to miss). Lets the Hero app ask the OS not to freeze it in
+         the background, so killed/backgrounded full-screen-intent ride
+         alerts can still wake the screen. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <!-- AUDIT FIX: Required for full-screen notification on lock screen -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <!-- NEW (CTO mandate — Hero app "You are Online" foreground service,

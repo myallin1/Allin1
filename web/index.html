@@ -504,6 +504,30 @@
       var installBtn = document.getElementById('pwa-install-btn');
       var dismissBtn = document.getElementById('pwa-dismiss-btn');
 
+      function trackInstall() {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          if (params.get('source') === 'poster_campaign') {
+            var body = {
+              writes: [{
+                update: { name: 'projects/erode-super-app/databases/(default)/documents/app_usage_stats/funnel', fields: {} },
+                updateMask: { fieldPaths: [] },
+                updateTransforms: [
+                  { fieldPath: 'poster_qr_pwa_installs', increment: { integerValue: '1' } },
+                  { fieldPath: 'updatedAt', setToServerValue: 'REQUEST_TIME' }
+                ]
+              }]
+            };
+            fetch('https://firestore.googleapis.com/v1/projects/erode-super-app/databases/(default)/documents:commit', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+              keepalive: true
+            }).catch(function(){});
+          }
+        } catch (e) {}
+      }
+
       // Check if already dismissed
       if (localStorage.getItem('pwa-dismissed') === 'true') {
         pwaPrompt.style.display = 'none';
@@ -530,6 +554,7 @@
             deferredPrompt.userChoice.then(function (choiceResult) {
               if (choiceResult.outcome === 'accepted') {
                 pwaPrompt.style.display = 'none';
+                trackInstall();
               }
               deferredPrompt = null;
             });
@@ -674,28 +699,82 @@
     // build this tab loaded with. No service worker involved, nothing
     // deprecated, identical behaviour on every Flutter version.
     //
-    // Registration itself is kept below purely for PWA installability
-    // (Chrome wants a registered worker) -- see the comment right
-    // before the registration call for why it's pwa_fallback_sw.js
-    // and not Flutter's own generated worker.
-
-    // flutter_service_worker.js is NOT registered here on purpose.
-    // It has no fetch handler (verified on the deployed file, see the
-    // block above) and self-unregisters on activate,
-    // and that self-unregister ALSO force-navigates/reloads every
-    // client it controls. Right after a fresh deploy, that reload
-    // fires mid-boot -- Flutter's engine is still initializing when
-    // the forced navigation interrupts it, which is the mobile
-    // blank-screen-after-update symptom. It buys nothing (no caching,
-    // no offline support) and actively causes that race, so it is
-    // never registered. pwa_fallback_sw.js satisfies the exact same
-    // Chrome installability requirement -- a registered worker with a
-    // fetch listener -- without caching anything or ever touching
-    // navigation/reload (see that file's own comments).
+    // flutter_service_worker.js is still NOT registered here — it has
+    // no fetch handler and self-unregisters on activate, and that
+    // self-unregister ALSO force-navigates/reloads every client it
+    // controls, which caused a mobile blank-screen-after-update bug
+    // right after a fresh deploy. Still never registered.
+    //
+    // FIX (Aug 8 2026 — "namma pwa vayum mobile app mari... net ilana
+    // open agamattingithu"): pwa_fallback_sw.js used to be genuinely
+    // inert (fetch listener registered but never respondWith()'d, zero
+    // caching) purely to satisfy Chrome's installability check while
+    // side-stepping the stale-cache bug above. It now does real,
+    // network-first offline caching of the app shell — see that file's
+    // own top-of-file comment for exactly how it avoids reintroducing
+    // either the stale-forever bug or the force-reload-mid-boot bug.
+    // Net effect: online behaviour is unchanged (always the freshest
+    // deploy), but the app shell now also opens with zero network,
+    // like an installed native app.
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
+        // ROOT CAUSE FIX (Aug 8 2026) — "selfie camera MissingPluginException
+        // persists even after a completely fresh rebuild + redeploy".
+        //
+        // The comments above explain why flutter_service_worker.js is no
+        // longer *registered* going forward. What they missed: any
+        // browser/device that visited this site BEFORE that change was
+        // made already has that old worker installed, active, and
+        // controlling every navigation on this origin. A service worker's
+        // fetch handler intercepts requests BEFORE they ever reach the
+        // network or respect Cache-Control headers — so Firebase Hosting's
+        // "no-cache" header on main.dart.js (see firebase.json) is
+        // completely bypassed. The old worker just keeps serving its own
+        // precached main.dart.js from whatever build was live when it was
+        // installed, forever, on that one device — regardless of how many
+        // times the app gets rebuilt and redeployed, and regardless of a
+        // manual hard-reload (a controlling service worker survives those
+        // too; only DevTools "Unregister" or Clear Site Data removes it).
+        // That precached bundle can predate camera/image_picker even being
+        // added to pubspec.yaml, which is exactly the MissingPluginException
+        // signature reported here.
+        //
+        // Fix: self-heal on load. Enumerate every registration for this
+        // origin and unregister anything that ISN'T pwa_fallback_sw.js —
+        // this only ever needs to fire once per affected device, after
+        // which only the intentionally-inert fallback worker remains.
+        //
+        // FIX (Aug 10 2026 — root cause of "Hero PWA never receives
+        // background ride/service pings"): this loop used to treat
+        // firebase-messaging-sw.js (which did not exist as a file until
+        // this same fix) the same as any other "stale" worker and
+        // unregistered it on every page load, before it ever had a
+        // chance to receive a push. Carved out an explicit exception —
+        // this is the ONLY other worker this origin intentionally runs.
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          for (const reg of regs) {
+            const url = reg.active?.scriptURL || reg.waiting?.scriptURL || reg.installing?.scriptURL || '';
+            if (!url.endsWith('/pwa_fallback_sw.js') && !url.endsWith('/firebase-messaging-sw.js')) {
+              console.warn('[PWA] Unregistering stale service worker:', url);
+              reg.unregister();
+            }
+          }
+        }).catch((err) => {
+          console.warn('[PWA] Could not enumerate service worker registrations:', err);
+        });
+
         navigator.serviceWorker.register('/pwa_fallback_sw.js')
           .catch(err => console.warn('[PWA] fallback service worker registration failed:', err));
+
+        // FIX (same root cause as above): firebase-messaging-sw.js must
+        // be explicitly registered too — Firebase Messaging's web SDK
+        // does NOT auto-register it, unlike some other Firebase web
+        // features. Registered at the default scope ('/'), same as
+        // pwa_fallback_sw.js; both can coexist since Firebase Messaging
+        // only intercepts push events, never fetch, so there is no
+        // routing conflict between the two workers.
+        navigator.serviceWorker.register('/firebase-messaging-sw.js')
+          .catch(err => console.warn('[PWA] firebase-messaging-sw.js registration failed:', err));
       });
     }
   </script>

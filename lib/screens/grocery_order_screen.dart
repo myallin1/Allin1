@@ -17,6 +17,7 @@ import '../services/cloudinary_upload_service.dart';
 import '../services/grocery_ai_notes_service.dart';
 import '../services/service_request_service.dart';
 import '../widgets/location_capture_field.dart';
+import '../services/auth_service.dart';
 import '../widgets/quick_order_line_items.dart';
 import '../widgets/server_busy_dialog.dart';
 import 'dmart_screen.dart';
@@ -218,12 +219,13 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
         ),
       );
 
+      final resolvedCustomerPhone = await AuthService().resolveCustomerPhone(user);
       await service.createServiceRequest(
         preGeneratedRequestId: requestId,
         requestType: 'grocery_order',
         customerId: user.uid,
         customerName: user.displayName ?? 'Customer',
-        customerPhone: user.phoneNumber ?? '',
+        customerPhone: resolvedCustomerPhone,
         details: {
           'items': quickOrderItemsToJson(_lineItems),
           // Backward compat: grocery_order_status_screen.dart and

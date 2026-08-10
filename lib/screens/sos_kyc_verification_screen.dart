@@ -18,6 +18,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../services/auth_service.dart';
 import '../services/cloudinary_upload_service.dart';
 
 const Color _bg = Color(0xFFFFFFFF);
@@ -155,6 +156,7 @@ class _SosKycVerificationScreenState extends State<SosKycVerificationScreen> {
         urls[entry.key] = url;
       }
 
+      final resolvedUserPhone = await AuthService().resolveCustomerPhone(user);
       await FirebaseFirestore.instance.collection('sos_kyc_requests').doc(user.uid).set({
         'userId': user.uid,
         'name': _nameController.text.trim(),
@@ -163,7 +165,7 @@ class _SosKycVerificationScreenState extends State<SosKycVerificationScreen> {
         'aadhaarNumber': _aadhaarNumberController.text.trim(),
         'panNumber': _panNumberController.text.trim(),
         'licenseNumber': _licenseNumberController.text.trim(),
-        'userPhone': user.phoneNumber ?? '',
+        'userPhone': resolvedUserPhone,
         'userEmail': user.email ?? '',
         ...urls,
         'status': 'pending',

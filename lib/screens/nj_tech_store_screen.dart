@@ -16,6 +16,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/auth_service.dart';
 import '../services/service_request_cache_service.dart';
 import '../services/service_request_service.dart';
 import '../utils/service_request_labels.dart';
@@ -803,11 +804,13 @@ class _CategoryModalState extends State<_CategoryModal> {
     final issue = _issueCtrl.text.trim();
 
     try {
+      final resolvedCustomerPhone =
+          phone.isNotEmpty ? phone : await AuthService().resolveCustomerPhone(user);
       final requestId = await ServiceRequestService().createServiceRequest(
         requestType: 'electronics_service',
         customerId: user.uid,
         customerName: name.isNotEmpty ? name : (user.displayName ?? 'Customer'),
-        customerPhone: phone.isNotEmpty ? phone : (user.phoneNumber ?? ''),
+        customerPhone: resolvedCustomerPhone,
         details: {
           'category': widget.category.id,
           'categoryLabel': widget.category.title,

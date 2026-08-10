@@ -13,24 +13,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'app_navigator.dart';
 import 'config/api_config.dart';
+import 'config/app_variant.dart';
 import 'firebase_options.dart';
 import 'screens/ai_settings_screen.dart';
 import 'screens/checkout_screen.dart';
 import 'screens/coming_soon_screen.dart';
 import 'screens/customer_login_screen.dart';
+import 'screens/customer_welcome_login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/guru_chat_screen.dart';
 import 'screens/guru_offer_screen.dart';
 import 'screens/hero_booking_screen.dart';
-import 'screens/intro_video_screen.dart';
-import 'screens/video_splash_screen.dart';
+import 'screens/app_splash_video_screen.dart';
 import 'screens/settings_screen.dart';
-import 'screens/welcome_screen.dart';
 import 'services/ai_activation_service.dart';
 import 'services/analytics_service.dart';
 import 'services/api_service.dart';
@@ -141,14 +141,38 @@ Future<void> _ensureFirebaseInitialized() async {
 // with the real app -- calling runApp() a second time is a normal,
 // already-used pattern here (see _BootFailedApp below, which did this
 // on the failure path before this fix existed).
+// FIX (Aug 8 2026 — Nizam's "video should act as a natural visual
+// buffer, background processes MUST run in parallel" architecture
+// decision): this used to always show the static BrandedLoadingScreen
+// first (while Firebase/Hive initialize), and only THEN swap to
+// CustomerApp -> _IntroGate -> AppSplashVideoScreen for the video —
+// meaning every launch showed [pink static splash] THEN [video], two
+// screens back to back, exactly what Nizam flagged as still-unwanted.
+//
+// Now: this IS the video screen. It's the very first thing painted,
+// with NO wait for Firebase — video playback has no Firebase
+// dependency. Firebase/Hive init runs fully in parallel in main()
+// while the video plays. `onVideoFinished` is a Completer.complete()
+// callback that main() awaits (alongside Firebase-readiness) before
+// its OWN runApp(CustomerApp()) swap — so the real app only replaces
+// this tree once BOTH the video has played AND the background work is
+// done, whichever finishes last. `nextScreen` here is BrandedLoadingScreen
+// purely as a rare fallback frame (only visible if Firebase/Hive is
+// somehow SLOWER than the ~6-7s video) — not a second animation, just
+// the same static frame this screen used to show first, now shown
+// last-resort instead.
 class _BootLoadingApp extends StatelessWidget {
-  const _BootLoadingApp();
+  final VoidCallback onVideoFinished;
+  const _BootLoadingApp({required this.onVideoFinished});
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: BrandedLoadingScreen(),
+      home: AppSplashVideoScreen(
+        nextScreen: const BrandedLoadingScreen(),
+        onFinished: onVideoFinished,
+      ),
     );
   }
 }
@@ -229,6 +253,11 @@ void main() async {
     },
     appRunner: () async {
       WidgetsFlutterBinding.ensureInitialized();
+      // FIX (audit finding — notifications_screen.dart hardcoded
+      // 'customer' fallback): explicit even though 'customer' is
+      // already the default in app_variant.dart, so this entrypoint
+      // doesn't silently rely on that default never changing.
+      currentAppVariant = 'customer';
 
       // FIX (task #108, jet-speed startup): paint something -- anything
       // -- as the very first statement after the binding is ready, before
@@ -239,7 +268,18 @@ void main() async {
       // this near-instantly instead of sitting there for however long
       // Firebase takes. See _BootLoadingApp's comment above for why this
       // is safe to do a second runApp() over, below.
-      runApp(const _BootLoadingApp());
+      //
+      // FIX (Aug 8 2026 — single visual buffer, no extra pink splash
+      // before the video): _BootLoadingApp IS the video now. videoDone
+      // completes the moment the video finishes (or its own safety
+      // timer fires) — awaited below, alongside Firebase/Hive readiness,
+      // before the real runApp(CustomerApp()) swap.
+      final videoDone = Completer<void>();
+      runApp(_BootLoadingApp(
+        onVideoFinished: () {
+          if (!videoDone.isCompleted) videoDone.complete();
+        },
+      ));
 
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
@@ -319,12 +359,20 @@ void main() async {
       // that's opening Hive boxes anyway, instead of forcing a THIRD
       // widget (the old _IntroGate's loading fallback) to mount after
       // runApp() just to wait for this exact same read.
-      var showIntro = false;
-      var showWelcome = false;
-
       try {
         await Hive.initFlutter();
         await CacheService().initCritical();
+
+        // FIX (Poster Campaign Tracking): Cache the 'source' parameter
+        // from the PWA URL into SharedPreferences before Google Sign-In
+        // redirects clear it.
+        if (kIsWeb) {
+          final sourceParam = Uri.base.queryParameters['source'];
+          if (sourceParam != null && sourceParam.isNotEmpty) {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('campaign_source', sourceParam);
+          }
+        }
 
         // If this launch came from Android's share sheet (customer shared a
         // location out of WhatsApp/Maps into Allin1), the shared text is on
@@ -339,41 +387,6 @@ void main() async {
             statusBarIconBrightness: Brightness.light,
           ),
         );
-
-        final flags = await _resolveIntroFlags();
-        showIntro = flags.showIntro;
-        showWelcome = flags.showWelcome;
-
-        // FIX (CTO mandate — Splash Screen Loop): the flags above are
-        // the right source of truth for "has this device ever seen the
-        // intro/welcome sequence" — that part already worked. This adds
-        // a SECOND, independent guarantee on top: if a real, currently
-        // signed-in Firebase session exists, skip both screens
-        // regardless of what the flags say. Covers the case the flags
-        // alone can't (e.g. app data partially cleared, or a device
-        // that somehow never got the "seen" flag written but genuinely
-        // has an active login) — a returning, logged-in customer should
-        // never see onboarding again, full stop. `authStateChanges()`
-        // is used instead of the synchronous `currentUser` getter
-        // because on web the persisted session can still be loading
-        // asynchronously immediately after Firebase.initializeApp()
-        // returns; a bare `currentUser` check here could wrongly read
-        // null for an actually-logged-in customer. Capped at 2s so a
-        // slow/failed auth restore can never hang the cold boot the
-        // rest of this file works hard to keep instant — falls back to
-        // the flags-only result on timeout.
-        try {
-          final signedInUser = await FirebaseAuth.instance
-              .authStateChanges()
-              .first
-              .timeout(const Duration(seconds: 2));
-          if (signedInUser != null) {
-            showIntro = false;
-            showWelcome = false;
-          }
-        } catch (e) {
-          debugPrint('[main_customer] auth-state bypass check skipped: $e');
-        }
       } catch (error, stack) {
         debugPrint('Boot phase 1 error: $error\n$stack');
         if (AnalyticsService.isInitialized) {
@@ -381,7 +394,14 @@ void main() async {
         }
       }
 
-      runApp(CustomerApp(showIntro: showIntro, showWelcome: showWelcome));
+      // FIX (Aug 8 2026 — natural visual buffer): wait for the video to
+      // actually finish (it almost always outlasts Firebase/Hive init,
+      // so this typically resolves instantly since videoDone already
+      // completed by now) before swapping to the real app -- the video
+      // is never cut short by background work finishing early.
+      await videoDone.future;
+
+      runApp(const CustomerApp());
 
       // Everything non-essential to the first frame runs here instead of
       // blocking runApp(): analytics, the deferred Hive boxes, the API
@@ -398,42 +418,6 @@ void main() async {
       unawaited(_listenForSharedLocations());
     },
   );
-}
-
-/// Reads (and, on first-ever launch, sets) the two "have they seen this
-/// already" SharedPreferences flags that decide whether _IntroGate shows
-/// the intro video and/or the language/sign-in welcome screen. Split out
-/// of the old _IntroGateState.checkFirstLaunch() unchanged in behavior —
-/// only WHEN it runs changed (see the boot-flicker fix comment above its
-/// call site, and on _IntroGate itself, for why).
-({bool showIntro, bool showWelcome}) _introFlagsResult(bool seenIntro, bool seenWelcome) =>
-    (showIntro: !seenIntro, showWelcome: !seenWelcome);
-
-Future<({bool showIntro, bool showWelcome})> _resolveIntroFlags() async {
-  const seenIntroKey = 'has_seen_intro_video_v1';
-  const seenWelcomeKey = 'has_seen_welcome_v1';
-  try {
-    final prefs = await SharedPreferences.getInstance();
-
-    final seenIntro = prefs.getBool(seenIntroKey) ?? false;
-    if (!seenIntro) {
-      await prefs.setBool(seenIntroKey, true);
-    }
-
-    // Tracked separately from the video. They were introduced at
-    // different times, so a customer who already has the intro flag set
-    // from an earlier version should still be offered the language/
-    // sign-in screen once.
-    final seenWelcome = prefs.getBool(seenWelcomeKey) ?? false;
-    if (!seenWelcome) {
-      await prefs.setBool(seenWelcomeKey, true);
-    }
-
-    return _introFlagsResult(seenIntro, seenWelcome);
-  } catch (e) {
-    debugPrint('[main_customer] intro-flags check failed: $e');
-    return _introFlagsResult(true, true); // seen=true -> show=false, safest default
-  }
 }
 
 // ── BOOT PHASE 2: everything that can wait for the first frame ──
@@ -579,14 +563,14 @@ Future<void> _restoreActiveRideIfNeeded() async {
 }
 
 class CustomerApp extends StatelessWidget {
-  // FIX (boot-flicker root cause): resolved once in main()'s boot phase
-  // 1 (see _resolveIntroFlags()), before this widget is ever built, so
-  // _IntroGate below never needs an async gap / loading placeholder of
-  // its own. See _IntroGate's comment for the full story.
-  final bool showIntro;
-  final bool showWelcome;
-
-  const CustomerApp({required this.showIntro, required this.showWelcome, super.key});
+  // BOOT-SEQUENCE CONSOLIDATION (per CTO mandate — single splash screen
+  // for all 4 apps): this used to carry showIntro/showWelcome booleans
+  // resolved in main()'s boot phase 1, threaded down into _IntroGate to
+  // decide whether to also play IntroVideoScreen and/or WelcomeScreen
+  // before the shared AppSplashVideoScreen. Both of those screens are
+  // now removed from the boot chain entirely (see _IntroGate below), so
+  // there is nothing left to gate and no flags left to carry.
+  const CustomerApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -627,7 +611,7 @@ class CustomerApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           theme: themeService.currentTheme,
           themeMode: ThemeMode.light,
-          home: _IntroGate(showIntro: showIntro, showWelcome: showWelcome),
+          home: const _IntroGate(),
           routes: {
             '/login': (_) => const CustomerLoginScreen(),
             '/dashboard': (_) => const DashboardScreen(),
@@ -669,58 +653,68 @@ class CustomerApp extends StatelessWidget {
 }
 
 // ================================================================
-// First-launch intro video gate.
+// Post-boot-frame gate.
 //
-// FIX (task #108 follow-up, "3x animation flicker" root cause): this
-// used to be a StatefulWidget that itself awaited SharedPreferences
-// inside initState() and showed ANOTHER fresh BrandedLoadingScreen
-// while that resolved (see the comment that used to be here about "no
-// 4th different-looking flash" — the flash it was talking about
-// avoiding was a visual-design difference, not the flicker itself).
-// The real problem: that async gap happened INSIDE _IntroGate, which
-// only exists after the boot sequence's second runApp(CustomerApp())
-// call has already thrown away and rebuilt the entire widget tree from
-// _BootLoadingApp. So a full cold boot painted BrandedLoadingScreen
-// TWICE as two completely separate Elements — once as _BootLoadingApp
-// pre-Firebase, once again here post-runApp() — and Flutter genuinely
-// tears down/repaints the whole screen at that runApp() swap, which is
-// what reads as a restart/flicker even though the two screens look
-// pixel-identical.
+// BOOT-SEQUENCE CONSOLIDATION (per CTO mandate — exactly ONE splash
+// screen between the static boot frame and the real home/auth-gated
+// screen, across all 4 apps): this used to conditionally chain
+// IntroVideoScreen (first-launch-only intro.mp4, had its own Skip
+// button) and/or WelcomeScreen (first-launch-only language + optional
+// sign-in) in FRONT of the shared AppSplashVideoScreen, based on
+// SharedPreferences "have they seen this" flags — meaning a first-time
+// customer could see up to three full-screen widgets back-to-back
+// before ever reaching the app (intro video -> welcome -> splash video
+// -> home). Both are now removed from this boot chain:
 //
-// Fixed by resolving showIntro/showWelcome in main()'s boot phase 1
-// (see _resolveIntroFlags()) BEFORE the second runApp() ever fires, and
-// threading the two already-known booleans down through CustomerApp
-// into this now-plain StatelessWidget. There is no async gap left in
-// this widget at all, so it can never show a loading placeholder of
-// its own — the ONLY loading screen in the entire cold-boot path is
-// _BootLoadingApp, painted exactly once.
+//   - IntroVideoScreen: removed entirely from the reachable path. It
+//     is not load-bearing (no consent/permission collection, purely a
+//     branded clip) and duplicated the exact kind of "competing splash
+//     video" the shared AppSplashVideoScreen was introduced to
+//     consolidate. The widget file/class itself is left in place
+//     (not deleted) in case product wants a "replay intro" entry point
+//     elsewhere later — it is simply never routed to from boot anymore.
+//   - WelcomeScreen: removed from the boot chain too. JUDGMENT CALL
+//     (flagged for owner review): WelcomeScreen has no auto-advance
+//     timer — it is a static, manual-tap screen — but everything it
+//     does is optional and duplicated elsewhere: its language picker
+//     is the same LocalizationService the Settings screen's own
+//     language picker already drives (see settings_screen.dart's
+//     _showLanguagePicker), and its "Continue with Google" sign-in is
+//     explicitly optional even on the screen itself ("Sign in later"
+//     button, "we'll only ask you to sign in when you book"). Nothing
+//     it collects is required to use the app. Treated as decorative/
+//     skippable per the task's criteria and removed from boot; the
+//     WelcomeScreen widget/file is not deleted, only unrouted, in case
+//     product wants it reachable some other way later.
+//
+// Every launch (first-ever or returning) now goes straight from the
+// boot frame to the single shared AppSplashVideoScreen, then to the
+// real auth-gated home screen (_CustomerHomeGate).
+//
+// This also preserves the earlier boot-flicker fix: this widget has no
+// async gap of its own (nothing left here needs one), so the ONLY
+// loading screen in the entire cold-boot path remains _BootLoadingApp,
+// painted exactly once.
 // ================================================================
 class _IntroGate extends StatelessWidget {
-  final bool showIntro;
-  final bool showWelcome;
-
-  const _IntroGate({required this.showIntro, required this.showWelcome});
+  const _IntroGate();
 
   @override
   Widget build(BuildContext context) {
-    // First launch runs the whole sequence:
-    //   intro video -> welcome (language + sign-in) -> video splash -> home
-    // Every launch after that goes straight to video splash -> home.
-    // NEW (CTO mandate — Video Splash Screen, every launch): was
-    // SplashSetupScreen (still used as-is by main_hero.dart — do not
-    // touch that file/screen, this Customer-only swap must not affect
-    // Hero). VideoSplashScreen wraps the exact same background
-    // warm-up call, just layers the new splash video on top, capped at
-    // a hard 5s so it can never add more delay than that regardless of
-    // video/network state.
-    const home = VideoSplashScreen(nextScreen: _CustomerHomeGate());
-    final afterIntro =
-        showWelcome ? const WelcomeScreen(next: home) : home;
-
-    if (showIntro) {
-      return IntroVideoScreen(next: afterIntro);
-    }
-    return afterIntro;
+    // NEW (CTO mandate — Video Splash Screen, every launch): shared
+    // AppSplashVideoScreen widget so every one of the 4 apps plays
+    // app_splash.mp4 through the exact same code path — one file to
+    // touch on the next video swap, not up to 4. Same asset, same
+    // BoxFit.fill full-screen stretch, same 11s safety-timer ceiling,
+    // same unmuted playback as before.
+    //
+    // The warm-up work IntroVideoScreen/WelcomeScreen never actually
+    // did (ApiConfig.ensureEnvLoaded() + MapService().initialize()) is
+    // unaffected by this change either way — main()'s
+    // _warmMapStack() (part of _warmCustomerServices(), fired
+    // unawaited() right after runApp(), independent of whichever
+    // screens are mounted) already covers it.
+    return const _CustomerHomeGate();
   }
 }
 
@@ -774,6 +768,19 @@ class _CustomerHomeGateState extends State<_CustomerHomeGate> {
         // handler (Admin/Seller/other-role flows), so removing the
         // FILE would break those. Only this customer-specific gate
         // stopped routing to it.
+        //
+        // FIX (Aug 8 2026 — Nizam's Unified Welcome Screen decision):
+        // a signed-out customer now sees CustomerWelcomeLoginScreen
+        // (merged language-picker + mobile-number + Google sign-in,
+        // white/pink theme) right here, on EVERY launch while signed
+        // out — not a one-time flag. Its own "Login Later" button still
+        // lets a guest straight through to DashboardScreen without any
+        // login wall, preserving the existing "browse freely, sign in
+        // only when you book" philosophy — it's just an explicit tap
+        // now instead of an implicit skip.
+        if (user == null) {
+          return const CustomerWelcomeLoginScreen(next: DashboardScreen());
+        }
         return const DashboardScreen();
       },
     );

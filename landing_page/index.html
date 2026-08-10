@@ -257,6 +257,83 @@
     try { saved = localStorage.getItem('allin1_landing_lang'); } catch (e) {}
     if (saved === 'en') setLang('en');
   })();
+
+  // ================================================================
+  // Usage tracking (per Nizam's request — Admin "Customer Usage
+  // Tracking" funnel). This static page is the ACTUAL public landing
+  // link people share/click (hosted on the "landing" Firebase Hosting
+  // target). The Flutter app has a matching UsageTrackingService that
+  // writes the same app_usage_stats/funnel doc, but that Dart screen
+  // (lib/screens/landing_page.dart) is never routed to from any app —
+  // so this static page had zero tracking wired in, which is exactly
+  // why the admin funnel showed nothing. This mirrors that same write
+  // shape via the Firestore REST API (no SDK needed for a static
+  // page), hitting the exact same doc/fields the admin screen
+  // (customer_usage_tracking_screen.dart) already reads. Firestore
+  // rules (firestore.rules, app_usage_stats/{docId}) already allow an
+  // unauthenticated create/update scoped to docId=='funnel' and only
+  // these field names — this was built for exactly this purpose.
+  // Fire-and-forget: a tracking failure must never block navigation.
+  (function () {
+    var PROJECT_ID = 'erode-super-app';
+    var DOC_PATH = 'app_usage_stats/funnel';
+    var COMMIT_URL = 'https://firestore.googleapis.com/v1/projects/' +
+      PROJECT_ID + '/databases/(default)/documents:commit';
+
+    function trackIncrement(fieldName) {
+      var body = {
+        writes: [
+          {
+            update: {
+              name: 'projects/' + PROJECT_ID + '/databases/(default)/documents/' + DOC_PATH,
+              fields: {}
+            },
+            updateMask: { fieldPaths: [] },
+            updateTransforms: [
+              { fieldPath: fieldName, increment: { integerValue: '1' } },
+              { fieldPath: 'updatedAt', setToServerValue: 'REQUEST_TIME' }
+            ]
+          }
+        ]
+      };
+      try {
+        fetch(COMMIT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          keepalive: true
+        }).catch(function () {});
+      } catch (e) {}
+    }
+
+    // Visit counter — once per page load.
+    trackIncrement('landingPageVisits');
+
+    // Poster QR Campaign Tracking
+    try {
+      var urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('source') === 'poster_campaign') {
+        trackIncrement('poster_qr_scans');
+        
+        // Append source to outbound PWA links
+        document.querySelectorAll('a[href^="https://my-allin1.web.app"]').forEach(function(link) {
+          try {
+            var outUrl = new URL(link.href);
+            outUrl.searchParams.set('source', 'poster_campaign');
+            link.href = outUrl.toString();
+          } catch(e) {}
+        });
+      }
+    } catch (e) {}
+
+    // APK download link clicks (customer app variant — the only APK
+    // linked from this page).
+    document.querySelectorAll('a.download-strip').forEach(function (link) {
+      link.addEventListener('click', function () {
+        trackIncrement('download_customer');
+      });
+    });
+  })();
 </script>
 
 </body>

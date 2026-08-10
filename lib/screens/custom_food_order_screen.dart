@@ -27,6 +27,7 @@ import '../services/map_service.dart';
 import '../services/service_request_service.dart';
 import '../utils/service_request_labels.dart';
 import '../widgets/quick_order_line_items.dart';
+import '../services/auth_service.dart';
 import '../widgets/server_busy_dialog.dart';
 import 'category_screen.dart';
 import 'food_order_status_screen.dart';
@@ -203,11 +204,12 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
 
     setState(() => _isLoading = true);
     try {
+      final resolvedCustomerPhone = await AuthService().resolveCustomerPhone(user);
       final requestId = await ServiceRequestService().createServiceRequest(
         requestType: 'custom_food_order',
         customerId: user.uid,
         customerName: _nameCtrl.text.trim().isNotEmpty ? _nameCtrl.text.trim() : (user.displayName ?? 'Customer'),
-        customerPhone: user.phoneNumber ?? '',
+        customerPhone: resolvedCustomerPhone,
         details: {
           'items': quickOrderItemsToJson(_lineItems),
           'restaurantOrPreference': _shopCtrl.text.trim(),

@@ -212,6 +212,16 @@ class CategoryGatewayService {
   }
 
   // ── Load Ride Fares (Cache-First Strategy) ───────────────────
+  // NOT used for fare math anymore. Per Nizam's MVP decision, every
+  // fare calculation reads from the hardcoded lib/config/fare_rates
+  // .dart (FareRates) instead of this Firestore-backed
+  // settings/ride_fares document, to avoid paying a DB read on every
+  // fare estimate. bike_booking_screen.dart's old _loadFareConfig()
+  // caller was removed for that reason. This method (and
+  // _getDefaultRideFares() below) are left in place unremoved only in
+  // case something non-fare-related still depends on them later —
+  // as of this change nothing in lib/ calls loadRideFares() or
+  // forceRefreshRideFares().
   Future<Map<String, dynamic>> loadRideFares() async {
     try {
       // ride_fares_cache now opens after runApp(). Without this await, a

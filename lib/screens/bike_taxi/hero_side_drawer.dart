@@ -15,11 +15,15 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/pwa_cache_platform_stub.dart'
+    if (dart.library.html) '../../services/pwa_cache_platform_web.dart';
 import '../../services/update_service.dart';
+import '../../services/web_version_checker.dart';
 import '../../widgets/download_app_banner.dart';
 import 'hero_settings_screen.dart';
 
@@ -82,8 +86,49 @@ class _HeroSideDrawerState extends State<HeroSideDrawer> {
     );
   }
 
+  // FIX (per Nizam's recurring bug report — Hero "Check for Updates"
+  // still ended up downloading/updating a different app): see the
+  // matching FIX comment on HeroProfileTab._openHeroUpdateUrl in
+  // hero_profile_tab.dart for the full root-cause writeup. Short
+  // version: this used to unconditionally launchUrl() the Hero APK
+  // link even when running as the Hero PWA on web, instead of using
+  // the same self-referential /version.json check (WebVersionChecker)
+  // that Customer's and Admin's "Check for Updates" buttons already
+  // use. Now identical to that pattern: web self-checks and reloads
+  // in place; native falls back to the GitHub APK link for 'hero'.
   Future<void> _openHeroUpdateUrl() async {
     final messenger = ScaffoldMessenger.of(context);
+
+    if (kIsWeb) {
+      await WebVersionChecker.instance.checkNow();
+      if (!mounted) return;
+
+      if (!WebVersionChecker.instance.isUpdateAvailable) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('You already have the latest version.'),
+            backgroundColor: _pink,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Updating…'),
+          backgroundColor: _pink,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      try {
+        await PwaCachePlatform().clearAndReload();
+      } catch (e) {
+        debugPrint('[HeroCheckUpdate] cache clear failed: $e');
+      }
+      return;
+    }
+
     final launched = await launchUrl(
       Uri.parse(UpdateService().fallbackApkUrl('hero')),
       mode: LaunchMode.externalApplication,

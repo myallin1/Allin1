@@ -15,6 +15,8 @@ import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'app_navigator.dart';
+import 'config/app_variant.dart';
+import 'config/web_push_config.dart';
 import 'firebase_options.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 import 'screens/app_splash_video_screen.dart';
@@ -58,7 +60,12 @@ StreamSubscription<String>? _adminFcmTokenRefreshSub;
 // the Cloud Functions would always find zero tokens and no-op.
 Future<void> _syncFcmTokenForAdmin(String uid) async {
   try {
-    final token = await FirebaseMessaging.instance.getToken();
+    // FIX (same web-push root cause fixed for main_hero.dart): getToken()
+    // on web needs a vapidKey or it fails silently. Admin PWA gets the
+    // same fix for consistency across all 4 apps.
+    final token = await FirebaseMessaging.instance.getToken(
+      vapidKey: kIsWeb ? WebPushConfig.vapidKey : null,
+    );
     if (token != null && token.trim().isNotEmpty) {
       await FirebaseFirestore.instance.collection('admins').doc(uid).set({
         'fcmToken': token,
@@ -110,18 +117,30 @@ void _initAdminFcmAuthListener() {
   });
 }
 
-// FIX (Nizam's "jet-speed startup" request, task #108, same fix as
-// main_customer.dart/main_hero.dart/main_seller.dart): paint this
-// instantly, before Hive/Firebase even start, so Flutter's first frame
-// fires in milliseconds instead of after a Firebase network round-trip.
+// FIX (Nizam's "video as natural visual buffer" request, task #108, same
+// fix as main_customer.dart/main_hero.dart/main_seller.dart): paint
+// app_splash.mp4 first, before Hive/Firebase even start, so Flutter's
+// first frame fires in milliseconds instead of after a Firebase network
+// round-trip, AND the video itself becomes the boot buffer while Hive/
+// Firebase init in parallel behind it. Previously the video was shown
+// AFTER Firebase, wrapped around AdminApp's StreamBuilder auth gate —
+// moved here and removed there (see AdminApp.build for that change) so
+// it's no longer a second screen stacked after this one.
+// BrandedLoadingScreen is now only a rare fallback frame, shown only if
+// Hive/Firebase init somehow outlasts the video.
 class _BootLoadingApp extends StatelessWidget {
-  const _BootLoadingApp();
+  const _BootLoadingApp({required this.onVideoFinished});
+
+  final VoidCallback onVideoFinished;
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: BrandedLoadingScreen(),
+      home: AppSplashVideoScreen(
+        nextScreen: const BrandedLoadingScreen(),
+        onFinished: onVideoFinished,
+      ),
     );
   }
 }
@@ -150,8 +169,17 @@ void main() {
     },
     appRunner: () async {
       WidgetsFlutterBinding.ensureInitialized();
+      // FIX (audit finding — notifications_screen.dart hardcoded
+      // 'customer' fallback): see lib/config/app_variant.dart.
+      currentAppVariant = 'admin';
 
-      runApp(const _BootLoadingApp());
+      // videoDone completes when app_splash.mp4 finishes playing; the
+      // second runApp() below (AdminApp) awaits it so the video is never
+      // cut short by a fast Hive/Firebase init.
+      final videoDone = Completer<void>();
+      runApp(_BootLoadingApp(onVideoFinished: () {
+        if (!videoDone.isCompleted) videoDone.complete();
+      }));
 
       // SessionService.saveSession() opens a Hive box directly (not via
       // HiveCache's guarded wrapper), which throws "You need to
@@ -220,6 +248,10 @@ void main() {
         ));
       });
 
+      // Gate the real-app swap on the video having finished playing (it
+      // almost always has, by now — Hive/Firebase init is the fast side
+      // of this race) so the boot video is never truncated mid-playback.
+      await videoDone.future;
       runApp(const AdminApp());
     },
   );
@@ -315,30 +347,30 @@ class AdminApp extends StatelessWidget {
       // this mount entirely for a returning admin, and the waiting-state
       // fallback now reuses BrandedLoadingScreen instead of a different-
       // looking bare spinner for the rare genuine cold-cache case.
-      // NEW (per Nizam's request — shared splash video, all 4 apps):
-      // app_splash.mp4 plays first (audio, full-screen stretch, hard-
-      // capped) as a purely visual layer wrapped around this exact same
-      // StreamBuilder auth gate — none of its own logic changed.
-      home: AppSplashVideoScreen(
-        nextScreen: StreamBuilder<User?>(
-          stream: FirebaseAuth.instance.authStateChanges(),
-          initialData: FirebaseAuth.instance.currentUser,
-          builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const BrandedLoadingScreen();
-            }
-            if (snap.hasData && snap.data != null) {
-              return const SuperAdminHomeScreen();
-            }
-            return const LoginScreen(
-               presetUserType: UserType.admin,
-               lockUserType: true,
-               title: '🔐 Admin Access',
-               subtitle: 'Authorized personnel only',
-               lockedUserLabel: 'Admin',
-             );
-          },
-        ),
+      // FIX (video-as-natural-buffer, per Nizam's request): app_splash.mp4
+      // now plays pre-Firebase/Hive as the very first boot frame (see
+      // _BootLoadingApp above) instead of here — this used to wrap the
+      // StreamBuilder auth gate in a second AppSplashVideoScreen play,
+      // which would have shown the same video twice back to back on every
+      // launch. Now goes straight to the (unchanged) StreamBuilder gate.
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        initialData: FirebaseAuth.instance.currentUser,
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const BrandedLoadingScreen();
+          }
+          if (snap.hasData && snap.data != null) {
+            return const SuperAdminHomeScreen();
+          }
+          return const LoginScreen(
+             presetUserType: UserType.admin,
+             lockUserType: true,
+             title: '🔐 Admin Access',
+             subtitle: 'Authorized personnel only',
+             lockedUserLabel: 'Admin',
+           );
+        },
       ),
       // NEW (CTO mandate — Task 1: The Admin Confirmation Gate): the
       // "Quick Task Chatbox" FAB, laid over every admin screen exactly
