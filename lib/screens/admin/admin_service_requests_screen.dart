@@ -24,7 +24,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/service_request_model.dart';
+import '../../services/admin_deletion_service.dart';
 import '../../utils/service_request_labels.dart';
+import '../../widgets/admin/admin_selection_mixin.dart';
 import '../../widgets/order_photo_gallery.dart';
 import '../service_request_tracking_screen.dart';
 import 'admin_new_orders_screen.dart' show AssignHeroSheet, requestSummary;
@@ -65,7 +67,7 @@ class AdminServiceRequestsScreen extends StatefulWidget {
 }
 
 class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, AdminSelectionMixin {
   // FIX (CTO mandate — Final UI Migration Sweep): typed models instead
   // of raw QueryDocumentSnapshots — same pattern already applied to
   // admin_new_orders_screen.dart and hero_home_screen.dart. Query/
@@ -161,8 +163,51 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
     );
   }
 
+  // ── Test Data Cleanup (Aug 11 2026) ──────────────────────────────
+  Future<void> _deleteOne(ServiceRequestModel request) async {
+    final confirmed = await confirmSingleDelete(context, subject: 'Test Request');
+    if (!confirmed || !mounted) return;
+    await AdminDeletionService.instance.deleteServiceRequest(
+      DeletableRequest(
+        id: request.requestId,
+        assignedHeroId: request.assignedHeroId,
+      ),
+    );
+    // No local removal needed — this screen is a live .snapshots()
+    // listener (see _listen()), so the delete's own snapshot event
+    // updates _requests automatically. A manual removal here would
+    // just race that event.
+  }
+
+  Future<void> _deleteSelected(List<ServiceRequestModel> visible) async {
+    final targets =
+        visible.where((r) => selectedIds.contains(r.requestId)).toList();
+    if (targets.isEmpty) return;
+    final confirmed = await confirmBulkDelete(
+      context,
+      count: targets.length,
+      subjectPlural: 'Test Requests',
+    );
+    if (!confirmed || !mounted) return;
+    await AdminDeletionService.instance.bulkDeleteServiceRequests(
+      targets
+          .map((r) => DeletableRequest(
+                id: r.requestId,
+                assignedHeroId: r.assignedHeroId,
+              ),)
+          .toList(),
+    );
+    clearSelection();
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Test Data Cleanup (Aug 11 2026): client-side filter on the
+    // already-loaded, already-paid-for page — never a second query.
+    final visible = _requests
+        .where((r) => matchesPhoneFilter(r.customerPhone))
+        .toList();
+
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
@@ -183,15 +228,33 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
                     color: _pink, fontSize: 12, fontWeight: FontWeight.bold,),),
           ),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: buildSelectionToolbar(
+              context: context,
+              visibleIds: visible.map((r) => r.requestId).toList(),
+              onFilterChanged: () {},
+            ),
+          ),
+        ),
       ),
-      body: _requests.isEmpty
-          ? const Center(
-              child: Text('No requests yet', style: TextStyle(color: _muted)),)
+      body: visible.isEmpty
+          ? Center(
+              child: Text(
+                _requests.isEmpty ? 'No requests yet' : 'No matches for that number',
+                style: const TextStyle(color: _muted),
+              ),)
           : ListView.builder(
               padding: const EdgeInsets.all(12),
-              itemCount: _requests.length,
-              itemBuilder: (context, i) => _buildCard(_requests[i]),
+              itemCount: visible.length,
+              itemBuilder: (context, i) => _buildCard(visible[i]),
             ),
+      bottomNavigationBar: buildDeleteBar(
+        subjectPlural: 'Test Requests',
+        onDelete: () => _deleteSelected(visible),
+      ),
     );
   }
 
@@ -231,6 +294,7 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
     final needsAssignment = status == 'pending' || status == 'admin_review';
 
     return _buildCardContent(
+      request: request,
       requestId: request.requestId,
       customerName: customerName,
       customerPhone: customerPhone,
@@ -244,6 +308,7 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
   }
 
   Widget _buildCardContent({
+    required ServiceRequestModel request,
     required String requestId,
     required String customerName,
     required String customerPhone,
@@ -262,14 +327,29 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
           side: const BorderSide(color: _border),),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        // Tap anywhere on the card → the same graphical step tracker
-        // the customer sees for this request.
-        onTap: () => _openTracking(requestId),
+        // Test Data Cleanup (Aug 11 2026): in select mode, tapping the
+        // card toggles its checkbox instead of opening tracking — a
+        // customer-support-shaped screen suddenly turning into a bulk
+        // deletion tool the moment select mode is on is exactly the
+        // "don't clutter existing UI" risk Nizam flagged; toggling
+        // selection on tap (matching the checkbox itself) keeps the
+        // normal tap behaviour fully intact the rest of the time.
+        onTap: selectMode
+            ? () => toggleItemSelected(requestId)
+            : () => _openTracking(requestId),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (selectMode)
+                Row(
+                  children: [
+                    buildSelectionCheckbox(requestId),
+                    const Text('Select this request',
+                        style: TextStyle(color: _muted, fontSize: 11.5),),
+                  ],
+                ),
               Row(
                 children: [
                   Container(
@@ -289,6 +369,16 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
                     onPressed: () => _call(customerPhone),
                     icon: const Icon(Icons.call_rounded,
                         color: _green, size: 20,),
+                  ),
+                  // Test Data Cleanup (Aug 11 2026): individual delete,
+                  // always available regardless of select mode — a
+                  // single stray test record shouldn't require entering
+                  // select mode just to remove it.
+                  IconButton(
+                    onPressed: () => unawaited(_deleteOne(request)),
+                    tooltip: 'Delete this request',
+                    icon: const Icon(Icons.delete_outline_rounded,
+                        color: Color(0xFFFF5252), size: 20,),
                   ),
                 ],
               ),

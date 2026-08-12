@@ -17,6 +17,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../services/db_usage_tracker.dart';
+import '../../widgets/admin/cached_analytics_view.dart';
+
 const Color _bg = Color(0xFF0A0A1A);
 const Color _card = Color(0xFF15152A);
 const Color _purple = Color(0xFF6C63FF);
@@ -39,44 +42,79 @@ class _CustomerUsageTrackingScreenState
   bool _loadingSignups = true;
   String? _signupError;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadSignupCount();
-  }
+  // FETCH-ON-DEMAND (Nizam's architecture instruction, Aug 11 2026):
+  // this screen used to auto-read on open TWICE over — an initState()
+  // signup-count query AND a live .snapshots() listener on the funnel
+  // doc. Both are gone: nothing is read until the admin taps Fetch.
+  AnalyticsRange _range = AnalyticsRange.thisMonth;
 
-  Future<void> _loadSignupCount() async {
-    try {
-      // Single server-side aggregation read — never scans/downloads
-      // the actual user documents.
-      final aggFuture = FirebaseFirestore.instance
-          .collection('users')
-          .count()
-          .get();
-      
-      final posterAggFuture = FirebaseFirestore.instance
-          .collection('users')
-          .where('source', isEqualTo: 'poster_campaign')
-          .count()
-          .get();
+  /// One funnel-document read + two server-side count() aggregations per
+  /// explicit Fetch tap. count() is billed as a single read regardless of
+  /// how many user documents exist — it never downloads them.
+  Future<Map<String, dynamic>> _fetchUsage() async {
+    final funnelFuture = FirebaseFirestore.instance
+        .collection('app_usage_stats')
+        .doc('funnel')
+        .get();
+    final aggFuture =
+        FirebaseFirestore.instance.collection('users').count().get();
+    final posterAggFuture = FirebaseFirestore.instance
+        .collection('users')
+        .where('source', isEqualTo: 'poster_campaign')
+        .count()
+        .get();
 
-      final results = await Future.wait([aggFuture, posterAggFuture]);
-      final agg = results[0];
-      final posterAgg = results[1];
+    final funnel = await funnelFuture;
+    final results = await Future.wait([aggFuture, posterAggFuture]);
+    // 1 document read + 2 count() aggregations (each billed as one read
+    // regardless of collection size).
+    DbUsageTracker.instance.recordRead(3, 'customer_usage_tracking', 'fetch_funnel');
 
-      if (!mounted) return;
-      setState(() {
-        _totalSignups = agg.count ?? 0;
-        _posterSignups = posterAgg.count ?? 0;
-        _loadingSignups = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _signupError = e.toString();
-        _loadingSignups = false;
+    final data = funnel.data() ?? <String, dynamic>{};
+    // Flatten to Hive-serializable primitives (no Timestamps).
+    final daily = <String, dynamic>{};
+    if (data['daily'] is Map) {
+      (data['daily'] as Map).forEach((day, fields) {
+        if (day is String && fields is Map) {
+          daily[day] = fields.map(
+            (k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0),
+          );
+        }
       });
     }
+
+    return <String, dynamic>{
+      'landingPageVisits': (data['landingPageVisits'] as num?)?.toInt() ?? 0,
+      'poster_qr_scans': (data['poster_qr_scans'] as num?)?.toInt() ?? 0,
+      'download_customer': (data['download_customer'] as num?)?.toInt() ?? 0,
+      'download_hero': (data['download_hero'] as num?)?.toInt() ?? 0,
+      'download_admin': (data['download_admin'] as num?)?.toInt() ?? 0,
+      'download_seller': (data['download_seller'] as num?)?.toInt() ?? 0,
+      'poster_qr_pwa_installs':
+          (data['poster_qr_pwa_installs'] as num?)?.toInt() ?? 0,
+      'daily': daily,
+      'totalSignups': results[0].count ?? 0,
+      'posterSignups': results[1].count ?? 0,
+    };
+  }
+
+  /// Sums a per-day bucketed field across the selected range.
+  /// Returns null when no daily data covers the range at all, so the UI
+  /// can say "not tracked yet" instead of misreporting a real zero.
+  int? _rangeTotal(Map<String, dynamic> data, String field) {
+    final daily = data['daily'];
+    if (daily is! Map || daily.isEmpty) return null;
+    final now = DateTime.now();
+    var sum = 0;
+    var matched = false;
+    daily.forEach((day, fields) {
+      final parsed = DateTime.tryParse(day.toString());
+      if (parsed == null || fields is! Map) return;
+      if (!_range.contains(parsed, now: now)) return;
+      matched = true;
+      sum += (fields[field] as num?)?.toInt() ?? 0;
+    });
+    return matched ? sum : null;
   }
 
   @override
@@ -91,27 +129,24 @@ class _CustomerUsageTrackingScreenState
           style: GoogleFonts.outfit(
             color: _text,
             fontWeight: FontWeight.w800,
-            fontSize: 17,
+            fontSize: 18, // FIX (UI standardization, Aug 11 2026): app-bar titles are 18sp app-wide
           ),
         ),
         iconTheme: const IconThemeData(color: _text),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: _text),
-            onPressed: () {
-              setState(() => _loadingSignups = true);
-              _loadSignupCount();
-            },
+      ),
+      body: CachedAnalyticsView<Map<String, dynamic>>(
+        cacheKey: 'admin_customer_usage',
+        fetch: _fetchUsage,
+        emptyMessage: 'No usage data loaded yet.',
+        extraActions: [
+          Expanded(
+            child: AnalyticsRangeChips(
+              selected: _range,
+              onChanged: (r) => setState(() => _range = r),
+            ),
           ),
         ],
-      ),
-      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('app_usage_stats')
-            .doc('funnel')
-            .snapshots(),
-        builder: (context, snapshot) {
-          final data = snapshot.data?.data() ?? <String, dynamic>{};
+        builder: (context, data) {
           final visits = (data['landingPageVisits'] as num?)?.toInt() ?? 0;
           final posterScans = (data['poster_qr_scans'] as num?)?.toInt() ?? 0;
           final dlCustomer = (data['download_customer'] as num?)?.toInt() ?? 0;
@@ -119,6 +154,25 @@ class _CustomerUsageTrackingScreenState
           final dlAdmin = (data['download_admin'] as num?)?.toInt() ?? 0;
           final dlSeller = (data['download_seller'] as num?)?.toInt() ?? 0;
           final totalDownloads = dlCustomer + dlHero + dlAdmin + dlSeller;
+          _totalSignups = (data['totalSignups'] as num?)?.toInt() ?? 0;
+          _posterSignups = (data['posterSignups'] as num?)?.toInt() ?? 0;
+          _loadingSignups = false;
+
+          // Range-scoped figures from the per-day buckets. Null means no
+          // daily data covers this range — shown as an explicit note
+          // rather than a misleading zero, since per-day tracking only
+          // starts from this build.
+          final rangeVisits = _rangeTotal(data, 'landingPageVisits');
+          final rangeScans = _rangeTotal(data, 'poster_qr_scans');
+          final rangeDownloads = [
+            'download_customer',
+            'download_hero',
+            'download_admin',
+            'download_seller',
+          ].map((f) => _rangeTotal(data, f)).fold<int?>(null, (acc, v) {
+            if (v == null) return acc;
+            return (acc ?? 0) + v;
+          });
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -131,7 +185,60 @@ class _CustomerUsageTrackingScreenState
                   fontSize: 12,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'In "${_range.label}"',
+                      style: GoogleFonts.outfit(
+                        color: _text,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (rangeVisits == null &&
+                        rangeScans == null &&
+                        rangeDownloads == null)
+                      Text(
+                        'Per-day tracking starts from this build — no '
+                        'day-level history exists for this range yet. '
+                        'Lifetime totals below are complete.',
+                        style: GoogleFonts.outfit(
+                          color: _text.withValues(alpha: 0.5),
+                          fontSize: 11.5,
+                        ),
+                      )
+                    else
+                      Text(
+                        '${rangeScans ?? 0} scans  •  ${rangeVisits ?? 0} visits  '
+                        '•  ${rangeDownloads ?? 0} downloads',
+                        style: GoogleFonts.outfit(
+                          color: Colors.greenAccent,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13.5,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Lifetime totals',
+                style: GoogleFonts.outfit(
+                  color: _text.withValues(alpha: 0.55),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 10),
               _funnelRow(
                 icon: Icons.qr_code_2_rounded,
                 iconColor: Colors.blueAccent,

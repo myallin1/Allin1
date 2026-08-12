@@ -68,7 +68,7 @@ class _AdminSellerApprovalScreenState extends State<AdminSellerApprovalScreen> {
             const SizedBox(width: 8),
             Text(
               'Seller Approvals',
-              style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800, fontSize: 17),
+              style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800, fontSize: 18), // FIX (UI standardization, Aug 11 2026): app-bar titles are 18sp app-wide
             ),
           ],
         ),

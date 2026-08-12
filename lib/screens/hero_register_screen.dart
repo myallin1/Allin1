@@ -452,7 +452,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
         bytes,
         fileName: 'selfie_${_selfieFileName ?? 'capture.jpg'}',
         folder: 'hero_documents/$uid',
-        targetBytes: 200 * 1024,
+        targetBytes: CloudinaryUploadService.kDocumentTargetBytes,
       );
       return {'selfieUrl': url};
     } catch (e) {
@@ -485,7 +485,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
           // Higher than the 100KB default — these are ID/license
           // documents admin must actually read to verify a hero, so a
           // bit more room keeps printed text legible.
-          targetBytes: 200 * 1024,
+          targetBytes: CloudinaryUploadService.kDocumentTargetBytes,
         );
         urls[entry.key] = url;
       } catch (e) {

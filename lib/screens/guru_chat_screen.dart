@@ -38,6 +38,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -46,6 +47,8 @@ import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:url_launcher/url_launcher.dart';
 
+// GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../services/auth_prompt_service.dart';
 import '../services/ai_activation_service.dart';
 import '../services/gemini_api_service.dart';
 import '../services/grocery_ai_notes_service.dart';
@@ -76,6 +79,8 @@ import 'ride_history_screen.dart';
 import 'settings_screen.dart';
 import 'sos_screen.dart';
 import '../services/theme_context_extensions.dart';
+import '../services/auth_service.dart';
+import '../services/service_request_service.dart';
 
 // ---- FIX (CTO mandate — Batch 1 Theme Retrofit): this used to be a
 // fixed "Dark, glowing Super Hero palette" of top-level const Colors —
@@ -347,6 +352,224 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
       case 'add_to_grocery_cart':
         _actOnGroceryAction(args);
         break;
+      case 'create_service_request':
+        await _actOnCreateServiceRequest(args);
+        break;
+      case 'report_app_bug':
+        await _actOnReportBug(args);
+        break;
+    }
+  }
+
+  // NEW (Aug 11 2026 — Nizam's "AI Bug Reporting").
+  //
+  // Writes to `app_bug_reports`. Attaches device/app context the customer
+  // could never be expected to provide (platform, app version, the screen
+  // they were on, their uid) — that context is usually the difference
+  // between a reproducible report and "it didn't work".
+  //
+  // Guarded against duplicate filing within one chat session: an agent
+  // that re-files the same bug each time the customer re-describes it
+  // would flood the admin queue with noise and make real reports harder
+  // to spot.
+  bool _bugReportFiledThisSession = false;
+
+  Future<void> _actOnReportBug(Map<String, dynamic> args) async {
+    final summary = (args['summary'] as String?)?.trim() ?? '';
+    final details = (args['details'] as String?)?.trim() ?? '';
+    if (summary.isEmpty && details.isEmpty) return;
+
+    // GUEST MODE (Aug 11 2026): app_bug_reports is now isRealUser()-gated
+    // too — a report filed under an anonymous uid gives admin nobody to
+    // follow up with, and the collection would otherwise be a free,
+    // unlimited write target. Asked here rather than silently failing so
+    // the customer knows their report actually went somewhere.
+    if (!await requireRealAuth(
+      context,
+      reason: 'Sign in so our team can follow up on what you found',
+    )) {
+      if (!mounted) return;
+      setState(() {
+        _messages.add(const _GuruMessage(
+          role: 'assistant',
+          text: 'Noted. Sign in whenever you like and I’ll pass this to the team.',
+        ),);
+      });
+      return;
+    }
+    if (!mounted) return;
+
+    if (_bugReportFiledThisSession) {
+      if (!mounted) return;
+      setState(() {
+        _messages.add(const _GuruMessage(
+          role: 'assistant',
+          text: "I've already sent a report for this session — the team has "
+              'it. If this is a different problem, tell me and I\'ll add it.',
+        ),);
+      });
+      return;
+    }
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      String appVersion = 'unknown';
+      try {
+        final info = await PackageInfo.fromPlatform();
+        appVersion = '${info.version}+${info.buildNumber}';
+      } catch (_) {/* version is a nice-to-have, never block the report */}
+
+      await FirebaseFirestore.instance.collection('app_bug_reports').add({
+        'summary': summary.isEmpty ? details : summary,
+        'details': details,
+        'screen': (args['screen'] as String?)?.trim() ?? '',
+        'severity': (args['severity'] as String?)?.trim() ?? 'medium',
+        'source': 'ai_agent',
+        'app': 'customer',
+        'platform': kIsWeb ? 'web' : defaultTargetPlatform.name,
+        'appVersion': appVersion,
+        'reportedBy': user?.uid ?? '',
+        'reporterName': user?.displayName ?? '',
+        'status': 'open',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      _bugReportFiledThisSession = true;
+
+      if (!mounted) return;
+      setState(() {
+        _messages.add(const _GuruMessage(
+          role: 'assistant',
+          text: "Reported — I've sent this to the team with your app details "
+              'attached. Thanks for flagging it.',
+        ),);
+      });
+    } catch (e) {
+      debugPrint('[GuruChat] report_app_bug failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _messages.add(const _GuruMessage(
+          role: 'assistant',
+          text: "I couldn't send the report just now. Please try again in a "
+              'moment.',
+        ),);
+      });
+    }
+  }
+
+  static String _requestTypeLabel(String? type) => switch (type) {
+        'custom_food_order' => 'food order',
+        'grocery_order' => 'grocery order',
+        'hero_booking' => 'hero booking',
+        _ => 'order',
+      };
+
+  // NEW (Aug 11 2026 — Nizam: the agent must PLACE orders end-to-end).
+  //
+  // Runs the SAME ServiceRequestService.createServiceRequest() path that
+  // hero_booking_screen / grocery_order_screen / custom_food_order_screen
+  // already use — deliberately not a parallel implementation, so the
+  // hero broadcast, admin alerting, usage-fee flush and every rule that
+  // depends on that document shape all behave identically whether the
+  // order came from a form or from the agent.
+  //
+  // Only reached AFTER the customer has explicitly confirmed the
+  // preview in _confirmationTextFor — the agent never places an order
+  // off its own judgement.
+  Future<void> _actOnCreateServiceRequest(Map<String, dynamic> args) async {
+    // GUEST MODE (Aug 11 2026 — this one is a genuine behaviour change,
+    // not just an added guard). The `currentUser == null` check below
+    // used to be the real gate, but every guest is now signed in
+    // ANONYMOUSLY, so that check silently started passing. Without
+    // requireRealAuth() here, the AI agent would happily file orders
+    // under an anonymous uid that carries no phone number — nobody could
+    // ring the customer back, and firestore.rules' isRealUser() would
+    // reject the write anyway, leaving the agent to apologise for a
+    // failure it could have prevented. The null check is kept below as a
+    // safety net only.
+    if (!await requireRealAuth(
+      context,
+      reason: 'Sign in and I’ll place this order for you right away',
+    )) {
+      if (!mounted) return;
+      setState(() {
+        _messages.add(const _GuruMessage(
+          role: 'assistant',
+          text: 'No problem — sign in whenever you’re ready and I’ll place it for you.',
+        ),);
+      });
+      return;
+    }
+    if (!mounted) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (!mounted) return;
+      setState(() {
+        _messages.add(const _GuruMessage(
+          role: 'assistant',
+          text: 'Please sign in first — I need an account to place the order under.',
+        ),);
+      });
+      return;
+    }
+
+    final requestType = (args['request_type'] as String?)?.trim();
+    final items = (args['items'] as String?)?.trim() ?? '';
+    if (requestType == null || requestType.isEmpty || items.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _messages.add(const _GuruMessage(
+          role: 'assistant',
+          text: "I didn't catch what to order. Tell me the item and I'll place it.",
+        ),);
+      });
+      return;
+    }
+
+    try {
+      // Signature is resolveCustomerPhone(User) — it takes the User
+      // object itself (it needs the Auth phoneNumber as a fallback), not
+      // a uid string.
+      final phone = await AuthService().resolveCustomerPhone(user);
+      final details = <String, dynamic>{
+        'items': items,
+        'placedByAi': true,
+        if ((args['vendor'] as String?)?.trim().isNotEmpty ?? false)
+          'hotelName': (args['vendor'] as String).trim(),
+        if ((args['address'] as String?)?.trim().isNotEmpty ?? false)
+          'dropAddress': (args['address'] as String).trim(),
+        if ((args['note'] as String?)?.trim().isNotEmpty ?? false)
+          'note': (args['note'] as String).trim(),
+      };
+
+      await ServiceRequestService().createServiceRequest(
+        requestType: requestType,
+        customerId: user.uid,
+        customerName: user.displayName?.trim().isNotEmpty ?? false
+            ? user.displayName!.trim()
+            : 'Customer',
+        customerPhone: phone,
+        details: details,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _messages.add(_GuruMessage(
+          role: 'assistant',
+          text: 'Done — your ${_requestTypeLabel(requestType)} is placed and '
+              'sent to nearby Heroes. You can track it under Booking Status.',
+        ),);
+      });
+    } catch (e) {
+      debugPrint('[GuruChat] create_service_request failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _messages.add(_GuruMessage(
+          role: 'assistant',
+          text: "I couldn't place that order just now ($e). Please try again, "
+              'or use the normal booking screen.',
+        ),);
+      });
     }
   }
 
@@ -855,7 +1078,11 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
         action != 'navigate_to_section' &&
         action != 'check_and_update_app' &&
         action != 'add_to_grocery_cart' &&
-        action != 'analyze_screen_with_vision') {
+        action != 'analyze_screen_with_vision' &&
+        // Aug 11 2026: without this the new order-placement tool would be
+        // silently rejected here and never reach _executePendingAction.
+        action != 'create_service_request' &&
+        action != 'report_app_bug') {
       return false;
     }
 
@@ -895,7 +1122,13 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     if (action == 'navigate_to_section' ||
         action == 'book_transport' ||
         action == 'check_and_update_app' ||
-        action == 'add_to_grocery_cart') {
+        action == 'add_to_grocery_cart' ||
+        // Aug 11 2026: filing a bug report costs nothing and reverses
+        // nothing, so gating it behind a Yes/No adds friction to the one
+        // moment the customer is ALREADY frustrated. Auto-execute; the
+        // reply confirms it was sent. (create_service_request stays
+        // gated below — that one commits real money.)
+        action == 'report_app_bug') {
       if (!mounted) return true;
       unawaited(_logGuruAnalyticsEvent(
         eventType: 'intent_requested',
@@ -962,6 +1195,19 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
         final quantity = (args['quantity'] as String?)?.trim();
         final label = (quantity != null && quantity.isNotEmpty) ? '$quantity $item' : item;
         return "I'll add \"$label\" to your grocery list — should I proceed?";
+      // NEW (Aug 11 2026): this one PLACES a real order and dispatches it
+      // to Heroes, so the confirmation names exactly what will be ordered
+      // and from where — this is the last checkpoint before money and a
+      // real hero's time are committed.
+      case 'create_service_request':
+        final items = (args['items'] as String?)?.trim() ?? 'your request';
+        final vendor = (args['vendor'] as String?)?.trim();
+        final label = _requestTypeLabel(args['request_type'] as String?);
+        return vendor != null && vendor.isNotEmpty
+            ? "I'll place a $label for \"$items\" from $vendor and send it to "
+                'nearby Heroes — should I proceed?'
+            : "I'll place a $label for \"$items\" and send it to nearby "
+                'Heroes — should I proceed?';
       default:
         return 'Should I proceed?';
     }

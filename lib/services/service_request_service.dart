@@ -17,6 +17,9 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import '../config/city_config.dart';
 import '../models/service_request_model.dart';
 import 'city_service.dart';
+import 'hero_usage_accumulator_service.dart';
+import 'hero_wallet_service.dart';
+import 'usage_tracking_service.dart';
 
 /// Canonical status enum — the single source of truth for lifecycle state.
 /// UI label sets (task-type vs goods-type) are presentation-only mappings
@@ -149,6 +152,32 @@ class ServiceRequestService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
+    // DEMAND TRACKING (Aug 11 2026 — Nizam's request): this is the single
+    // creation point for ALL FOUR non-ride categories (Hero Booking,
+    // Custom Order, Custom Food Order, Grocery Order), so tracking here
+    // covers every one of them rather than needing a call per screen.
+    // Fire-and-forget single-doc atomic increments — never awaited, so
+    // tracking can't delay a real customer request.
+    unawaited(UsageTrackingService.instance.trackServiceUsed(requestType));
+    // Hotel/store name lives inside the free-form `details` map — check
+    // the keys the various builders actually use, in priority order.
+    final vendorName = (details['hotelName'] ??
+        details['sellerName'] ??
+        details['storeName'] ??
+        details['shopName'] ??
+        details['restaurantName']) as String?;
+    if (vendorName != null) {
+      unawaited(UsageTrackingService.instance.trackHotelOrdered(vendorName));
+    }
+    final pickupPlace = (details['pickupAddress'] ?? details['pickup']) as String?;
+    final dropPlace = (details['dropAddress'] ?? details['drop']) as String?;
+    if (pickupPlace != null) {
+      unawaited(UsageTrackingService.instance.trackPlaceSearched(pickupPlace));
+    }
+    if (dropPlace != null) {
+      unawaited(UsageTrackingService.instance.trackPlaceSearched(dropPlace));
+    }
+
     final pingExpiresAt = DateTime.now().toUtc().millisecondsSinceEpoch +
         kServiceRequestPingExpirySeconds * 1000;
 
@@ -207,8 +236,23 @@ class ServiceRequestService {
     heroes.forEach((heroId, heroDataRaw) {
       if (heroDataRaw is! Map) return;
       final heroData = Map<String, dynamic>.from(heroDataRaw);
-      final isAvailable = (heroData['isAvailable'] as bool?) ?? false;
-      if (!isAvailable) return;
+
+      // FIX (Aug 11 2026 — presence-semantics mismatch found while
+      // auditing "hero PWA never receives service requests"): this read
+      // `(heroData['isAvailable'] as bool?) ?? false`, i.e. a hero whose
+      // online_heroes node has no isAvailable key at all was treated as
+      // UNAVAILABLE and silently skipped.
+      //
+      // The taxi dispatcher (ride_search_screen._fetchNearbyHeroes) does
+      // the opposite for the same node: `if (isAvailable == false)
+      // continue;` — only an EXPLICIT false excludes a hero. So the two
+      // pipelines disagreed about the same presence record, and a node
+      // written by any path that omits the key (or a partial/legacy
+      // node) would keep receiving ride pings while never receiving a
+      // single service-request ping. Presence has ONE meaning; both
+      // readers must agree on it. Matched to the taxi semantics.
+      final isAvailable = heroData['isAvailable'] as bool?;
+      if (isAvailable == false) return;
 
       final heroCity = (heroData['city'] as String?)?.trim().toLowerCase().isNotEmpty ?? false
           ? (heroData['city'] as String).trim().toLowerCase()
@@ -602,15 +646,62 @@ class ServiceRequestService {
     String requestId, {
     String method = 'cash',
   }) async {
-    await FirebaseFirestore.instance
-        .collection('service_requests')
-        .doc(requestId)
-        .update({
+    final requestRef =
+        FirebaseFirestore.instance.collection('service_requests').doc(requestId);
+    await requestRef.update({
       'paymentStatus': 'paid',
       'paymentMethod': method,
       'paidAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    // FIX (Aug 11 2026 — Nizam's "Phase 1" revenue-leak audit fix):
+    // this method used to ONLY write payment status onto the
+    // service_requests doc — it never charged the platform's infra
+    // usage fee at all. hero_ride_screen.dart's taxi flow always called
+    // HeroWalletService().flushUsageCost() at this exact point (payment
+    // confirmed / task settled); this generic path (which covers ALL
+    // FOUR non-ride categories — Hero Booking, Custom Order, Custom Food
+    // Order, Grocery Order, per this file's header comment) never did,
+    // so completing any of those four task types cost the platform real
+    // Firestore/RTDB dispatch+completion load with ZERO fee recovery —
+    // a straightforward, structural revenue leak, not an edge case.
+    // Mirrors hero_ride_screen.dart's flush exactly: reads the
+    // in-memory accumulator (minutes online + this one task), writes a
+    // single batched debit to hero_wallets/{heroId}, non-fatal on
+    // failure (a flush error must never block the hero from closing out
+    // a task they already collected payment for).
+    try {
+      final requestSnap = await requestRef.get();
+      final data = requestSnap.data();
+      final heroId = (data?['assignedHeroId'] as String?) ??
+          (data?['acceptedHeroId'] as String?);
+      if (heroId != null && heroId.isNotEmpty) {
+        final heroName = (data?['assignedHeroName'] as String?) ??
+            (data?['acceptedHeroName'] as String?);
+        HeroUsageAccumulatorService().recordRideHandled();
+        final activeMinutes =
+            HeroUsageAccumulatorService().consumeActiveMinutes();
+        final ridesHandled =
+            HeroUsageAccumulatorService().consumeRidesHandled();
+        await HeroWalletService().flushUsageCost(
+          heroId: heroId,
+          heroName: heroName,
+          activeMinutes: activeMinutes,
+          ridesHandled: ridesHandled,
+        );
+      } else {
+        debugPrint(
+          '[ServiceRequestService] markServiceRequestPaymentReceived: no '
+          'assignedHeroId/acceptedHeroId on $requestId — usage fee not '
+          'flushed (nothing to attribute it to).',
+        );
+      }
+    } catch (e) {
+      debugPrint(
+        '[ServiceRequestService] Wallet usage-fee flush failed (non-fatal): $e',
+      );
+    }
   }
 
   /// Admin manually assigns a hero after confirming by phone — no
@@ -708,7 +799,21 @@ class ServiceRequestService {
   /// which could let a hero accidentally revive a task that was just
   /// cancelled. Updating first closes that race; the delete below
   /// only removes the Firestore source-of-truth document.
-  Future<void> cancelServiceRequest(String requestId) async {
+  // FIX (Cancellation Reason Analytics, Aug 11 2026 — Nizam: "we are
+  // losing valuable business data on WHY customers cancel"): the spec
+  // asks for a `cancellationReason` field ON the cancelled document,
+  // but service_requests are DELETED here, not status-set (see the
+  // doc comment above — deliberate, to close the accept-race with
+  // acceptServiceRequest()'s transaction guard). A field on a doc
+  // that's about to vanish can't be queried for analytics afterward,
+  // so [reason] (when provided) is instead written to a small
+  // `cancellation_analytics` doc BEFORE the delete — same requestId,
+  // so it can still be joined back to whatever admin logs already
+  // captured about the request. This is a deliberate, minimal
+  // deviation from the literal spec wording to keep the existing
+  // delete-based cancellation model (and the accept-race protection
+  // it exists for) completely untouched.
+  Future<void> cancelServiceRequest(String requestId, {String? reason}) async {
     try {
       await rtdb.FirebaseDatabase.instance
           .ref('active_service_requests/$requestId')
@@ -718,6 +823,30 @@ class ServiceRequestService {
       // and it was cleaned up, or it timed out) — proceed to delete
       // the Firestore doc regardless.
       debugPrint('[ServiceRequestService] RTDB cancel-mark failed (non-fatal): $e');
+    }
+
+    if (reason != null && reason.trim().isNotEmpty) {
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('service_requests')
+            .doc(requestId)
+            .get();
+        final data = snap.data();
+        await FirebaseFirestore.instance
+            .collection('cancellation_analytics')
+            .add({
+          'requestId': requestId,
+          'source': 'service_requests',
+          'requestType': data?['requestType'],
+          'customerId': data?['customerId'],
+          'cancellationReason': reason,
+          'cancelledAt': FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        // Best-effort — analytics must never block the actual
+        // cancellation the customer is waiting on.
+        debugPrint('[ServiceRequestService] cancellation_analytics write failed (non-fatal): $e');
+      }
     }
 
     await FirebaseFirestore.instance

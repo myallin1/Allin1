@@ -24,6 +24,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/service_request_model.dart';
 import '../services/service_request_service.dart';
 import '../utils/service_request_labels.dart';
+import '../widgets/cancellation_reason_sheet.dart';
 import '../widgets/rating_feedback_sheet.dart';
 import '../widgets/stage_progress_tracker.dart';
 import 'service_request_live_map_screen.dart';
@@ -529,31 +530,18 @@ class HeroBookingTrackingScreen extends StatelessWidget {
     );
   }
 
+  // FIX (Cancellation Reason Analytics, Aug 11 2026): the reason sheet
+  // replaces the old plain "Keep Task / Cancel Task" confirm dialog —
+  // picking a reason IS the confirmation now, consistent with the ride
+  // cancel flows. Backing out of the sheet without picking a reason
+  // means no cancellation happens.
   Future<void> _confirmAndCancel(BuildContext context, String requestId) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cancel this task?'),
-        content: const Text(
-          'This will cancel your Hero Booking request. This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Keep Task'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Cancel Task'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
+    final reason = await showCancellationReasonSheet(context);
+    if (reason == null || !context.mounted) return;
 
     try {
-      await ServiceRequestService().cancelServiceRequest(requestId);
+      await ServiceRequestService()
+          .cancelServiceRequest(requestId, reason: reason);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Task cancelled.')),

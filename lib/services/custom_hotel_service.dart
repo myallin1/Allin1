@@ -15,6 +15,9 @@
 //   custom_hotels/{sellerId}                     (doc, one per seller)
 //     - ownerId: string (== sellerId, the seller's Firebase Auth uid)
 //     - hotelName: string
+//     - phoneNumber: string                       (seller's contact number
+//       — see FIX note on ensureHotelDoc below; this was missing entirely
+//       until the "custom menu phone not wiring to customer" bug fix)
 //     - isOpen: bool                              (global Open/Close)
 //     - createdAt / updatedAt: Timestamp
 //   custom_hotels/{sellerId}/items/{itemId}       (subcollection)
@@ -103,12 +106,38 @@ class CustomHotelService {
   /// Starts closed (isOpen: false) by design: a brand-new "empty
   /// canvas" shop should never appear open to customers until the
   /// seller has actually added something and explicitly opened it.
-  Future<void> ensureHotelDoc({required String sellerId, required String hotelName}) async {
+  ///
+  /// FIX (audit: "Seller custom-menu phone not wiring to customer side"):
+  /// this doc never carried a phone number at all — the customer's Call
+  /// button (custom_hotel_view_screen.dart) had nothing to read even
+  /// though the seller had a real number on file. `sellerPhone` is
+  /// resolved by the caller via AuthService.resolveSellerPhone() (same
+  /// Firestore-first, Auth-object-fallback pattern as
+  /// resolveCustomerPhone/resolveHeroPhone) and written here as
+  /// 'phoneNumber'. Also backfills the field on an EXISTING doc that
+  /// predates this fix (previously this method did nothing once
+  /// `doc.exists`, so sellers who built their menu before this fix
+  /// would otherwise stay phoneless forever).
+  Future<void> ensureHotelDoc({
+    required String sellerId,
+    required String hotelName,
+    String sellerPhone = '',
+  }) async {
     final doc = await _hotelDoc(sellerId).get();
-    if (doc.exists) return;
+    if (doc.exists) {
+      final existingPhone = (doc.data()?['phoneNumber'] as String?)?.trim() ?? '';
+      if (existingPhone.isEmpty && sellerPhone.trim().isNotEmpty) {
+        await _hotelDoc(sellerId).set(
+          {'phoneNumber': sellerPhone.trim(), 'updatedAt': FieldValue.serverTimestamp()},
+          SetOptions(merge: true),
+        );
+      }
+      return;
+    }
     await _hotelDoc(sellerId).set({
       'ownerId': sellerId,
       'hotelName': hotelName,
+      'phoneNumber': sellerPhone.trim(),
       'isOpen': false,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),

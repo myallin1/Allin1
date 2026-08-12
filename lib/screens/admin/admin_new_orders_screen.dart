@@ -16,8 +16,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/service_request_model.dart';
+import '../../services/admin_deletion_service.dart';
 import '../../services/service_request_service.dart';
 import '../../services/service_requests_listener.dart';
+import '../../widgets/admin/admin_selection_mixin.dart';
 import '../../widgets/order_photo_gallery.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
@@ -130,7 +132,7 @@ class AdminNewOrdersScreen extends StatefulWidget {
 }
 
 class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, AdminSelectionMixin {
   // FIX (CTO mandate — Final UI Migration Sweep): typed models instead
   // of raw QueryDocumentSnapshots — screens/widgets below now read
   // request.requestType / request.customerName / etc. instead of
@@ -244,7 +246,15 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
 
   @override
   Widget build(BuildContext context) {
-    final totalCount = _pendingReview.length + _adminManagedActive.length;
+    // Test Data Cleanup (Aug 11 2026): client-side filter on the
+    // already-loaded lists — same phone-filter contract as the other
+    // cleanup-enabled screens, no extra query.
+    final pendingVisible =
+        _pendingReview.where((r) => matchesPhoneFilter(r.customerPhone)).toList();
+    final activeVisible = _adminManagedActive
+        .where((r) => matchesPhoneFilter(r.customerPhone))
+        .toList();
+    final totalCount = pendingVisible.length + activeVisible.length;
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
@@ -259,33 +269,86 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: _red.withValues(alpha: 0.4)),
             ),
-            child: Text('$totalCount Pending', style: const TextStyle(color: _red, fontSize: 12, fontWeight: FontWeight.bold)),
+            child: Text('${_pendingReview.length + _adminManagedActive.length} Pending', style: const TextStyle(color: _red, fontSize: 12, fontWeight: FontWeight.bold)),
           ),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: buildSelectionToolbar(
+              context: context,
+              visibleIds: [
+                ...pendingVisible.map((r) => r.requestId),
+                ...activeVisible.map((r) => r.requestId),
+              ],
+              onFilterChanged: () {},
+            ),
+          ),
+        ),
       ),
       body: totalCount == 0
-          ? const Center(child: Text('No orders awaiting review', style: TextStyle(color: _muted)))
+          ? Center(
+              child: Text(
+                (_pendingReview.isEmpty && _adminManagedActive.isEmpty)
+                    ? 'No orders awaiting review'
+                    : 'No matches for that number',
+                style: const TextStyle(color: _muted),
+              ),)
           : ListView(
               padding: const EdgeInsets.all(12),
               children: [
-                if (_pendingReview.isNotEmpty) ...[
+                if (pendingVisible.isNotEmpty) ...[
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8, left: 4),
                     child: Text('AWAITING ASSIGNMENT', style: GoogleFonts.outfit(color: _muted, fontSize: 11, fontWeight: FontWeight.w800)),
                   ),
-                  ..._pendingReview.map(_buildPendingReviewCard),
+                  ...pendingVisible.map(_buildPendingReviewCard),
                   const SizedBox(height: 16),
                 ],
-                if (_adminManagedActive.isNotEmpty) ...[
+                if (activeVisible.isNotEmpty) ...[
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8, left: 4),
                     child: Text('MANUALLY ASSIGNED — IN PROGRESS', style: GoogleFonts.outfit(color: _muted, fontSize: 11, fontWeight: FontWeight.w800)),
                   ),
-                  ..._adminManagedActive.map(_buildAdminManagedCard),
+                  ...activeVisible.map(_buildAdminManagedCard),
                 ],
               ],
             ),
+      bottomNavigationBar: buildDeleteBar(
+        subjectPlural: 'Test Requests',
+        onDelete: () => _deleteSelected([...pendingVisible, ...activeVisible]),
+      ),
     );
+  }
+
+  // ── Test Data Cleanup (Aug 11 2026) ──────────────────────────────
+  Future<void> _deleteOne(ServiceRequestModel request) async {
+    final confirmed = await confirmSingleDelete(context, subject: 'Test Request');
+    if (!confirmed || !mounted) return;
+    await AdminDeletionService.instance.deleteServiceRequest(
+      DeletableRequest(id: request.requestId, assignedHeroId: request.assignedHeroId),
+    );
+    // No local removal — both lists are fed by live .snapshots()
+    // listeners (see _listen-style subs at the top of this class), so
+    // the delete's own snapshot event updates them automatically.
+  }
+
+  Future<void> _deleteSelected(List<ServiceRequestModel> visible) async {
+    final targets = visible.where((r) => selectedIds.contains(r.requestId)).toList();
+    if (targets.isEmpty) return;
+    final confirmed = await confirmBulkDelete(
+      context,
+      count: targets.length,
+      subjectPlural: 'Test Requests',
+    );
+    if (!confirmed || !mounted) return;
+    await AdminDeletionService.instance.bulkDeleteServiceRequests(
+      targets
+          .map((r) => DeletableRequest(id: r.requestId, assignedHeroId: r.assignedHeroId))
+          .toList(),
+    );
+    clearSelection();
   }
 
   Widget _buildPendingReviewCard(ServiceRequestModel request) {
@@ -305,6 +368,7 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
           children: [
             Row(
               children: [
+                if (selectMode) buildSelectionCheckbox(request.requestId),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(color: _pink.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
@@ -314,6 +378,15 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
                 IconButton(
                   onPressed: () => _call(customerPhone),
                   icon: const Icon(Icons.call_rounded, color: _green, size: 20),
+                ),
+                // Test Data Cleanup (Aug 11 2026): a hard, permanent
+                // delete — distinct from the existing "Cancel" action
+                // below (_confirmAndCancel), which is a normal
+                // operational status change, not data removal.
+                IconButton(
+                  onPressed: () => unawaited(_deleteOne(request)),
+                  tooltip: 'Delete this request',
+                  icon: const Icon(Icons.delete_outline_rounded, color: _red, size: 20),
                 ),
               ],
             ),
@@ -375,6 +448,7 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
           children: [
             Row(
               children: [
+                if (selectMode) buildSelectionCheckbox(request.requestId),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(color: _pink.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
@@ -389,6 +463,11 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
                 IconButton(
                   onPressed: () => _call(customerPhone),
                   icon: const Icon(Icons.call_rounded, color: _green, size: 20),
+                ),
+                IconButton(
+                  onPressed: () => unawaited(_deleteOne(request)),
+                  tooltip: 'Delete this request',
+                  icon: const Icon(Icons.delete_outline_rounded, color: _red, size: 20),
                 ),
               ],
             ),

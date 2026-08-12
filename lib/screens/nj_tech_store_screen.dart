@@ -16,6 +16,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+// GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../services/auth_prompt_service.dart';
 import '../services/auth_service.dart';
 import '../services/service_request_cache_service.dart';
 import '../services/service_request_service.dart';
@@ -784,14 +786,25 @@ class _CategoryModalState extends State<_CategoryModal> {
   Future<void> _submitRequest() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
+    // GUEST MODE (Aug 11 2026): guard after form validation, before the
+    // currentUser read. The "Please sign in to send an enquiry" snackbar
+    // below is now only a safety net — a guest gets the sheet, not a
+    // dead end. See auth_prompt_service.dart.
+    if (!await requireRealAuth(
+      context,
+      reason: 'Sign in so our service team can call you back',
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please sign in to send an enquiry.'),
-            backgroundColor: _kRed,
-          ),
+        // GUEST MODE: was _kRed. Needing an account is not an error.
+        showSignInRequiredSnack(
+          context,
+          message: 'Sign in to send your enquiry',
         );
       }
       return;

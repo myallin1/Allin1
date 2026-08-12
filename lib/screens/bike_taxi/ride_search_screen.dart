@@ -13,9 +13,12 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/city_config.dart';
 import '../../models/ride_model.dart';
+// Phone lookups consolidated here (Aug 11 2026) — single source of truth.
+import '../../services/auth_service.dart';
 import '../../services/city_service.dart';
 import '../../utils/otp_utils.dart';
 import '../../widgets/allin1_map_widget.dart';
+import '../../widgets/cancellation_reason_sheet.dart';
 import 'ride_tracking_screen.dart';
 
 class RideSearchScreen extends StatefulWidget {
@@ -314,6 +317,45 @@ class _RideSearchScreenState extends State<RideSearchScreen>
           continue;
         }
 
+        // FIX (Aug 11 2026 — ROOT CAUSE of "2 tabs on mobile browser,
+        // hero never gets the request"): hero_home_screen.dart now
+        // STAMPS a disconnected hero (connectionLost/disconnectedAt)
+        // instead of deleting their online_heroes node outright — see
+        // that file's detailed comment. That change alone makes a
+        // backgrounded hero discoverable again; this is the matching
+        // read-side rule that keeps it honest, so a hero who genuinely
+        // left doesn't linger as a candidate forever.
+        //
+        // Grace window rationale: a suspended browser tab reconnects
+        // within seconds of being refocused, and the ping we broadcast
+        // PERSISTS at hero_pings/{heroId}/{requestId} — their listener
+        // fires the moment the tab wakes, plus FCM push covers the
+        // fully-backgrounded case. So pinging a briefly-disconnected
+        // hero is genuinely useful, not wasted. Beyond the window we
+        // assume they really are gone. The broadcast hits ALL nearby
+        // heroes simultaneously anyway, so an occasional stale
+        // candidate can never block or delay dispatch to the others.
+        const int kPresenceGraceMs = 5 * 60 * 1000; // 5 minutes
+        final connectionLost = data['connectionLost'] == true;
+        if (connectionLost) {
+          final disconnectedAt = (data['disconnectedAt'] as num?)?.toInt();
+          final ageMs = disconnectedAt == null
+              ? null
+              : DateTime.now().toUtc().millisecondsSinceEpoch - disconnectedAt;
+          if (ageMs == null || ageMs > kPresenceGraceMs) {
+            debugPrint(
+              '🔥 [REJECTED] Hero $heroId rejected: disconnected too long '
+              '(${ageMs == null ? "no disconnectedAt stamp" : "${(ageMs / 1000).toStringAsFixed(0)}s ago"})',
+            );
+            continue;
+          }
+          debugPrint(
+            '🔥 [GRACE] Hero $heroId is briefly disconnected '
+            '(${(ageMs / 1000).toStringAsFixed(0)}s ago) but still within the '
+            'grace window — keeping as a ping candidate.',
+          );
+        }
+
         final heroCity = (data['city'] as String?)?.trim().toLowerCase().isNotEmpty ?? false
             ? (data['city'] as String).trim().toLowerCase()
             : kDefaultCity;
@@ -381,23 +423,22 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   // both had nothing to call. Matches the same Firestore-first, Auth-
   // field-fallback pattern already used correctly elsewhere in this
   // app (bike_booking_screen.dart, ride_tracking_screen.dart).
+  // CONSOLIDATED (Aug 11 2026): this was a private third copy of the
+  // phoneNumber -> phone -> Auth-field fallback chain, doing its own
+  // users/{uid} Firestore read. Three copies of one rule meant three
+  // places to fix whenever the rule changed, and a read on the critical
+  // dispatch path. Now delegates to AuthService.resolveCustomerPhone(),
+  // which serves the number out of the Hive cache — 0 reads, 0 network
+  // wait before heroes are pinged. The in-memory _resolvedCustomerPhone
+  // field is kept as a per-screen memo so a single search session does
+  // not even hit Hive twice.
   Future<String> _resolveCustomerPhone(User user) async {
     if (_resolvedCustomerPhone != null && _resolvedCustomerPhone!.isNotEmpty) {
       return _resolvedCustomerPhone!;
     }
-    try {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      final data = doc.data();
-      final phone = (data?['phoneNumber'] as String?)?.trim();
-      final phoneAlt = (data?['phone'] as String?)?.trim();
-      final resolved = (phone != null && phone.isNotEmpty)
-          ? phone
-          : (phoneAlt != null && phoneAlt.isNotEmpty ? phoneAlt : (user.phoneNumber ?? ''));
-      _resolvedCustomerPhone = resolved;
-      return resolved;
-    } catch (_) {
-      return user.phoneNumber ?? '';
-    }
+    final resolved = await AuthService().resolveCustomerPhone(user);
+    _resolvedCustomerPhone = resolved;
+    return resolved;
   }
 
   Future<void> _createRideInRTDB(User user) async {
@@ -411,6 +452,18 @@ class _RideSearchScreenState extends State<RideSearchScreen>
           'customerId': user.uid,
           'category': _normalizeCategoryKey(widget.ride.vehicleType ?? 'bike'),
           'createdAt': FieldValue.serverTimestamp(),
+          // FIX (Aug 11 2026 — "admin can't call the customer during
+          // dispatch"): customerPhone used to be written only by
+          // _finalizeRideToFirestore(), i.e. AFTER a hero accepted. So
+          // for the entire search window — and permanently for any ride
+          // nobody accepted — this doc had no contact number, which is
+          // exactly when admin most needs to phone the customer. Now
+          // stamped at creation. Costs nothing: customerPhone is already
+          // resolved above and, thanks to the Hive cache in
+          // AuthService.resolveCustomerPhone(), came from local storage
+          // with zero Firestore reads.
+          'customerPhone': customerPhone,
+          'customerName': user.displayName ?? 'Customer',
         });
       }
 
@@ -440,11 +493,38 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         setState(() => _requestId = _requestId);
       }
     } catch (e) {
+      // FIX (Aug 11 2026 — "customer books, hero receives nothing"): this
+      // catch is the exact point where that bug became INVISIBLE. The
+      // Firestore rides write above is the first await in this method, so
+      // a permission-denied there jumps straight here — leaving
+      // _requestId EMPTY. _startBroadcastPinging() then bails on its
+      // `_requestId.isEmpty` guard and writes zero hero_pings nodes. From
+      // the customer's side it looks like a slow search; from the hero's
+      // side nothing ever happened; and the only trace was one snackbar
+      // competing with a full-screen search UI.
+      //
+      // Now the failure is recorded in state as well as shown, so the
+      // "no heroes found" screen can never again be the face of what is
+      // really an auth/rules rejection.
       debugPrint('[RideSearch] createRideInRTDB error: $e');
+      _fetchNearbyHeroesError = 'Booking could not be created: $e';
+      final isPermissionDenied =
+          e.toString().toLowerCase().contains('permission-denied');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Booking failed: $e'), backgroundColor: const Color(0xFFFF5252)),
+          SnackBar(
+            content: Text(
+              isPermissionDenied
+                  ? 'Your session expired before we could send this booking. '
+                      'Please sign in again and retry.'
+                  : 'Booking failed: $e',
+            ),
+            backgroundColor: const Color(0xFFFF5252),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 6),
+          ),
         );
+        setState(() => _searchTimedOut = true);
       }
     }
   }
@@ -489,7 +569,38 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   // ================================================================
   Future<void> _startBroadcastPinging() async {
     debugPrint('🔥 [BROADCAST] _startBroadcastPinging started. Candidates: ${_heroesQueue.length}');
-    if (_heroesQueue.isEmpty || _requestId.isEmpty) return;
+
+    // FIX (Aug 11 2026 — Nizam's "laptop console completely clean, ping
+    // never sent" report): this early-return used to be silent beyond the
+    // debugPrint above (which only shows the candidate COUNT, not why it's
+    // zero). If pickup coords ended up wrong/default (e.g. the laptop GPS
+    // issue fixed in bike_booking_screen.dart), _heroesQueue could come
+    // back empty with no heroes nearby that default point, and this method
+    // would just quietly stop -- looking exactly like "nothing happened,
+    // no error anywhere." Now logs specifically WHICH condition tripped
+    // and surfaces it to the customer via a SnackBar instead of leaving
+    // them staring at a spinner forever.
+    if (_heroesQueue.isEmpty || _requestId.isEmpty) {
+      debugPrint(
+          '🔥 [BROADCAST] Aborting: '
+          '${_heroesQueue.isEmpty ? "no candidate heroes in queue" : ""}'
+          '${_heroesQueue.isEmpty && _requestId.isEmpty ? " AND " : ""}'
+          '${_requestId.isEmpty ? "_requestId is empty" : ""}. '
+          'pickup=(${widget.ride.pickupLatitude ?? "null->fallback 11.3410"}, '
+          '${widget.ride.pickupLongitude ?? "null->fallback 77.7172"})',);
+      if (mounted && _heroesQueue.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No heroes found near your pickup location. Please check your '
+              'pickup pin is correct and try again.',
+            ),
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+      return;
+    }
 
     _isPinging = true;
 
@@ -505,36 +616,87 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       });
     }
 
-    // ── Step 1: mark the request as broadcasting (no single "current" hero) ──
-    await FirebaseDatabase.instance
-        .ref('active_ride_requests/$_requestId')
-        .update({'currentPingHeroId': '', 'dispatchMode': 'broadcast'});
-
-    // ── Step 2: write the SAME ping to every candidate hero's inbox, simultaneously ──
-    final Map<String, dynamic> multiPathUpdate = {};
-    for (final hero in _heroesQueue) {
-      final heroId = hero['id'] as String;
-      multiPathUpdate['hero_pings/$heroId/$_requestId'] = {
-        'requestId': _requestId,
-        'customerId': FirebaseAuth.instance.currentUser?.uid ?? '',
-        'firestoreDocId': _rideDocId,
-        'pickupAddress': widget.ride.pickupAddress ?? '',
-        'dropAddress': widget.ride.dropAddress ?? '',
-        'pickupLat': widget.ride.pickupLatitude ?? 11.3410,
-        'pickupLng': widget.ride.pickupLongitude ?? 77.7172,
-        'dropLat': widget.ride.dropLatitude ?? 11.3520,
-        'dropLng': widget.ride.dropLongitude ?? 77.7280,
-        'distanceKm': widget.ride.distanceKm ?? 0,
-        'estimatedFare': widget.ride.estimatedFare ?? widget.ride.fare ?? 0,
-        'tipAmount': _selectedTipAmount,
-        'vehicleType': widget.ride.vehicleType ?? 'bike',
-        'category': _normalizeCategoryKey(widget.ride.vehicleType ?? 'bike'),
-        'pingExpiresAt': pingExpiresAt,
+    // FIX (Aug 11 2026): both broadcast-write steps below used to run with
+    // NO try/catch at all -- any RTDB write failure (permission-denied,
+    // offline, transient network blip) would throw silently up the async
+    // call chain with nothing printed, which is exactly the "clean
+    // console, no ping sent" symptom reported. Now both are logged
+    // explicitly and surfaced to the customer so a real failure here is
+    // never invisible again.
+    try {
+      // ── Step 1: mark the request as broadcasting (no single "current" hero) ──
+      // FIX (Aug 11 2026 — Nizam's "Try Again press pannuna ride retry
+      // agala" report): ROOT CAUSE — this update never reset `status`.
+      // The first search attempt's Step 5 (timeout branch, below) writes
+      // `status: 'timeout'` to this same active_ride_requests/$_requestId
+      // node when no hero accepts in time. hero_home_screen.dart's
+      // _acceptRide() runs an atomic RTDB transaction that reads this
+      // EXACT `status` field and calls Transaction.abort() if it's
+      // 'accepted', 'cancelled', OR 'timeout' (see that file, ~line 2787)
+      // — so once a search had timed out once, every future "Try Again"
+      // on the SAME _requestId kept re-broadcasting fresh pings to heroes
+      // (which arrived and displayed fine, explaining why nothing looked
+      // broken from the customer's side), but ANY hero who then tapped
+      // Accept had their transaction silently abort because `status` was
+      // still 'timeout' from the very first attempt — permanently, since
+      // nothing ever set it back to a live value. Fixed by resetting
+      // `status` to 'pinging' here, every time a broadcast (re)starts.
+      await FirebaseDatabase.instance
+          .ref('active_ride_requests/$_requestId')
+          .update({
+        'currentPingHeroId': '',
+        'dispatchMode': 'broadcast',
         'status': 'pinging',
-      };
+      });
+
+      // ── Step 2: write the SAME ping to every candidate hero's inbox, simultaneously ──
+      final Map<String, dynamic> multiPathUpdate = {};
+      for (final hero in _heroesQueue) {
+        final heroId = hero['id'] as String;
+        multiPathUpdate['hero_pings/$heroId/$_requestId'] = {
+          'requestId': _requestId,
+          'customerId': FirebaseAuth.instance.currentUser?.uid ?? '',
+          'firestoreDocId': _rideDocId,
+          'pickupAddress': widget.ride.pickupAddress ?? '',
+          'dropAddress': widget.ride.dropAddress ?? '',
+          'pickupLat': widget.ride.pickupLatitude ?? 11.3410,
+          'pickupLng': widget.ride.pickupLongitude ?? 77.7172,
+          'dropLat': widget.ride.dropLatitude ?? 11.3520,
+          'dropLng': widget.ride.dropLongitude ?? 77.7280,
+          'distanceKm': widget.ride.distanceKm ?? 0,
+          'estimatedFare': widget.ride.estimatedFare ?? widget.ride.fare ?? 0,
+          'tipAmount': _selectedTipAmount,
+          'vehicleType': widget.ride.vehicleType ?? 'bike',
+          'category': _normalizeCategoryKey(widget.ride.vehicleType ?? 'bike'),
+          'pingExpiresAt': pingExpiresAt,
+          // FIX (Aug 11 2026): an EXPLICIT server-stamped creation time.
+          // The hero used to derive "when was this ping created?" as
+          // `pingExpiresAt - 90000`, which silently couples the hero's
+          // dedup logic to the customer's broadcast-window constant —
+          // change one, break the other. Worse, pingExpiresAt comes from
+          // the CUSTOMER's device clock while the hero compares it to the
+          // HERO's device clock, so any skew between two phones shifts
+          // the derived timestamp. ServerValue.timestamp is written by
+          // Firebase's own servers, so both sides can agree.
+          'createdAt': ServerValue.timestamp,
+          'status': 'pinging',
+        };
+      }
+      await FirebaseDatabase.instance.ref().update(multiPathUpdate);
+      debugPrint('🔥 [BROADCAST] Ping broadcast to ${_heroesQueue.length} heroes — waiting up to ${broadcastWindowSeconds}s...');
+    } catch (e) {
+      debugPrint('🔥 [BROADCAST] FAILED to write broadcast ping: $e');
+      _isPinging = false;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not reach heroes — please retry ($e)'),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+      return;
     }
-    await FirebaseDatabase.instance.ref().update(multiPathUpdate);
-    debugPrint('🔥 [BROADCAST] Ping broadcast to ${_heroesQueue.length} heroes — waiting up to ${broadcastWindowSeconds}s...');
 
     // ── Step 3: wait for the full window, checking every 1s for acceptance ──
     // (_rtdbRequestSub, already listening on active_ride_requests/$_requestId,
@@ -739,7 +901,13 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   }
 
 
+  // FIX (Cancellation Reason Analytics, Aug 11 2026): cancel no longer
+  // fires immediately from the button tap — the reason sheet IS the
+  // confirmation now. Backing out of the sheet without picking a
+  // reason means no cancellation happens at all (search keeps going).
   Future<void> _cancelRide() async {
+    final reason = await showCancellationReasonSheet(context);
+    if (reason == null || !mounted) return;
     setState(() => _cancelled = true);
     _countTimer?.cancel();
     _pingCountdown?.cancel();
@@ -761,7 +929,11 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       FirebaseFirestore.instance
           .collection('rides')
           .doc(_rideDocId)
-          .update({'status': 'cancelled', 'cancelledAt': FieldValue.serverTimestamp()})
+          .update({
+            'status': 'cancelled',
+            'cancelledAt': FieldValue.serverTimestamp(),
+            'cancellationReason': reason,
+          })
           .catchError((Object e) {
         debugPrint('[RideSearch] Firestore ride cancel-cleanup failed (non-fatal): $e');
       });
@@ -780,37 +952,79 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   }
 
   Future<void> _tryAgainSearch() async {
+    debugPrint('🔥 [TRY-AGAIN] tapped. _isPinging=$_isPinging requestId=$_requestId');
     // _isPinging is set true for the duration of _startSequentialPinging()
     // (see its start/end points below) — guard against a stray re-entrant
     // call (e.g. a fast double-tap) starting a second overlapping pinging
     // loop against the same _heroesQueue/_requestId state, which would
     // double-write to active_ride_requests/hero_pings.
+    //
+    // FIX (Aug 11 2026 — Nizam's "Try Again does nothing" report): this
+    // guard silently no-op'd with zero logging if _isPinging was ever
+    // left true (e.g. an earlier unhandled exception mid-broadcast, or a
+    // genuine double-tap) — from the outside this looked exactly like a
+    // dead button. Now logged so a real stuck-flag case is diagnosable
+    // instead of indistinguishable from "button does nothing."
     if (_isPinging) {
+      debugPrint('🔥 [TRY-AGAIN] blocked — a broadcast is already in flight.');
       return;
     }
-    _pingCountdown?.cancel();
-    _countTimer?.cancel();
-    _heroAcceptedOverlayShown = false;
-    _currentHeroIndex = 0;
-    _rideFinalized = false;
-    setState(() {
-      _searchTimedOut = false;
-      _cancelled = false;
-      _captainFound = false;
-      _searchSeconds = 0;
-      _rideStatus = 'searching';
-    });
-    _radarCtrl.repeat();
-    await _fetchNearbyHeroes();
-    if (_heroesQueue.isNotEmpty) {
-      _startCountTimer();
-      _listenForAcceptance();
-      // ✅ Listeners must start BEFORE the blocking await.
-      // TASK 2: "Try Again" now fires a fresh 5km broadcast, per spec
-      // item 6 ("simply fire a fresh broadcast to all nearby heroes").
-      await _startBroadcastPinging();
-    } else {
-      setState(() => _searchTimedOut = true);
+    try {
+      _pingCountdown?.cancel();
+      _countTimer?.cancel();
+      // FIX: _rtdbRequestSub was never cancelled before _listenForAcceptance()
+      // re-subscribed below on every retry — each "Try Again" press left the
+      // previous subscription running forever (leak), and repeated retries
+      // stacked up multiple listeners on the same node. Harmless in the
+      // common case (all guarded by !_rideFinalized) but wasteful and a real
+      // source of confusing duplicate-log noise while debugging exactly this
+      // kind of report — cancel explicitly before re-subscribing.
+      await _rtdbRequestSub?.cancel();
+      _heroAcceptedOverlayShown = false;
+      _currentHeroIndex = 0;
+      _rideFinalized = false;
+      if (mounted) {
+        setState(() {
+          _searchTimedOut = false;
+          _cancelled = false;
+          _captainFound = false;
+          _searchSeconds = 0;
+          _rideStatus = 'searching';
+        });
+      }
+      _radarCtrl.repeat();
+      debugPrint('🔥 [TRY-AGAIN] re-fetching nearby heroes...');
+      await _fetchNearbyHeroes();
+      debugPrint('🔥 [TRY-AGAIN] fetch complete — ${_heroesQueue.length} candidates.');
+      if (_heroesQueue.isNotEmpty) {
+        _startCountTimer();
+        _listenForAcceptance();
+        // ✅ Listeners must start BEFORE the blocking await.
+        // TASK 2: "Try Again" now fires a fresh 5km broadcast, per spec
+        // item 6 ("simply fire a fresh broadcast to all nearby heroes").
+        await _startBroadcastPinging();
+      } else {
+        if (mounted) setState(() => _searchTimedOut = true);
+      }
+    } catch (e, st) {
+      // FIX: the whole body above had no top-level try/catch. A thrown
+      // exception anywhere in this chain (e.g. _radarCtrl.repeat() on an
+      // already-disposed controller, or any future change that adds a
+      // throwing call) would leave _isPinging in whatever state it was
+      // last set to, the UI stuck on whatever it last rendered, and — since
+      // TextButton's onPressed callback here isn't awaited by the
+      // framework — the error would only ever surface as an easy-to-miss
+      // unhandled-exception zone error, looking exactly like "the button
+      // does nothing." Now caught, logged, state force-reset so the
+      // customer isn't left stuck, and a real error is surfaced.
+      debugPrint('🔥 [TRY-AGAIN] EXCEPTION: $e\n$st');
+      _isPinging = false;
+      if (mounted) {
+        setState(() => _searchTimedOut = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not restart search: $e')),
+        );
+      }
     }
   }
 

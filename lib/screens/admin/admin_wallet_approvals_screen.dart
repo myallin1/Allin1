@@ -154,7 +154,7 @@ class _AdminWalletApprovalsScreenState
             const SizedBox(width: 8),
             Text(
               'Wallet Recharge Approvals',
-              style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800, fontSize: 17),
+              style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800, fontSize: 18), // FIX (UI standardization, Aug 11 2026): app-bar titles are 18sp app-wide
             ),
           ],
         ),
@@ -224,11 +224,15 @@ class _AdminWalletApprovalsScreenState
                 ),
               ),
               Text(
+                // FIX (UI standardization, Aug 11 2026): shrunk from 18
+                // to match the hero-name field's 15sp on the same row —
+                // this repeats on every card in the list, not a one-off
+                // KPI, so it shouldn't dominate the row.
                 '₹${request.amount.toStringAsFixed(0)}',
                 style: GoogleFonts.outfit(
                   color: _green,
                   fontWeight: FontWeight.w900,
-                  fontSize: 18,
+                  fontSize: 15,
                 ),
               ),
             ],

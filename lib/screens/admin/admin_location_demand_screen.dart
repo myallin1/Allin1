@@ -112,7 +112,9 @@ class _AdminLocationDemandScreenState
         elevation: 0,
         title: Text(
           'Location Demand',
-          style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w600),
+          // FIX (UI standardization, Aug 11 2026): explicit 18sp,
+          // matching the app-bar title convention app-wide.
+          style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w600, fontSize: 18),
         ),
       ),
       body: Padding(

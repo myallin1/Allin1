@@ -20,6 +20,9 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../services/admin_deletion_service.dart';
+import '../../widgets/admin/admin_selection_mixin.dart';
+
 // Ride statuses that mean "no hero has accepted yet" -- these are the
 // only ones that show the "Assign Hero Manually (VIP Booking)" action.
 // Feeds the VIP Booking fallback: when a customer's sequential hero-ping
@@ -53,9 +56,24 @@ const Set<String> _settledPaymentStatuses = {
   'confirmed',
 };
 
-class AdminTaxiRidesScreen extends StatelessWidget {
+class AdminTaxiRidesScreen extends StatefulWidget {
   const AdminTaxiRidesScreen({super.key});
 
+  // Test Data Cleanup (Aug 11 2026): this screen was a plain
+  // StatelessWidget — no local state existed anywhere in it, every
+  // method below took `context` explicitly and touched nothing but its
+  // own parameters. Converted to Stateful ONLY to host
+  // AdminSelectionMixin's select-mode/checkbox/filter state; every
+  // existing method (build, _buildRidesList, _assignHero,
+  // _showUtrDialog, the pure label/color helpers) moved into the State
+  // class UNCHANGED — none of them referenced `widget.` anything, so
+  // none needed rewriting, only relocating.
+  @override
+  State<AdminTaxiRidesScreen> createState() => _AdminTaxiRidesScreenState();
+}
+
+class _AdminTaxiRidesScreenState extends State<AdminTaxiRidesScreen>
+    with AdminSelectionMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -68,6 +86,10 @@ class AdminTaxiRidesScreen extends StatelessWidget {
         ),
       ),
       body: _buildRidesList(context),
+      bottomNavigationBar: buildDeleteBar(
+        subjectPlural: 'Test Rides',
+        onDelete: () => _deleteSelectedRides(context),
+      ),
     );
   }
 
@@ -85,11 +107,45 @@ class AdminTaxiRidesScreen extends StatelessWidget {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: _gold));
         }
-        final docs = snap.data?.docs ?? [];
+        final allDocs = snap.data?.docs ?? [];
+        // Test Data Cleanup (Aug 11 2026): the select-mode toolbar and
+        // phone filter live HERE, inside the StreamBuilder, rather than
+        // in the AppBar — the filtered list only exists once the
+        // snapshot has data, and build() (where the AppBar is
+        // constructed) runs before that data is available. Placing it
+        // where the data actually lives avoids a stale/empty filter.
+        final docs = allDocs
+            .where((doc) => matchesPhoneFilter(
+                ((doc.data()! as Map<String, dynamic>)['customerPhone']
+                        as String?) ??
+                    '',),)
+            .toList();
+        final toolbar = Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: buildSelectionToolbar(
+            context: context,
+            visibleIds: docs.map((d) => d.id).toList(),
+            onFilterChanged: () {},
+          ),
+        );
         if (docs.isEmpty) {
-          return _emptyCard('No rides found', '🏍️');
+          return Column(
+            children: [
+              toolbar,
+              Expanded(
+                child: _emptyCard(
+                  allDocs.isEmpty ? 'No rides found' : 'No matches for that number',
+                  '🏍️',
+                ),
+              ),
+            ],
+          );
         }
-        return ListView.builder(
+        return Column(
+          children: [
+            toolbar,
+            Expanded(
+              child: ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: docs.length,
           itemBuilder: (context, i) {
@@ -119,7 +175,15 @@ class AdminTaxiRidesScreen extends StatelessWidget {
             final categoryEmoji = _categoryEmoji(rawCategory);
             final categoryLabel = _categoryLabel(rawCategory);
             final color = _statusColor(status);
-            return Container(
+            // Test Data Cleanup (Aug 11 2026): select-mode toggles the
+            // row's checkbox on tap instead of doing nothing (this row
+            // has no onTap at all outside select mode — the card itself
+            // is not interactive; only its inner "Verify UTR"/assign
+            // buttons are), so select mode adds behaviour rather than
+            // taking any away.
+            return GestureDetector(
+              onTap: selectMode ? () => toggleItemSelected(doc.id) : null,
+              child: Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -130,6 +194,24 @@ class AdminTaxiRidesScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Test Data Cleanup (Aug 11 2026): checkbox in select
+                  // mode, individual delete always available otherwise —
+                  // same pattern as admin_service_requests_screen.dart.
+                  Row(
+                    children: [
+                      if (selectMode) buildSelectionCheckbox(doc.id),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => _deleteOneRide(context, doc.id),
+                        tooltip: 'Delete this ride',
+                        icon: const Icon(Icons.delete_outline_rounded,
+                            color: _red, size: 18,),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                            minWidth: 32, minHeight: 32,),
+                      ),
+                    ],
+                  ),
                   Row(
                     children: [
                       Expanded(
@@ -293,11 +375,36 @@ class AdminTaxiRidesScreen extends StatelessWidget {
                   ],
                 ],
               ),
+            ),
             );
           },
+              ),
+            ),
+          ],
         );
       },
     );
+  }
+
+  // Test Data Cleanup (Aug 11 2026) ─────────────────────────────────
+  Future<void> _deleteOneRide(BuildContext context, String rideId) async {
+    final confirmed = await confirmSingleDelete(context, subject: 'Test Ride');
+    if (!confirmed) return;
+    await AdminDeletionService.instance.deleteRide(rideId);
+    // No local list mutation needed — the StreamBuilder above re-renders
+    // from the live snapshot the instant Firestore reflects the delete.
+  }
+
+  Future<void> _deleteSelectedRides(BuildContext context) async {
+    if (selectedIds.isEmpty) return;
+    final confirmed = await confirmBulkDelete(
+      context,
+      count: selectedIds.length,
+      subjectPlural: 'Test Rides',
+    );
+    if (!confirmed) return;
+    await AdminDeletionService.instance.bulkDeleteRides(selectedIds.toList());
+    clearSelection();
   }
 
   // ── VIP Booking manual hero assignment ──────────────────────────
@@ -549,6 +656,12 @@ class AdminTaxiRidesScreen extends StatelessWidget {
       case 'cancelled':
       case 'cancelled_by_captain':
         return _red;
+      // NEW (Recovery System, Aug 11 2026): a hero released this ride
+      // back to admin via the Incomplete/Stuck Tasks hub — distinct
+      // pink so it doesn't blend into the plain-grey "unknown status"
+      // default and admin notices it needs a follow-up call.
+      case 'admin_review':
+        return const Color(0xFFFF4FA3);
       default:
         return _muted;
     }

@@ -378,7 +378,7 @@ class _CaptainDocumentScreenState extends State<CaptainDocumentScreen> {
           // Higher than the 100KB default — same reasoning as
           // hero_register_screen.dart: these are ID documents admin
           // must read to verify, so keep a bit more clarity.
-          targetBytes: 200 * 1024,
+          targetBytes: CloudinaryUploadService.kDocumentTargetBytes,
         );
 
         // Save to Firestore

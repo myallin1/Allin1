@@ -13,6 +13,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+// GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../services/auth_prompt_service.dart';
 import '../services/cloudinary_upload_service.dart';
 import '../services/grocery_ai_notes_service.dart';
 import '../services/service_request_service.dart';
@@ -190,6 +192,16 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
 
   Future<void> _submit() async {
     if (!_canSubmit) return;
+
+    // GUEST MODE (Aug 11 2026): browse and build the whole list as a
+    // guest; sign in only at submit. See auth_prompt_service.dart.
+    if (!await requireRealAuth(
+      context,
+      reason: 'Sign in and we’ll get your groceries moving',
+    )) {
+      return;
+    }
+    if (!mounted) return;
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;

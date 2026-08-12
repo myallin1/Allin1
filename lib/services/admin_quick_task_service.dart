@@ -53,6 +53,7 @@ import '../screens/admin/hero_approvals_screen.dart';
 import 'admin_ai_audit_tools.dart';
 import 'admin_kyc_vision_service.dart';
 import 'admin_kyc_write_service.dart';
+import 'deepseek_api_service.dart';
 import 'gemini_api_service.dart';
 import 'guru_admin_api_service.dart';
 import 'voice_booking_intent_service.dart';
@@ -70,21 +71,24 @@ class AdminQuickTaskService extends ChangeNotifier {
 
   final GuruAdminApiService _api = GuruAdminApiService();
   final GeminiApiService _gemini = GeminiApiService();
+  // Admin-only third agent — see deepseek_api_service.dart for why this
+  // is deliberately not added to the customer app.
+  final DeepSeekApiService _deepseek = DeepSeekApiService();
   final VoiceBookingIntentService _yesNo = VoiceBookingIntentService();
 
   // NEW (CTO mandate — Multi-Agent Orchestration & Handoff Architecture,
-  // Dual Agent Toggle). 'groq' (default) or 'gemini' — controls ONLY
-  // which agent answers plain conversational messages (see the branch
-  // in sendMessage() below). All 5 admin tools (navigate/propose-write/
-  // audit_ui_sections/generate_kyc_report/run_ux_audit) keep running
-  // through Groq's extractAgentAction regardless of this toggle — Groq
-  // is this app's "Fast Logic" tool-calling agent by the CTO's own
-  // framing, so tool-calling parity for Gemini was judged out of scope
-  // for this toggle and left for a future mandate if wanted.
+  // Dual Agent Toggle). 'groq' (default), 'gemini', or 'deepseek' —
+  // controls which agent answers plain conversational messages (see
+  // the branch in sendMessage() below) AND, as of Aug 12 2026, which
+  // agent's extractAgentAction runs the 5 admin tools (see
+  // _tryAgentActionFromText above) — all three providers now share
+  // the same tool schema (admin_ai_tools_schema.dart), so whichever
+  // model the CTO switches to becomes a genuinely full admin assistant,
+  // not just a chat window.
   String activeAgent = 'groq';
 
   void setActiveAgent(String agent) {
-    if (agent != 'groq' && agent != 'gemini') return;
+    if (agent != 'groq' && agent != 'gemini' && agent != 'deepseek') return;
     if (activeAgent == agent) return;
     activeAgent = agent;
     notifyListeners();
@@ -102,6 +106,21 @@ class AdminQuickTaskService extends ChangeNotifier {
     _autoSpeak = !_autoSpeak;
     if (!_autoSpeak) unawaited(_tts.stop());
     notifyListeners();
+  }
+
+  // NEW (Aug 12 2026 — Nizam: "yeppayume oru work muichutu next work
+  // boss nu enkita question pannanum" — every time a piece of work
+  // finishes, ask what's next): appended after any action that fully
+  // completes with no further question already pending — a read-only
+  // report, a navigation, or a resolved write decision. Deliberately
+  // NOT called after propose_write_action's own Yes/No prompt or after
+  // a KYC report's Approve/Reject/Skip chips, since those already ask
+  // the CTO a direct question and a second "what's next" on top would
+  // just be noise stacked on an unanswered one.
+  void _appendNextTaskPrompt() {
+    const nextTaskText = "Boss, what's the next task?";
+    messages.add(const AdminChatTurn(role: 'assistant', text: nextTaskText));
+    unawaited(_speak(nextTaskText));
   }
 
   Future<void> _speak(String text) async {
@@ -260,6 +279,7 @@ class AdminQuickTaskService extends ChangeNotifier {
         _lastKycReport = null;
         messages.add(const AdminChatTurn(role: 'assistant', text: 'Okay, skipped — no changes made.'));
         unawaited(_speak('Okay, skipped. No changes made.'));
+        _appendNextTaskPrompt();
         _sending = false;
         notifyListeners();
         return;
@@ -342,15 +362,29 @@ class AdminQuickTaskService extends ChangeNotifier {
       // returned early when a tool matched, so reaching here means this
       // is a normal question/reply either way — the only difference is
       // which agent answers it.
-      final reply = activeAgent == 'gemini'
-          ? await _gemini.sendMessage(
-              message: trimmed,
-              apiKey: await _api.resolveGeminiApiKey(),
-              history: history,
-            )
-          : await _api.sendMessage(message: trimmed, history: history);
+      // NEW (Aug 11 2026 — Nizam: DeepSeek as a third admin agent, to
+      // fall back on when Groq/Gemini free limits run out). Same
+      // plain-conversation branch — tool-calling still belongs to Groq
+      // above, unchanged.
+      final String reply;
+      if (activeAgent == 'gemini') {
+        reply = await _gemini.sendMessage(
+          message: trimmed,
+          apiKey: await _api.resolveGeminiApiKey(),
+          history: history,
+        );
+      } else if (activeAgent == 'deepseek') {
+        reply = await _deepseek.sendMessage(
+          message: trimmed,
+          apiKey: await _deepseek.resolveApiKey(),
+          history: history,
+        );
+      } else {
+        reply = await _api.sendMessage(message: trimmed, history: history);
+      }
       messages.add(AdminChatTurn(role: 'assistant', text: reply));
       unawaited(_speak(reply));
+      _appendNextTaskPrompt();
     } catch (e) {
       const failureText = 'Admin AI is temporarily unavailable. Please try again shortly.';
       messages.add(const AdminChatTurn(role: 'assistant', text: failureText));
@@ -365,7 +399,31 @@ class AdminQuickTaskService extends ChangeNotifier {
     if (input.isEmpty) return false;
     Map<String, dynamic>? args;
     try {
-      args = await _api.extractAgentAction(message: input);
+      // NEW (Aug 12 2026 — Nizam: "apdi set pannuna model than quick
+      // task la enaku full and full yennoda assistanta ah irukanum"):
+      // tool-calling used to always go through Groq regardless of
+      // which agent was toggled active. Now the CTO's active-agent
+      // choice decides which provider extracts the tool call — Groq,
+      // Gemini and DeepSeek all share the same 5-tool schema (see
+      // admin_ai_tools_schema.dart) and return the exact same
+      // {'action': ..., ...args} shape, so nothing below this switch
+      // needs to know or care which provider actually answered.
+      switch (activeAgent) {
+        case 'gemini':
+          args = await _gemini.extractAgentAction(
+            message: input,
+            apiKey: await _api.resolveGeminiApiKey(),
+          );
+          break;
+        case 'deepseek':
+          args = await _deepseek.extractAgentAction(
+            message: input,
+            apiKey: await _deepseek.resolveApiKey(),
+          );
+          break;
+        default:
+          args = await _api.extractAgentAction(message: input);
+      }
     } catch (e) {
       debugPrint('[AdminQuickTaskService] extractAgentAction failed: $e');
     }
@@ -386,6 +444,7 @@ class AdminQuickTaskService extends ChangeNotifier {
       final report = await AdminAiAuditTools.auditUiSections();
       messages.add(AdminChatTurn(role: 'assistant', text: report));
       unawaited(_speak(report));
+      _appendNextTaskPrompt();
       notifyListeners();
       return true;
     }
@@ -402,6 +461,7 @@ class AdminQuickTaskService extends ChangeNotifier {
       final report = await AdminAiAuditTools.runUxAudit();
       messages.add(AdminChatTurn(role: 'assistant', text: report));
       unawaited(_speak(report));
+      _appendNextTaskPrompt();
       notifyListeners();
       return true;
     }
@@ -419,6 +479,7 @@ class AdminQuickTaskService extends ChangeNotifier {
         final notFoundText = 'No pending ${type ?? 'hero'} KYC submissions found.';
         messages.add(AdminChatTurn(role: 'assistant', text: notFoundText));
         unawaited(_speak(notFoundText));
+        _appendNextTaskPrompt();
         notifyListeners();
         return true;
       }
@@ -545,6 +606,7 @@ class AdminQuickTaskService extends ChangeNotifier {
     final openingText = 'Opening ${_sectionLabel(section)} now.';
     messages.add(AdminChatTurn(role: 'assistant', text: openingText));
     unawaited(_speak(openingText));
+    _appendNextTaskPrompt();
     notifyListeners();
     unawaited(navState.push(MaterialPageRoute<void>(builder: (_) => target)));
   }
@@ -668,6 +730,7 @@ class AdminQuickTaskService extends ChangeNotifier {
     }
     messages.add(AdminChatTurn(role: 'assistant', text: resultText));
     unawaited(_speak(resultText));
+    _appendNextTaskPrompt();
   }
 
   // NEW (CTO mandate — Task 1 foundation, extended for Final Write
@@ -1041,6 +1104,15 @@ class _AdminQuickTaskPanelState extends State<_AdminQuickTaskPanel> {
                                 label: 'Gemini (Deep Reasoning)',
                                 selected: service.activeAgent == 'gemini',
                                 onTap: () => service.setActiveAgent('gemini'),
+                              ),
+                              const SizedBox(width: 6),
+                              // Aug 11 2026: third agent, admin-only —
+                              // the backup to switch to when Groq/Gemini
+                              // free limits are exhausted.
+                              _AgentToggleChip(
+                                label: 'DeepSeek (Backup)',
+                                selected: service.activeAgent == 'deepseek',
+                                onTap: () => service.setActiveAgent('deepseek'),
                               ),
                             ],
                           ),

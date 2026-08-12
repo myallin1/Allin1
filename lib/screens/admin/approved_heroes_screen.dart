@@ -78,7 +78,7 @@ class _ApprovedHeroesScreenState extends State<ApprovedHeroesScreen> {
               style: GoogleFonts.outfit(
                 color: _text,
                 fontWeight: FontWeight.w800,
-                fontSize: 17,
+                fontSize: 18, // FIX (UI standardization, Aug 11 2026): app-bar titles are 18sp app-wide
               ),
             ),
           ],

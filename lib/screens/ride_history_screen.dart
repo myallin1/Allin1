@@ -83,11 +83,33 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
     // schema does not consistently write 'userId' on every document,
     // only 'customerId' is guaranteed present (see CHANGELOG). Using
     // 'userId' here silently returned zero rides for every customer.
+    //
+    // FIX (root cause of "Could not load ride history — pull down to
+    // retry" — and pulling down NEVER actually fixed it, always the
+    // exact same message): this combined a `.where('customerId', ...)`
+    // equality filter with `.orderBy('createdAt', ...)` — two different
+    // fields — which Firestore requires a composite index for.
+    // firestore.indexes.json has a `customerId + status + createdAt`
+    // index for `rides`, but NOT a plain `customerId + createdAt` one
+    // (this query doesn't filter on status at all), so every single
+    // read here threw `failed-precondition: requires an index`,
+    // 100% of the time, for every customer — not a transient/flaky
+    // failure at all. Pull-to-refresh forces a fresh Firestore call
+    // (see forceRefresh in _loadRideHistory below) but it was hitting
+    // the exact same broken query every time, which is exactly why
+    // retrying never changed anything — same guaranteed failure, same
+    // static error message. Fixed the same way as the earlier
+    // Payments Received disputes-tab bug this session: drop the
+    // orderBy (no composite index needed for a single equality filter
+    // alone) and sort client-side instead — cheap, ride history is a
+    // small per-customer list, and this avoids waiting on a Firestore
+    // index build this close to launch. Limit bumped to 50 before the
+    // client-side sort+truncate so "most recent 20" is still accurate
+    // even for a customer with more than 20 rides ever.
     _rideHistoryQuery = FirebaseFirestore.instance
         .collection('rides')
         .where('customerId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
-        .orderBy('createdAt', descending: true)
-        .limit(20)
+        .limit(50)
         .withConverter<Map<String, dynamic>>(
           fromFirestore: (snap, _) => snap.data() ?? <String, dynamic>{},
           toFirestore: (data, _) => data,
@@ -145,18 +167,28 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
 
     try {
       final snap = await _rideHistoryQuery.get();
-      DbUsageTracker.instance.recordRead(snap.docs.length);
-      final rides = snap.docs.map((d) => d.data()).toList();
+      DbUsageTracker.instance.recordRead(snap.docs.length, 'ride_history', 'fetch_rides');
+      // Client-side sort (see the query-construction comment above for
+      // why orderBy was removed) + truncate to the 20 most recent.
+      final rides = snap.docs.map((d) => d.data()).toList()
+        ..sort((a, b) {
+          final tsA = a['createdAt'];
+          final tsB = b['createdAt'];
+          final msA = tsA is Timestamp ? tsA.millisecondsSinceEpoch : 0;
+          final msB = tsB is Timestamp ? tsB.millisecondsSinceEpoch : 0;
+          return msB.compareTo(msA);
+        });
+      final limitedRides = rides.take(20).toList();
       if (mounted) {
         setState(() {
-          _rides = rides;
+          _rides = limitedRides;
           _loading = false;
           _error = null;
         });
       }
       await HiveCache.put(
         HiveCache.kRideHistory,
-        rides.map(_encodeRideForCache).toList(),
+        limitedRides.map(_encodeRideForCache).toList(),
         ttl: HiveCache.ttlRideHistory,
       );
     } catch (e) {

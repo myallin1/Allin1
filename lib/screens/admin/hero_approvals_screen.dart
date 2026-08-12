@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/city_config.dart';
+import '../../services/cloudinary_upload_service.dart';
 
 // ── Theme (matches admin dashboard) ────────────────────────────
 const Color _bg = Color(0xFF0A0A1A);
@@ -80,7 +81,7 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
               style: GoogleFonts.outfit(
                 color: _text,
                 fontWeight: FontWeight.w800,
-                fontSize: 17,
+                fontSize: 18, // FIX (UI standardization, Aug 11 2026): app-bar titles are 18sp app-wide
               ),
             ),
           ],
@@ -413,7 +414,11 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
               borderRadius: BorderRadius.circular(8),
               child: hasPhoto
                   ? Image.network(
-                      photoUrl,
+                      // List thumbnail only. The full-screen verification
+                      // viewer above is deliberately left un-transformed —
+                      // an admin reading fine print on an ID document
+                      // should never have q_auto in the path.
+                      CloudinaryUploadService.optimizedUrl(photoUrl, width: 128),
                       width: 64,
                       height: 64,
                       fit: BoxFit.cover,

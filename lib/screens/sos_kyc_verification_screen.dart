@@ -151,7 +151,7 @@ class _SosKycVerificationScreenState extends State<SosKycVerificationScreen> {
           // Higher than the 100KB default — admin needs to actually
           // read these ID documents to verify identity before
           // activating SOS, so keep a bit more clarity.
-          targetBytes: 200 * 1024,
+          targetBytes: CloudinaryUploadService.kDocumentTargetBytes,
         );
         urls[entry.key] = url;
       }

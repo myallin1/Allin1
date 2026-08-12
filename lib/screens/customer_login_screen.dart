@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+// Phone cache warm-up on sign-in (Aug 11 2026).
+import '../services/auth_service.dart';
 import '../services/local_sync_service.dart';
 
 // ================================================================
@@ -153,6 +155,16 @@ class _CustomerLoginScreenState extends State<CustomerLoginScreen> {
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }
+      // Phone cache (Aug 11 2026): warm it from the number we already
+      // have, so this customer's first booking costs zero Firestore reads
+      // and waits on nothing before the hero ping goes out. The
+      // existing-user path below intentionally does not cache here (no
+      // number in hand) — resolveCustomerPhone() does one cold read then
+      // caches for good.
+      if (!existingDoc.exists) {
+        await AuthService().cacheCustomerPhone(user.uid, mobile);
+      }
+
       // FIX (CTO-confirmed edge case): existingDoc.exists == true means
       // this Google account already has an account — the typed mobile
       // number is intentionally discarded here (never overwrites an

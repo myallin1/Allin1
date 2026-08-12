@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+// GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../services/auth_prompt_service.dart';
 import '../services/auth_service.dart';
 import '../services/cart_service.dart';
 import '../services/category_gateway_service.dart';
@@ -561,15 +563,26 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
     final cart = widget.cart;
     if (cart.isEmpty || _isPlacingOrder) return;
 
+    // GUEST MODE (Aug 11 2026): NOT in the original spec's list of nine
+    // screens — found by grepping every createServiceRequest() call site
+    // in lib/ rather than trusting the list. This is the catalog/menu
+    // checkout ('catalog_food_order'), which writes to service_requests
+    // exactly like the other order screens, so isRealUser() rejects it
+    // from a guest too. Without this guard the seller's order simply
+    // never arrives and nobody finds out why.
+    if (!await requireRealAuth(
+      context,
+      reason: 'Sign in and this shop will start packing your order',
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please sign in to place an order'),
-            backgroundColor: Color(0xFFFF5252),
-          ),
-        );
+        // GUEST MODE: was the harsh 0xFFFF5252 red.
+        showSignInRequiredSnack(context, message: 'Sign in to place your order');
       }
       return;
     }

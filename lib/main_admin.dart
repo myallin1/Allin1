@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_navigator.dart';
 import 'config/app_variant.dart';
@@ -32,9 +33,11 @@ import 'services/admin_live_alert_service.dart';
 import 'services/admin_quick_task_service.dart';
 import 'services/db_usage_tracker.dart';
 import 'services/localization_service.dart';
+import 'services/migration_gate_service.dart';
 import 'services/session_service.dart';
 import 'services/theme_service.dart';
 import 'widgets/branded_loading_screen.dart';
+import 'widgets/migration_notice_overlay.dart';
 
 // NEW (per Nizam's request — Admin "WhatsApp model" closed-app alerts):
 // mirrors main_hero.dart's _firebaseMessagingBackgroundHandler. Must be
@@ -117,6 +120,15 @@ void _initAdminFcmAuthListener() {
   });
 }
 
+// FIX (Aug 10 2026 — Nizam's "video every launch is too slow / disturbs
+// repeat users" report, same pattern as main_customer.dart/main_hero.dart/
+// main_seller.dart): gates whether the splash video plays at all. Set
+// (once) only after the video has actually finished playing on a
+// first-ever launch — see the branch in main() below. Every launch after
+// that reads this as true and skips straight past the video AND past any
+// blocking loading screen.
+const String _kSplashVideoSeenEverKey = 'admin_splash_video_seen_ever_v1';
+
 // FIX (Nizam's "video as natural visual buffer" request, task #108, same
 // fix as main_customer.dart/main_hero.dart/main_seller.dart): paint
 // app_splash.mp4 first, before Hive/Firebase even start, so Flutter's
@@ -128,6 +140,13 @@ void _initAdminFcmAuthListener() {
 // it's no longer a second screen stacked after this one.
 // BrandedLoadingScreen is now only a rare fallback frame, shown only if
 // Hive/Firebase init somehow outlasts the video.
+//
+// FIX (Aug 10 2026 — first-launch-only video): this class itself is
+// UNCHANGED — still the video screen described above. What changed is
+// main() no longer runApp()s it unconditionally: it now only does so the
+// very first time this device/browser ever opens the admin app (see
+// _kSplashVideoSeenEverKey above). Every later launch skips this widget
+// entirely and goes straight to AdminApp — see the branch in main() below.
 class _BootLoadingApp extends StatelessWidget {
   const _BootLoadingApp({required this.onVideoFinished});
 
@@ -176,17 +195,47 @@ void main() {
       // videoDone completes when app_splash.mp4 finishes playing; the
       // second runApp() below (AdminApp) awaits it so the video is never
       // cut short by a fast Hive/Firebase init.
+      //
+      // FIX (Aug 10 2026 — first-launch-only video, "rocket speed" repeat
+      // opens): a SharedPreferences read (fast, local, no network) decides
+      // right here whether this device has ever seen the video before.
+      // First-ever launch: unchanged behavior — _BootLoadingApp (video)
+      // paints immediately. Every later launch: videoDone is marked
+      // complete immediately (nothing to wait for) and _BootLoadingApp is
+      // never even built.
+      final earlyPrefs = await SharedPreferences.getInstance();
+      final hasSeenSplashVideoEver =
+          earlyPrefs.getBool(_kSplashVideoSeenEverKey) ?? false;
+
       final videoDone = Completer<void>();
-      runApp(_BootLoadingApp(onVideoFinished: () {
-        if (!videoDone.isCompleted) videoDone.complete();
-      }));
+      if (!hasSeenSplashVideoEver) {
+        runApp(_BootLoadingApp(onVideoFinished: () {
+          if (!videoDone.isCompleted) videoDone.complete();
+        }));
+      } else {
+        videoDone.complete();
+      }
 
       // SessionService.saveSession() opens a Hive box directly (not via
       // HiveCache's guarded wrapper), which throws "You need to
       // initialize Hive..." if nothing primed it first. main_customer.dart
       // calls this eagerly at startup; admin never did, so Google
       // Sign-In's post-auth saveSession() call was crashing here.
-      await Hive.initFlutter();
+      //
+      // FIX (Aug 10 2026 — rocket-speed repeat opens): first-ever launch
+      // still awaits this (unchanged timing, still finishes long before
+      // the video does); a repeat launch has no video to hide behind, so
+      // this now runs unawaited in the background instead — nothing on
+      // the very first AdminApp frame reads Hive directly, only
+      // SessionService.saveSession() does, and that only fires later, on
+      // an actual login action.
+      if (!hasSeenSplashVideoEver) {
+        await Hive.initFlutter();
+      } else {
+        unawaited(Hive.initFlutter().catchError((Object e) {
+          debugPrint('[main_admin] Background Hive.initFlutter() error: $e');
+        }));
+      }
 
       try {
         if (Firebase.apps.isEmpty) {
@@ -202,6 +251,13 @@ void main() {
           FirebaseFirestore.instance.settings = const Settings(
             persistenceEnabled: true,
             cacheSizeBytes: 52428800, // 50MB
+            // FIX (Aug 10 2026, UPDATED Aug 11 2026 — same QUIC/
+            // Firestore-Listen-channel fix applied to main_customer.dart/
+            // main_hero.dart, for consistency across all 4 apps; switched
+            // from auto-detect to forced long-polling since auto-detect
+            // proved unreliable): see main_hero.dart for the full
+            // explanation.
+            webExperimentalForceLongPolling: true,
           );
         }
         await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
@@ -227,13 +283,30 @@ void main() {
       // signed in (works for both a fresh login and an already-warm
       // session restored from disk).
       FirebaseMessaging.onBackgroundMessage(_adminFirebaseMessagingBackgroundHandler);
-      await AdminAlertNotificationService.initialize();
+      // FIX (Aug 10 2026 — rocket-speed repeat opens): same treatment as
+      // Hive.initFlutter() above — first-ever launch still awaits these
+      // (unchanged timing, hidden behind the video), a repeat launch fires
+      // them unawaited so notification-channel setup doesn't stand between
+      // "app opens" and runApp(AdminApp()) below.
+      if (!hasSeenSplashVideoEver) {
+        await AdminAlertNotificationService.initialize();
+      } else {
+        unawaited(AdminAlertNotificationService.initialize());
+      }
       AdminForegroundService.initialize();
-      await FirebaseMessaging.instance.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
+      if (!hasSeenSplashVideoEver) {
+        await FirebaseMessaging.instance.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+      } else {
+        unawaited(FirebaseMessaging.instance.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+        ));
+      }
       _initAdminFcmAuthListener();
       // Foreground messages are NOT auto-displayed by Android/FCM (only
       // background/killed states get that for free from the
@@ -251,8 +324,28 @@ void main() {
       // Gate the real-app swap on the video having finished playing (it
       // almost always has, by now — Hive/Firebase init is the fast side
       // of this race) so the boot video is never truncated mid-playback.
+      // On a repeat launch videoDone was already completed above (no
+      // video was ever shown), so this resolves instantly and adds no
+      // wait — Firebase init above (a local-session restore, not a fresh
+      // network call in the common case) is the only thing standing
+      // between "app opens" and runApp(AdminApp()) on a repeat launch.
       await videoDone.future;
       runApp(const AdminApp());
+      // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch"): fire-and-forget,
+      // fails open on any error — see MigrationGateService's own header.
+      // Also doubles as the source of truth admin writes migrationUrl
+      // FROM (Admin QR Generator screen), so it's especially important
+      // this app instance always has the listener running.
+      MigrationGateService.instance.start();
+
+      // Mark the video as seen only now that it has actually finished
+      // playing (videoDone is only completed by AppSplashVideoScreen's
+      // own onFinished/safety-timer, or immediately above if it was
+      // already skipped) — every launch from here on takes the
+      // "skip video" branch above.
+      if (!hasSeenSplashVideoEver) {
+        unawaited(earlyPrefs.setBool(_kSplashVideoSeenEverKey, true));
+      }
     },
   );
 }
@@ -348,11 +441,16 @@ class AdminApp extends StatelessWidget {
       // fallback now reuses BrandedLoadingScreen instead of a different-
       // looking bare spinner for the rare genuine cold-cache case.
       // FIX (video-as-natural-buffer, per Nizam's request): app_splash.mp4
-      // now plays pre-Firebase/Hive as the very first boot frame (see
+      // plays pre-Firebase/Hive as the very first boot frame (see
       // _BootLoadingApp above) instead of here — this used to wrap the
       // StreamBuilder auth gate in a second AppSplashVideoScreen play,
       // which would have shown the same video twice back to back on every
       // launch. Now goes straight to the (unchanged) StreamBuilder gate.
+      // UPDATED (Aug 10 2026): the pre-Firebase video itself is now
+      // first-ever-launch-only (see _kSplashVideoSeenEverKey in main())
+      // — on every later launch nothing plays before this route at all,
+      // and this StreamBuilder's existing initialData fast-path is what
+      // the admin actually sees appear almost instantly.
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         initialData: FirebaseAuth.instance.currentUser,
@@ -378,11 +476,17 @@ class AdminApp extends StatelessWidget {
       // a separate root-level OverlayEntry (see
       // AdminQuickTaskService.show()) inserted via `navigatorKey`, so
       // it survives Navigator.push/pop the same way this FAB does.
-      builder: (context, child) => Stack(
-        children: [
-          if (child != null) child,
-          const AdminQuickTaskFab(),
-        ],
+      // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch"): MigrationGate
+      // wraps EVERYTHING else here, including the Quick Task FAB — a
+      // migration lock must hide the whole app, not sit under a
+      // still-interactive overlay.
+      builder: (context, child) => MigrationGate(
+        child: Stack(
+          children: [
+            if (child != null) child,
+            const AdminQuickTaskFab(),
+          ],
+        ),
       ),
       routes: {
         '/admin-home':       (_) => const AdminDashboardScreen(),

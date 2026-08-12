@@ -24,15 +24,22 @@ import 'screens/ai_settings_screen.dart';
 import 'screens/checkout_screen.dart';
 import 'screens/coming_soon_screen.dart';
 import 'screens/customer_login_screen.dart';
-import 'screens/customer_welcome_login_screen.dart';
+// GUEST MODE (Aug 11 2026): customer_welcome_login_screen.dart's import
+// was removed here, not the FILE. _CustomerHomeGate was its only caller
+// in the entire repo (verified by grep), so with the login wall gone the
+// import became unused and would fail `flutter analyze`. The screen is
+// left on disk, unrouted — same state welcome_screen.dart has been in
+// since Aug 8 — so it can be restored in one line if Guest Mode is ever
+// rolled back.
 import 'screens/dashboard_screen.dart';
 import 'screens/guru_chat_screen.dart';
 import 'screens/guru_offer_screen.dart';
 import 'screens/hero_booking_screen.dart';
-import 'screens/app_splash_video_screen.dart';
 import 'screens/settings_screen.dart';
 import 'services/ai_activation_service.dart';
 import 'services/analytics_service.dart';
+// GUEST MODE (Aug 11 2026): for ensureGuestSession() in main().
+import 'services/auth_service.dart';
 import 'services/api_service.dart';
 import 'services/cache_service.dart';
 import 'services/db_usage_tracker.dart';
@@ -41,6 +48,7 @@ import 'services/hive_cache.dart';
 import 'services/local_sync_service.dart';
 import 'services/localization_service.dart';
 import 'services/map_service.dart';
+import 'services/migration_gate_service.dart';
 // receive_sharing_intent is Android/iOS only and has no web
 // implementation, so importing it unconditionally broke `flutter build
 // web`. Switch the implementation at compile time instead: web gets the
@@ -50,7 +58,7 @@ import 'services/share_intent_platform_stub.dart'
 import 'services/shared_location_inbox.dart';
 import 'services/soundbox_easter_egg_service.dart';
 import 'services/theme_service.dart';
-import 'widgets/branded_loading_screen.dart';
+import 'widgets/migration_notice_overlay.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -66,6 +74,27 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       FirebaseFirestore.instance.settings = const Settings(
         persistenceEnabled: true,
         cacheSizeBytes: 52428800, // 50MB
+        // FIX (Aug 10 2026 — root cause of "customer PWA la book
+        // pannuna hero PWA la varala" on some devices/networks): the
+        // Hero PWA's own browser console showed repeated
+        // `net::ERR_QUIC_PROTOCOL_ERROR / QUIC_TOO_MANY_RTOS` on
+        // firestore.googleapis.com — Firestore Web SDK defaults to
+        // QUIC/HTTP3 for its real-time Listen channel, and some
+        // networks (certain WiFi/mobile carriers/VPNs) silently
+        // block or degrade QUIC (a UDP-based protocol), causing the
+        // channel to keep failing to reconnect with no visible error
+        // to the user — writes still succeed (this is why the
+        // customer side worked fine finding heroes), but the
+        // listener on the OTHER end never receives the update.
+        // UPDATED (Aug 11 2026): auto-detect proved unreliable — Hero
+        // PWA still hit the same QUIC error after this fix on some
+        // networks, because QUIC_TOO_MANY_RTOS means the connection
+        // keeps silently retrying rather than failing cleanly, so
+        // auto-detect never gets a clean signal to fall back. Switched
+        // to `experimentalForceLongPolling`, which skips QUIC/WebChannel
+        // negotiation entirely — see main_hero.dart for the full
+        // explanation. Applied here too for consistency across all 4 apps.
+        webExperimentalForceLongPolling: true,
       );
     }
   }
@@ -89,6 +118,22 @@ Future<void> _ensureFirebaseInitialized() async {
       FirebaseFirestore.instance.settings = const Settings(
         persistenceEnabled: true,
         cacheSizeBytes: 52428800, // 50MB
+        // FIX (Aug 10 2026 — root cause of "customer PWA la book
+        // pannuna hero PWA la varala" on some devices/networks): the
+        // Hero PWA's own browser console showed repeated
+        // `net::ERR_QUIC_PROTOCOL_ERROR / QUIC_TOO_MANY_RTOS` on
+        // firestore.googleapis.com — Firestore Web SDK defaults to
+        // QUIC/HTTP3 for its real-time Listen channel, and some
+        // networks (certain WiFi/mobile carriers/VPNs) silently
+        // block or degrade QUIC (a UDP-based protocol), causing the
+        // channel to keep failing to reconnect with no visible error
+        // to the user — writes still succeed (this is why the
+        // customer side worked fine finding heroes), but the
+        // listener on the OTHER end never receives the update.
+        // UPDATED (Aug 11 2026): auto-detect proved unreliable — see
+        // the matching comment above/main_hero.dart for the full
+        // explanation. Switched to `experimentalForceLongPolling`.
+        webExperimentalForceLongPolling: true,
       );
     }
     // FIX (Nizam's report — PWA "3 animations every reopen" audit): the
@@ -118,64 +163,37 @@ Future<void> _ensureFirebaseInitialized() async {
   }
 }
 
-// FIX (Nizam's "jet-speed startup" request, task #108): previously
-// nothing painted at all until Firebase.initializeApp() + its retry loop
-// + Hive boot phase 1 all finished -- a genuine network round-trip
-// (Firebase init can hit the network, and is documented above as prone
-// to "transient blip" failures on weak Erode connections) that blocked
-// Flutter's very first frame. Flutter's `flutter-first-frame` web event
-// (see web/index.html) only fires once something actually paints, so
-// the customer sat on the JS splash's cycling status text the entire
-// time -- which is what read as "3 animations before the app opens" on
-// every single launch, not just the first.
+// REMOVED (Aug 12 2026 — CTO mandate: "Splash Screen Overhaul & UX
+// Animation" + "The Rebuild Bug"): _BootLoadingApp (the Flutter-side
+// video splash, AppSplashVideoScreen) and its whole first-launch-vs-
+// repeat-launch branch below are gone. Two independent reasons:
 //
-// Fix: paint THIS tiny, dependency-free screen immediately (no Firebase,
-// no providers, nothing it needs isn't available the instant the Dart
-// VM boots) via an early runApp() call, before Firebase/Hive even start.
-// That fires flutter-first-frame right away and swaps out the JS splash
-// for this -- which looks IDENTICAL to BrandedLoadingScreen (same design
-// as the JS splash by design, see branded_loading_screen.dart's own
-// comment), so the customer never perceives a "swap" at all, just one
-// continuous screen. Once Firebase/Hive phase 1 finish in the
-// background, a second runApp(CustomerApp()) call below replaces this
-// with the real app -- calling runApp() a second time is a normal,
-// already-used pattern here (see _BootFailedApp below, which did this
-// on the failure path before this fix existed).
-// FIX (Aug 8 2026 — Nizam's "video should act as a natural visual
-// buffer, background processes MUST run in parallel" architecture
-// decision): this used to always show the static BrandedLoadingScreen
-// first (while Firebase/Hive initialize), and only THEN swap to
-// CustomerApp -> _IntroGate -> AppSplashVideoScreen for the video —
-// meaning every launch showed [pink static splash] THEN [video], two
-// screens back to back, exactly what Nizam flagged as still-unwanted.
+//   1. It was itself a forced ~6-11s watch (real completion-based, not
+//      a fake Future.delayed, but still a hard floor on boot time no
+//      matter how fast Firebase/Hive actually finished) — the CTO's own
+//      framing was that an 11-second video is the "slow feeling"
+//      startup, not merely "3 splashes."
+//   2. It required a SECOND runApp() call (this widget, then
+//      runApp(CustomerApp()) later) — a full root-binding-level
+//      teardown-and-rebuild of the entire Flutter element tree, which
+//      is one of the two confirmed causes of the "triple rebuild on
+//      boot" bug (see CustomerApp's build() below for the other one,
+//      the ValueKey/themeKey fix).
 //
-// Now: this IS the video screen. It's the very first thing painted,
-// with NO wait for Firebase — video playback has no Firebase
-// dependency. Firebase/Hive init runs fully in parallel in main()
-// while the video plays. `onVideoFinished` is a Completer.complete()
-// callback that main() awaits (alongside Firebase-readiness) before
-// its OWN runApp(CustomerApp()) swap — so the real app only replaces
-// this tree once BOTH the video has played AND the background work is
-// done, whichever finishes last. `nextScreen` here is BrandedLoadingScreen
-// purely as a rare fallback frame (only visible if Firebase/Hive is
-// somehow SLOWER than the ~6-7s video) — not a second animation, just
-// the same static frame this screen used to show first, now shown
-// last-resort instead.
-class _BootLoadingApp extends StatelessWidget {
-  final VoidCallback onVideoFinished;
-  const _BootLoadingApp({required this.onVideoFinished});
+// The web/index.html HTML/CSS splash (see that file's category-icon
+// shuffle preloader) is now the ONE and ONLY splash across the entire
+// boot sequence — it already exists outside Flutter entirely, costs
+// zero extra runApp() calls, and is torn down the instant
+// `flutter-first-frame` fires, which now happens on the FIRST and ONLY
+// runApp(CustomerApp()) call in main() below. The video asset itself
+// and AppSplashVideoScreen/BrandedLoadingScreen widget files are left
+// on disk, unrouted, in case product wants them reachable some other
+// way later — same "unroute, don't delete" convention already used for
+// IntroVideoScreen/WelcomeScreen elsewhere in this file.
 
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: AppSplashVideoScreen(
-        nextScreen: const BrandedLoadingScreen(),
-        onFinished: onVideoFinished,
-      ),
-    );
-  }
-}
+// REMOVED (Aug 12 2026): _kSplashVideoSeenEverKey. It gated the now-
+// removed Flutter video splash — see the removal note above
+// _BootFailedApp's own class comment for the full reasoning.
 
 // FIX (black/white-screen-stuck audit, per Nizam's request): the
 // fallback shown when Firebase can't be reached even after retries —
@@ -259,28 +277,17 @@ void main() async {
       // doesn't silently rely on that default never changing.
       currentAppVariant = 'customer';
 
-      // FIX (task #108, jet-speed startup): paint something -- anything
-      // -- as the very first statement after the binding is ready, before
-      // Firebase or Hive have even started. This is what actually kills
-      // the "3 animations on every open" symptom: Flutter's first frame
-      // now happens in milliseconds instead of after a Firebase network
-      // round-trip, so the web JS splash (web/index.html) swaps out for
-      // this near-instantly instead of sitting there for however long
-      // Firebase takes. See _BootLoadingApp's comment above for why this
-      // is safe to do a second runApp() over, below.
-      //
-      // FIX (Aug 8 2026 — single visual buffer, no extra pink splash
-      // before the video): _BootLoadingApp IS the video now. videoDone
-      // completes the moment the video finishes (or its own safety
-      // timer fires) — awaited below, alongside Firebase/Hive readiness,
-      // before the real runApp(CustomerApp()) swap.
-      final videoDone = Completer<void>();
-      runApp(_BootLoadingApp(
-        onVideoFinished: () {
-          if (!videoDone.isCompleted) videoDone.complete();
-        },
-      ));
-
+      // REMOVED (Aug 12 2026 — single-splash consolidation): the early
+      // "paint _BootLoadingApp before Firebase starts" trick and the
+      // first-launch-vs-repeat-launch video branching are both gone —
+      // see the removal note above _BootFailedApp's class comment. The
+      // web/index.html HTML/CSS splash now covers this entire wait
+      // (Firebase init below, boot phase 1 further down) on its own,
+      // with zero Dart-side runApp() calls needed to keep it on screen —
+      // it is torn down by the SAME `flutter-first-frame` event this
+      // file already relied on, just now triggered by the one and only
+      // runApp(CustomerApp()) call below instead of an early throwaway
+      // frame.
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
       FlutterError.onError = (details) {
@@ -350,58 +357,38 @@ void main() async {
       // function body) already catches and reports uncaught errors here,
       // so the plain try/catch below covers exactly the same cases
       // without adding a second zone layer.
-      // FIX (boot-flicker root cause, task #108 follow-up): resolved
-      // here, BEFORE runApp(CustomerApp(...)) below, instead of inside
-      // _IntroGate's own initState() after the widget tree already
-      // swapped over. A SharedPreferences read is a fast local
-      // round-trip (not network) — doing it here costs a few
-      // milliseconds added to the SAME already-in-flight boot phase 1
-      // that's opening Hive boxes anyway, instead of forcing a THIRD
-      // widget (the old _IntroGate's loading fallback) to mount after
-      // runApp() just to wait for this exact same read.
-      try {
-        await Hive.initFlutter();
-        await CacheService().initCritical();
-
-        // FIX (Poster Campaign Tracking): Cache the 'source' parameter
-        // from the PWA URL into SharedPreferences before Google Sign-In
-        // redirects clear it.
-        if (kIsWeb) {
-          final sourceParam = Uri.base.queryParameters['source'];
-          if (sourceParam != null && sourceParam.isNotEmpty) {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('campaign_source', sourceParam);
-          }
-        }
-
-        // If this launch came from Android's share sheet (customer shared a
-        // location out of WhatsApp/Maps into Allin1), the shared text is on
-        // the launch URL. Read it now, before any screen builds, so the
-        // hero booking screen finds it already waiting. Cheap, synchronous,
-        // and a no-op on an ordinary launch.
-        SharedLocationInbox.instance.captureFromLaunchUrl();
-
-        SystemChrome.setSystemUIOverlayStyle(
-          const SystemUiOverlayStyle(
-            statusBarColor: Colors.transparent,
-            statusBarIconBrightness: Brightness.light,
-          ),
-        );
-      } catch (error, stack) {
-        debugPrint('Boot phase 1 error: $error\n$stack');
-        if (AnalyticsService.isInitialized) {
-          AnalyticsService.instance.recordError(error, stack);
-        }
-      }
-
-      // FIX (Aug 8 2026 — natural visual buffer): wait for the video to
-      // actually finish (it almost always outlasts Firebase/Hive init,
-      // so this typically resolves instantly since videoDone already
-      // completed by now) before swapping to the real app -- the video
-      // is never cut short by background work finishing early.
-      await videoDone.future;
-
+      // SIMPLIFIED (Aug 12 2026 — single-splash consolidation): the
+      // first-launch-vs-repeat-launch split is gone. Every launch now
+      // takes what used to be only the "repeat launch" path: paint the
+      // real CustomerApp tree IMMEDIATELY — do not wait on Hive/cache
+      // warm-up first. Firebase itself is still awaited above
+      // (unavoidable: _CustomerHomeGate's boot-uid subscription reads
+      // FirebaseAuth.instance.authStateChanges() the moment CustomerApp
+      // builds, so Firebase must already be initialized by then), but
+      // that's a local SDK call restoring an already-persisted session,
+      // not a fresh network round-trip, so it's fast. Everything else
+      // (Hive boxes, cache, shared-location inbox, system chrome) runs
+      // unawaited in the background — the customer sees the dashboard
+      // shell first, data fills in via the screens' own existing loading
+      // states as it arrives. This is exactly the CTO's "snap instantly
+      // to the Home Screen the millisecond it's ready" requirement: the
+      // ONLY thing this runApp() call still waits on is the genuinely
+      // real async work above (Firebase), never a fixed timer.
       runApp(const CustomerApp());
+      unawaited(_runBootPhase1());
+
+      // GUEST MODE (Aug 11 2026): give every customer a real uid from
+      // the first frame, so the dozens of existing screens that read
+      // FirebaseAuth.instance.currentUser! (or gate an RTDB read on
+      // auth != null) keep working with no null-hardening audit.
+      //
+      // Placed AFTER both runApp() branches and unawaited() on purpose:
+      // it is a network round-trip and must never sit between the app
+      // and its first paint. It is also idempotent — if a real session
+      // was already restored from disk it returns immediately without
+      // touching it, so a signed-in customer is never downgraded to a
+      // guest on relaunch.
+      unawaited(AuthService().ensureGuestSession());
 
       // Everything non-essential to the first frame runs here instead of
       // blocking runApp(): analytics, the deferred Hive boxes, the API
@@ -416,8 +403,58 @@ void main() async {
       unawaited(_warmCustomerServices());
       unawaited(_restoreActiveRideIfNeeded());
       unawaited(_listenForSharedLocations());
+      // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch"): starts the live
+      // migration-notice listener. Fire-and-forget, after runApp(), same
+      // as every other post-boot warm-up above — never delays first
+      // paint, and fails open (see MigrationGateService's own header
+      // comment) so a Firestore hiccup here can never lock out a
+      // healthy app.
+      MigrationGateService.instance.start();
     },
   );
+}
+
+// FIX (Aug 10 2026 — extracted for first-launch-only video change): body
+// unchanged from what used to sit inline in main() — Hive core + the
+// boxes the home screen reads, the campaign-source capture, the
+// share-intent capture, and the status-bar style. First-ever launch
+// still `await`s this before runApp(); repeat launches fire it
+// unawaited() instead. See the two call sites in main() above.
+Future<void> _runBootPhase1() async {
+  try {
+    await Hive.initFlutter();
+    await CacheService().initCritical();
+
+    // FIX (Poster Campaign Tracking): Cache the 'source' parameter
+    // from the PWA URL into SharedPreferences before Google Sign-In
+    // redirects clear it.
+    if (kIsWeb) {
+      final sourceParam = Uri.base.queryParameters['source'];
+      if (sourceParam != null && sourceParam.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('campaign_source', sourceParam);
+      }
+    }
+
+    // If this launch came from Android's share sheet (customer shared a
+    // location out of WhatsApp/Maps into Allin1), the shared text is on
+    // the launch URL. Read it now, before any screen builds, so the
+    // hero booking screen finds it already waiting. Cheap, synchronous,
+    // and a no-op on an ordinary launch.
+    SharedLocationInbox.instance.captureFromLaunchUrl();
+
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+      ),
+    );
+  } catch (error, stack) {
+    debugPrint('Boot phase 1 error: $error\n$stack');
+    if (AnalyticsService.isInitialized) {
+      AnalyticsService.instance.recordError(error, stack);
+    }
+  }
 }
 
 // ── BOOT PHASE 2: everything that can wait for the first frame ──
@@ -602,10 +639,22 @@ class CustomerApp extends StatelessWidget {
           // context.watch<LocalizationService>() re-renders in the new
           // language without nuking navigation.
           //
-          // themeKey is left in place for now — same concern applies to
-          // it, but theme switching mid-session isn't part of this fix
-          // and changing it here would be an unrelated behaviour change.
-          key: ValueKey('customer_${themeService.themeKey}'),
+          // FIX (Aug 12 2026 — "triple rebuild on boot" root cause):
+          // themeKey WAS still keying this MaterialApp (left in place
+          // "for now" by the note above, which is exactly what regressed
+          // it). ThemeService's constructor fires an async _loadTheme()
+          // that, for any customer who ever picked a non-default theme,
+          // resolves to a DIFFERENT value than the hardcoded default
+          // ('pink_white') a moment after first paint and calls
+          // notifyListeners() — and because THIS key was built from that
+          // value, Flutter treated it as a brand-new widget and threw
+          // away the entire tree (Navigator + every screen + all state)
+          // a second time, on top of whatever boot-sequence rebuilds
+          // were already happening. Removed entirely: MaterialApp has no
+          // key here at all now, exactly like every other flavor's app
+          // root. Consumer2 already handles reactive theme swaps by
+          // rebuilding `theme:` in place — no tree destruction needed
+          // for that, ever.
           navigatorKey: navigatorKey,
           title: localization.t('app_title'),
           debugShowCheckedModeBanner: false,
@@ -633,11 +682,17 @@ class CustomerApp extends StatelessWidget {
           // is NOT built here -- it's a separate root-level OverlayEntry
           // (see GuruOverlayService.show()) inserted via `navigatorKey`,
           // so it survives Navigator.push/pop the same way this FAB does.
-          builder: (context, child) => Stack(
-            children: [
-              if (child != null) child,
-              const GlobalGuruFab(),
-            ],
+          // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch"): MigrationGate
+          // wraps EVERYTHING else here, including the AI FAB — a
+          // migration lock must hide the whole app, not sit under a
+          // still-interactive overlay.
+          builder: (context, child) => MigrationGate(
+            child: Stack(
+              children: [
+                if (child != null) child,
+                const GlobalGuruFab(),
+              ],
+            ),
           ),
           // The bouncing Paytm soundbox used to be mounted HERE, at the
           // MaterialApp builder — meaning it sat on top of every single
@@ -687,14 +742,14 @@ class CustomerApp extends StatelessWidget {
 //     WelcomeScreen widget/file is not deleted, only unrouted, in case
 //     product wants it reachable some other way later.
 //
-// Every launch (first-ever or returning) now goes straight from the
-// boot frame to the single shared AppSplashVideoScreen, then to the
-// real auth-gated home screen (_CustomerHomeGate).
-//
-// This also preserves the earlier boot-flicker fix: this widget has no
-// async gap of its own (nothing left here needs one), so the ONLY
-// loading screen in the entire cold-boot path remains _BootLoadingApp,
-// painted exactly once.
+// UPDATED (Aug 12 2026 — single-splash consolidation): the Flutter-side
+// video boot frame this comment used to describe (_BootLoadingApp /
+// AppSplashVideoScreen) is gone entirely now — see the removal note
+// above _BootFailedApp's class comment near the top of this file. This
+// widget (_IntroGate) has nothing left to gate and always goes straight
+// to the real home screen (_CustomerHomeGate); the ONE splash for the
+// whole boot sequence is now the HTML/CSS one in web/index.html, which
+// lives outside Flutter entirely and needs no widget here to manage it.
 // ================================================================
 class _IntroGate extends StatelessWidget {
   const _IntroGate();
@@ -727,62 +782,97 @@ class _CustomerHomeGate extends StatefulWidget {
 
 class _CustomerHomeGateState extends State<_CustomerHomeGate> {
   String? _lastUid;
+  StreamSubscription<User?>? _authSub;
+
+  // FIX (Aug 12 2026 — "triple rebuild on boot" root cause, contributing
+  // factor): this used to be a StreamBuilder whose `builder` re-ran on
+  // EVERY authStateChanges() emission (the boot-time guest sign-in lands
+  // a moment after the initial cached-user read, so that's at least two
+  // emissions on a normal launch) — harmless in practice only because it
+  // always returned the exact same `const DashboardScreen()` either way,
+  // but it was still an extra build pass sitting in the hottest part of
+  // the boot path for zero visual benefit. Converted to a manual
+  // StreamSubscription that exists ONLY to fire the
+  // AiActivationService.refreshForUser() side effect when the uid
+  // actually changes — it never calls setState, so this widget now
+  // builds DashboardScreen exactly once, full stop, regardless of how
+  // many auth events land during boot.
+  @override
+  void initState() {
+    super.initState();
+    final initialUser = FirebaseAuth.instance.currentUser;
+    _lastUid = initialUser?.uid;
+    if (initialUser != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(context.read<AiActivationService>().refreshForUser(initialUser));
+      });
+    }
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      final currentUid = user?.uid;
+      if (_lastUid == currentUid) return;
+      _lastUid = currentUid;
+      if (!mounted) return;
+      unawaited(context.read<AiActivationService>().refreshForUser(user));
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        final user = snapshot.data;
-        final currentUid = user?.uid;
-
-        if (_lastUid != currentUid) {
-          _lastUid = currentUid;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) {
-              return;
-            }
-            unawaited(context.read<AiActivationService>().refreshForUser(user));
-          });
-        }
-
-        // FIX (CTO mandate — Task 1: Remove Legacy Profile Setup): this
-        // gate used to run a whole extra Firestore FutureBuilder here
-        // just to decide whether to swap in ProfileSetupScreen — that
-        // "still needs onboarding" case can no longer genuinely happen
-        // for the customer app. customer_login_screen.dart's new
-        // mobile-number-first Sign Up flow now writes `phoneNumber`,
-        // `phone`, AND `isSetupComplete: true` into users/{uid} at the
-        // exact moment the account is created (see that file's
-        // _signUpWithGoogle()) — so by the time ANY customer reaches
-        // this gate, either they're not signed in yet (handled above)
-        // or their profile is already complete. Removed the
-        // Firestore-profile-read FutureBuilder and the ProfileSetupScreen
-        // branch entirely; every signed-in customer now goes straight to
-        // DashboardScreen, unconditionally, every time. Zero network
-        // round trip added to this gate anymore.
-        //
-        // NOTE: ProfileSetupScreen the WIDGET is not deleted — it's
-        // still a real, actively-used screen for other app types via
-        // lib/screens/login_screen.dart's generic Google sign-in
-        // handler (Admin/Seller/other-role flows), so removing the
-        // FILE would break those. Only this customer-specific gate
-        // stopped routing to it.
-        //
-        // FIX (Aug 8 2026 — Nizam's Unified Welcome Screen decision):
-        // a signed-out customer now sees CustomerWelcomeLoginScreen
-        // (merged language-picker + mobile-number + Google sign-in,
-        // white/pink theme) right here, on EVERY launch while signed
-        // out — not a one-time flag. Its own "Login Later" button still
-        // lets a guest straight through to DashboardScreen without any
-        // login wall, preserving the existing "browse freely, sign in
-        // only when you book" philosophy — it's just an explicit tap
-        // now instead of an implicit skip.
-        if (user == null) {
-          return const CustomerWelcomeLoginScreen(next: DashboardScreen());
-        }
-        return const DashboardScreen();
-      },
-    );
+    // FIX (CTO mandate — Task 1: Remove Legacy Profile Setup): this
+    // gate used to run a whole extra Firestore FutureBuilder here
+    // just to decide whether to swap in ProfileSetupScreen — that
+    // "still needs onboarding" case can no longer genuinely happen
+    // for the customer app. customer_login_screen.dart's new
+    // mobile-number-first Sign Up flow now writes `phoneNumber`,
+    // `phone`, AND `isSetupComplete: true` into users/{uid} at the
+    // exact moment the account is created (see that file's
+    // _signUpWithGoogle()) — so by the time ANY customer reaches
+    // this gate, either they're not signed in yet (handled above)
+    // or their profile is already complete. Removed the
+    // Firestore-profile-read FutureBuilder and the ProfileSetupScreen
+    // branch entirely; every signed-in customer now goes straight to
+    // DashboardScreen, unconditionally, every time. Zero network
+    // round trip added to this gate anymore.
+    //
+    // NOTE: ProfileSetupScreen the WIDGET is not deleted — it's
+    // still a real, actively-used screen for other app types via
+    // lib/screens/login_screen.dart's generic Google sign-in
+    // handler (Admin/Seller/other-role flows), so removing the
+    // FILE would break those. Only this customer-specific gate
+    // stopped routing to it.
+    //
+    // SUPERSEDED (Aug 8 2026 — Unified Welcome Screen): a signed-out
+    // customer used to see CustomerWelcomeLoginScreen here on every
+    // launch, with a "Login Later" button letting them through.
+    //
+    // GUEST MODE (Aug 11 2026): the login wall is gone entirely. A
+    // null user here no longer means "signed out" — every customer
+    // is signed in ANONYMOUSLY from boot (see
+    // AuthService.ensureGuestSession(), fired unawaited in main()
+    // below). Null now only means that sub-second network call has
+    // not landed yet, which is not a state worth showing a whole
+    // login screen for. Returning DashboardScreen unconditionally is
+    // what guarantees the acceptance criterion of exactly ONE
+    // transition on boot: HTML splash -> Home. Any branch here would
+    // reintroduce a second frame swap.
+    //
+    // Screens that genuinely need a real, contactable account call
+    // requireRealAuth() at the moment of the action instead — see
+    // lib/services/auth_prompt_service.dart. The gate is enforced
+    // server-side too: firestore.rules' isRealUser() blocks writes
+    // from anonymous uids, so this is not merely a UI convention.
+    //
+    // Do NOT re-add a login gate here.
+    //
+    // CustomerWelcomeLoginScreen the FILE is intentionally not
+    // deleted — only unrouted. See the import block at the top.
+    return const DashboardScreen();
   }
 }

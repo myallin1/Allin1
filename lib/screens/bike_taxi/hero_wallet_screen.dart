@@ -422,7 +422,7 @@ class _RechargeSheetState extends State<_RechargeSheet> {
         _pickedFile!.bytes!,
         fileName: _pickedFile!.name,
         folder: 'hero_wallet_recharge/${widget.heroId}',
-        targetBytes: 200 * 1024,
+        targetBytes: CloudinaryUploadService.kDocumentTargetBytes,
       );
 
       final heroName = FirebaseAuth.instance.currentUser?.displayName;

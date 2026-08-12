@@ -25,6 +25,8 @@ import '../../services/pwa_cache_platform_stub.dart'
 import '../../services/update_service.dart';
 import '../../services/web_version_checker.dart';
 import '../../widgets/download_app_banner.dart';
+import 'hero_earnings_screen.dart';
+import 'hero_incomplete_tasks_screen.dart';
 import 'hero_settings_screen.dart';
 
 class HeroSideDrawer extends StatefulWidget {
@@ -342,6 +344,42 @@ class _HeroSideDrawerState extends State<HeroSideDrawer> {
               leading: const Icon(Icons.support_agent_rounded, color: _pink),
               title: const Text('Help & Support', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
               onTap: _openHelpSupport,
+            ),
+            // NEW (Aug 11 2026 — Recovery System): escape hatch for the
+            // "hero already on a service request" stuck-ping bug — a
+            // hero can reach a task assigned to them (however old/stuck)
+            // and either Resume it or Release it back to admin, freeing
+            // themselves up for new pings without waiting on any
+            // automatic timeout.
+            ListTile(
+              leading: const Icon(Icons.build_circle_rounded, color: _pink),
+              title: const Text('Incomplete / Stuck Tasks', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const HeroIncompleteTasksScreen(),
+                  ),
+                );
+              },
+            ),
+            // NEW (Aug 11 2026 — Business Analytics & Dynamic Billing
+            // Upgrade, Tasks 4/5): hero-facing Earnings + Online Time
+            // monitor. Fetch-on-demand + Hive cached, same architecture
+            // as the admin analytics screens — never a live listener.
+            ListTile(
+              leading: const Icon(Icons.bar_chart_rounded, color: _pink),
+              title: const Text('Earnings & Online Time', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const HeroEarningsScreen(),
+                  ),
+                );
+              },
             ),
             ListTile(
               leading: const Icon(Icons.update_rounded, color: Color(0xFF6C63FF)),

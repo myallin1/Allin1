@@ -422,10 +422,12 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
         children: [
           Icon(icon, color: const Color(0xFF16213E)),
           const SizedBox(width: 8),
+          // FIX (UI standardization, Aug 11 2026): section headers are
+          // 16sp app-wide, distinct from 18sp app-bar titles.
           Text(
             title,
             style: GoogleFonts.outfit(
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: FontWeight.bold,
               color: const Color(0xFF16213E),
             ),

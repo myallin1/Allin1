@@ -127,7 +127,11 @@ class _AdminRideTrackingScreenState extends State<AdminRideTrackingScreen> {
         backgroundColor: _surface,
         title: const Text(
           'Active Rides',
-          style: TextStyle(color: _text, fontWeight: FontWeight.bold),
+          // FIX (UI standardization, Aug 11 2026): was missing an
+          // explicit size, silently inheriting the theme's larger
+          // default titleLarge instead of the app's 18sp title
+          // convention.
+          style: TextStyle(color: _text, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         actions: [
           IconButton(

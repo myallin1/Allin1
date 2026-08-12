@@ -215,10 +215,20 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
         return;
       }
 
+      // FIX (Aug 11 2026 — HD-clarity standard pass): was
+      // imageQuality:70 / maxWidth:1024. That pre-degraded the image
+      // BELOW the pipeline's new 1080px floor before
+      // CloudinaryUploadService ever saw it — and since this is a KYC
+      // selfie used for facial comparison by an admin, throwing away
+      // that detail up front is the one place we least want to. These
+      // values now act purely as an OOM guard (capping the decode of a
+      // 12MP gallery original on a low-end device), deliberately set
+      // ABOVE the compression pipeline's own ceiling so the real
+      // size/quality decision stays centralized in one place.
       final picked = await ImagePicker().pickImage(
         source: ImageSource.gallery,
-        imageQuality: 70,
-        maxWidth: 1024,
+        imageQuality: 90,
+        maxWidth: 1920,
       );
       if (picked == null || !mounted) return;
       final bytes = await picked.readAsBytes();

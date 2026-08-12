@@ -705,8 +705,8 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       // broadcast .snapshots() stream to count docs per snapshot; the
       // stream already has _serviceRequestBusySub as a listener below, so
       // this adds no extra Firestore reads. See db_usage_tracker.dart.
-      _activeServiceRequestsStream!
-          .listen((s) => DbUsageTracker.instance.recordRead(s.docs.length));
+      _activeServiceRequestsStream!.listen((s) => DbUsageTracker.instance
+          .recordRead(s.docs.length, 'hero_active_service_requests'));
       _serviceRequestBusySub = _activeServiceRequestsStream!.listen((snap) {
         // FIX (CTO mandate — Final UI Migration Sweep): map to typed
         // models here so both this busy-gate check and the GPS-tracking
@@ -721,7 +721,26 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         // assigned/in_progress/nearing_completion). 'completed' docs
         // stay in the query only for the payment-collection UI (see
         // comment above) — they don't count as "busy" anymore.
-        final activeDocs = models.where((m) => m.status != 'completed');
+        //
+        // FIX (Recovery System, Aug 11 2026): unlike rides (which already
+        // self-expire from the busy-gate via _staleRideWindow, see
+        // _checkActiveRide below), a service request had NO time-based
+        // escape at all — one stuck at hero_assigned/in_progress forever
+        // blocked this hero's pings with no automatic recovery. Mirrors
+        // the ride behavior: a request whose last activity
+        // (updatedAt ?? createdAt) is older than _staleRideWindow no
+        // longer counts as "busy" for the ping-gate, even if its
+        // Firestore doc is untouched. This is a purely client-side gate
+        // change — it does NOT alter or delete the request document, so
+        // the new Incomplete/Stuck Tasks hub (which has no such age
+        // limit) still lists and can Release it. The manual hub remains
+        // the primary fix; this is just the same defense-in-depth
+        // rides already had.
+        final activeDocs = models.where((m) =>
+            m.status != 'completed' &&
+            DateTime.now()
+                    .difference(m.updatedAt ?? m.createdAt ?? DateTime.now())
+                <= _staleRideWindow);
         final hasActive = activeDocs.isNotEmpty;
         if (mounted && hasActive != _hasActiveServiceRequest) {
           setState(() => _hasActiveServiceRequest = hasActive);
@@ -842,10 +861,25 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         _locationTimer?.cancel();
         _locationTimer = null;
         if (_user != null) {
-          // Remove from RTDB radar to save battery — does NOT touch Firestore
+          // FIX (Aug 11 2026 — same root cause as the onDisconnect()
+          // change in _syncOnlineStatus): this used to hard-remove the
+          // node. On mobile browsers `detached` can fire simply from a
+          // PWA tab being torn down/backgrounded — not only from a real
+          // app exit — so deleting here made the hero instantly
+          // undiscoverable to customer-side search in exactly the
+          // two-tab scenario Nizam hit. Stamp instead of delete, so the
+          // grace window in ride_search_screen.dart's
+          // _fetchNearbyHeroes() governs discoverability uniformly, no
+          // matter which path caused the disconnect. An explicit
+          // "Go Offline" tap still hard-removes the node (see the
+          // offline-toggle cleanup) — that remains the only immediate,
+          // intentional way to disappear from radar.
           FirebaseDatabase.instance
               .ref('online_heroes/${_user!.uid}')
-              .remove()
+              .update({
+                'connectionLost': true,
+                'disconnectedAt': ServerValue.timestamp,
+              })
               .catchError((Object e) {
             debugPrint('RTDB radar cleanup error (detached): $e');
           });
@@ -872,7 +906,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           .collection('heroes')
           .doc(_user!.uid)
           .get();
-      DbUsageTracker.instance.recordRead();
+      DbUsageTracker.instance.recordRead(1, 'hero_home_screen', 'profile_fetch');
       final data = doc.data() ?? {};
       String vehicleType =
           (data['vehicleType'] as String?)?.trim().isNotEmpty ?? false
@@ -883,7 +917,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             .collection('users')
             .doc(_user!.uid)
             .get();
-        DbUsageTracker.instance.recordRead();
+        DbUsageTracker.instance.recordRead(1, 'hero_home_screen', 'vehicle_type_lookup');
         final userVehicle = userDoc.data()?['vehicleType'] as String?;
         if (userVehicle != null && userVehicle.trim().isNotEmpty) {
           vehicleType = userVehicle.trim();
@@ -961,7 +995,8 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               .where('captainId', isEqualTo: _user!.uid)
               .where('status', isEqualTo: 'completed')
               .get();
-          DbUsageTracker.instance.recordRead(ridesSnap.docs.length);
+          DbUsageTracker.instance
+              .recordRead(ridesSnap.docs.length, 'hero_completed_rides_count');
           double earn = 0;
           for (final d in ridesSnap.docs) {
             earn += (d.data()['fare'] as num? ?? 0).toDouble();
@@ -987,7 +1022,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           {'last_login_date': FieldValue.serverTimestamp()},
           SetOptions(merge: true),
         );
-        DbUsageTracker.instance.recordWrite();
+        DbUsageTracker.instance.recordWrite(1, 'hero_home_screen', 'last_login_stamp');
       }
     } catch (e) {
       debugPrint('Hero data load error: $e');
@@ -1161,7 +1196,39 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             // disconnect hook armed for that entire session, and
             // nothing would ever know. Now logged so a silent failure
             // is at least visible in debug output instead of invisible.
-            unawaited(onlineHeroRef.onDisconnect().remove().catchError((Object e) {
+            // FIX (Aug 11 2026 — ROOT CAUSE of Nizam's "2 tabs on mobile
+            // browser, hero never receives the ride request"): this used
+            // to be `onDisconnect().remove()`, which DELETED the hero
+            // from online_heroes the instant their socket dropped. On a
+            // mobile browser that is catastrophic for the two-tab test:
+            // the moment the Hero tab is backgrounded (because the
+            // customer switched to the Customer tab to book!), the
+            // browser suspends its WebSocket, RTDB's server fires this
+            // hook, the hero's node is deleted -- and
+            // ride_search_screen.dart's _fetchNearbyHeroes() then finds
+            // NOBODY, so no ping is ever broadcast. The hero was made
+            // undiscoverable by the very act of the customer switching
+            // tabs to book. Same thing happens on any phone-screen-off,
+            // app-switch, or brief network blip.
+            //
+            // Fix: keep the node but STAMP it as disconnected. The hero
+            // stays discoverable for a short grace window (see
+            // kPresenceGraceMs in ride_search_screen.dart), which is
+            // correct because the ping is delivered by mechanisms that
+            // survive a suspended tab anyway -- the persisted
+            // hero_pings/{heroId}/{requestId} RTDB node (their listener
+            // fires the moment the tab resumes) plus the FCM push. A
+            // hero who genuinely left simply stops being returned once
+            // the grace window lapses, and the broadcast already pings
+            // ALL nearby heroes simultaneously, so one stale entry can
+            // never block dispatch.
+            unawaited(onlineHeroRef
+                .onDisconnect()
+                .update({
+                  'connectionLost': true,
+                  'disconnectedAt': ServerValue.timestamp,
+                })
+                .catchError((Object e) {
               debugPrint('[HeroHomeScreen] onDisconnect() registration failed: $e');
             }));
             _lastUploadedPosition = currentPos;
@@ -1223,10 +1290,24 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         // non-fatal: a flush failure must never block the hero from
         // actually going offline.
         if (isStateTransition) {
+          // FIX (Hero Earnings & Online Time Monitor, Aug 11 2026):
+          // captured BEFORE endSession() clears it — this is when the
+          // online period truly began, unlike _sessionStartedAt which
+          // gets reset on every mid-session flush above.
+          final trueSessionStart =
+              HeroUsageAccumulatorService().trueSessionStartedAt;
           final activeMinutes =
               HeroUsageAccumulatorService().consumeActiveMinutes();
           final ridesHandled =
               HeroUsageAccumulatorService().consumeRidesHandled();
+          // FIX (Dynamic Micro-Billing, Aug 11 2026): safety-net flush —
+          // ride/task completions normally flush immediately at their
+          // own payment point, so this is usually 0, but if a hero goes
+          // Offline with any un-flushed activity still pending, its
+          // distance (if any) must come along too so it bills
+          // dynamically instead of silently falling back to flat.
+          final rideDistancesKm =
+              HeroUsageAccumulatorService().consumeRideDistances();
           HeroUsageAccumulatorService().endSession();
           unawaited(
             HeroWalletService()
@@ -1234,6 +1315,8 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                   heroId: _user!.uid,
                   activeMinutes: activeMinutes,
                   ridesHandled: ridesHandled,
+                  rideDistancesKm: rideDistancesKm,
+                  heroName: _captainName,
                 )
                 .catchError((Object e) {
               debugPrint(
@@ -1241,6 +1324,26 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               );
             }),
           );
+          // FIX (Hero Earnings & Online Time Monitor, Aug 11 2026): logs
+          // one doc per online→offline cycle so the new Earnings/Online
+          // Time screen has a persistent history to sum — nothing
+          // tracked this before (confirmed by audit: online-time only
+          // ever existed as an in-memory clock, lost on app kill).
+          // Bounded exactly like the usage-fee flush above — one write
+          // per toggle, never per-minute. Best-effort: a logging
+          // failure must never block the hero from going offline.
+          if (trueSessionStart != null && _user != null) {
+            final now = DateTime.now();
+            final durationMinutes =
+                now.difference(trueSessionStart).inSeconds / 60.0;
+            if (durationMinutes > 0) {
+              unawaited(_logHeroSession(
+                heroId: _user!.uid,
+                startedAt: trueSessionStart,
+                durationMinutes: durationMinutes,
+              ));
+            }
+          }
         }
         // FIX: this is the root cause of "admin dispatched a ride but the
         // hero never saw it." Going online (the `if (online)` branch
@@ -1317,6 +1420,11 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         'category': _normalizeHeroVehicleType(_vehicleType).toLowerCase(),
         'city': _heroCity,
         'lastUpdated': ServerValue.timestamp,
+        // Clear the disconnect stamp — this is a live reconnect, so the
+        // hero is genuinely back. (This is an .update()/merge, unlike the
+        // .set() calls elsewhere which replace the node wholesale and
+        // therefore drop these fields automatically.)
+        'connectionLost': false,
         if (pos != null) 'lat': pos.latitude,
         if (pos != null) 'lng': pos.longitude,
         if (pos != null) 'latitude': pos.latitude,
@@ -1324,7 +1432,14 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       };
       unawaited(
         onlineHeroRef.update(payload).then((_) {
-          return onlineHeroRef.onDisconnect().remove();
+          // See the detailed comment on the first onDisconnect()
+          // registration in _syncOnlineStatus — stamp-don't-delete, so a
+          // backgrounded/suspended tab stays discoverable for the grace
+          // window instead of vanishing from customer-side search.
+          return onlineHeroRef.onDisconnect().update({
+            'connectionLost': true,
+            'disconnectedAt': ServerValue.timestamp,
+          });
         }).catchError((Object e) {
           debugPrint('[HeroHomeScreen] .info/connected re-arm failed: $e');
         }),
@@ -1437,8 +1552,16 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           'lastUpdated': ServerValue.timestamp,
         });
         // See the matching comment on the other online_heroes.set() call
-        // above (~line 960) — server-side cleanup for ungraceful exits.
-        unawaited(onlineHeroRef.onDisconnect().remove().catchError((Object e) {
+        // above — server-side stamp (NOT delete) for ungraceful exits, so
+        // a suspended background tab stays discoverable for the grace
+        // window rather than disappearing from customer-side search.
+        unawaited(onlineHeroRef
+            .onDisconnect()
+            .update({
+              'connectionLost': true,
+              'disconnectedAt': ServerValue.timestamp,
+            })
+            .catchError((Object e) {
           debugPrint('[HeroHomeScreen] onDisconnect() re-registration failed: $e');
         }));
 
@@ -1479,6 +1602,11 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     _messageOpenedSub?.cancel();
     _serviceRequestBusySub?.cancel();
     _presenceConnectedSub?.cancel();
+    // Server-clock watcher (Aug 11 2026) — one lightweight RTDB
+    // subscription on .info/serverTimeOffset; must be released like the
+    // rest or it leaks across screen rebuilds.
+    _serverOffsetSub?.cancel();
+    _serverOffsetSub = null;
     // Cancel Firestore/RTDB popup streams — background FCM replaces them.
     _stopBroadcastRideStream();
     // Dispose UI-only animation controllers.
@@ -1968,9 +2096,62 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     );
   }
 
+  // ================================================================
+  // Ping diagnostics + server clock (Aug 11 2026)
+  // ================================================================
+  // WHY print() AND NOT debugPrint(): during the "customer books, hero
+  // receives nothing" investigation, the customer tab's console showed
+  // every print() line and NOT ONE debugPrint() line — Chrome DevTools
+  // was filtering them out ("23 hidden"), so the entire ride-dispatch
+  // trace was invisible exactly when it was needed. The handful of lines
+  // that answer "did the ping arrive, and if it was dropped, WHY" must
+  // survive a default DevTools filter. Everything else in this file
+  // stays on debugPrint.
+  void _pingLog(String message) {
+    // ignore: avoid_print
+    print('[HeroPing] $message');
+  }
+
+  /// RTDB's own clock, corrected by the offset the SDK maintains at
+  /// `.info/serverTimeOffset`. Ping timing MUST NOT be judged on a raw
+  /// device clock: the writer and the reader are different devices, and
+  /// on a browser/PWA neither is NTP-disciplined.
+  int _serverTimeOffsetMs = 0;
+
+  int _serverNowMs() =>
+      DateTime.now().toUtc().millisecondsSinceEpoch + _serverTimeOffsetMs;
+
+  StreamSubscription<DatabaseEvent>? _serverOffsetSub;
+
+  void _watchServerTimeOffset() {
+    if (_serverOffsetSub != null) return;
+    _serverOffsetSub =
+        FirebaseDatabase.instance.ref('.info/serverTimeOffset').onValue.listen(
+      (event) {
+        final offset = (event.snapshot.value as num?)?.toInt();
+        if (offset == null) return;
+        _serverTimeOffsetMs = offset;
+        if (offset.abs() > 5000) {
+          _pingLog(
+            'device clock is off by ${(offset / 1000).toStringAsFixed(1)}s '
+            'vs Firebase server time — corrected',
+          );
+        }
+      },
+      onError: (Object e) {
+        // Non-fatal: offset stays 0, i.e. previous behaviour.
+        _pingLog('serverTimeOffset watch failed: $e');
+      },
+    );
+  }
+
   void _listenForHeroPings() {
     final uid = _user?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      _pingLog('NOT LISTENING: no signed-in hero uid yet');
+      return;
+    }
+    _watchServerTimeOffset();
     // Already subscribed — RTDB listeners survive app backgrounding, so a
     // lifecycle resume must not tear this down and re-create it. Both
     // _syncOnlineStatus() and _loadHeroData() call this on the same resume
@@ -1978,9 +2159,10 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     // (each re-attach costs a fresh initial-data sync). Every cancel path
     // nulls the field, so non-null reliably means "currently attached".
     if (_heroPingSub != null) {
+      _pingLog('already listening on hero_pings/$uid');
       return;
     }
-    debugPrint('🔥 [DEBUG] Hero is LISTENING to EXACT PATH: hero_pings/$uid');
+    _pingLog('LISTENING on hero_pings/$uid');
 
     // Track when listener was attached — ignore pings older than this
     final listenerAttachedAt = DateTime.now().toUtc().millisecondsSinceEpoch;
@@ -1997,21 +2179,59 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       // online proof. Gating on the local _isOnline flag (which can lag
       // true by several seconds after app resume/cold start) was
       // silently dropping real, valid ride pings.
-      if (!mounted ||
-          _activeRideId.isNotEmpty ||
-          _hasActiveServiceRequest) {
+      // Each of these three used to swallow a ping with no trace at all.
+      // If a hero says "I got nothing", this is where the answer is.
+      if (!mounted) {
+        _pingLog('DROPPED: hero_home_screen not mounted');
         return;
       }
-      if (_isShowingRideDialog) return;
+      if (_activeRideId.isNotEmpty) {
+        _pingLog('DROPPED: hero already on ride $_activeRideId');
+        return;
+      }
+      if (_hasActiveServiceRequest) {
+        _pingLog('DROPPED: hero already on a service request');
+        return;
+      }
+      if (_isShowingRideDialog) {
+        _pingLog('DROPPED: a ride dialog is already showing');
+        return;
+      }
 
       final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
       final requestId = event.snapshot.key ?? '';
       if (pingData == null || requestId.isEmpty) return;
 
+      _pingLog('ping arrived: $requestId  data=${pingData.keys.toList()}');
+
       final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
-      if (pingExpiresAt == null) return;
-      if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
-        FirebaseDatabase.instance.ref('hero_pings/$uid/$requestId').remove();
+      if (pingExpiresAt == null) {
+        _pingLog('DROPPED $requestId: no pingExpiresAt field');
+        return;
+      }
+
+      // FIX (Aug 11 2026 — "customer books, hero app just sits there"):
+      // this compared the customer's clock (pingExpiresAt is stamped from
+      // the CUSTOMER's device via DateTime.now()) against the HERO's
+      // clock, then DELETED the ping if it looked expired. Two phones
+      // whose clocks differ by more than the 90s window would therefore
+      // destroy every incoming ping on arrival — silently, with the hero
+      // showing nothing and the customer searching forever. Device clocks
+      // routinely drift, and a browser/PWA has no NTP discipline at all.
+      //
+      // Now corrected by RTDB's own server-time offset (.info/
+      // serverTimeOffset, maintained by the SDK), so both sides measure
+      // against Firebase's clock rather than their own.
+      final nowServer = _serverNowMs();
+      if (nowServer > pingExpiresAt) {
+        final lateBy = nowServer - pingExpiresAt;
+        _pingLog('EXPIRED $requestId by ${(lateBy / 1000).toStringAsFixed(0)}s');
+        // Only sweep pings that are expired beyond any plausible skew.
+        // Deleting a merely-borderline ping used to destroy the only
+        // evidence that dispatch had happened at all.
+        if (lateBy > const Duration(minutes: 5).inMilliseconds) {
+          FirebaseDatabase.instance.ref('hero_pings/$uid/$requestId').remove();
+        }
         return;
       }
 
@@ -2025,13 +2245,25 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       // "created at" lands far in the future and this dedup check goes
       // silent, letting an already-seen/dismissed ping re-trigger the
       // Accept dialog on every app resume for the rest of the window.
-      final pingCreatedAt = pingExpiresAt - 90000; // expiresAt - 90s broadcast window
+      // FIX (Aug 11 2026): prefer the EXPLICIT server-stamped createdAt
+      // that ride_search_screen now writes. The old derivation
+      // (pingExpiresAt - 90000) silently assumed the customer's broadcast
+      // window constant and inherited the customer's clock — if either
+      // moved, every fresh ping's derived age was wrong and real pings
+      // were dropped as "pre-existing". The subtraction is kept only as a
+      // fallback for pings written by an older customer build still in
+      // the wild during rollout.
+      final pingCreatedAt =
+          (pingData['createdAt'] as num?)?.toInt() ?? (pingExpiresAt - 90000);
       if (pingCreatedAt < listenerAttachedAt - 18000) {
-        debugPrint('[HeroHomeScreen] Ignoring pre-existing ping: $requestId');
+        _pingLog(
+          'DROPPED $requestId as pre-existing '
+          '(created=$pingCreatedAt, listenerAttached=$listenerAttachedAt)',
+        );
         return;
       }
 
-      debugPrint('[HeroHomeScreen] RTDB ping received: $requestId');
+      _pingLog('ACCEPTED for display: $requestId');
 
       // ── CATEGORY FILTER: Only show rides matching hero's vehicle ──
       final requestedCategory = (pingData['category'] as String?)?.trim().toLowerCase() ??
@@ -2051,7 +2283,10 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         }
       }
       if (!categoryMatch) {
-        debugPrint('[HeroHomeScreen] Skipping ping: requested $requestedCategory, hero $heroCategory');
+        _pingLog(
+          'DROPPED $requestId on category: requested=$requestedCategory '
+          'hero=$heroCategory',
+        );
         // Silently remove the ping to clean up RTDB node
         FirebaseDatabase.instance.ref('hero_pings/${_user!.uid}/$requestId').remove();
         return;
@@ -2953,6 +3188,26 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   }
 
   // Complete a ride — 0% Commission Promotion: Hero keeps 100% of fare
+  /// Best-effort online-period log for the Earnings & Online Time
+  /// monitor. Never throws to the caller — a logging failure must
+  /// never affect the offline-toggle flow it's fired from.
+  Future<void> _logHeroSession({
+    required String heroId,
+    required DateTime startedAt,
+    required double durationMinutes,
+  }) async {
+    try {
+      await FirebaseFirestore.instance.collection('hero_sessions').add({
+        'heroId': heroId,
+        'startedAt': Timestamp.fromDate(startedAt),
+        'endedAt': FieldValue.serverTimestamp(),
+        'durationMinutes': durationMinutes,
+      });
+    } catch (e) {
+      debugPrint('[HeroHomeScreen] hero_sessions log write failed (non-fatal): $e');
+    }
+  }
+
   Future<void> _completeRide() async {
     if (_activeRideId.isEmpty) {
       return;
@@ -3014,6 +3269,21 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           'lastRideCompletedAt': FieldValue.serverTimestamp(),
           'status': 'online',
           'activeRideId': null,
+          // FIX (root cause, Aug 11 2026 — "hero completes a ride, next
+          // request never reaches them"): _acceptRide() sets isAvailable
+          // false in BOTH heroes/{uid} (Firestore) and online_heroes/{uid}
+          // (RTDB) at accept time. This Home-screen "Mark Ride Complete"
+          // button is a separate completion path from CaptainRideScreen's
+          // payment-collection flow (hero_ride_screen.dart), which DOES
+          // flip isAvailable back to true — this path never did, on
+          // either store. ride_search_screen.dart's broadcast candidate
+          // query and service_request_service.dart's dispatch check both
+          // filter on this exact flag, so a hero who closes out a ride
+          // here was left permanently invisible to every future ping with
+          // no reliable self-heal. Restoring it here on the Firestore
+          // side; the RTDB side is restored right after batch.commit()
+          // below.
+          'isAvailable': true,
           'lastUpdated': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),
@@ -3030,6 +3300,16 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     await FirebaseDatabase.instance
         .ref('live_locations/$_activeRideId')
         .remove();
+
+    // FIX (root cause, Aug 11 2026 — see the isAvailable comment on the
+    // heroes/{uid} batch write above): online_heroes/{uid} in RTDB is
+    // the actual source of truth both dispatch queries filter on, not
+    // the Firestore copy. Both must be restored together.
+    if (_user != null) {
+      await FirebaseDatabase.instance
+          .ref('online_heroes/${_user!.uid}')
+          .update({'isAvailable': true});
+    }
 
     setState(() {
       _activeRideId = '';
@@ -5659,7 +5939,20 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
                 onPressed: _updating ? null : () => _advanceTo(nextStatus),
                 child: _updating
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : Text(_buttonLabelFor(nextStatus), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
+                    // FIX (UI polish, Aug 11 2026 — Hero button text
+                    // overflow bug): this SizedBox pins height to 38, but
+                    // the longest label here ('Nearing Completion', 19
+                    // chars at fontSize 12 bold) could wrap past that
+                    // fixed height on narrow phones with no overflow
+                    // handling, clipping the text. FittedBox scales the
+                    // whole label down to fit instead of ever clipping —
+                    // short labels ('Start', 'Mark Complete') render at
+                    // their natural size since FittedBox only shrinks,
+                    // never grows.
+                    : FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(_buttonLabelFor(nextStatus), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
+                      ),
               ),
             ),
           ],
@@ -5736,7 +6029,17 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
                   ),
                   child: _updating
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00C853)))
-                      : const Text('Payment Received (Cash/UPI)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11)),
+                      // FIX (UI polish, Aug 11 2026 — Hero button text
+                      // overflow bug): 'Payment Received (Cash/UPI)' is
+                      // 28 characters at fontSize 11 bold inside a fixed
+                      // height:38 button — on narrow phones this was
+                      // wrapping to 2 lines and clipping against the
+                      // fixed height. FittedBox scales the label down to
+                      // guarantee it always fits on one line instead.
+                      : const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('Payment Received (Cash/UPI)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11)),
+                        ),
                 ),
               ),
           ],

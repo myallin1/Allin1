@@ -309,7 +309,7 @@ class _SellerHomeKitchenMenuScreenState
             borderRadius: BorderRadius.circular(12),
             child: item.imageUrl != null && item.imageUrl!.isNotEmpty
                 ? Image.network(
-                    item.imageUrl!,
+                    CloudinaryUploadService.optimizedUrl(item.imageUrl!, width: 136),
                     width: 68,
                     height: 68,
                     fit: BoxFit.cover,
@@ -646,7 +646,11 @@ class _DishEditorSheetState extends State<_DishEditorSheet> {
     if (_existingImageUrl != null && _existingImageUrl!.isNotEmpty) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(14),
-        child: Image.network(_existingImageUrl!, fit: BoxFit.cover, width: double.infinity),
+        child: Image.network(
+          CloudinaryUploadService.optimizedUrl(_existingImageUrl!, width: 800),
+          fit: BoxFit.cover,
+          width: double.infinity,
+        ),
       );
     }
     return Center(

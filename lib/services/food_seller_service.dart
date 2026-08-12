@@ -53,7 +53,7 @@ class FoodSellerService {
     try {
       updates['updatedAt'] = FieldValue.serverTimestamp();
       await _sellerDocRef(sellerId).update(updates);
-      DbUsageTracker.instance.recordWrite();
+      DbUsageTracker.instance.recordWrite(1, 'seller_profile', 'profile_update');
       debugPrint('[FoodSellerService] Seller profile updated: $sellerId');
     } catch (e) {
       debugPrint('[FoodSellerService] Failed to update seller profile: $e');
@@ -220,7 +220,7 @@ class FoodSellerService {
         timelineField: FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      DbUsageTracker.instance.recordWrite();
+      DbUsageTracker.instance.recordWrite(1, 'seller_orders', 'order_status_update');
       debugPrint(
           '[FoodSellerService] Order $orderId status updated to: $newStatus',);
     } catch (e) {
@@ -237,7 +237,8 @@ class FoodSellerService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      DbUsageTracker.instance.recordRead(snapshot.docs.length);
+      DbUsageTracker.instance.recordRead(
+          snapshot.docs.length, 'seller_orders', 'incoming_orders_fetch');
       return snapshot.docs.map((doc) {
         final data = doc.data()! as Map<String, dynamic>;
         return FoodOrderModel.fromJson(data);
@@ -252,7 +253,8 @@ class FoodSellerService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      DbUsageTracker.instance.recordRead(snapshot.docs.length);
+      DbUsageTracker.instance.recordRead(
+          snapshot.docs.length, 'seller_orders', 'order_history_fetch');
       return snapshot.docs.map((doc) {
         final data = doc.data()! as Map<String, dynamic>;
         return FoodOrderModel.fromJson(data);
@@ -267,7 +269,8 @@ class FoodSellerService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      DbUsageTracker.instance.recordRead(snapshot.docs.length);
+      DbUsageTracker.instance
+          .recordRead(snapshot.docs.length, 'customer_food_orders');
       return snapshot.docs.map((doc) {
         final data = doc.data()! as Map<String, dynamic>;
         return FoodOrderModel.fromJson(data);

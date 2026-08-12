@@ -71,7 +71,9 @@ class AdminHeroMirrorScreen extends StatelessWidget {
         elevation: 0,
         title: Text(
           'Hero Mirror',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w800),
+          // FIX (UI standardization, Aug 11 2026): explicit 18sp,
+          // matching the app-bar title convention app-wide.
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 18),
         ),
       ),
       body: ListView(
@@ -96,11 +98,15 @@ class AdminHeroMirrorScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // FIX (UI standardization, Aug 11 2026): matches
+                      // the 15sp name-field convention used elsewhere
+                      // (e.g. admin_wallet_approvals_screen.dart) instead
+                      // of standing out at 20.
                       Text(
                         name,
                         style: GoogleFonts.outfit(
                           color: _text,
-                          fontSize: 20,
+                          fontSize: 15,
                           fontWeight: FontWeight.w800,
                         ),
                       ),

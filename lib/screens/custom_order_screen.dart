@@ -12,6 +12,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+// GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../services/auth_prompt_service.dart';
 import '../services/auth_service.dart';
 import '../services/service_request_service.dart';
 import '../widgets/location_capture_field.dart';
@@ -58,6 +60,16 @@ class _CustomOrderScreenState extends State<CustomOrderScreen> {
       );
       return;
     }
+
+    // GUEST MODE (Aug 11 2026): guard after validation, before the
+    // currentUser read. See auth_prompt_service.dart.
+    if (!await requireRealAuth(
+      context,
+      reason: 'Sign in and we’ll pick this up for you',
+    )) {
+      return;
+    }
+    if (!mounted) return;
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;

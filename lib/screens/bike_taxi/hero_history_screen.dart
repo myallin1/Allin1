@@ -59,6 +59,25 @@ class _HeroHistoryScreenState extends State<HeroHistoryScreen>
         _aggregateRides = (data['totalRides'] as int?) ?? 0;
         _aggregateRating = (data['averageRating'] as num?)?.toDouble() ?? 0;
       });
+      // FIX (root cause of "earnings/history screen open panna DB reads
+      // athigam" — heavy reads every time this screen opens): this
+      // unconditionally forced a Source.server read on heroes/{uid}
+      // EVERY single time _loadAggregates() ran, with no throttle at
+      // all — unlike _refreshFromServer() below (the ride-LIST reader),
+      // which already correctly gates its own server reads behind
+      // _syncThrottle/_lastServerSyncAt. Opening this screen twice in a
+      // row (or the AutomaticKeepAliveClientMixin state being recreated
+      // on tab switches) meant two full-price server reads back to
+      // back, no matter how fresh the data already was. Now shares the
+      // exact same 30s throttle window as the ride-list refresh — the
+      // cache read above still always runs (instant, local, correct
+      // behavior for "show something immediately"), only the paid
+      // server round-trip is now rate-limited.
+      final now = DateTime.now();
+      if (_lastServerSyncAt != null &&
+          now.difference(_lastServerSyncAt!) < _syncThrottle) {
+        return;
+      }
       // Refresh from server
       final serverDoc = await FirebaseFirestore.instance
           .collection('heroes')

@@ -47,7 +47,35 @@
 // and new cache entries can never mix.
 // ================================================================
 
-const CACHE_VERSION = 'allin1-offline-v1';
+// ================================================================
+// CACHE_VERSION — STAMPED PER FLAVOR + PER DEPLOY by deploy_web.ps1
+// ================================================================
+// FIX (Aug 11 2026 — Nizam: "customer app build pannalum admin app than
+// open aguthu", still happening AFTER a correct rebuild+redeploy):
+//
+// ROOT CAUSE — a poisoned cache, not a bad deploy. When the wrong build
+// once shipped to the customer URL, that origin's cache stored ADMIN's
+// main.dart.js. Because heavy bundles now use stale-while-revalidate
+// (added the same day), the service worker serves that CACHED bundle
+// instantly on every launch and only refreshes in the background. And
+// since CACHE_VERSION was a hardcoded constant, a fresh deploy reused
+// the very same cache — so the customer kept booting into Admin no
+// matter how many times the correct build was deployed. The deploy was
+// fine; the browser never looked at it.
+//
+// FIX: deploy_web.ps1 rewrites the placeholder below with
+// "<flavor>-<timestamp>" for every build. Two guarantees follow:
+//   1. Different flavor  => different cache name => a bundle from
+//      another app can NEVER be served under this origin.
+//   2. Every deploy      => new cache name => activate() purges the old
+//      one (see the keys().filter() sweep further down), so a fresh
+//      deploy is picked up on the FIRST launch, not the second.
+//
+// The literal fallback keeps this file valid if it is ever loaded
+// unstamped (e.g. `flutter run` locally, without the deploy script).
+const CACHE_VERSION = '__ALLIN1_CACHE_VERSION__'.indexOf('__') === 0
+  ? 'allin1-dev-local'
+  : '__ALLIN1_CACHE_VERSION__';
 
 // Minimum set precached on install so the app SHELL can paint with
 // zero network — deliberately small (large/rarely-needed assets like
@@ -62,6 +90,21 @@ const PRECACHE_URLS = [
   '/flutter.js',
   '/manifest.json',
   '/favicon.png',
+  // ADDED (Aug 11 2026 — Nizam's offline-first requirement): without
+  // main.dart.js in the cache the app CANNOT boot offline at all. The
+  // shell would load, then die waiting for the engine.
+  //
+  // It was previously left to opportunistic caching on first fetch,
+  // which is *usually* fine — but "usually" is not an offline
+  // guarantee: a customer who first-loads on a flaky connection could
+  // end up with a cached shell and no engine, i.e. a permanently blank
+  // app the next time they open it with no signal. Precaching it makes
+  // offline boot deterministic.
+  //
+  // Note this makes install heavier (~5.9 MB). That is the correct
+  // trade for an offline-first app, and the per-URL cache.add() below
+  // means a failure here still can't break the whole install.
+  '/main.dart.js',
 ];
 
 self.addEventListener('install', (event) => {
@@ -114,6 +157,73 @@ self.addEventListener('fetch', (event) => {
   // request is left completely untouched, same as before.
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+
+  // ================================================================
+  // PURE CACHE-FIRST for the big immutable bundles ("Extreme Bandwidth
+  // Caching" — zero-budget escape hatch, Aug 12 2026)
+  // ================================================================
+  // FIX (Aug 11 2026 — Nizam: "app open pannuna 5 to 8 sec white display
+  // va ninnu than open aguthu"): originally fixed with stale-while-
+  // revalidate — serve the cached copy immediately, but still fire a
+  // background fetch every single launch to refresh it for next time.
+  // That solved the white-screen delay, but it means a RETURNING
+  // customer's device still downloads the full ~5.9 MB main.dart.js
+  // (plus fonts/canvaskit) on every single app open, just silently in
+  // the background — real Hosting bandwidth spent for zero visible
+  // benefit on a Spark plan with a hard monthly cap.
+  //
+  // UPGRADED (Aug 12 2026 — CTO mandate, "Extreme Bandwidth Caching":
+  // "Ensure the PWA Service Worker is aggressively caching... so that
+  // returning users consume absolutely 0 bytes of Firebase Hosting
+  // bandwidth"): now pure cache-first — if a cached copy exists, serve
+  // it and NEVER touch the network for it, full stop. Only a true cache
+  // miss (first-ever visit under this CACHE_VERSION) reaches the
+  // network.
+  //
+  // This is safe against ever serving stale JS forever (the exact bug
+  // this file's network-first design originally existed to prevent) for
+  // a reason that did NOT exist when stale-while-revalidate was chosen:
+  // CACHE_VERSION is now stamped "<flavor>-<timestamp>" by
+  // deploy_web.ps1 on every single deploy (see the CACHE_VERSION
+  // comment above), so a real redeploy always gets a brand-new, empty
+  // cache — there is nothing to cache-first-serve stale bytes FROM.
+  // Every redeploy still forces exactly one fresh download per file,
+  // same as before; only the "N background refreshes between deploys"
+  // cost is what's being eliminated here.
+  //
+  // Deliberately scoped to the heavy, content-addressed bundles only.
+  // index.html and version.json stay network-first below (see the fetch
+  // handler's default branch), so web_version_checker.dart's update
+  // DETECTION is completely unaffected by this change.
+  const isHeavyBundle =
+    url.pathname.endsWith('/main.dart.js') ||
+    url.pathname.endsWith('.otf') ||
+    url.pathname.endsWith('.ttf') ||
+    url.pathname.includes('/canvaskit/');
+
+  if (isHeavyBundle) {
+    event.respondWith(
+      caches.match(req).then((cached) => {
+        if (cached) {
+          // Cache hit — the whole point of this branch. Zero bytes over
+          // the network for this file on this launch.
+          return cached;
+        }
+        // Cache miss — first time this exact file has been requested
+        // under the current CACHE_VERSION (fresh install, or the first
+        // launch right after a redeploy). Fetch once and cache it so
+        // every subsequent launch until the next deploy is a pure hit.
+        return fetch(req).then((res) => {
+          if (res && res.status === 200) {
+            const clone = res.clone();
+            caches.open(CACHE_VERSION).then((cache) => cache.put(req, clone));
+          }
+          return res;
+        });
+      })
+    );
+    return;
+  }
 
   event.respondWith(
     fetch(req)

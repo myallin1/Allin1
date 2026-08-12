@@ -13,17 +13,90 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/hive_cache.dart';
+
 const Color _offerInk = Color(0xFF121A3D);
 const Color _offerPink = Color(0xFFFF4FA3);
 const Color _offerPurple = Color(0xFFB21FFF);
 const Color _offerMuted = Color(0xFF6B7280);
 
+/// A cached offer row. Firestore's own QueryDocumentSnapshot can't be
+/// stored in Hive (it holds a live reference), so offers are flattened
+/// to plain id+map pairs on the way into the cache and rehydrated on the
+/// way out.
+class _OfferRecord {
+  const _OfferRecord({required this.id, required this.data});
+
+  final String id;
+  final Map<String, dynamic> data;
+}
+
 class ErodeOffersSection extends StatelessWidget {
   const ErodeOffersSection({super.key});
 
+  /// Cache-first offers load. See the comment in [build] for the cost
+  /// rationale. Sorting stays client-side (newest first) exactly as
+  /// before — that was already required to avoid a composite index.
+  Future<List<_OfferRecord>?> _loadOffers() async {
+    final raw = await HiveCache.cachedFetch<List<dynamic>>(
+      HiveCache.kErodeOffers,
+      () async {
+        final snap = await FirebaseFirestore.instance
+            .collection('erode_offers')
+            .where('active', isEqualTo: true)
+            .get();
+        // Stored as a plain List<Map> so it survives Hive serialization.
+        // createdAt (a Timestamp) is converted to epoch millis for the
+        // same reason, and used only for sorting.
+        return snap.docs.map((d) {
+          final data = Map<String, dynamic>.from(d.data());
+          final ts = data['createdAt'];
+          return <String, dynamic>{
+            '__id': d.id,
+            '__createdAtMs':
+                ts is Timestamp ? ts.millisecondsSinceEpoch : 0,
+            ...data..remove('createdAt'),
+          };
+        }).toList();
+      },
+      ttl: HiveCache.ttlErodeOffers,
+    );
+    if (raw == null) return null;
+
+    final records = raw
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList()
+      ..sort((a, b) => ((b['__createdAtMs'] as int?) ?? 0)
+          .compareTo((a['__createdAtMs'] as int?) ?? 0));
+
+    return records
+        .map((m) => _OfferRecord(
+              id: (m['__id'] as String?) ?? '',
+              data: Map<String, dynamic>.from(m)
+                ..remove('__id')
+                ..remove('__createdAtMs'),
+            ))
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+    // CACHE-FIRST (Aug 11 2026 — Nizam's Spark read-budget hardening):
+    // this was a live .snapshots() stream on a collection rendered on
+    // the customer dashboard, i.e. loaded by every customer on nearly
+    // every app open. A live stream bills per document delivered AND
+    // re-bills whenever anything changes, so N offers x every open x
+    // every customer came straight out of the 50K reads/day Spark
+    // budget — for content that realistically changes once a week.
+    // Now a one-shot .get() behind a 1-hour Hive cache: a customer
+    // opening the app ten times in an hour costs ONE read instead of
+    // ten streams. HiveCache.cachedFetch also serves stale data if the
+    // fetch throws, so offers still render if we ever hit the daily
+    // read ceiling. Admin edits show up within the hour (acceptable
+    // for promo content — and admins can pull-to-refresh the dashboard
+    // to force it sooner).
+    return FutureBuilder<List<_OfferRecord>?>(
+      future: _loadOffers(),
       // FIX (root cause of "Could not load offers, please try again
       // later" — live bug, security rules were already correctly
       // deployed by this point): a Firestore query combining an
@@ -44,10 +117,6 @@ class ErodeOffersSection extends StatelessWidget {
       // entirely, so this feature can never break this way again
       // regardless of whether an index gets deployed. Sorting is done
       // client-side instead, right after the docs list is built below.
-      stream: FirebaseFirestore.instance
-          .collection('erode_offers')
-          .where('active', isEqualTo: true)
-          .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Padding(
@@ -65,13 +134,7 @@ class ErodeOffersSection extends StatelessWidget {
             subtitle: 'Please try again in a moment.',
           );
         }
-        final docs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(snapshot.data?.docs ?? [])
-          ..sort((a, b) {
-            final aTs = a.data()['createdAt'];
-            final bTs = b.data()['createdAt'];
-            if (aTs is! Timestamp || bTs is! Timestamp) return 0;
-            return bTs.compareTo(aTs); // descending, newest first
-          });
+        final docs = snapshot.data ?? const <_OfferRecord>[];
         if (docs.isEmpty) {
           return _emptyState(
             icon: Icons.storefront_rounded,
@@ -113,10 +176,9 @@ class ErodeOffersSection extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             ...docs.map((doc) {
-              final data = doc.data();
               return Padding(
                 padding: const EdgeInsets.only(bottom: 14),
-                child: _OfferCard(offerId: doc.id, data: data),
+                child: _OfferCard(offerId: doc.id, data: doc.data),
               );
             }),
           ],

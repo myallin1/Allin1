@@ -19,6 +19,48 @@ function isAuth() {
   return request.auth != null;
 }
 
+// NEW (Aug 11 2026 — Guest Mode): isAuth() above is satisfied by
+// ANONYMOUS users too, and as of Guest Mode every customer is signed in
+// anonymously from the first frame (main_customer.dart ->
+// AuthService.ensureGuestSession()). Without this helper, every guest
+// would have had exactly the same write access as a registered customer,
+// and since anonymous accounts are free and unlimited to create, that is
+// also a denial-of-wallet risk against the Spark daily quota.
+//
+// isRealUser() means "signed in with a real, contactable identity"
+// (Google today). Use it on CREATE/UPDATE for anything that costs money,
+// dispatches a hero, or needs someone we can phone about the order.
+// Do NOT use it on reads — guests must be able to browse the whole
+// catalogue freely, which is the entire point of Guest Mode.
+// HARDENED (Aug 11 2026, after the "hero never receives the booking"
+// incident): sign_in_provider describes how the CURRENT SESSION was
+// established, not what the account can now do. A guest who upgrades via
+// linkWithCredential keeps the same session — so their token can still
+// report 'anonymous' even though the account is now a full Google
+// account. Judging them on that claim alone denied every booking write,
+// and because ride_search_screen._createRideInRTDB() writes the rides
+// doc BEFORE creating active_ride_requests, the denial aborted the whole
+// RTDB dispatch: no hero_pings were ever written and the hero app showed
+// nothing at all.
+//
+// auth_service.dart now re-signs-in after linking so the provider claim
+// is correct, but the rule must not depend on that alone — a stale token
+// in flight, or any future flow that links without re-auth, would break
+// bookings again.
+//
+// email / phone_number are the reliable signal: a purely anonymous token
+// carries NEITHER, and any real identity carries at least one. Checked
+// with `in` first because reading an absent key errors out.
+function isRealUser() {
+  return request.auth != null
+    && (
+      request.auth.token.firebase.sign_in_provider != 'anonymous'
+      || ('email' in request.auth.token && request.auth.token.email != null)
+      || ('phone_number' in request.auth.token
+          && request.auth.token.phone_number != null)
+    );
+}
+
 function isAdmin() {
   return isAuth() && request.auth.token.admin == true;
 }
@@ -197,9 +239,13 @@ service cloud.firestore {
     match /food_orders/{orderId} {
 
       // ── Create ────────────────────────────────────────────────
-      // Any authenticated user can place an order.
+      // Any REAL (non-anonymous) signed-in user can place an order.
       // The customerId in the document MUST match the requestor's UID.
-      allow create: if isAuth()
+      // GUEST MODE (Aug 11 2026): isAuth() -> isRealUser(). A guest may
+      // browse every shop and menu (read rules below unchanged) but must
+      // sign in at checkout — an order placed under an anonymous uid has
+      // no phone number and no way for the seller to contact anyone.
+      allow create: if isRealUser()
         && request.resource.data.customerId == request.auth.uid
         && request.resource.data.sellerId is string
         && request.resource.data.sellerId != null;
@@ -265,13 +311,23 @@ service cloud.firestore {
       // reassigned to someone else's uid on update), same isAdminAny()
       // full access preserved, and a hero can update a ride they're
       // assigned to (accept/status/complete) without needing admin.
+      // GUEST MODE (Aug 11 2026): isAuth() -> isRealUser() on every
+      // write clause here. Two separate reasons:
+      //  1. customerId clause: a ride booked by an anonymous guest has
+      //     no contactable phone number — the hero cannot call them.
+      //  2. heroId clauses: `request.resource.data.heroId ==
+      //     request.auth.uid` lets ANY signed-in uid claim ANY ride by
+      //     writing its own uid into heroId. That was already loose, but
+      //     Guest Mode makes the attacking identity free and unlimited to
+      //     mint, so it is now gated too. Real heroes always sign in with
+      //     a real account, so this costs them nothing.
       allow create: if isAdminAny()
-        || (isAuth() && request.resource.data.customerId == request.auth.uid);
+        || (isRealUser() && request.resource.data.customerId == request.auth.uid);
       allow update: if isAdminAny()
-        || (isAuth() && resource.data.customerId == request.auth.uid
+        || (isRealUser() && resource.data.customerId == request.auth.uid
             && request.resource.data.customerId == request.auth.uid)
-        || (isAuth() && resource.data.heroId == request.auth.uid)
-        || (isAuth() && request.resource.data.heroId == request.auth.uid);
+        || (isRealUser() && resource.data.heroId == request.auth.uid)
+        || (isRealUser() && request.resource.data.heroId == request.auth.uid);
       allow delete: if isAdminAny();
     }
 
@@ -289,8 +345,9 @@ service cloud.firestore {
     match /company_payments_received/{docId} {
       allow read: if isAdminAny()
         || (isAuth() && resource.data.heroId == request.auth.uid);
+      // GUEST MODE: heroes are always real accounts — isRealUser().
       allow create: if isAdminAny()
-        || (isAuth() && request.resource.data.heroId == request.auth.uid);
+        || (isRealUser() && request.resource.data.heroId == request.auth.uid);
       allow update, delete: if isAdminAny();
     }
 
@@ -313,7 +370,13 @@ service cloud.firestore {
     // Admin:     full access (dispatch screens, tracking, cleanup).
     // ==============================================================
     match /service_requests/{requestId} {
-      allow create: if isAuth()
+      // GUEST MODE (Aug 11 2026): isAuth() -> isRealUser(). This is the
+      // single most important gate in this file — every broadcast order
+      // (hero booking, custom order, food, grocery, catalog food) lands
+      // here and pings real heroes to ride out to a real address. A guest
+      // may open and fill in every one of those screens; the guard fires
+      // at submit (see requireRealAuth() in auth_prompt_service.dart).
+      allow create: if isRealUser()
         && request.resource.data.customerId == request.auth.uid;
 
       // FIX (root cause of "seller never sees catalog food orders"):
@@ -358,6 +421,20 @@ service cloud.firestore {
       //   4. Customer-owner: may update payment/rating fields on their
       //      own request but cannot change assignedHeroId or
       //      customerId — no self-assigning, no ownership transfer.
+      // FIX (Recovery System, Aug 11 2026): releaseServiceRequest()
+      // (service_request_service.dart) — the hero's "give this task
+      // back" escape hatch, used both by the pre-existing 'Release
+      // Task' button and the new Incomplete/Stuck Tasks hub — writes
+      // assignedHeroId: null. Clause 3 above pins assignedHeroId
+      // UNCHANGED for an already-assigned hero, so that write was being
+      // silently rejected as permission-denied with no other clause to
+      // fall back on. This narrow 5th clause allows exactly one
+      // transition: the currently-assigned hero may null out
+      // assignedHeroId ONLY together with moving status to
+      // 'admin_review' (the same status markTimeoutIfStillPending()
+      // already uses, so this surfaces on admin_new_orders_screen.dart's
+      // AWAITING ASSIGNMENT section for free). customerId still cannot
+      // change. No other field-combination is opened by this clause.
       allow update: if isAdminAny()
         || (isAuth()
             && resource.data.assignedHeroId == null
@@ -366,6 +443,11 @@ service cloud.firestore {
         || (isAuth()
             && resource.data.assignedHeroId == request.auth.uid
             && request.resource.data.assignedHeroId == resource.data.assignedHeroId
+            && request.resource.data.customerId == resource.data.customerId)
+        || (isAuth()
+            && resource.data.assignedHeroId == request.auth.uid
+            && request.resource.data.assignedHeroId == null
+            && request.resource.data.status == 'admin_review'
             && request.resource.data.customerId == resource.data.customerId)
         || (isAuth()
             && resource.data.customerId == request.auth.uid
@@ -393,6 +475,43 @@ service cloud.firestore {
     }
 
     // ==============================================================
+    // CANCELLATION_ANALYTICS COLLECTION (Cancellation Reason Analytics,
+    // Aug 11 2026, per Nizam — "we are losing valuable business data
+    // on WHY customers cancel")
+    // ==============================================================
+    // Write-only for customers (same shape as location_search_logs
+    // above) — one doc per cancellation with a reason, written from
+    // rides' inline cancel updates (which also stamp cancellationReason
+    // directly onto the rides doc itself, since that doc survives) and
+    // from ServiceRequestService.cancelServiceRequest() (whose
+    // service_requests doc gets DELETED on cancel, so this collection
+    // is the only place that reason survives for analytics).
+    // ==============================================================
+    match /cancellation_analytics/{logId} {
+      allow create: if isAuth() && request.resource.data.customerId == request.auth.uid;
+      allow read: if isAdminAny();
+      allow update, delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // HERO_SESSIONS COLLECTION (Hero Earnings & Online Time Monitor,
+    // Aug 11 2026, per Nizam)
+    // ==============================================================
+    // One doc per online→offline cycle, written by hero_home_screen.dart
+    // right when a hero goes offline (batched, same cadence as the
+    // usage-fee flush — never per-minute). A hero may create/read only
+    // their own session logs (the new hero_earnings_screen.dart fetch
+    // query); no update/delete from the client — these are an
+    // append-only history, same as location_search_logs.
+    // ==============================================================
+    match /hero_sessions/{sessionId} {
+      allow create: if isAuth() && request.resource.data.heroId == request.auth.uid;
+      allow read: if isAdminAny()
+        || (isAuth() && resource.data.heroId == request.auth.uid);
+      allow update, delete: if isAdminAny();
+    }
+
+    // ==============================================================
     // APP_USAGE_STATS COLLECTION (single "funnel" doc — per Nizam's
     // request, Customer Usage Tracking admin feature)
     // ==============================================================
@@ -406,6 +525,62 @@ service cloud.firestore {
     // touch the known counter field names (enforced via affectedKeys()
     // below), so even an anonymous abuser can only inflate a vanity
     // metric, never write arbitrary data. Read is admin-only.
+    // ==============================================================
+    // COLLECTION GROUP: transactions  (Aug 11 2026)
+    // ==============================================================
+    // FIX (root cause of "Usage Fee Ledger firestore permission"):
+    // usage_fee_ledger_screen.dart reads every hero's wallet ledger via
+    // collectionGroup('transactions'). A collection-GROUP query is NOT
+    // authorized by the nested `match /hero_wallets/{heroId}/transactions
+    // /{txnId}` rule further down this file — Firestore requires a
+    // separate rule whose path begins with the recursive wildcard
+    // `{path=**}` for group queries, otherwise every such query is
+    // denied outright regardless of the nested rule. Admin-only read:
+    // this spans EVERY hero's private ledger, so it must never be
+    // readable by a hero (who keeps their own per-hero read access via
+    // the nested rule). No write access here at all — writes continue to
+    // go through the nested rule's ownership checks.
+    match /{path=**}/transactions/{txnId} {
+      allow read: if isAdminAny();
+    }
+
+    // ==============================================================
+    // UX_AUDIT_REPORTS COLLECTION
+    // ==============================================================
+    // FIX (Nizam's report — "UX report la cloud firestore permission
+    // ila"): this collection had ZERO rule coverage anywhere in this
+    // file, so it fell through to the default-deny at the bottom and
+    // admin_ux_audit_screen.dart could never read it. Same bug class as
+    // the heroes/rides/users gaps fixed earlier. Admin-only both ways —
+    // these are internal QA-bot findings, never customer-facing.
+    // ==============================================================
+    // APP_BUG_REPORTS COLLECTION  (Aug 11 2026 — AI Bug Reporting)
+    // ==============================================================
+    // Filed by the customer app's AI agent when a customer reports
+    // something broken (see guru_chat_screen.dart's _actOnReportBug).
+    //
+    // create: any signed-in user, but ONLY a report pinned to their own
+    // uid — so a report can never be filed in someone else's name. No
+    // read for customers: bug reports are an internal queue, and letting
+    // customers list them would expose other people's uids and their
+    // free-text descriptions (which often contain personal detail).
+    //
+    // update/delete are admin-only: the report is an immutable record of
+    // what the customer actually said. Admin flips `status` as they
+    // triage; nobody rewrites the original description.
+    match /app_bug_reports/{reportId} {
+      // GUEST MODE: a bug report from an anonymous uid is unactionable —
+      // admin has nobody to follow up with — and this collection is a
+      // free, unlimited, unauthenticated write target otherwise.
+      allow create: if isRealUser()
+        && request.resource.data.reportedBy == request.auth.uid;
+      allow read, update, delete: if isAdminAny();
+    }
+
+    match /ux_audit_reports/{reportId} {
+      allow read, write: if isAdminAny();
+    }
+
     match /app_usage_stats/{docId} {
       allow read: if isAdminAny();
       // Scoped to docId == 'funnel' only: the landing page visitor (who
@@ -413,18 +588,50 @@ service cloud.firestore {
       // funnel tracking document — not an arbitrary number of new docs.
       // Before this fix: `allow create: if true` let any anonymous requester
       // spam-create unlimited documents in this collection.
-      allow create: if docId == 'funnel';
-      allow update: if request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly([
-            'landingPageVisits',
-            'download_customer',
-            'download_hero',
-            'download_admin',
-            'download_seller',
-            'poster_qr_scans',
-            'poster_qr_pwa_installs',
-            'updatedAt',
-          ]);
+      // UPDATED (Aug 11 2026 — customer demand tracking): 'customer_demand'
+      // joins 'funnel' as a second known, explicitly-allowlisted doc id
+      // (written by UsageTrackingService's demand counters). Still a
+      // closed allowlist of exactly two ids — an anonymous requester
+      // cannot spam-create arbitrary documents here, which was the
+      // original point of scoping this rule.
+      allow create: if docId == 'funnel' || docId == 'customer_demand';
+      allow update: if (docId == 'funnel'
+              && request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly([
+                    'landingPageVisits',
+                    'download_customer',
+                    'download_hero',
+                    'download_admin',
+                    'download_seller',
+                    'poster_qr_scans',
+                    'poster_qr_pwa_installs',
+                    // Per-day counter buckets (daily.<yyyy-MM-dd>.<field>)
+                    // added Aug 11 2026 so the admin Usage Tracking screen
+                    // can offer real date/month ranges — the lifetime
+                    // totals above carry no time dimension to filter on.
+                    'daily',
+                    'updatedAt',
+                  ]))
+          // customer_demand holds nested COUNTER MAPS whose inner keys are
+          // dynamic by nature (place/hotel names can't be enumerated in a
+          // rule), so the allowlist is enforced at the top-level category
+          // names instead — a writer still can't introduce arbitrary
+          // top-level fields, only inflate counts inside these four known
+          // buckets. Same trust level as the funnel counters above: worst
+          // case an abuser skews a vanity metric, never writes real data.
+          || (docId == 'customer_demand'
+              && request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly([
+                    'places',
+                    'hotels',
+                    'vehicles',
+                    'services',
+                    // Written only by the admin-triggered one-time
+                    // historical backfill (UsageTrackingService
+                    // .backfillFromHistory) as its idempotence marker.
+                    'backfilledAt',
+                    'updatedAt',
+                  ]));
       allow delete: if isAdminAny();
     }
 
@@ -532,9 +739,10 @@ service cloud.firestore {
       allow read: if isAdminAny()
         || (isAuth() && resource.data.userId == request.auth.uid)
         || (isAuth() && resource.data.heroId == request.auth.uid);
+      // GUEST MODE: money ledger — real accounts only.
       allow create: if isAdminAny()
-        || (isAuth() && request.resource.data.userId == request.auth.uid)
-        || (isAuth() && request.resource.data.heroId == request.auth.uid);
+        || (isRealUser() && request.resource.data.userId == request.auth.uid)
+        || (isRealUser() && request.resource.data.heroId == request.auth.uid);
       allow update, delete: if isAdminAny();
     }
 
@@ -560,8 +768,9 @@ service cloud.firestore {
     // ==============================================================
     match /hero_wallets/{heroId} {
       allow read: if isAdminAny() || (isAuth() && request.auth.uid == heroId);
+      // GUEST MODE: wallet balance mutation — real accounts only.
       allow create, update: if isAdminAny()
-        || (isAuth() && request.auth.uid == heroId);
+        || (isRealUser() && request.auth.uid == heroId);
       allow delete: if isAdminAny();
 
       // hero_wallets/{heroId}/transactions/{txnId}: immutable ledger,
@@ -571,7 +780,7 @@ service cloud.firestore {
       match /transactions/{txnId} {
         allow read: if isAdminAny() || (isAuth() && request.auth.uid == heroId);
         allow create: if isAdminAny()
-          || (isAuth() && request.auth.uid == heroId
+          || (isRealUser() && request.auth.uid == heroId
               && request.resource.data.heroId == heroId);
         allow update, delete: if isAdminAny();
       }
@@ -585,7 +794,8 @@ service cloud.firestore {
     match /wallet_recharge_requests/{requestId} {
       allow read: if isAdminAny()
         || (isAuth() && resource.data.heroId == request.auth.uid);
-      allow create: if isAuth()
+      // GUEST MODE: money movement — real accounts only.
+      allow create: if isRealUser()
         && request.resource.data.heroId == request.auth.uid
         && request.resource.data.status == 'pending';
       allow update: if isAdminAny();
@@ -746,8 +956,12 @@ service cloud.firestore {
     // ==============================================================
     match /orders/{orderId} {
       allow read: if isAdminAny() || (isAuth() && resource.data.customerId == request.auth.uid);
-      allow create: if isAuth() && request.resource.data.customerId == request.auth.uid;
-      allow update: if isAdminAny() || (isAuth() && resource.data.customerId == request.auth.uid);
+      // GUEST MODE (Aug 11 2026): create/update gated to real accounts,
+      // same reasoning as food_orders. Read is deliberately left on
+      // isAuth() — an anonymous uid can only ever match customerId on a
+      // doc it created, and it can no longer create one.
+      allow create: if isRealUser() && request.resource.data.customerId == request.auth.uid;
+      allow update: if isAdminAny() || (isRealUser() && resource.data.customerId == request.auth.uid);
       allow delete: if isAdminAny();
     }
 
@@ -825,6 +1039,27 @@ service cloud.firestore {
     // (needed for the offers list + detail page); only admins can
     // create/edit/delete/toggle-active from AdminErodeOffersScreen.
     match /erode_offers/{offerId} {
+      allow read: if isAuth();
+      allow write: if isAdminAny();
+    }
+
+    // ==============================================================
+    // system_settings — Zero-Budget Escape Hatch (Aug 12 2026, CTO's
+    // "Migration Notice Board" mandate): a single doc,
+    // system_settings/app_status, read by every app (customer/hero/
+    // seller/admin) via a live listener from the moment it boots. When
+    // `migrationUrl` is ever populated, all 4 apps lock their UI behind
+    // a full-screen notice pointing customers at wherever the business
+    // has moved — the whole point is that this MUST still work even if
+    // this Firebase project is later abandoned/deleted, so read access
+    // is as wide as this project's model allows: every isAuth() session,
+    // INCLUDING anonymous guests (every customer is anonymously signed
+    // in from boot under Guest Mode — see AuthService.ensureGuestSession()
+    // — so restricting this to real accounts would leave the majority of
+    // customer-app sessions unable to see the notice at all). Write is
+    // admin-only — this is a kill-switch, not user data.
+    // ==============================================================
+    match /system_settings/{docId} {
       allow read: if isAuth();
       allow write: if isAdminAny();
     }

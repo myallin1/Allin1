@@ -65,14 +65,67 @@ class DbUsageTracker {
     _flushTimer = Timer.periodic(_flushInterval, (_) => _flush());
   }
 
-  void recordRead([int count = 1]) {
-    if (!_initialized) return;
-    _pendingReads += count;
+  // NEW (Aug 11 2026 — Nizam: "yentha app la yentha screen database read
+  // write ah unwanted ah use pannuthu-nu oru detailed report kidacha
+  // database usage ah innum optimise pannalam").
+  //
+  // The tracker knew WHICH APP was spending reads but never WHICH SCREEN,
+  // so a report could tell you "customer used 4,000 reads today" without
+  // telling you where to go fix it. These per-screen buckets are
+  // accumulated in memory alongside the existing totals and flushed in
+  // the SAME single document write — so attribution costs zero extra
+  // writes and cannot make the monitor itself expensive.
+  final Map<String, int> _pendingScreenReads = <String, int>{};
+  final Map<String, int> _pendingScreenWrites = <String, int>{};
+
+  // NEW (Aug 12 2026 — Nizam: "high read/write volumes but cannot
+  // pinpoint exactly which specific queries or actions are causing
+  // them"): a `screen` name alone answers "which screen" but not
+  // "which query on that screen" — a screen with 3 different listeners
+  // all showed up as one indistinguishable number. [action] is an
+  // optional free-text label for the specific query/listener (e.g.
+  // 'listen_active_ping', 'fetch_ride_history') layered onto the SAME
+  // screen bucket via a flat composite key ('screen::action') rather
+  // than a second nested map — this keeps the existing screenReads/
+  // screenWrites schema and FieldValue.increment() shape completely
+  // unchanged (still one flat map, still one write per flush), and
+  // matches the 'app · screen' string-join convention the Admin DB
+  // Monitor screen already parses, so that screen only needs one more
+  // split, not a new data shape.
+  //
+  // Fully backward compatible: every one of the ~16 existing call
+  // sites that only pass `screen` keeps landing on a plain 'screen' key
+  // exactly as before (no '::' suffix) — only NEW/updated call sites
+  // that pass `action` get the richer key. Both key shapes coexist in
+  // the same map and the UI (admin_db_usage_screen.dart) treats an
+  // absent action as "generic"/unspecified.
+  static String _key(String? screen, String? action) {
+    final s = (screen == null || screen.trim().isEmpty) ? 'unattributed' : screen.trim();
+    final a = action?.trim();
+    return (a == null || a.isEmpty) ? s : '$s::$a';
   }
 
-  void recordWrite([int count = 1]) {
+  /// Optional [screen] attributes this read to a named screen (e.g.
+  /// 'dashboard', 'ride_search'). Existing callers that omit it keep
+  /// working exactly as before and simply land in the 'unattributed'
+  /// bucket — which is itself useful, since a large unattributed number
+  /// tells you how much of the app still needs instrumenting.
+  ///
+  /// Optional [action]/query-type (e.g. 'listen_active_ping',
+  /// 'fetch_ride_history') narrows the attribution further, down to the
+  /// specific query/listener on that screen — see [_key] above.
+  void recordRead([int count = 1, String? screen, String? action]) {
+    if (!_initialized) return;
+    _pendingReads += count;
+    final key = _key(screen, action);
+    _pendingScreenReads[key] = (_pendingScreenReads[key] ?? 0) + count;
+  }
+
+  void recordWrite([int count = 1, String? screen, String? action]) {
     if (!_initialized) return;
     _pendingWrites += count;
+    final key = _key(screen, action);
+    _pendingScreenWrites[key] = (_pendingScreenWrites[key] ?? 0) + count;
   }
 
   /// yyyy-MM-dd — used for the human-readable `date` field.
@@ -103,6 +156,12 @@ class DbUsageTracker {
     // on rare network failure, which is fine for an approximate monitor.
     _pendingReads = 0;
     _pendingWrites = 0;
+    // Snapshot + clear the per-screen buckets under the same optimistic
+    // reset as the totals above, so the two can never drift apart.
+    final screenReads = Map<String, int>.from(_pendingScreenReads);
+    final screenWrites = Map<String, int>.from(_pendingScreenWrites);
+    _pendingScreenReads.clear();
+    _pendingScreenWrites.clear();
 
     final dateHour = _dateHourStr;
     try {
@@ -116,6 +175,15 @@ class DbUsageTracker {
         'dateHour': dateHour,
         'reads': FieldValue.increment(reads),
         'writes': FieldValue.increment(writes),
+        // Nested per-screen maps, merged into the SAME document — still
+        // exactly one write per flush regardless of how many screens
+        // were active.
+        if (screenReads.isNotEmpty)
+          'screenReads':
+              screenReads.map((k, v) => MapEntry(k, FieldValue.increment(v))),
+        if (screenWrites.isNotEmpty)
+          'screenWrites':
+              screenWrites.map((k, v) => MapEntry(k, FieldValue.increment(v))),
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true),);
     } catch (e) {

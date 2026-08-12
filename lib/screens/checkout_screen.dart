@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+// GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../services/auth_prompt_service.dart';
 import '../services/hive_cache.dart';
 
 // ============================================================
@@ -99,6 +101,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Future<void> _processPayment(String method) async {
+    // GUEST MODE (Aug 11 2026): first line — before the coin check, the
+    // sheet dismissal, and the processing overlay. Anything after this
+    // point either spends NJ Coins or shows a "payment processing"
+    // dialog, and neither should ever run for someone who cannot
+    // actually own an order. See auth_prompt_service.dart.
+    if (!await requireRealAuth(
+      context,
+      reason: 'Sign in to complete your order',
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
     if (!await _canRedeemCoins(_coinsToUse)) return;
 
     // 1. Close the bottom sheet
@@ -250,11 +265,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+              // FIX (UI standardization, Aug 11 2026): matches the
+              // 18sp title convention used app-wide instead of standing
+              // out at 22.
               const Text(
                 'Payment Successful!',
                 style: TextStyle(
                   color: _textPrimary,
-                  fontSize: 22,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.2,
                 ),
@@ -329,11 +347,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ),
           onPressed: () => Navigator.of(context).pop(),
         ),
+        // FIX (UI standardization, Aug 11 2026): app-bar titles are
+        // 18sp app-wide; this was 20.
         title: const Text(
           'Checkout',
           style: TextStyle(
             color: Colors.white,
-            fontSize: 20,
+            fontSize: 18,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.3,
           ),
@@ -794,10 +814,12 @@ class _PaymentSheetState extends State<_PaymentSheet> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
+                        // FIX (UI standardization, Aug 11 2026): matches
+                        // the 18sp title convention used app-wide.
                         'Choose Payment',
                         style: TextStyle(
                           color: _textPrimary,
-                          fontSize: 20,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),

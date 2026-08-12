@@ -20,6 +20,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/cloudinary_upload_service.dart';
+
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
 const Color _card = Color(0xFF1A1A2E);
@@ -68,7 +70,7 @@ class _AdminSosKycApprovalsScreenState extends State<AdminSosKycApprovalsScreen>
             const Text('🆘', style: TextStyle(fontSize: 18)),
             const SizedBox(width: 8),
             Text('Cus SOS Approval',
-                style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800, fontSize: 17),),
+                style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800, fontSize: 18),), // FIX (UI standardization, Aug 11 2026): app-bar titles are 18sp app-wide
           ],
         ),
         bottom: PreferredSize(
@@ -276,7 +278,9 @@ class _AdminSosKycApprovalsScreenState extends State<AdminSosKycApprovalsScreen>
               borderRadius: BorderRadius.circular(8),
               child: hasPhoto
                   ? Image.network(
-                      photoUrl,
+                      // List thumbnail only — the full-screen KYC viewer
+                      // above stays un-transformed for verification.
+                      CloudinaryUploadService.optimizedUrl(photoUrl, width: 128),
                       width: 64,
                       height: 64,
                       fit: BoxFit.cover,

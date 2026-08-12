@@ -349,10 +349,12 @@ class _FareManagementScreenState extends State<FareManagementScreen> {
                   child: Icon(icon, color: _secondary, size: 24),
                 ),
                 const SizedBox(width: 12),
+                // FIX (UI standardization, Aug 11 2026): section headers
+                // are 16sp app-wide, distinct from 18sp app-bar titles.
                 Text(
                   '$emoji $title',
                   style: GoogleFonts.outfit(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: _text,
                   ),

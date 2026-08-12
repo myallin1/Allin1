@@ -584,8 +584,61 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         if (previousStatus != nextStatus) {
           unawaited(_loadRoadRoute());
         }
+        // FIX (Real-Time Cancellation Sync, Aug 11 2026): the status
+        // check above already detected 'cancelled' and cleaned up the
+        // RTDB live-location node, but nothing told the hero — they
+        // could keep driving to a pickup/drop that no longer exists and
+        // tap Arrived/Start/Complete against a cancelled doc. Only fire
+        // once, on the transition into cancelled (not on every snapshot
+        // while already cancelled).
+        if (previousStatus != nextStatus &&
+            nextStatus.startsWith('cancelled') &&
+            !_cancellationHandled) {
+          _cancellationHandled = true;
+          unawaited(_handleCancelledByCustomer());
+        }
       }
     });
+  }
+
+  bool _cancellationHandled = false;
+
+  /// Customer cancelled while this hero was actively working the ride.
+  /// Restores the hero to the dispatch pool (mirrors the isAvailable
+  /// fix in hero_home_screen.dart's _completeRide()) and cleanly exits
+  /// back to the Home screen after a blocking dialog.
+  Future<void> _handleCancelledByCustomer() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('heroes')
+            .doc(uid)
+            .set({'isAvailable': true}, SetOptions(merge: true));
+        await FirebaseDatabase.instance
+            .ref('online_heroes/$uid')
+            .update({'isAvailable': true});
+      } catch (e) {
+        debugPrint('[CaptainRideScreen] isAvailable restore on cancel failed: $e');
+      }
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Booking Cancelled'),
+        content: const Text('Booking was cancelled by the customer.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   // ── Trip Actions ─────────────────────────────────────────────
@@ -1144,38 +1197,69 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
           'description': 'Payment collected for completed ride',
           'timestamp': FieldValue.serverTimestamp(),
         });
+      }
 
-        // APP INFRA COST RECOVERY (per Nizam's explicit instruction --
-        // REPLACES the flat % commission model entirely): no cut of the
-        // hero's fare is taken here at all. Instead, a minimal
-        // usage-proportional fee (minutes spent Online + this ride) is
-        // flushed from the in-memory accumulator to the hero's PREPAID
-        // wallet in ONE batched write -- see HeroUsageAccumulatorService
-        // / HeroWalletService.flushUsageCost() for the full rationale.
-        // Only runs on the 'self' path per Nizam's explicit "self ah
-        // select panna wallet-la deduct pannanum" instruction — a hero
-        // who never touched the money (myallin1 path, above) doesn't
-        // get charged out of a wallet that received nothing this ride.
-        try {
-          HeroUsageAccumulatorService().recordRideHandled();
-          final activeMinutes =
-              HeroUsageAccumulatorService().consumeActiveMinutes();
-          final ridesHandled =
-              HeroUsageAccumulatorService().consumeRidesHandled();
-          await HeroWalletService().flushUsageCost(
-            heroId: user.uid,
-            activeMinutes: activeMinutes,
-            ridesHandled: ridesHandled,
-          );
-          final walletSnap = await FirebaseFirestore.instance
-              .collection('hero_wallets')
-              .doc(user.uid)
-              .get();
-          walletEligible =
-              (walletSnap.data()?['isEligibleForRequests'] as bool?) ?? true;
-        } catch (e) {
-          debugPrint('[HeroRideScreen] Wallet usage-fee flush failed (non-fatal): $e');
-        }
+      // APP INFRA COST RECOVERY (per Nizam's explicit instruction --
+      // REPLACES the flat % commission model entirely): no cut of the
+      // hero's fare is taken here at all. Instead, a minimal
+      // usage-proportional fee (minutes spent Online + this ride) is
+      // flushed from the in-memory accumulator to the hero's PREPAID
+      // wallet in ONE batched write -- see HeroUsageAccumulatorService
+      // / HeroWalletService.flushUsageCost() for the full rationale.
+      //
+      // FIX (Aug 11 2026 — Nizam's "Phase 1" revenue-leak audit fix):
+      // this used to run ONLY on the 'self' path, on the reasoning that
+      // a hero who never touched the customer's money (myallin1 path)
+      // shouldn't be charged out of a wallet that received nothing this
+      // ride. That reasoning conflated two SEPARATE wallets: the hero's
+      // own earnings (heroes/{uid}.walletBalance, 'self'-only, correctly
+      // untouched on myallin1 — the hero genuinely never held that cash)
+      // and the PREPAID infra-fee wallet (hero_wallets/{uid}.balance),
+      // which pays for OUR server/database load of dispatching and
+      // completing this ride — load that is IDENTICAL regardless of
+      // which payment method the customer used. Skipping the flush on
+      // myallin1 meant every company-UPI ride silently cost the platform
+      // real infra spend with zero fee recovery — a straightforward
+      // revenue leak, now closed by running this for both paths.
+      try {
+        // FIX (Dynamic Micro-Billing, Aug 11 2026): this method
+        // (_markPaymentReceived) is a SEPARATE method from
+        // _completeTrip() above — billedDistanceKm was a local
+        // variable scoped to that other method, not visible here,
+        // which is what the "Undefined name 'billedDistanceKm'"
+        // compiler error was pointing at. Recomputed locally instead,
+        // from the same rideData already fetched at the top of this
+        // method (actualDistanceKm/routeDistanceKm are both written to
+        // the rides doc by _completeTrip() before payment collection
+        // ever runs) with a fallback to this screen's own live-tracked
+        // _actualDistanceKm state field if the doc field is missing.
+        final billedDistanceKm = math.max(
+          (rideData['actualDistanceKm'] as num?)?.toDouble() ??
+              _actualDistanceKm,
+          (rideData['routeDistanceKm'] as num?)?.toDouble() ?? 0.0,
+        );
+        HeroUsageAccumulatorService().recordRideHandled(distanceKm: billedDistanceKm);
+        final activeMinutes =
+            HeroUsageAccumulatorService().consumeActiveMinutes();
+        final ridesHandled =
+            HeroUsageAccumulatorService().consumeRidesHandled();
+        final rideDistancesKm =
+            HeroUsageAccumulatorService().consumeRideDistances();
+        await HeroWalletService().flushUsageCost(
+          heroId: user.uid,
+          heroName: widget.ride.heroName,
+          activeMinutes: activeMinutes,
+          ridesHandled: ridesHandled,
+          rideDistancesKm: rideDistancesKm,
+        );
+        final walletSnap = await FirebaseFirestore.instance
+            .collection('hero_wallets')
+            .doc(user.uid)
+            .get();
+        walletEligible =
+            (walletSnap.data()?['isEligibleForRequests'] as bool?) ?? true;
+      } catch (e) {
+        debugPrint('[HeroRideScreen] Wallet usage-fee flush failed (non-fatal): $e');
       }
 
       // FIX (Phase 4a defensive cleanup): _completeTrip() already deletes
@@ -1302,6 +1386,14 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       case 'paid':
         badgeColor = _green;
         statusText = 'Payment Received';
+        break;
+      // FIX (Real-Time Cancellation Sync, Aug 11 2026): brief display
+      // window between the status flipping and the cancellation dialog
+      // popping this screen — was falling through to "Unknown Status".
+      case 'cancelled':
+      case 'cancelled_by_captain':
+        badgeColor = _red;
+        statusText = 'Cancelled';
         break;
       default:
         badgeColor = _muted;
@@ -1622,17 +1714,28 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: Text(
-                isAccepted
-                    ? (_isCargoRide ? 'PARCEL PICKED' : 'ARRIVED')
-                    : (isArrived
-                        ? (_verifyingOtp
-                            ? 'VERIFYING OTP...'
-                            : 'VERIFY OTP & START')
-                        : (_isCargoRide ? 'DELIVERED' : 'END RIDE')),
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+              // FIX (UI polish, Aug 11 2026 — Hero button text overflow
+              // bug): this button's label changes length across ride
+              // states ('ARRIVED' vs 'VERIFY OTP & START', 19 chars at
+              // fontSize 18 bold) with no overflow guard, so the longest
+              // state could wrap or crowd against the button edges on
+              // narrow phones. FittedBox scales the label to fit —
+              // shorter states like 'ARRIVED' still render at their
+              // natural size since FittedBox only shrinks.
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  isAccepted
+                      ? (_isCargoRide ? 'PARCEL PICKED' : 'ARRIVED')
+                      : (isArrived
+                          ? (_verifyingOtp
+                              ? 'VERIFYING OTP...'
+                              : 'VERIFY OTP & START')
+                          : (_isCargoRide ? 'DELIVERED' : 'END RIDE')),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),

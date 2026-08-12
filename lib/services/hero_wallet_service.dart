@@ -164,7 +164,19 @@ class HeroWalletService {
   // observed Firestore/RTDB cost per hero -- they are the entire
   // pricing model now, replacing RiderCommission for heroes.
   static const double ratePerActiveMinute = 0.05; // ₹ per online minute
-  static const double ratePerRideHandled = 2; // ₹ per completed ride
+  // FIX (Dynamic Micro-Billing, Aug 11 2026, per Nizam — "switch to a
+  // dynamic, fractional model based on the service scope"): this flat
+  // rate now applies ONLY to completed activity with no distance
+  // concept — service_requests (Hero Booking, Custom Order, Custom
+  // Food Order, Grocery Order). Actual rides bill via
+  // [ratePerRideBase]/[ratePerKm]/[maxFeePerRide] below instead — see
+  // the per-ride loop in flushUsageCost(). Kept as the fallback for any
+  // ride whose distance wasn't passed in, so nothing silently bills
+  // ₹0.
+  static const double ratePerRideHandled = 2; // ₹ per completed task (no distance)
+  static const double ratePerRideBase = 0.50; // ₹ base fee per actual ride
+  static const double ratePerKm = 0.15; // ₹ per km travelled
+  static const double maxFeePerRide = 3.00; // cap — never bill more than this per ride
 
   /// Called by the Hero App at two batched points ONLY -- a ride
   /// completing, or the hero going Offline (see
@@ -191,11 +203,43 @@ class HeroWalletService {
     required String heroId,
     required double activeMinutes,
     required int ridesHandled,
+    // FIX (Dynamic Micro-Billing, Aug 11 2026): distance (km) of each
+    // ACTUAL ride included in [ridesHandled] since the last flush —
+    // see HeroUsageAccumulatorService.consumeRideDistances(). Every
+    // entry here bills at base+per-km (capped), instead of the flat
+    // rate. `ridesHandled - rideDistancesKm.length` is the remaining
+    // count with no distance (service_requests), which still bills at
+    // the unchanged flat ratePerRideHandled. Purely additive — omit it
+    // (default empty) and every ride in [ridesHandled] bills flat,
+    // exactly as before this change.
+    List<double> rideDistancesKm = const [],
+    // FIX (Aug 11 2026 — Admin usage-fee ledger, Phase 2): optional,
+    // denormalized onto the written transaction so the admin ledger
+    // screen can render a hero name per row without an extra read per
+    // hero — see HeroWalletTransactionModel.heroName for the full
+    // rationale. Purely additive; every existing caller that doesn't
+    // pass this keeps working exactly as before.
+    String? heroName,
   }) async {
     if (activeMinutes <= 0 && ridesHandled <= 0) return;
 
+    // Distance-based component: base fee + per-km, capped per ride —
+    // e.g. a 5km ride bills ₹0.50 + (5 × ₹0.15) = ₹1.25; a 30km ride
+    // would compute to ₹5.00 but is capped at ₹3.00.
+    var rideComponent = 0.0;
+    for (final km in rideDistancesKm) {
+      final perRide = ratePerRideBase + (km * ratePerKm);
+      rideComponent += perRide > maxFeePerRide ? maxFeePerRide : perRide;
+    }
+    // Whatever's left in ridesHandled after the distance-billed rides
+    // are accounted for is flat-rate activity (service_requests, or a
+    // ride whose distance genuinely wasn't available).
+    final flatCount = ridesHandled - rideDistancesKm.length;
+    final flatComponent =
+        (flatCount > 0 ? flatCount : 0) * ratePerRideHandled;
+
     final rawCost =
-        (activeMinutes * ratePerActiveMinute) + (ridesHandled * ratePerRideHandled);
+        (activeMinutes * ratePerActiveMinute) + rideComponent + flatComponent;
     // Round to paise -- avoids writing values like 0.0500000001 forever.
     final usageCost = (rawCost * 100).roundToDouble() / 100;
     if (usageCost <= 0) return;
@@ -249,6 +293,67 @@ class HeroWalletService {
           balanceAfter: newBalance,
           activeMinutes: activeMinutes,
           ridesHandled: ridesHandled,
+          heroName: heroName,
+        ).toFirestore(),
+      );
+    });
+  }
+
+  // FIX (Hero Earnings & Online Time Monitor, Aug 11 2026, per Nizam —
+  // "when they tap Fetch/Refresh, deduct a minimal micro-fee in paise
+  // for the server read cost"): a hero's own Earnings/Online-Time
+  // monitor is fetch-on-demand (no live listener — see
+  // hero_earnings_screen.dart), but every tap still costs real
+  // Firestore reads on OUR side. This is the same "activity = cost"
+  // philosophy as flushUsageCost() above, just gated on a manual tap
+  // instead of online-minutes/rides. Deliberately a tiny fixed amount
+  // (10 paise), not a formula — this is a read-cost recovery fee, not
+  // a service fee, so it doesn't need to scale with anything.
+  static const double monitorRefreshFee = 0.10; // ₹0.10 per manual Fetch tap
+
+  /// Charges the flat monitor-refresh micro-fee. Non-fatal by design —
+  /// callers should NOT block the fetch itself on this; a failed
+  /// micro-fee charge should never stop a hero from seeing their own
+  /// earnings.
+  Future<void> chargeMonitorRefreshFee(String heroId, {String? heroName}) async {
+    const fee = monitorRefreshFee;
+    final walletRef = _walletRef(heroId);
+    final txnRef = _txnRef(heroId).doc();
+
+    await _firestore.runTransaction((tx) async {
+      final walletSnap = await tx.get(walletRef);
+      final currentBalance =
+          (walletSnap.data()?['balance'] as num?)?.toDouble() ?? 0.0;
+      final currentPaid =
+          (walletSnap.data()?['lifetimeCommissionPaid'] as num?)
+                  ?.toDouble() ??
+              0.0;
+      final threshold =
+          (walletSnap.data()?['lowBalanceThreshold'] as num?)?.toDouble() ??
+              50.0;
+      final newBalance = currentBalance - fee;
+
+      tx.set(
+        walletRef,
+        {
+          'balance': newBalance,
+          'lifetimeCommissionPaid': currentPaid + fee,
+          'lowBalanceThreshold': threshold,
+          'isEligibleForRequests': newBalance >= threshold,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+
+      tx.set(
+        txnRef,
+        HeroWalletTransactionModel(
+          id: txnRef.id,
+          heroId: heroId,
+          type: HeroWalletTxnType.infraUsageFee,
+          amount: -fee,
+          balanceAfter: newBalance,
+          heroName: heroName,
         ).toFirestore(),
       );
     });

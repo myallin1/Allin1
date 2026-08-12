@@ -19,7 +19,10 @@ import 'package:scratcher/scratcher.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config/city_config.dart';
+import '../services/app_minimizer_service.dart';
 import '../services/app_update_checker.dart';
+// GUEST MODE (Aug 11 2026): the 30s deferred sign-in nudge.
+import '../services/auth_prompt_service.dart';
 import '../services/city_service.dart';
 import '../services/hive_cache.dart';
 import '../services/local_sync_service.dart';
@@ -227,6 +230,16 @@ class _DashboardScreenState extends State<DashboardScreen>
     // has a cached position ready — the booking screen no longer has to
     // run its own permission-check + GPS-fetch from a cold start.
     unawaited(_prefetchLocationInBackground());
+    // GUEST MODE (Aug 11 2026): start the 30s deferred sign-in nudge.
+    // addPostFrameCallback is REQUIRED — showModalBottomSheet needs a
+    // context that is already mounted in the tree, which it is not
+    // during initState. The service itself no-ops for a real account,
+    // for a second call in the same session, within 24h of a "Later",
+    // and whenever another route/modal is on top — so it can never
+    // ambush someone mid-booking. See auth_prompt_service.dart.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) AuthPromptService.instance.scheduleDeferredPrompt(context);
+    });
     // Auto-show the daily Paytm Soundbox scratch card once per calendar day
     // — but only AFTER the first-open coach mark tour (if any) has been
     // shown/dismissed, so the two overlays never fight for the screen.
@@ -386,6 +399,10 @@ class _DashboardScreenState extends State<DashboardScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _pwaUpdatePollTimer?.cancel();
+    // GUEST MODE: kill the pending 30s timer — without this it would
+    // fire against a disposed context if the customer leaves Home
+    // within 30 seconds of opening the app.
+    AuthPromptService.instance.cancel();
     super.dispose();
   }
 
@@ -625,28 +642,36 @@ class _DashboardScreenState extends State<DashboardScreen>
     _promoOffers ??= _localizedPromoOffers(context.watch<LocalizationService>().t);
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
+      // FIX (Aug 12 2026 — CTO mandate: "System Back Button Overhaul"):
+      // this used to show a Yes/No "exit app?" dialog and call
+      // SystemNavigator.pop() on Yes — which FINISHES the Activity (a
+      // real close), and on web either no-ops or leaves a blank/frozen
+      // tab. That's the exact "app terminates / blank on PWA / full
+      // cold-boot rebuild on reopen" bug this feature fixes. Minimizing
+      // is a safe, fully reversible action (nothing is lost, the app
+      // resumes instantly), so it no longer needs a confirmation dialog
+      // at all — it just happens, the same way tapping the OS Home
+      // button would.
+      onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         if (_navIndex != 0) { _goTab(0); return; }
-        final t = context.read<LocalizationService>().t;
-        final exit = await showDialog<bool>(
-          context: context,
-          builder: (_) => AlertDialog(
-            backgroundColor: kBg,
-            title: Text(t('exit_app_title'),
-                style: GoogleFonts.outfit(
-                    color: kText, fontWeight: FontWeight.w700,),),
-            content: Text(t('exit_app_body'),
-                style: GoogleFonts.outfit(color: kMuted),),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false),
-                  child: Text(t('no_label'), style: TextStyle(color: kPink)),),
-              TextButton(onPressed: () => Navigator.pop(context, true),
-                  child: Text(t('yes_label'), style: TextStyle(color: kRed)),),
-            ],
-          ),
-        );
-        if ((exit ?? false) && context.mounted) SystemNavigator.pop();
+        if (kIsWeb) {
+          // A browser tab cannot minimize itself to the OS home screen —
+          // no such API exists (would be a sandboxing violation). Show
+          // the "use your device's Home button" hint once per session,
+          // then silently swallow further back-presses so it never nags.
+          if (AppMinimizer.consumeWebHintOnce()) {
+            final t = context.read<LocalizationService>().t;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(t('press_home_to_minimize')),
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+          return;
+        }
+        unawaited(AppMinimizer.moveToBackground());
       },
       child: Scaffold(
         key: _scaffoldKey,
@@ -693,7 +718,10 @@ class _DashboardScreenState extends State<DashboardScreen>
       surfaceTintColor: Colors.transparent,
       titleSpacing: 0,
       leading: IconButton(
-        icon: Icon(Icons.menu_rounded, color: kPink, size: 26),
+        // FIX (UI standardization, Aug 11 2026): every other screen's
+        // leading nav icon (back button etc.) is size 20 — this hamburger
+        // was 26, 30% larger for the same semantic slot.
+        icon: Icon(Icons.menu_rounded, color: kPink, size: 20),
         onPressed: () => _scaffoldKey.currentState?.openDrawer(),
       ),
       title: Row(
@@ -771,7 +799,10 @@ class _DashboardScreenState extends State<DashboardScreen>
         const SizedBox(width: 8),
         GestureDetector(
           onTap: () => _showApkSheet(context),
-          child: Icon(Icons.notifications_outlined, color: kText, size: 22),
+          // FIX (UI standardization, Aug 11 2026): matches the 18-20px
+          // inline-icon convention used everywhere else (drawer icons,
+          // list-row icons) instead of standing out at 22.
+          child: Icon(Icons.notifications_outlined, color: kText, size: 20),
         ),
         const SizedBox(width: 16),
       ],

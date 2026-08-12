@@ -11,6 +11,8 @@ import 'package:latlong2/latlong.dart';
 
 import '../config/food_categories.dart';
 import '../models/service_request_model.dart';
+// GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../services/auth_prompt_service.dart';
 import '../services/app_palette.dart';
 // Imported with a prefix (rather than a `hide` clause on some other
 // import) because the ambiguity here is with a `Category` symbol from
@@ -198,6 +200,16 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
       );
       return;
     }
+
+    // GUEST MODE (Aug 11 2026): guard after form validation, before the
+    // currentUser read. See auth_prompt_service.dart.
+    if (!await requireRealAuth(
+      context,
+      reason: 'Sign in and your food is on its way',
+    )) {
+      return;
+    }
+    if (!mounted) return;
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;

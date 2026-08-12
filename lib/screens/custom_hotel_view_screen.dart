@@ -28,8 +28,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+// GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../services/auth_prompt_service.dart';
 import '../services/auth_service.dart';
+import '../services/cloudinary_upload_service.dart';
 import '../services/custom_hotel_service.dart';
 import '../services/service_request_service.dart';
 
@@ -68,6 +72,34 @@ class _CustomHotelViewScreenState extends State<CustomHotelViewScreen> {
         _cart[itemId] = current - 1;
       }
     });
+  }
+
+  // FIX (audit: "Seller custom-menu phone not wiring to customer side"):
+  // this screen previously had no way at all for a customer to call a
+  // hotel built via the "custom menu" builder — custom_hotels/{sellerId}
+  // never carried a phone field (see CustomHotelService.ensureHotelDoc
+  // FIX note), so there was nothing here to read even if a Call button
+  // had existed. Now that ensureHotelDoc() writes 'phoneNumber', wire it
+  // up the same way admin_seller_approval_screen.dart's _callSeller
+  // already does for the legacy seller flow.
+  Future<void> _callHotel(String phone) async {
+    final digits = phone.replaceAll(RegExp('[^0-9+]'), '');
+    if (digits.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No phone number on file for this hotel')),
+      );
+      return;
+    }
+    final url = Uri.parse('tel:$digits');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to open phone dialer')),
+      );
+    }
   }
 
   Future<void> _openCheckout(List<CustomHotelItem> allItems) async {
@@ -109,6 +141,25 @@ class _CustomHotelViewScreenState extends State<CustomHotelViewScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: _kText),
         title: Text(widget.hotelName, style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 17)),
+        // NEW — Call button (see _callHotel FIX note above). A separate,
+        // lightweight StreamBuilder over the same hotelStream doc rather
+        // than threading phone data down from the body's own
+        // hotelStream StreamBuilder below, since the AppBar is built
+        // outside that builder's scope.
+        actions: [
+          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: _service.hotelStream(widget.hotelId),
+            builder: (context, snap) {
+              final phone = (snap.data?.data()?['phoneNumber'] as String?)?.trim() ?? '';
+              if (phone.isEmpty) return const SizedBox.shrink();
+              return IconButton(
+                icon: const Icon(Icons.call_rounded, color: _kPink),
+                tooltip: 'Call hotel',
+                onPressed: () => _callHotel(phone),
+              );
+            },
+          ),
+        ],
       ),
       // NEW — live: if the seller closes the hotel entirely while the
       // customer is on this exact screen, the hotel doc itself leaves
@@ -189,7 +240,12 @@ class _CustomHotelViewScreenState extends State<CustomHotelViewScreen> {
                                       ),
                                       child: const Icon(Icons.restaurant_rounded, color: Colors.white),
                                     )
-                                  : Image.network(item.photoUrl, width: 64, height: 64, fit: BoxFit.cover),
+                                  : Image.network(
+                                      CloudinaryUploadService.optimizedUrl(item.photoUrl, width: 128),
+                                      width: 64,
+                                      height: 64,
+                                      fit: BoxFit.cover,
+                                    ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -338,9 +394,21 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Your cart is empty.')));
       return;
     }
+    // GUEST MODE (Aug 11 2026): guard after address + cart validation,
+    // before the currentUser read. The "Please sign in" snackbar below
+    // is now only a safety net — an anonymous guest reaches the sheet
+    // here instead of a dead-end message. See auth_prompt_service.dart.
+    if (!await requireRealAuth(
+      context,
+      reason: 'Sign in and this kitchen will start your order',
+    )) {
+      return;
+    }
+    if (!mounted) return;
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please sign in to place an order.')));
+      // GUEST MODE: branded pink, not a default grey/red snackbar.
+      showSignInRequiredSnack(context, message: 'Sign in to place your order');
       return;
     }
 

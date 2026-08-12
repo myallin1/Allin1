@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'config/app_variant.dart';
 import 'firebase_options.dart';
@@ -20,9 +21,19 @@ import 'screens/seller_onboarding_screen.dart';
 import 'screens/seller_screen.dart';
 import 'services/db_usage_tracker.dart';
 import 'services/localization_service.dart';
+import 'services/migration_gate_service.dart';
 import 'services/session_service.dart';
 import 'services/theme_service.dart';
 import 'widgets/branded_loading_screen.dart';
+import 'widgets/migration_notice_overlay.dart';
+
+// FIX (Aug 10 2026 — Nizam's "video every launch is too slow / disturbs
+// repeat users" report, same pattern as main_customer.dart/main_hero.dart):
+// gates whether the splash video plays at all. Set (once) only after the
+// video has actually finished playing on a first-ever launch — see the
+// branch in main() below. Every launch after that reads this as true and
+// skips straight past the video AND past any blocking loading screen.
+const String _kSplashVideoSeenEverKey = 'seller_splash_video_seen_ever_v1';
 
 // FIX (Nizam's "video as natural visual buffer" request, task #108, same
 // fix as main_customer.dart/main_hero.dart): paint app_splash.mp4 first,
@@ -34,6 +45,13 @@ import 'widgets/branded_loading_screen.dart';
 // SellerApp.build for that change) so it's no longer a second screen
 // stacked after this one. BrandedLoadingScreen is now only a rare
 // fallback frame, shown only if Firebase init somehow outlasts the video.
+//
+// FIX (Aug 10 2026 — first-launch-only video): this class itself is
+// UNCHANGED — still the video screen described above. What changed is
+// main() no longer runApp()s it unconditionally: it now only does so the
+// very first time this device/browser ever opens the seller app (see
+// _kSplashVideoSeenEverKey above). Every later launch skips this widget
+// entirely and goes straight to SellerApp — see the branch in main() below.
 class _BootLoadingApp extends StatelessWidget {
   const _BootLoadingApp({required this.onVideoFinished});
 
@@ -67,10 +85,26 @@ void main() async {
       // videoDone completes when app_splash.mp4 finishes playing; the
       // second runApp() below (SellerApp) awaits it so the video is never
       // cut short by a fast Firebase init.
+      //
+      // FIX (Aug 10 2026 — first-launch-only video, "rocket speed" repeat
+      // opens): a SharedPreferences read (fast, local, no network) decides
+      // right here whether this device has ever seen the video before.
+      // First-ever launch: unchanged behavior — _BootLoadingApp (video)
+      // paints immediately. Every later launch: videoDone is marked
+      // complete immediately (nothing to wait for) and _BootLoadingApp is
+      // never even built.
+      final earlyPrefs = await SharedPreferences.getInstance();
+      final hasSeenSplashVideoEver =
+          earlyPrefs.getBool(_kSplashVideoSeenEverKey) ?? false;
+
       final videoDone = Completer<void>();
-      runApp(_BootLoadingApp(onVideoFinished: () {
-        if (!videoDone.isCompleted) videoDone.complete();
-      }));
+      if (!hasSeenSplashVideoEver) {
+        runApp(_BootLoadingApp(onVideoFinished: () {
+          if (!videoDone.isCompleted) videoDone.complete();
+        }));
+      } else {
+        videoDone.complete();
+      }
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
@@ -82,6 +116,13 @@ void main() async {
         FirebaseFirestore.instance.settings = const Settings(
           persistenceEnabled: true,
           cacheSizeBytes: 52428800, // 50MB
+          // FIX (Aug 10 2026, UPDATED Aug 11 2026 — same QUIC/
+          // Firestore-Listen-channel fix applied to main_customer.dart/
+          // main_hero.dart, for consistency across all 4 apps; switched
+          // from auto-detect to forced long-polling since auto-detect
+          // proved unreliable): see main_hero.dart for the full
+          // explanation.
+          webExperimentalForceLongPolling: true,
         );
       }
       DbUsageTracker.instance.init('seller');
@@ -90,10 +131,11 @@ void main() async {
       // main_admin.dart, SellerApp's root route goes straight to
       // LoginScreen ('/') with no auth-stream gate at the app root at
       // all — there's no second loading widget mounted after this
-      // runApp() swap to collapse here. The only two screens painted
-      // during a seller cold boot are the pre-Firebase _BootLoadingApp
-      // (BrandedLoadingScreen) and then LoginScreen itself — already a
-      // single continuous mount, nothing to fix structurally. (Separately
+      // runApp() swap to collapse here. On a first-ever launch, the only
+      // two screens painted during a seller cold boot are the pre-Firebase
+      // _BootLoadingApp (video) and then LoginScreen itself — already a
+      // single continuous mount, nothing to fix structurally. On every
+      // later launch there's no splash frame at all — see below. (Separately
       // worth knowing: a seller with an existing Firebase Auth session
       // still sees the login FORM on every relaunch instead of skipping
       // straight to SellerDashboardScreen — a real UX gap, but a
@@ -101,9 +143,25 @@ void main() async {
       //
       // Gate the real-app swap on the video having finished playing (it
       // almost always has, by now — Firebase init is the fast side of
-      // this race) so the boot video is never truncated mid-playback.
+      // this race) so the boot video is never truncated mid-playback. On a
+      // repeat launch videoDone was already completed above (no video was
+      // ever shown), so this resolves instantly and adds no wait — Firebase
+      // init above (a local-session restore, not a fresh network call in
+      // the common case) is the only thing standing between "app opens"
+      // and runApp(SellerApp()) on a repeat launch.
       await videoDone.future;
       runApp(const SellerApp());
+      // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch"): fire-and-forget,
+      // fails open on any error — see MigrationGateService's own header.
+      MigrationGateService.instance.start();
+
+      // Mark the video as seen only now that it has actually finished
+      // playing (videoDone is only completed by AppSplashVideoScreen's own
+      // onFinished/safety-timer, or immediately above if it was already
+      // skipped) — every launch from here on takes the "skip video" branch.
+      if (!hasSeenSplashVideoEver) {
+        unawaited(earlyPrefs.setBool(_kSplashVideoSeenEverKey, true));
+      }
     },
   );
 }
@@ -140,11 +198,14 @@ class SellerApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         // FIX (video-as-natural-buffer, per Nizam's request): app_splash.mp4
-        // now plays pre-Firebase as the very first boot frame (see
+        // plays pre-Firebase as the very first boot frame (see
         // _BootLoadingApp above) instead of here — this route used to wrap
         // LoginScreen in a second AppSplashVideoScreen play, which would
         // have shown the same video twice back to back on every launch.
         // Now goes straight to LoginScreen.
+        // UPDATED (Aug 10 2026): the pre-Firebase video itself is now
+        // first-ever-launch-only (see _kSplashVideoSeenEverKey in main())
+        // — on every later launch nothing plays before this route at all.
         '/': (_) => const LoginScreen(
               presetUserType: UserType.customer,
               lockUserType: true,
@@ -169,6 +230,12 @@ class SellerApp extends StatelessWidget {
         }
         return null;
       },
+      // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch"): Seller app had no
+      // builder: before this — added purely to host MigrationGate, same
+      // pattern as the other 3 apps. child can briefly be null on the very
+      // first MaterialApp build, so fall back to an empty box.
+      builder: (context, child) =>
+          MigrationGate(child: child ?? const SizedBox.shrink()),
         ),
       ),
     );

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' show Color;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -311,6 +312,17 @@ class HeroRideNotificationService {
         fullScreenIntent: true,
         ongoing: showDetails,
         autoCancel: !showDetails,
+        // FIX (Nizam's "notification icon namma pink theme ku maathu"):
+        // no `color` was ever set here, so Android used its own default
+        // system accent (blue/purple) for the small-icon tint and the
+        // notification's accent elements — that's the purple circle icon
+        // seen in the reported screenshot, not our brand color at all.
+        // This is the one part of a native Android notification that
+        // CAN be app-themed (unlike action-button layout/alignment,
+        // which Android's own notification renderer controls and no
+        // app can override — see the actions list below, unchanged).
+        color: const Color(0xFFFF4FA3),
+        colorized: false,
         // 0ms delay, vibrate 1sec, pause 0.5sec, vibrate 1sec, pause 0.5sec, vibrate 1sec
         vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
         ticker: ticker,

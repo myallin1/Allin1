@@ -18,6 +18,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
+// GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../services/auth_prompt_service.dart';
 import '../services/location_service.dart';
 import '../services/map_service.dart';
 import '../services/service_request_service.dart';
@@ -483,6 +485,22 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
       );
       return;
     }
+
+    // GUEST MODE (Aug 11 2026): the guard sits AFTER the "describe your
+    // task" validation and BEFORE the currentUser read, deliberately.
+    // Asking someone to sign in and only then telling them the form is
+    // empty wastes the sign-in; and reading currentUser first would
+    // capture the anonymous guest, not the account they just linked.
+    // firestore.rules' isRealUser() rejects this write from an anonymous
+    // uid anyway — this guard is what turns that hard denial into a
+    // sign-in sheet instead of a "Server Busy" error.
+    if (!await requireRealAuth(
+      context,
+      reason: 'Sign in and a Hero will be on the way to you',
+    )) {
+      return;
+    }
+    if (!mounted) return;
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;

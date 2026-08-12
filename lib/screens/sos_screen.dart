@@ -247,6 +247,69 @@ class _SosScreenState extends State<SosScreen> {
   // (sos_kyc_requests/{uid}), reviewed by admin's Cus SOS Approval tab.
   // Real-time listener so the button unlocks the instant admin
   // approves, without the customer needing to reopen the app.
+  // NEW (Aug 11 2026 — Nizam's request): legal-deterrent banner shown
+  // ABOVE the KYC gate, so the consequence of misuse is the first thing
+  // a customer reads on this screen rather than something buried after
+  // they've already verified.
+  //
+  // NOTE FOR REVIEW: the specific figures below (₹50,000 / 3 months) were
+  // supplied by Nizam and are stated here verbatim at his explicit
+  // instruction. I could not verify them against a specific Indian
+  // statute — worth a lawyer's confirmation before/soon after launch,
+  // since this is customer-facing text asserting a legal penalty. The
+  // surrounding claims (identity/location/time are logged, account ban)
+  // are all factually true of this app's own behaviour.
+  Widget _buildMisuseWarning() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4F6),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFFFB3C6), width: 1.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.gavel_rounded, color: Color(0xFFD11A4A), size: 26),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'WARNING: SOS Misuse is a Punishable Offence',
+                  style: GoogleFonts.outfit(
+                    color: const Color(0xFFD11A4A),
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w900,
+                    height: 1.25,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'This emergency network is strictly for real emergencies. '
+                  'Raising a false SOS alert can lead to a penalty of '
+                  '₹50,000 and imprisonment of up to 3 months, along with a '
+                  'permanent ban from this app.\n\n'
+                  'Your identity, live location and the exact time are '
+                  'recorded with every SOS you send.',
+                  style: GoogleFonts.outfit(
+                    color: const Color(0xFF7A2138),
+                    fontSize: 12.5,
+                    height: 1.45,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSosGateOrCard() {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return _buildSosCard();
@@ -269,37 +332,51 @@ class _SosScreenState extends State<SosScreen> {
         if (status == 'approved') {
           return _buildSosCard();
         }
+        // Every not-yet-approved state shows the misuse warning above the
+        // card. Deliberately NOT shown once approved: at that point the
+        // customer has already read and accepted it during verification,
+        // and someone in a real emergency should see the SOS button
+        // immediately, not a wall of legal text.
         if (status == 'pending') {
-          return _buildKycStatusCard(
+          return Column(children: [
+            _buildMisuseWarning(),
+            _buildKycStatusCard(
             icon: Icons.hourglass_top_rounded,
             color: _darkRed,
             title: 'Verification Pending',
             message: 'Your SOS KYC details are with admin for review. '
                 'This is a one-time check — once approved, your SOS button '
                 'activates permanently.',
-          );
+            ),
+          ],);
         }
         if (status == 'rejected') {
           final reason = data?['rejectionReason'] as String? ?? '';
-          return _buildKycStatusCard(
-            icon: Icons.error_outline_rounded,
-            color: _red,
-            title: 'Verification Rejected',
-            message: reason.isNotEmpty
-                ? 'Reason: $reason\n\nPlease correct and resubmit.'
-                : 'Please correct your details and resubmit.',
-            actionLabel: 'Resubmit KYC',
-          );
+          return Column(children: [
+            _buildMisuseWarning(),
+            _buildKycStatusCard(
+              icon: Icons.error_outline_rounded,
+              color: _red,
+              title: 'Verification Rejected',
+              message: reason.isNotEmpty
+                  ? 'Reason: $reason\n\nPlease correct and resubmit.'
+                  : 'Please correct your details and resubmit.',
+              actionLabel: 'Resubmit KYC',
+            ),
+          ],);
         }
         // Not submitted yet.
-        return _buildKycStatusCard(
-          icon: Icons.verified_user_outlined,
-          color: _pink,
-          title: 'Verify KYC to Activate SOS',
-          message: 'For your safety and to prevent misuse of this emergency '
-              'network, please verify your identity once before using SOS.',
-          actionLabel: 'Start Verification',
-        );
+        return Column(children: [
+          _buildMisuseWarning(),
+          _buildKycStatusCard(
+            icon: Icons.verified_user_outlined,
+            color: _pink,
+            title: 'Verify KYC to Activate SOS',
+            message: 'For your safety and to prevent misuse of this emergency '
+                'network, please verify your identity once before using SOS.',
+            actionLabel: 'Start Verification',
+          ),
+        ],);
       },
     );
   }

@@ -144,7 +144,57 @@ function Build-And-Deploy {
     # which icons render, only whether unused ones are pruned from the
     # font file. If bundle size ever becomes the bottleneck instead of
     # build time, remove this flag to get tree-shaking back.
-    flutter build web -t $Entry --no-tree-shake-icons
+    # FIX (Aug 10 2026 — root cause of "SELLER DEPLOY FAILED" printing
+    # in red, then SUMMARY printing "SELLER : OK" two lines later): a
+    # bare external-command call inside a PowerShell function sends its
+    # stdout into the FUNCTION'S OWN return/output stream, not just the
+    # console — nothing here was redirecting it. So `$results[$app.Name]
+    # = Build-And-Deploy ...` was capturing an ARRAY containing every
+    # line flutter/firebase printed PLUS the real $true/$false, and
+    # `if ($results[$key])` in the SUMMARY loop just checks "is this a
+    # non-empty array" — which is ALWAYS true, regardless of whether the
+    # real value buried inside it was $false. This has silently been
+    # true for every run, all along; it only became visible now because
+    # this is the first genuine deploy failure to actually test it.
+    # `| Out-Host` sends the command's output straight to the console
+    # (identical visible behavior, real-time streaming preserved) WITHOUT
+    # adding it to the function's output stream — so only the explicit
+    # `return $true` / `return $false` below ever reach $results now.
+    # FIX (Aug 11 2026 — Nizam's "5 to 8 sec white display" report):
+    # --no-tree-shake-icons REMOVED. I added it earlier purely to speed up
+    # OUR build, but measuring the output showed the real cost: it ships
+    # the entire MaterialIcons font at 1.6 MB instead of tree-shaking it
+    # down to the ~20 KB of glyphs this app actually uses. That 1.6 MB is
+    # paid by every customer on every cold load, over mobile data, to save
+    # us a few seconds at build time. Wrong trade — build time is our
+    # inconvenience, download time is the customer's.
+    # ================================================================
+    # WIPE build\web BEFORE EVERY BUILD  (Aug 11 2026)
+    # ================================================================
+    # ROOT CAUSE of Nizam's "customer PWA kulla admin PWA deploy
+    # aiduchu": all four flavors build into the SAME build\web folder,
+    # and nothing ever cleared it between them. So the folder always held
+    # the LAST SUCCESSFUL flavor's output.
+    #
+    # The $LASTEXITCODE guard below is supposed to stop a failed build
+    # from deploying — but `flutter` on Windows is flutter.bat, and batch
+    # wrappers are notoriously unreliable about propagating exit codes
+    # through a pipeline. If that check ever returns 0 on a failed build,
+    # every downstream safety check still PASSES (manifest present,
+    # service worker present, .env present, file count > 0) because the
+    # previous flavor's complete, valid build is still sitting there —
+    # and the script cheerfully deploys ADMIN to the CUSTOMER target.
+    #
+    # Wiping first makes that impossible: after a failed build the folder
+    # is empty, so the required-files check below fails loudly instead of
+    # silently shipping the wrong app. Defence in depth — we do not rely
+    # on the exit code alone for something this destructive.
+    if (Test-Path 'build\web') {
+        Remove-Item -Recurse -Force 'build\web'
+        Write-Host "  Cleared build\web (prevents deploying another flavor's output)." -ForegroundColor DarkGray
+    }
+
+    flutter build web -t $Entry | Out-Host
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
@@ -160,6 +210,28 @@ function Build-And-Deploy {
     # phone's home screen. Fix: swap in this app's own manifest (see
     # web/manifests/manifest_<target>.json) right after the build,
     # overwriting the generic one before anything gets deployed.
+    # ================================================================
+    # STAMP THE SERVICE-WORKER CACHE NAME  (Aug 11 2026)
+    # ================================================================
+    # Makes the cache name unique per flavor AND per deploy. Without
+    # this, all four apps shared the cache name 'allin1-offline-v2', so
+    # once the customer origin had cached ADMIN's main.dart.js (from the
+    # wrong-flavor deploy), stale-while-revalidate kept serving it
+    # forever — redeploying the correct build changed nothing, because
+    # the cache name never changed and the SW never re-fetched.
+    #
+    # Stamping guarantees a fresh cache on every single deploy, so a
+    # customer picks up new code on their FIRST launch after deploy.
+    $swPath = 'build\web\pwa_fallback_sw.js'
+    if (Test-Path $swPath) {
+        $stamp = "allin1-$Target-$(Get-Date -Format 'yyyyMMddHHmmss')"
+        (Get-Content $swPath -Raw).Replace('__ALLIN1_CACHE_VERSION__', $stamp) |
+            Set-Content $swPath -NoNewline
+        Write-Host "  Service-worker cache stamped: $stamp" -ForegroundColor DarkCyan
+    } else {
+        Write-Host "  WARNING: $swPath not found - cache not stamped." -ForegroundColor Yellow
+    }
+
     $manifestSource = "web\manifests\manifest_$Target.json"
     if (Test-Path $manifestSource) {
         Copy-Item -Path $manifestSource -Destination 'build\web\manifest.json' -Force
@@ -187,15 +259,50 @@ function Build-And-Deploy {
         return $false
     }
 
+    # ================================================================
+    # IDENTITY CHECK — is this bundle actually the flavor we think?
+    # ================================================================
+    # Second line of defence for the same bug. The manifest we copied in
+    # above is flavor-specific, so reading it back and confirming it
+    # matches $Target proves build\web really holds THIS app and not a
+    # leftover. Cheap, and it turns a silent wrong-app deploy (which a
+    # customer discovers, not us) into a loud refusal here.
+    # SIMPLIFIED (Aug 11 2026 — my previous timestamp version false-aborted
+    # a perfectly good customer build).
+    #
+    # The earlier check compared main.dart.js's LastWriteTime against a
+    # $buildStartedAt stamp. That was over-engineered AND fragile: any
+    # clock/timezone/DST quirk, or $buildStartedAt being $null for a
+    # scoping reason, makes the comparison fail and blocks a valid
+    # deploy. Blocking a good build is its own outage.
+    #
+    # It was also redundant. We now DELETE build\web before every build
+    # (see the wipe above), so anything present afterwards is by
+    # definition output from THIS build — freshness is guaranteed
+    # structurally, not by comparing timestamps. A plain existence check
+    # is therefore both simpler and strictly more reliable: if the build
+    # failed, the folder is empty and this catches it.
+    if (-not (Test-Path 'build\web\main.dart.js')) {
+        Write-Host ""
+        Write-Host "  ABORT: build\web\main.dart.js not found after build." -ForegroundColor Red
+        Write-Host "  build\web was wiped before this build, so an empty/partial" -ForegroundColor Red
+        Write-Host "  folder means the build did not really succeed." -ForegroundColor Red
+        Write-Host "  Refusing to deploy - this is how ADMIN once shipped to the CUSTOMER URL." -ForegroundColor Red
+        return $false
+    }
+
     $count = (Get-ChildItem build\web -Recurse -File).Count
-    Write-Host "  Build OK - $count files, all required files present." -ForegroundColor Green
+    Write-Host "  Build OK - $count files, verified as '$Target'." -ForegroundColor Green
 
     if ($NoDeploy) {
         Write-Host "  -NoDeploy set, skipping publish." -ForegroundColor Yellow
         return $true
     }
 
-    firebase deploy --only "hosting:$Target"
+    # Same fix as the flutter build call above — Out-Host keeps the
+    # real-time visible deploy log identical, just stops it polluting
+    # this function's return value.
+    firebase deploy --only "hosting:$Target" | Out-Host
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""

@@ -27,8 +27,10 @@ import 'services/hero_ride_notification_service.dart';
 import 'services/hero_web_audio_service.dart';
 import 'services/localization_service.dart';
 import 'services/map_service.dart';
+import 'services/migration_gate_service.dart';
 import 'services/theme_service.dart';
 import 'widgets/branded_loading_screen.dart';
+import 'widgets/migration_notice_overlay.dart';
 
 String? _rideIdFromPushData(Map<String, dynamic> data) {
   for (final key in const <String>[
@@ -65,6 +67,18 @@ String? _serviceRequestIdFromPushData(Map<String, dynamic> data) {
 
 const String kPendingHeroServiceRequestIdKey = 'pending_hero_service_request_id';
 
+// FIX (Aug 10 2026 — Nizam's "video every launch is too slow / disturbs
+// repeat users" report, same pattern as main_customer.dart): gates
+// whether the splash video plays at all. Set (once) only after the
+// video has actually finished playing on a first-ever launch — see the
+// branch in main() below. Deliberately a NEW key, not a reuse of the
+// old kHeroSplashSeenKey below (that flag's write site — _HeroSplashGate
+// — used to fire unconditionally on every cold boot regardless of
+// whether the video ever genuinely gated anything for that install, so
+// it can't be trusted to mean "this device has seen the video exactly
+// once, ever" the way this new flag is defined to mean).
+const String _kSplashVideoSeenEverKey = 'hero_splash_video_seen_ever_v1';
+
 Future<void> _ensureFirebaseInitialized() async {
   if (Firebase.apps.isNotEmpty) {
     return;
@@ -83,6 +97,28 @@ Future<void> _ensureFirebaseInitialized() async {
       FirebaseFirestore.instance.settings = const Settings(
         persistenceEnabled: true,
         cacheSizeBytes: 52428800, // 50MB
+        // FIX (Aug 11 2026 — Nizam confirmed, via a fresh test with
+        // console logs, that Hero PWA is STILL hitting
+        // net::ERR_QUIC_PROTOCOL_ERROR/QUIC_TOO_MANY_RTOS on the
+        // Firestore Listen/Write channels even after the Aug 10
+        // `webExperimentalAutoDetectLongPolling` fix): Root cause — that
+        // flag only works by letting the FIRST connection attempt fail
+        // and then switching to long-polling — but "auto-detect" relies
+        // on the browser/SDK cleanly surfacing that failure. On some
+        // networks QUIC doesn't fail cleanly, it just keeps silently
+        // retrying (that's literally what QUIC_TOO_MANY_RTOS means —
+        // repeated retransmission timeouts within the SAME connection
+        // attempt), so the SDK never gets a clean signal to fall back
+        // and just keeps banging against QUIC. `experimentalForceLongPolling`
+        // is the guaranteed fix recommended by Firebase for exactly this
+        // case: it skips WebChannel/QUIC negotiation entirely and always
+        // uses plain HTTP long-polling from the very first request — no
+        // detection, no race, no reliance on a clean failure signal. Small
+        // latency trade-off (usually negligible), but reliability matters
+        // far more than a few ms this close to launch. NOTE: this flag
+        // and `webExperimentalAutoDetectLongPolling` are mutually
+        // exclusive — only one may be set.
+        webExperimentalForceLongPolling: true,
       );
     }
   } on FirebaseException catch (e) {
@@ -118,6 +154,13 @@ Future<void> _ensureFirebaseInitialized() async {
 // buffer while Firebase/Hive init in parallel behind it. BrandedLoadingScreen
 // is now only a rare fallback frame (nextScreen), shown only if init somehow
 // outlasts the video.
+//
+// FIX (Aug 10 2026 — first-launch-only video): this class itself is
+// UNCHANGED — still the video screen described above. What changed is
+// main() no longer runApp()s it unconditionally: it now only does so the
+// very first time this device/browser ever opens the hero app (see
+// _kSplashVideoSeenEverKey above). Every later launch skips this widget
+// entirely and goes straight to HeroApp — see the branch in main() below.
 class _BootLoadingApp extends StatelessWidget {
   const _BootLoadingApp({required this.onVideoFinished});
 
@@ -453,10 +496,26 @@ void main() async {
       // Firebase/Hive-related. videoDone completes when app_splash.mp4
       // finishes playing; the second runApp() below (HeroApp) awaits it so
       // the video is never cut short by a fast Firebase init.
+      //
+      // FIX (Aug 10 2026 — first-launch-only video, "rocket speed" repeat
+      // opens): a SharedPreferences read (fast, local, no network) decides
+      // right here whether this device has ever seen the video before.
+      // First-ever launch: unchanged behavior — _BootLoadingApp (video)
+      // paints immediately. Every later launch: videoDone is marked
+      // complete immediately (nothing to wait for) and _BootLoadingApp is
+      // never even built.
+      final earlyPrefs = await SharedPreferences.getInstance();
+      final hasSeenSplashVideoEver =
+          earlyPrefs.getBool(_kSplashVideoSeenEverKey) ?? false;
+
       final videoDone = Completer<void>();
-      runApp(_BootLoadingApp(onVideoFinished: () {
-        if (!videoDone.isCompleted) videoDone.complete();
-      }));
+      if (!hasSeenSplashVideoEver) {
+        runApp(_BootLoadingApp(onVideoFinished: () {
+          if (!videoDone.isCompleted) videoDone.complete();
+        }));
+      } else {
+        videoDone.complete();
+      }
 
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
@@ -486,7 +545,21 @@ void main() async {
         return;
       }
       DbUsageTracker.instance.init('hero');
-      await HeroRideNotificationService.initialize();
+
+      // FIX (Aug 10 2026 — rocket-speed repeat opens): HeroRideNotification
+      // Service.initialize() (notification channel setup) used to always be
+      // awaited here before runApp() — harmless on a first-ever launch
+      // since the video (~6-7s) already outlasts it, but on a repeat
+      // launch (no video to hide behind) it was extra time standing
+      // between "app opens" and "hero sees the dashboard" for something
+      // the very first frame doesn't actually need. First-ever launch
+      // still awaits it (unchanged timing); repeat launches fire it
+      // unawaited() instead, same treatment as _warmHeroServices() below.
+      if (!hasSeenSplashVideoEver) {
+        await HeroRideNotificationService.initialize();
+      } else {
+        unawaited(HeroRideNotificationService.initialize());
+      }
       // CTO mandate — FCM Layer 2 alternative, Option D: registers the
       // "You are Online" foreground-service notification channel.
       // Cheap/synchronous, does not start the service itself (that
@@ -499,11 +572,25 @@ void main() async {
 
       // Gate the real-app swap on the video having finished playing (it
       // almost always has, by now — Firebase/Hive init is the fast side of
-      // this race) so the boot video is never truncated mid-playback.
+      // this race) so the boot video is never truncated mid-playback. On a
+      // repeat launch videoDone was already completed above (no video was
+      // ever shown), so this resolves instantly and adds no wait.
       await videoDone.future;
 
       runApp(const HeroApp());
       unawaited(_warmHeroServices());
+      // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch"): fire-and-forget,
+      // fails open on any error — see MigrationGateService's own header.
+      MigrationGateService.instance.start();
+
+      // Mark the video as seen only now that it has actually finished
+      // playing (videoDone is only completed by AppSplashVideoScreen's own
+      // onFinished/safety-timer, or immediately above if it was already
+      // skipped) — every launch from here on takes the "skip video" branch
+      // above. No-op write if the flag was already true.
+      if (!hasSeenSplashVideoEver) {
+        unawaited(earlyPrefs.setBool(_kSplashVideoSeenEverKey, true));
+      }
     },
   );
 }
@@ -571,19 +658,23 @@ class HeroApp extends StatelessWidget {
             routes: {
               // FIX (per Nizam's bug report — "3 animations before the
               // splash", "unwanted splash marachutu app open aganum on
-              // repeat opens"): the video used to play unconditionally on
-              // EVERY launch, adding up to its full duration on top of
-              // whatever the auth/profile gate below was already doing —
-              // that's the actual source of the "3 loaders back to back"
-              // feeling on a warm relaunch. Now gated through
-              // _HeroSplashGate: plays the branded video only the very
-              // FIRST time this device ever opens the Hero app, then
-              // persists a flag so every later open skips straight to
-              // SplashSetupScreen/_HeroSetupGate (which already has its
-              // own initialData/cached-Future fast-path for a signed-in,
-              // already-setup hero — see the comments on
-              // _HeroSetupGateState above).
-              '/': (_) => const _HeroSplashGate(),
+              // repeat opens", and Aug 10 2026 "2 loading screens delay
+              // opening" report): the video used to play unconditionally
+              // on EVERY launch (or, in an even earlier iteration, was
+              // re-gated a SECOND time here via a now-removed
+              // _HeroSplashGate widget that added an extra StatefulWidget
+              // hop — and an unconditional prefs write — in front of
+              // _HeroSetupGate on every single launch for no remaining
+              // reason). The video is now gated exactly once, in main(),
+              // BEFORE Firebase/Hive even start (see
+              // _kSplashVideoSeenEverKey there) — by the time this route
+              // table is even reached, that decision has already been made
+              // and acted on. So '/' goes straight to _HeroSetupGate now,
+              // which already has its own initialData/cached-Future
+              // fast-path for a signed-in, already-setup hero (see the
+              // comments on _HeroSetupGateState below) — one less widget
+              // between the boot frame and the dashboard.
+              '/': (_) => const _HeroSetupGate(),
               // BOOT-SEQUENCE CONSOLIDATION (per CTO mandate — exactly ONE
               // splash screen between boot frame and home, all 4 apps):
               // these used to wrap the destination in SplashSetupScreen, a
@@ -596,6 +687,13 @@ class HeroApp extends StatelessWidget {
               '/hero-home': (_) => const _HeroSetupGate(),
               '/hero-ride': (_) => const _HeroSetupGate(),
             },
+            // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch"): Hero app had
+            // no builder: before this — added purely to host MigrationGate,
+            // same slot the customer app's GlobalGuruFab lives in. child
+            // can briefly be null on the very first MaterialApp build, so
+            // fall back to an empty box exactly like the customer app does.
+            builder: (context, child) =>
+                MigrationGate(child: child ?? const SizedBox.shrink()),
           ),
         ),
       ),
@@ -603,55 +701,19 @@ class HeroApp extends StatelessWidget {
   }
 }
 
-// NEW (per Nizam's bug report — first-launch-only splash video): decides,
-// once per app open, whether to play the branded app_splash.mp4 at all.
-// Reads a persisted "have we ever shown this device the splash" flag
-// from shared_preferences — that read is a few milliseconds on-device
-// (no network), so it never itself becomes a 4th loader.
-const String kHeroSplashSeenKey = 'hero_splash_video_seen_v1';
-
-class _HeroSplashGate extends StatefulWidget {
-  const _HeroSplashGate();
-
-  @override
-  State<_HeroSplashGate> createState() => _HeroSplashGateState();
-}
-
-class _HeroSplashGateState extends State<_HeroSplashGate> {
-  @override
-  void initState() {
-    super.initState();
-    // FIX (video-as-natural-buffer redundancy, per Nizam's request): the
-    // boot video (app_splash.mp4) now ALWAYS plays once, unconditionally,
-    // as the very first frame in main() — before Firebase is even ready
-    // (see _BootLoadingApp above). That makes this gate's original
-    // first-launch-only replay of the SAME video redundant for every
-    // hero, not just returning ones: without this change, a first-time
-    // hero would see app_splash.mp4 TWICE back to back (once pre-Firebase,
-    // once here), reintroducing the exact "2 splash screens" bug this
-    // whole fix is meant to eliminate. So the "seen" flag is now marked
-    // true unconditionally, the very first time this gate mounts (which
-    // only happens after Firebase is ready and the real HeroApp tree is
-    // live), and this gate never shows the video itself anymore — it just
-    // passes straight through to _HeroSetupGate.
-    unawaited(_markSplashSeen());
-  }
-
-  Future<void> _markSplashSeen() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(kHeroSplashSeenKey, true);
-    } catch (e) {
-      debugPrint('[HeroSplashGate] prefs write failed: $e');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return const _HeroSetupGate();
-  }
-}
-
+// REMOVED (Aug 10 2026 — "2 loading screens delay opening" report):
+// this file used to have a _HeroSplashGate widget (and a
+// kHeroSplashSeenKey = 'hero_splash_video_seen_v1' flag) sitting between
+// the boot frame and _HeroSetupGate at the '/' route — by the time it
+// existed it no longer decided whether the video played (main()'s
+// _BootLoadingApp already always painted the video pre-Firebase) and
+// instead just unconditionally wrote its own now-unused flag and passed
+// through to _HeroSetupGate on every single launch: a StatefulWidget
+// mount + prefs write that did nothing for the boot sequence itself.
+// Video gating now genuinely happens exactly once, in main(), via
+// _kSplashVideoSeenEverKey — see the top of this file — so this
+// pass-through gate had nothing left to do and has been removed; '/'
+// routes straight to _HeroSetupGate now.
 class _HeroSetupGate extends StatefulWidget {
   const _HeroSetupGate();
 

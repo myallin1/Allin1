@@ -102,6 +102,20 @@ class GuruAdminApiService {
       Uri.parse('https://api.groq.com/openai/v1/chat/completions');
   static const String _textModel = 'llama-3.1-8b-instant';
 
+  // NEW (Aug 12 2026 — Nizam: "api key podumbothu athuku keelaye
+  // model select pannalam"): admin_ai_settings_screen.dart now saves
+  // whichever model the CTO picked from the hardcoded Groq list under
+  // this key. Falls back to the original hardcoded _textModel when
+  // nothing has been picked yet, so a fresh install behaves exactly
+  // as before this feature existed.
+  static const String _modelPrefsKey = 'personal_ai_model';
+
+  Future<String> _resolveModel() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_modelPrefsKey)?.trim();
+    return (saved == null || saved.isEmpty) ? _textModel : saved;
+  }
+
   // NEW (CTO mandate — Multi-Agent Orchestration & Handoff Architecture,
   // Dual Agent Toggle): the "Gemini (Deep Reasoning)" agent's key,
   // resolved the exact same way as _apiKey above (env var first, then
@@ -143,7 +157,7 @@ class GuruAdminApiService {
               'Authorization': 'Bearer $apiKey',
             },
             body: jsonEncode(<String, dynamic>{
-              'model': _textModel,
+              'model': await _resolveModel(),
               'messages': <Map<String, dynamic>>[
                 {'role': 'system', 'content': systemPrompt},
                 ...history.where(
@@ -207,7 +221,7 @@ class GuruAdminApiService {
               'Authorization': 'Bearer $apiKey',
             },
             body: jsonEncode(<String, dynamic>{
-              'model': _textModel,
+              'model': await _resolveModel(),
               'messages': <Map<String, String>>[
                 {
                   'role': 'system',
@@ -443,6 +457,11 @@ class GuruAdminApiService {
   // key AdminKycVisionService needs for its own direct Groq calls,
   // without duplicating the resolution logic above in a second place.
   Future<String> resolveApiKey() => _resolveApiKey();
+
+  /// Public wrapper mirroring resolveApiKey() above, so
+  /// admin_ai_settings_screen.dart can show the currently-active model
+  /// as the dropdown's initial value.
+  Future<String> resolveModel() => _resolveModel();
 
   // NEW (CTO mandate — Dual Agent Toggle): same public-wrapper pattern
   // as resolveApiKey() above, for admin_quick_task_service.dart to pass

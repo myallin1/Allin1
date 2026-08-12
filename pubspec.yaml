@@ -1,7 +1,7 @@
 ﻿name: erode_superapp
 description: Erode All-in-One Super App - Multi-vendor Commerce MVP by NJ TECH
 publish_to: 'none'
-version: 1.0.9+134
+version: 1.0.9+192
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -46,7 +46,12 @@ dependencies:
   firebase_database: ^12.1.4
   firebase_messaging: ^16.1.2
   firebase_performance: any
-  firebase_storage: ^13.1.0
+  # firebase_storage REMOVED (Aug 11 2026): Allin1 stays on the Spark
+  # (free) plan, where new Storage buckets can't even be created — every
+  # image upload moved to Cloudinary long ago (see
+  # lib/services/cloudinary_upload_service.dart). Confirmed via grep that
+  # zero Dart code imports or references FirebaseStorage, so this was
+  # pure build weight (an unused native SDK shipped in every APK/PWA).
   flutter:
     sdk: flutter
   flutter_animate: ^4.5.0
@@ -97,6 +102,20 @@ dependencies:
   receive_sharing_intent: ^1.8.1
   lottie: ^3.1.0
   scratcher: ^2.5.0
+  # NEW (Aug 12 2026 — Admin QR Generator, "zero-budget escape hatch"
+  # follow-up): verified publisher (theyakka.com), 1.58M downloads, pure
+  # Dart QR rendering with no native platform code — used only by
+  # admin_qr_generator_screen.dart so the poster/flex QR's target URL has
+  # a single source of truth in-repo instead of being hand-made externally.
+  qr_flutter: ^4.1.0
+  # NEW (Aug 12 2026 — Admin QR Generator "Share to WhatsApp" follow-up):
+  # verified publisher (fluttercommunity.dev, Flutter Favorite), 3.15M
+  # downloads, 150 points. Wraps Android's ACTION_SEND / iOS
+  # UIActivityViewController so the OS's native share sheet (WhatsApp
+  # included, if installed) opens with the generated QR PNG attached —
+  # used only by admin_qr_generator_screen.dart. Also has real Web Share
+  # API support for the Admin PWA build.
+  share_plus: ^13.3.0
   shorebird_code_push: ^2.0.5
   speech_to_text: ^7.3.0
   url_launcher: ^6.3.2

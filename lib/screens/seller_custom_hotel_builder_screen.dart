@@ -13,10 +13,12 @@ import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image/image.dart' as img;
 
+import '../services/auth_service.dart';
 import '../services/cloudinary_upload_service.dart';
 import '../services/custom_hotel_service.dart';
 
@@ -46,9 +48,20 @@ class _SellerCustomHotelBuilderScreenState extends State<SellerCustomHotelBuilde
   @override
   void initState() {
     super.initState();
-    _service
-        .ensureHotelDoc(sellerId: widget.sellerId, hotelName: widget.sellerName)
-        .whenComplete(() {
+    // FIX (audit: "Seller custom-menu phone not wiring to customer side"):
+    // ensureHotelDoc() used to be called with no phone at all, so
+    // custom_hotels/{sellerId} never had a number for the customer's Call
+    // button to read. Resolve it the same Firestore-first / Auth-fallback
+    // way AuthService already resolves customer/hero phones — a seller
+    // who signed up via Google + a typed mobile number has that number
+    // only in sellers/{uid}.phone, never on the FirebaseAuth user object.
+    AuthService().resolveSellerPhone(widget.sellerId, user: FirebaseAuth.instance.currentUser).then((phone) {
+      return _service.ensureHotelDoc(
+        sellerId: widget.sellerId,
+        hotelName: widget.sellerName,
+        sellerPhone: phone,
+      );
+    }).whenComplete(() {
       if (mounted) setState(() => _ensuring = false);
     });
   }
@@ -185,7 +198,12 @@ class _ItemCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             child: item.photoUrl.isEmpty
                 ? Container(width: 56, height: 56, color: _bg, child: const Icon(Icons.fastfood_rounded, color: _muted))
-                : Image.network(item.photoUrl, width: 56, height: 56, fit: BoxFit.cover),
+                : Image.network(
+                    CloudinaryUploadService.optimizedUrl(item.photoUrl, width: 112),
+                    width: 56,
+                    height: 56,
+                    fit: BoxFit.cover,
+                  ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -348,7 +366,12 @@ class _ItemEditorSheetState extends State<_ItemEditorSheet> {
                 child: _pickedBytes != null
                     ? Image.memory(_pickedBytes!, width: double.infinity, height: 140, fit: BoxFit.cover)
                     : (_photoUrl.isNotEmpty
-                        ? Image.network(_photoUrl, width: double.infinity, height: 140, fit: BoxFit.cover)
+                        ? Image.network(
+                            CloudinaryUploadService.optimizedUrl(_photoUrl, width: 800),
+                            width: double.infinity,
+                            height: 140,
+                            fit: BoxFit.cover,
+                          )
                         : Container(
                             width: double.infinity,
                             height: 140,

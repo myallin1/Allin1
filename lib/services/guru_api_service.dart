@@ -359,7 +359,62 @@ class GuruApiService {
                   {
                     'role': 'system',
                     'content':
-                        'You have five tools available. Call book_transport ONLY '
+                        // FIX (Aug 11 2026 — Nizam: "AI sariya automatic
+                        // order set pannama namaku instructions kuduthutruku,
+                        // athum athigama explain panni ... api key limit
+                        // theenthurum ... function calling than athigama
+                        // pannanum, question mattum ketutu next customer
+                        // soldra action-a athuve pannanum"):
+                        //
+                        // ROOT CAUSE of "it explains instead of doing": the
+                        // instructions below were written defensively — they
+                        // told the model to call a tool ONLY under narrow
+                        // conditions and, whenever anything was even slightly
+                        // ambiguous, to "let it fall through to the normal
+                        // reply". A normal reply is free-form prose, so the
+                        // model defaulted to long explanations. That is both
+                        // the wrong UX (the user wants the ACTION performed)
+                        // and the expensive one, because prose burns far more
+                        // output tokens than a compact tool call — which is
+                        // exactly why the API quota was draining.
+                        //
+                        // The rule below inverts that default: ACT first, and
+                        // when something genuinely is missing, ask ONE short
+                        // question rather than explaining. Kept deliberately
+                        // strict about never inventing values — guessing a
+                        // destination or an item is worse than asking.
+                        'You are an ACTING agent inside this app, not a help '
+                        'desk. Your job is to DO things for the user by '
+                        'calling tools — not to describe how to do them. '
+                        'Never explain the steps a user could take if a tool '
+                        'can take them instead. Never output long paragraphs. '
+                        'If a tool applies, call it. If required information '
+                        'is missing, ask exactly ONE short question naming at '
+                        'most 3 concrete options, then call the tool on their '
+                        'answer. Never invent a destination, item, quantity or '
+                        'section the user did not say. Keep every text reply '
+                        'under 2 short sentences.\n\n'
+                        'Call create_service_request whenever the customer '
+                        'wants to ORDER or BOOK something that a Hero fulfils — '
+                        'food, groceries, an errand, a pickup/drop, or any '
+                        'custom purchase (e.g. "order 2 biryani from Sagar", '
+                        '"I need 1kg onions and milk", "someone pick up my '
+                        'parcel from Surampatti", "book a hero to collect my '
+                        'documents"). This PLACES the real order — never '
+                        'explain how to order manually when you can call this. '
+                        'If the customer named a shop/hotel, pass it as vendor; '
+                        'if not, leave vendor out rather than guessing.\n\n'
+                        'Call report_app_bug whenever the customer says '
+                        'something in the app is broken, stuck, not loading, '
+                        'showing a wrong number, or not working as expected '
+                        '(e.g. "the booking screen is blank", "my wallet '
+                        'balance is wrong", "it keeps crashing when I tap '
+                        'pay"). NEVER just apologise and leave it — an '
+                        'apology fixes nothing. If you do not know which '
+                        'screen or what they were doing, ask ONE short '
+                        'question, then file the report. After filing, tell '
+                        'them in one line that it has been sent to the team.\n\n'
+                        'You have seven tools available. Call book_transport ONLY '
                         'when the user CLEARLY wants to book a ride or send '
                         'something right now (e.g. "book a bike to the bus '
                         'stand", "I need an auto to home", "send a parcel to '
@@ -380,21 +435,144 @@ class GuruApiService {
                         'wants you to identify a product in it for their grocery '
                         'list (e.g. "what is this?", "add this to my list" with an '
                         'attached image). Never call this tool if no image is '
-                        'attached — there is nothing to analyze in that case. For '
-                        'general conversation, greetings, or '
-                        'anything that is not clearly one of these five, do NOT call any tool '
-                        '— just let the normal reply happen. IMPORTANT: if the '
-                        'request is genuinely ambiguous — you cannot tell which '
-                        'service, section, or item the user means (e.g. "book me '
-                        'a ride" with no service named, or a section name that '
-                        'could match more than one thing) — do NOT guess and do '
-                        'NOT call a tool with a made-up value. Let it fall '
-                        'through to the normal reply, which will ask a short '
-                        'clarifying question with exactly 3 options instead.',
+                        'attached — there is nothing to analyze in that case. '
+                        'Only for pure greetings or small talk with no '
+                        'actionable intent should you skip tools entirely — and '
+                        'even then reply in ONE short line.\n\n'
+                        'IMPORTANT: if the request is genuinely ambiguous — you '
+                        'cannot tell which service, section, or item the user '
+                        'means (e.g. "book me a ride" with no service named) — '
+                        'do NOT guess and do NOT call a tool with a made-up '
+                        'value. Ask ONE short clarifying question offering at '
+                        'most 3 options, and nothing else. As soon as the user '
+                        'answers, immediately call the matching tool. Do not '
+                        're-explain, do not confirm twice, do not summarise '
+                        'what you are about to do — just call the tool.',
                   },
                   {'role': 'user', 'content': userContent},
                 ],
                 'tools': <Map<String, dynamic>>[
+                  // NEW (Aug 11 2026 — Nizam's "AI Bug Reporting"): when a
+                  // customer says something is broken, the agent files a
+                  // real report instead of apologising into the void.
+                  //
+                  // Why this is worth a tool rather than a support email:
+                  // the customer is ALREADY describing the problem to the
+                  // agent in their own words, at the moment it happened.
+                  // That is the highest-quality bug signal we will ever
+                  // get, and today it evaporates. The agent summarises it
+                  // into `app_bug_reports`, which the admin can review.
+                  {
+                    'type': 'function',
+                    'function': {
+                      'name': 'report_app_bug',
+                      'description':
+                          'File a bug report when the customer says something in the app is '
+                          'broken, stuck, not loading, showing a wrong value, or otherwise not '
+                          'working. Use this INSTEAD of only apologising. Ask at most one short '
+                          'question first if you do not know which screen or what they were '
+                          'doing, then call this.',
+                      'parameters': {
+                        'type': 'object',
+                        'properties': {
+                          'summary': {
+                            'type': 'string',
+                            'description':
+                                'One-line summary of the problem, in plain English. '
+                                'e.g. "Booking Status screen stays empty after placing an order".',
+                          },
+                          'details': {
+                            'type': 'string',
+                            'description':
+                                "The customer's description of what happened, what they expected, "
+                                'and any error text they mentioned. Use their own words where '
+                                'possible — do not invent details they did not say.',
+                          },
+                          'screen': {
+                            'type': 'string',
+                            'description':
+                                'Which screen/section the problem happened on, if the customer '
+                                'said (e.g. "taxi booking", "rewards", "grocery"). Omit if unknown.',
+                          },
+                          'severity': {
+                            'type': 'string',
+                            'enum': ['low', 'medium', 'high'],
+                            'description':
+                                'high = cannot use the app or lost money; medium = a feature is '
+                                'broken but there is a workaround; low = cosmetic or minor.',
+                          },
+                        },
+                        'required': ['summary', 'details'],
+                      },
+                    },
+                  },
+                  // NEW (Aug 11 2026 — Nizam: the agent must PLACE food /
+                  // grocery / hero-booking orders, not just explain how).
+                  //
+                  // Deliberately ONE tool rather than three: on the backend
+                  // all of these are a single `service_requests` document
+                  // distinguished only by `requestType` (see
+                  // ServiceRequestService.createServiceRequest — the same
+                  // path used by hero_booking_screen, grocery_order_screen,
+                  // custom_food_order_screen, etc.). Three separate tools
+                  // would mean three near-identical schemas for the model to
+                  // disambiguate between, which measurably increases
+                  // wrong-tool picks AND token cost — the exact quota
+                  // problem Nizam flagged. One tool with a requestType enum
+                  // maps 1:1 onto the real data model.
+                  {
+                    'type': 'function',
+                    'function': {
+                      'name': 'create_service_request',
+                      'description':
+                          'Place a REAL order/booking for the customer and dispatch it to nearby '
+                          'Heroes. Use for food orders, grocery orders, hero bookings (errands, '
+                          'pickup/drop, help), and custom orders. Call this as soon as you know '
+                          'the request type and what the customer wants — do not describe the '
+                          'steps, just place it.',
+                      'parameters': {
+                        'type': 'object',
+                        'properties': {
+                          'request_type': {
+                            'type': 'string',
+                            'enum': [
+                              'hero_booking',
+                              'custom_food_order',
+                              'grocery_order',
+                              'custom_order',
+                            ],
+                            'description':
+                                'hero_booking = errand/help/pickup-drop task. '
+                                'custom_food_order = food from a hotel/restaurant. '
+                                'grocery_order = groceries/provisions. '
+                                'custom_order = anything else the customer wants bought/collected.',
+                          },
+                          'items': {
+                            'type': 'string',
+                            'description':
+                                'What the customer wants, in their own words, including '
+                                'quantities if they said any. e.g. "2 plate chicken biryani", '
+                                '"1kg onions, 2 packs milk", "pick up my parcel from Surampatti".',
+                          },
+                          'vendor': {
+                            'type': 'string',
+                            'description':
+                                'Hotel/shop/store name if the customer named one. Omit if not mentioned — never invent one.',
+                          },
+                          'address': {
+                            'type': 'string',
+                            'description':
+                                'Delivery or task address if the customer gave one. Omit if not mentioned.',
+                          },
+                          'note': {
+                            'type': 'string',
+                            'description': 'Any extra instruction from the customer.',
+                          },
+                        },
+                        'required': ['request_type', 'items'],
+                      },
+                    },
+                  },
                   {
                     'type': 'function',
                     'function': {
@@ -543,6 +721,11 @@ class GuruApiService {
         'check_and_update_app',
         'add_to_grocery_cart',
         'analyze_screen_with_vision',
+        // NEW (Aug 11 2026): end-to-end order placement — see the tool
+        // definition above for why food/grocery/hero-booking are ONE tool.
+        'create_service_request',
+        // NEW (Aug 11 2026): AI bug reporting.
+        'report_app_bug',
       };
       if (function == null || !knownActions.contains(functionName)) {
         return null;

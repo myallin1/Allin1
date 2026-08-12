@@ -17,12 +17,23 @@ import 'package:provider/provider.dart';
 import '../../config/fare_rates.dart';
 import '../../config/ride_catalog.dart';
 import '../../models/ride_model.dart';
+// GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../../services/auth_prompt_service.dart';
+// Phone lookups consolidated here (Aug 11 2026) — single source of truth.
+import '../../services/auth_service.dart';
+// INSTANT-SEED (Aug 11 2026): remembers the last confirmed pickup.
+import '../../services/pickup_memory_service.dart';
+// INSTANT-SEED: the app's existing drag-a-pin picker, reused for the
+// manual pickup path instead of adding tap plumbing to the shared map.
+import '../location_picker_screen.dart';
 import '../../services/city_service.dart';
 import '../../services/localization_service.dart';
 import '../../services/location_service.dart';
 import '../../services/map_service.dart';
 import '../../services/recent_places_service.dart';
 import '../../services/session_service.dart';
+import '../../widgets/cancellation_reason_sheet.dart';
+import '../../services/usage_tracking_service.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../../widgets/server_busy_dialog.dart';
 import '../../widgets/vehicle_selection_bottom_sheet.dart';
@@ -416,7 +427,11 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     // anymore (RideModel.calculateFare() ignores its `fares` param).
     _fares = RideModel.defaultFares;
     _listenToNearbyCaptains();
-    _initLocationTracking();
+    // INSTANT-SEED (Aug 11 2026): was _initLocationTracking(), which
+    // could keep the customer on a spinner for ~82s before the map
+    // became usable. Seeding never blocks; GPS refines in the
+    // background. See the block comment above _seedPickupInstantly().
+    unawaited(_seedPickupInstantly());
     unawaited(_restoreActiveRideIfNeeded());
     unawaited(_loadRecentPlaces());
 
@@ -894,11 +909,17 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     }
   }
 
+  // FIX (Cancellation Reason Analytics, Aug 11 2026): cancel no longer
+  // fires immediately from the button tap — the reason sheet IS the
+  // confirmation now. Backing out of the sheet without picking a
+  // reason means no cancellation happens at all.
   Future<void> _cancelPendingActiveRide() async {
     final rideDocId = _pendingActiveRideDocId;
     if (rideDocId == null) {
       return;
     }
+    final reason = await showCancellationReasonSheet(context);
+    if (reason == null || !mounted) return;
     // ── Optimistic UI: dismiss ride banner immediately before network write ──
     // The update propagates via the ride stream; on failure the user is notified.
     if (mounted) {
@@ -918,6 +939,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         'status': 'cancelled',
         'cancelledBy': 'customer',
         'cancelledAt': FieldValue.serverTimestamp(),
+        'cancellationReason': reason,
       });
       if (mounted) _showError('Ride cancelled successfully');
     } catch (e) {
@@ -1144,7 +1166,220 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     );
   }
 
+  // ================================================================
+  // INSTANT-SEED LOCATION (Aug 11 2026) — read this before editing
+  // ================================================================
+  // THE BUG THIS REPLACES: booking could not open until GPS answered.
+  // The old path was getCurrentLocation() [15s high accuracy -> 25s
+  // medium web retry] -> 2s pause -> getCurrentLocation() AGAIN [15s ->
+  // 25s]. Roughly 82 seconds before the customer was even OFFERED the
+  // manual pin — and on a Windows laptop with no GPS chip, that was the
+  // normal path, not the worst case. Customers on desktop browsers and
+  // iPhone PWAs simply could not book.
+  //
+  // THE NEW CONTRACT: the map NEVER waits for GPS.
+  //   1. Seed instantly from what we already know:
+  //        last confirmed pickup (Hive) -> device last-known -> Erode.
+  //      The customer sees a usable map and can book immediately.
+  //   2. Refine GPS in the BACKGROUND, capped at 8s, unawaited.
+  //      If it lands and the customer hasn't already chosen a point,
+  //      snap to it. If it never lands, nothing happens — nothing was
+  //      waiting on it, so there is no error state to show.
+  //   3. Manual pin is always reachable, and now actually works
+  //      (see _openManualPickupPicker).
+  //
+  // The result is that time-to-hero-ping no longer depends on GPS on
+  // ANY platform: iPhone PWA, Android PWA, native app and desktop
+  // browser all behave identically.
+  //
+  // INVARIANT: never reintroduce an `await` on a location call in the
+  // startup path. Background refinement only.
+  // ================================================================
+
+  /// True once the customer has chosen a pickup themselves — via search,
+  /// or the manual map picker. Background GPS must NEVER overwrite a
+  /// deliberate choice with a "corrected" one; that is how a customer
+  /// ends up dispatched from the wrong street after carefully pinning
+  /// the right one.
+  bool _pickupChosenByCustomer = false;
+
+  /// Seeds the map immediately from local knowledge, then kicks GPS off
+  /// in the background. Returns as soon as the seed is on screen.
+  Future<void> _seedPickupInstantly() async {
+    // 1. Anything already in memory wins — the dashboard warms
+    //    LocationService on app open, so this is often already here.
+    final cachedPos = _locationService.currentPosition;
+    if (cachedPos != null) {
+      _applySeed(
+        LatLng(cachedPos.latitude, cachedPos.longitude),
+        status: 'Live location ready',
+      );
+      unawaited(_refineLocationInBackground());
+      return;
+    }
+
+    // 2. Where they were picked up last time. Zero network, zero
+    //    permission, works on every platform including a browser that
+    //    has permanently denied location.
+    final remembered = await PickupMemoryService.instance.load();
+    if (remembered != null && mounted) {
+      _applySeed(
+        remembered.latLng,
+        status: 'Starting from your last pickup — drag the map to change it',
+      );
+      unawaited(_refineLocationInBackground());
+      return;
+    }
+
+    // 3. The OS's last-known fix. Cheap and instant when present.
+    final lastKnown = await _locationService.getLastKnownLocation();
+    if (lastKnown != null && mounted) {
+      _applySeed(
+        LatLng(lastKnown.latitude, lastKnown.longitude),
+        status: 'Locating you…',
+      );
+      unawaited(_refineLocationInBackground());
+      return;
+    }
+
+    // 4. City centre. A first-time customer on a desktop browser lands
+    //    here — and critically still gets a working, bookable map
+    //    rather than a spinner.
+    _applySeed(
+      kErodeCenter,
+      status: 'Set your pickup on the map, or wait for GPS',
+    );
+    unawaited(_refineLocationInBackground());
+  }
+
+  void _applySeed(LatLng point, {required String status}) {
+    if (!mounted) return;
+    setState(() {
+      // The overlay is never a gate again — the map underneath is
+      // usable from the first frame.
+      _isInitializingLocation = false;
+      _locationPermissionRequired = false;
+      _startupStatus = status;
+    });
+    _updateUserLocation(point, animateMap: true);
+  }
+
+  /// True once the "GPS is slow, drag the map" hint has been shown this
+  /// screen visit. Shown at most once — a customer who already knows to
+  /// drag the map does not need to be told again every few seconds.
+  bool _shownSlowGpsHint = false;
+
+  /// One short GPS attempt, unawaited, whose failure is a non-event for
+  /// BOOKING (the map is already seeded and usable) but IS worth a
+  /// gentle, non-blocking nudge — the customer's seed may only be the
+  /// city centre or an old remembered point, and dragging the map
+  /// themselves is faster than waiting on GPS that has already proven
+  /// slow on this device.
+  Future<void> _refineLocationInBackground() async {
+    final pos = await _locationService.getFastLocation();
+    if (pos == null || !mounted) {
+      debugPrint(
+        '[bike_booking] background GPS refine did not land '
+        '(${_locationService.lastLocationError ?? "no fix"}) — '
+        'seeded pickup stands, booking is unaffected.',
+      );
+      _maybeShowSlowGpsHint();
+      return;
+    }
+    if (_pickupChosenByCustomer) {
+      // They already picked a point. Their choice wins, always.
+      debugPrint('[bike_booking] GPS landed but customer already chose a '
+          'pickup — not overriding.');
+      return;
+    }
+    _updateUserLocation(LatLng(pos.latitude, pos.longitude), animateMap: true);
+    if (mounted) {
+      setState(() => _startupStatus = 'Live location ready');
+    }
+  }
+
+  /// Non-blocking floating snackbar — never a dialog, never something
+  /// that sits in front of the map. Skipped entirely once the customer
+  /// has already made a deliberate pickup choice, since the hint would
+  /// then be stale advice about a problem they've already solved.
+  ///
+  /// FIX (Aug 11 2026): the plain wording "drag the map to set your
+  /// pickup" would have repeated the exact bug this whole feature was
+  /// built to fix — the MAIN map on this screen has no drag-to-pin
+  /// behaviour at all (Allin1MapWidget exposes no onCenterChanged here).
+  /// The real drag-a-pin map only exists INSIDE the search overlay
+  /// (_openSearch, the FlutterMap with onPositionChanged around line
+  /// 3315) — reachable by tapping the pickup field. A passive hint
+  /// pointing at the wrong surface would leave the customer dragging a
+  /// map that ignores them, same failure, different gesture. So this is
+  /// actionable: the button opens that real overlay directly instead of
+  /// describing a gesture that only works after another tap.
+  void _maybeShowSlowGpsHint() {
+    if (!mounted || _shownSlowGpsHint || _pickupChosenByCustomer) return;
+    _shownSlowGpsHint = true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('GPS signal slow. Set your pickup manually?'),
+        backgroundColor: _accentOrange,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 6),
+        action: SnackBarAction(
+          label: 'Set now',
+          textColor: Colors.white,
+          onPressed: () => _openSearch(focusDrop: false),
+        ),
+      ),
+    );
+  }
+
+  /// The manual pin path, and the fix for a promise the UI could not
+  /// keep: the old overlay said "Tap anywhere on the map to set your
+  /// pickup", but Allin1MapWidget exposes no map-tap callback at all
+  /// (only onMarkerTap / onCenterChanged), so tapping the map did
+  /// nothing whatsoever. Rather than add tap plumbing to the shared map
+  /// widget — which every other screen also uses — this reuses
+  /// LocationPickerScreen, the app's existing, proven drag-a-centre-pin
+  /// picker with reverse geocoding, already used by
+  /// custom_food_order_screen and hero_booking_screen.
+  Future<void> _openManualPickupPicker() async {
+    final picked = await Navigator.push<PickedLocation>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          initialCenter: _myPositionLatLng,
+          title: 'Set your pickup',
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+
+    final point = LatLng(picked.lat, picked.lng);
+    _pickupChosenByCustomer = true;
+    setState(() {
+      _pickupLocation = {
+        'name': picked.name,
+        'full': picked.name,
+        'lat': picked.lat,
+        'lng': picked.lng,
+      };
+      _pickupController.text = picked.name;
+      _isInitializingLocation = false;
+      _locationPermissionRequired = false;
+      _startupStatus = 'Pickup set';
+    });
+    _myPositionLatLng = point;
+    _moveMainMap(point, 16);
+    _refreshHeroMarkers();
+    if (_dropLocation != null) unawaited(_loadRoadRoute());
+
+    // Remembered so the NEXT booking seeds instantly — this is what
+    // makes booking two onward zero-wait on every platform.
+    unawaited(PickupMemoryService.instance.remember(point, name: picked.name));
+  }
+
   // ── Location Tracking ─────────────────────────────────────────
+  // Kept for the explicit "Retry GPS" action only. It is NO LONGER on
+  // the startup path — _seedPickupInstantly() is.
   Future<void> _initLocationTracking() async {
     // Fast path: the dashboard already warms up LocationService (permission
     // + a first GPS fix) the moment the app opens (see
@@ -1204,27 +1439,63 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         });
       }
 
-      final pos = await _locationService.getCurrentLocation();
+      var pos = await _locationService.getCurrentLocation();
+
+      // FIX (Aug 11 2026 — Nizam's laptop-browser report): a null `pos`
+      // here used to be treated as "still loading" forever -- no log, no
+      // retry, no way for the customer to know GPS actually failed.
+      // LocationService itself now logs the real exception (see that
+      // file), but this screen also had zero retry of its own. Laptops
+      // relying on WiFi-based positioning (no GPS hardware) are commonly
+      // slower than the first getCurrentLocation() attempt allows -- so
+      // give it one more explicit try here (LocationService's own
+      // internal reduced-accuracy web retry already ran once inside that
+      // call; this is a second, screen-level attempt after a short pause,
+      // covering the case where the browser's position cache/negotiation
+      // just needed a beat longer) before surfacing a real retry action
+      // to the customer instead of leaving them stuck on a spinner.
+      if (pos == null && kIsWeb) {
+        debugPrint(
+            '[bike_booking] getCurrentLocation() returned null on first try '
+            '(lastLocationError: ${_locationService.lastLocationError}). '
+            'Retrying once after a short delay (web/laptop fallback)...',);
+        if (mounted) {
+          setState(() {
+            _startupStatus = 'Still locating you... retrying GPS fix.';
+          });
+        }
+        await Future.delayed(const Duration(seconds: 2));
+        pos = await _locationService.getCurrentLocation();
+        if (pos == null) {
+          debugPrint(
+              '[bike_booking] retry also returned null '
+              '(lastLocationError: ${_locationService.lastLocationError}).',);
+        }
+      }
+
       if (pos == null) {
         if (mounted) {
           setState(() {
-            _isInitializingLocation = true;
-            _locationPermissionRequired = false;
-            _startupStatus =
-                'Loading map / Checking GPS... you can browse while we locate you.';
+            _isInitializingLocation = false;
+            _locationPermissionRequired = true;
+            _startupStatus = _locationService.lastLocationError != null
+                ? 'Could not get a precise location automatically '
+                    '(${_locationService.lastLocationError}). Tap the map to '
+                    'set your pickup manually, or tap Retry.'
+                : 'Could not get a precise location automatically. Tap the '
+                    'map to set your pickup manually, or tap Retry.';
           });
         }
       } else {
         _updateUserLocation(LatLng(pos.latitude, pos.longitude),
             animateMap: true,);
-      }
-
-      if (mounted && _isInitializingLocation) {
-        setState(() {
-          _isInitializingLocation = false;
-          _locationPermissionRequired = false;
-          _startupStatus = 'Live location ready';
-        });
+        if (mounted) {
+          setState(() {
+            _isInitializingLocation = false;
+            _locationPermissionRequired = false;
+            _startupStatus = 'Live location ready';
+          });
+        }
       }
     } catch (e) {
       debugPrint('Location error: $e');
@@ -1232,7 +1503,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         setState(() {
           _isInitializingLocation = false;
           _locationPermissionRequired = true;
-          _startupStatus = 'Unable to access live location. Please enable GPS.';
+          _startupStatus = 'Unable to access live location. Please enable GPS, '
+              'or tap the map to set your pickup manually.';
         });
       }
     }
@@ -1657,11 +1929,25 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       } else {
         _pickupLocation = location;
         _pickupController.text = location['name'] as String? ?? '';
+        // INSTANT-SEED: a pickup picked from search is a deliberate
+        // choice. Latch it so a late background GPS fix cannot quietly
+        // drag the customer back to wherever the phone thinks they are.
+        _pickupChosenByCustomer = true;
       }
       _searchMapCenter = selectedPoint;
       _pinDropLocation = location;
     });
     unawaited(_recordRecentPlace(location));
+    if (!_isFocusingDrop) {
+      // Remember it as the seed for the next booking — this is what
+      // makes booking two onward instant on every platform.
+      unawaited(
+        PickupMemoryService.instance.remember(
+          selectedPoint,
+          name: location['name'] as String? ?? 'Pinned location',
+        ),
+      );
+    }
     _moveMainMap(selectedPoint, 15.5);
     
     if (_isFocusingDrop) {
@@ -1906,9 +2192,31 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     String? recipientPhone,
   }) async {
     debugPrint('🔥 [RIDE CREATION] Entered _createRide() method!');
+
+    // GUEST MODE (Aug 11 2026): first line of the handler — a guest may
+    // pick pickup/drop, see the fare, and compare vehicle types, but the
+    // ride doc itself is written straight to rides/{id} a few lines
+    // below, and firestore.rules' isRealUser() now rejects that from an
+    // anonymous uid. Without this guard the customer would be
+    // optimistically navigated to "Finding a Hero" and only then hit a
+    // permission-denied — which is exactly the "Server Busy" symptom
+    // fixed back in the rides-rules audit. Sheet first, ride after.
+    if (!await requireRealAuth(
+      context,
+      reason: 'Sign in and your ride is one tap away',
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      _showError('Authentication required');
+      // GUEST MODE (Aug 11 2026): was _showError('Authentication
+      // required') — Colors.redAccent, the same red this screen uses for
+      // real failures like "no route found". Needing an account is not a
+      // failure, so it now gets the brand-pink treatment instead.
+      // _showError() itself is deliberately left red for genuine errors.
+      showSignInRequiredSnack(context, message: 'Sign in to book your ride');
       // Redirect to login after a brief delay so the user sees the error
       Future.delayed(const Duration(seconds: 1), () {
         if (!mounted) return;
@@ -1943,17 +2251,15 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       // same-city heroes only. Defaults to kDefaultCity ('erode') until
       // a real city-picker UI exists for customers.
       final rideCity = await CityService.getCurrentCity();
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      final userData = userDoc.data() ?? <String, dynamic>{};
-      final customerPhone =
-          ((userData['phoneNumber'] as String?)?.trim().isNotEmpty ?? false)
-              ? (userData['phoneNumber'] as String).trim()
-              : ((userData['phone'] as String?)?.trim().isNotEmpty ?? false)
-                  ? (userData['phone'] as String).trim()
-                  : (user.phoneNumber ?? '').trim();
+      // CONSOLIDATED (Aug 11 2026): this was a full users/{uid} Firestore
+      // read plus an inline, hand-rolled copy of the
+      // phoneNumber -> phone -> Auth-field fallback chain — a fourth
+      // implementation of one rule, sitting directly on the ride-creation
+      // path. AuthService.resolveCustomerPhone() is now the single source
+      // of truth and serves this from the Hive cache: zero reads, zero
+      // network latency before the ride doc is written and heroes are
+      // pinged.
+      final customerPhone = await AuthService().resolveCustomerPhone(user);
       // Use the full address ('full') rather than the short label ('name')
       // when saving to Firestore — the picker UI shows both (name as the
       // title, full as the subtitle), but only the short label was being
@@ -1986,6 +2292,17 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         status: 'searching',
         createdAt: DateTime.now(),
       );
+
+      // DEMAND TRACKING (Aug 11 2026 — Nizam's request): record which
+      // places and vehicle types customers actually want, so the Admin
+      // app can show real demand. Fire-and-forget single-doc atomic
+      // increments (see UsageTrackingService) — deliberately NOT awaited
+      // so tracking can never delay or block a real booking, and every
+      // failure is swallowed inside the service itself.
+      unawaited(UsageTrackingService.instance.trackVehicleBooked(vehicleType));
+      unawaited(UsageTrackingService.instance.trackPlaceSearched(pickupAddress));
+      unawaited(UsageTrackingService.instance.trackPlaceSearched(dropAddress));
+      unawaited(UsageTrackingService.instance.trackServiceUsed('taxi'));
 
       // ── Optimistic Update: Transition UI immediately ──
       setState(() {
@@ -2415,24 +2732,77 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                   ),
                   const SizedBox(height: 18),
                   if (_locationPermissionRequired)
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        await _locationService.openLocationSettings();
-                        unawaited(_initLocationTracking());
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _accentOrange,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 14,
+                    // FIX (Aug 11 2026 — laptop/desktop GPS fallback):
+                    // previously this was a single "Enable GPS" button
+                    // that reopened OS location settings -- useless when
+                    // the real problem is a slow/failed browser fix
+                    // rather than a denied permission (the laptop case),
+                    // and it left the customer with NO way to proceed at
+                    // all since this overlay blocks all touches on the
+                    // map underneath. Now offers both: Retry (re-runs the
+                    // same GPS attempt, for transient failures) and Set
+                    // Manually (dismisses the overlay so the customer can
+                    // tap their pickup point directly on the map -- the
+                    // guaranteed fallback for a laptop that just can't get
+                    // a fast/precise fix at all).
+                    Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              unawaited(_initLocationTracking());
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _accentOrange,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 14,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                            ),
+                            icon: const Icon(Icons.gps_fixed_rounded),
+                            label: const Text('Retry GPS'),
+                          ),
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            // FIX (Aug 11 2026): this used to just dismiss
+                            // the overlay and tell the customer to "tap
+                            // anywhere on the map" — an instruction the
+                            // app could not honour, because
+                            // Allin1MapWidget has no map-tap callback.
+                            // The customer was left on a map that
+                            // ignored every tap. Now opens the real
+                            // picker.
+                            onPressed: () {
+                              setState(() {
+                                _isInitializingLocation = false;
+                                _locationPermissionRequired = false;
+                              });
+                              unawaited(_openManualPickupPicker());
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _accentOrange,
+                              side: BorderSide(color: _accentOrange),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 14,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                            ),
+                            icon: const Icon(Icons.touch_app_rounded),
+                            label: const Text('Set Pickup Manually'),
+                          ),
                         ),
-                      ),
-                      icon: const Icon(Icons.gps_fixed_rounded),
-                      label: const Text('Enable GPS'),
+                      ],
                     )
                   else
                     const LinearProgressIndicator(

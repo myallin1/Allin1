@@ -8,12 +8,13 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/food_models.dart';
 import '../models/service_request_model.dart';
+import '../services/app_minimizer_service.dart';
 import '../services/db_usage_tracker.dart';
 import '../services/food_seller_service.dart';
 import 'seller_custom_hotel_builder_screen.dart';
@@ -233,7 +234,8 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         ],)
         .snapshots()
         .listen((snap) {
-      DbUsageTracker.instance.recordRead(snap.docs.length);
+      DbUsageTracker.instance
+          .recordRead(snap.docs.length, 'seller_catalog_orders');
       if (mounted) {
         setState(() => _catalogOrders =
             snap.docs.map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id)).toList());
@@ -261,7 +263,8 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         ],)
         .snapshots()
         .listen((snap) {
-      DbUsageTracker.instance.recordRead(snap.docs.length);
+      DbUsageTracker.instance
+          .recordRead(snap.docs.length, 'seller_custom_hotel_orders');
       if (mounted) {
         setState(() => _customHotelOrders =
             snap.docs.map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id)).toList());
@@ -423,71 +426,85 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
     );
   }
 
+  // FIX (Aug 12 2026 — CTO mandate: "System Back Button Overhaul"): this
+  // used to show a Yes/No "leave the app?" dialog and call
+  // SystemNavigator.pop() on Yes, which FINISHES the Activity (a real
+  // close) — exactly the "app terminates / blank on PWA / full cold-boot
+  // rebuild on reopen" bug this feature fixes. Minimizing is safe and
+  // fully reversible, so it no longer needs a confirmation dialog.
+  // Unlike the customer/hero/admin root shells, this screen has no tabs
+  // to reset first — a single-page dashboard — so back here always goes
+  // straight to minimize/hint.
+  void _handleBackPress() {
+    if (kIsWeb) {
+      // A browser tab cannot minimize itself to the OS home screen — no
+      // such API exists. Show the "use your device's Home button" hint
+      // once per session, then silently swallow further back-presses.
+      if (AppMinimizer.consumeWebHintOnce()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Press your device's Home button to minimize"),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+    unawaited(AppMinimizer.moveToBackground());
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoadingProfile) {
-      return Scaffold(
-        backgroundColor: _bg,
-        body: Center(
-          child: _showRetryButton
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.wifi_off_rounded, color: _muted, size: 40),
-                    const SizedBox(height: 12),
-                    Text('Taking longer than usual to load your shop.',
-                        style: GoogleFonts.outfit(color: _text, fontSize: 13),),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: _teal),
-                      onPressed: () {
-                        setState(() {
-                          _showRetryButton = false;
-                          _isLoadingProfile = true;
-                        });
-                        _loadProfile();
-                      },
-                      icon: const Icon(Icons.refresh_rounded, color: Colors.white),
-                      label: const Text('Retry', style: TextStyle(color: Colors.white)),
-                    ),
-                  ],
-                )
-              : const CircularProgressIndicator(color: _teal),
+      // FIX (Aug 12 2026 — back-button audit gap): this transient
+      // loading/error Scaffold used to have NO PopScope at all, so a
+      // back-press during the (usually brief) profile load fell through
+      // to the OS/browser default — closing the app instead of
+      // minimizing, same bug this whole feature exists to fix elsewhere.
+      // Same handler as the loaded state below.
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          _handleBackPress();
+        },
+        child: Scaffold(
+          backgroundColor: _bg,
+          body: Center(
+            child: _showRetryButton
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.wifi_off_rounded, color: _muted, size: 40),
+                      const SizedBox(height: 12),
+                      Text('Taking longer than usual to load your shop.',
+                          style: GoogleFonts.outfit(color: _text, fontSize: 13),),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: _teal),
+                        onPressed: () {
+                          setState(() {
+                            _showRetryButton = false;
+                            _isLoadingProfile = true;
+                          });
+                          _loadProfile();
+                        },
+                        icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                        label: const Text('Retry', style: TextStyle(color: Colors.white)),
+                      ),
+                    ],
+                  )
+                : const CircularProgressIndicator(color: _teal),
+          ),
         ),
       );
     }
 
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
+      onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        // FIX (back-button audit, per Nizam's request): unlike the
-        // customer/hero/admin root shells, this screen has no tabs to
-        // reset first — a single-page dashboard — so back here should
-        // just confirm-exit, same as tab 0 does elsewhere. Previously
-        // there was NO handling at all: Navigator.canPop()==false at
-        // this root meant back fell straight through to the OS/browser
-        // default action and the app closed instantly.
-        final exit = await showDialog<bool>(
-          context: context,
-          builder: (_) => AlertDialog(
-            backgroundColor: _bg,
-            title: const Text('Leave the app?',
-                style: TextStyle(fontWeight: FontWeight.w700),),
-            content: const Text('Close Allin1 Seller?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('No'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Yes', style: TextStyle(color: Colors.red)),
-              ),
-            ],
-          ),
-        );
-        if ((exit ?? false) && context.mounted) SystemNavigator.pop();
+        _handleBackPress();
       },
       child: Scaffold(
       backgroundColor: _bg,

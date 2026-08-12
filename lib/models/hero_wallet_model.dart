@@ -127,6 +127,14 @@ class HeroWalletTransactionModel {
   final int? ridesHandled;
   final String? rechargeRequestId;
   final DateTime? createdAt;
+  // FIX (Aug 11 2026 — Admin usage-fee ledger, "Phase 2" of Nizam's
+  // revenue-tracking audit): denormalized onto the transaction at write
+  // time so the new admin ledger screen can render a hero name per row
+  // without an extra `heroes/{heroId}` read per transaction (N reads for
+  // N rows would be wasteful/slow on a live feed). Optional/nullable so
+  // older transaction docs written before this field existed still
+  // decode fine -- the ledger UI falls back to showing the raw heroId.
+  final String? heroName;
 
   const HeroWalletTransactionModel({
     required this.id,
@@ -139,6 +147,7 @@ class HeroWalletTransactionModel {
     this.ridesHandled,
     this.rechargeRequestId,
     this.createdAt,
+    this.heroName,
   });
 
   factory HeroWalletTransactionModel.fromFirestore(
@@ -156,6 +165,7 @@ class HeroWalletTransactionModel {
       ridesHandled: (data['ridesHandled'] as num?)?.toInt(),
       rechargeRequestId: data['rechargeRequestId'] as String?,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      heroName: data['heroName'] as String?,
     );
   }
 
@@ -169,6 +179,7 @@ class HeroWalletTransactionModel {
       if (activeMinutes != null) 'activeMinutes': activeMinutes,
       if (ridesHandled != null) 'ridesHandled': ridesHandled,
       if (rechargeRequestId != null) 'rechargeRequestId': rechargeRequestId,
+      if (heroName != null) 'heroName': heroName,
       'createdAt': FieldValue.serverTimestamp(),
     };
   }

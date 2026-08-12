@@ -26,6 +26,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../services/db_usage_tracker.dart';
+import '../../widgets/admin/cached_analytics_view.dart';
+
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
 const Color _card = Color(0xFF1A1A2E);
@@ -47,12 +50,91 @@ class PaymentsReceivedScreen extends StatefulWidget {
 class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
+
+  // FIX (Nizam's request, Aug 11 2026 — "year wise filter than iruku,
+  // datewise, within 24 hours, 60 minutes filter vaikalam, and filter
+  // pannura total timing la varra amount ah total pottu kaatatum"):
+  // the old month-picker is replaced by the shared AnalyticsRange preset
+  // set (60 min / 24 h / Today / This month / This year / All time).
+  // Filtering runs CLIENT-SIDE over the already-fetched snapshot, so
+  // switching ranges costs ZERO additional reads — the admin can flip
+  // freely between 60-minute and year views without touching Firestore
+  // ("database ah unwanted ah waste pannama").
+  AnalyticsRange _range = AnalyticsRange.today;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+  }
+
+  /// One bounded query per Fetch tap (not per screen open, not per
+  /// change) — see CachedAnalyticsView.
+  Future<List<dynamic>> _fetchCompanyPayments() async {
+    final snap = await FirebaseFirestore.instance
+        .collection('company_payments_received')
+        .orderBy('collectedAt', descending: true)
+        .limit(500)
+        .get();
+    DbUsageTracker.instance.recordRead(snap.docs.length, 'payments_received', 'fetch_company_payments');
+    // Flattened to plain maps (epoch millis instead of Timestamp) so the
+    // snapshot can be stored in Hive.
+    return snap.docs.map((d) {
+      final data = d.data();
+      return <String, dynamic>{
+        'id': d.id,
+        'heroName': data['heroName'] ?? '',
+        'heroId': data['heroId'] ?? '',
+        'amount': (data['amount'] as num?)?.toDouble() ?? 0.0,
+        'verified': data['verified'] == true,
+        'collectedAtMs':
+            (data['collectedAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0,
+      };
+    }).toList();
+  }
+
+  Future<List<dynamic>> _fetchDisputes() async {
+    // Single-field equality filter only — deliberately no .orderBy() on a
+    // different field, which would demand a composite index that doesn't
+    // exist (this exact combination is what originally broke this tab).
+    final snap = await FirebaseFirestore.instance
+        .collection('rides')
+        .where('paymentDispute', isEqualTo: true)
+        .limit(300)
+        .get();
+    DbUsageTracker.instance.recordRead(snap.docs.length, 'payments_received', 'fetch_disputes');
+    return snap.docs.map((d) {
+      final data = d.data();
+      return <String, dynamic>{
+        'id': d.id,
+        'heroName': data['acceptedHeroName'] ?? data['heroName'] ?? '',
+        'disputeReason': data['disputeReason'] ?? '',
+        'amount': ((data['finalFare'] ?? data['estimatedFare'] ?? data['fare'])
+                    as num?)
+                ?.toDouble() ??
+            0.0,
+        // Matches the write performed by "Mark Resolved" below — the
+        // dispute is considered handled once the admin alert is cleared.
+        'resolved': data['adminAlertRequired'] == false,
+        'raisedAtMs':
+            (data['disputeRaisedAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0,
+      };
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> _inRange(List<dynamic> raw, String tsField) {
+    final now = DateTime.now();
+    return raw
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .where((m) {
+          final ms = (m[tsField] as num?)?.toInt() ?? 0;
+          if (ms == 0) return _range == AnalyticsRange.all;
+          return _range.contains(DateTime.fromMillisecondsSinceEpoch(ms),
+              now: now,);
+        })
+        .toList()
+      ..sort((a, b) => ((b[tsField] as num?) ?? 0)
+          .compareTo((a[tsField] as num?) ?? 0));
   }
 
   @override
@@ -61,48 +143,10 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
     super.dispose();
   }
 
-  void _pickMonth() {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: _surface,
-      builder: (context) {
-        final now = DateTime.now();
-        final months = List<DateTime>.generate(
-          12,
-          (i) => DateTime(now.year, now.month - i),
-        );
-        return SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            children: months.map((m) {
-              final label = '${_monthName(m.month)} ${m.year}';
-              return ListTile(
-                title: Text(label, style: GoogleFonts.outfit(color: _text)),
-                trailing: (m.year == _selectedMonth.year &&
-                        m.month == _selectedMonth.month)
-                    ? const Icon(Icons.check_circle, color: _green)
-                    : null,
-                onTap: () {
-                  setState(() => _selectedMonth = m);
-                  Navigator.pop(context);
-                },
-              );
-            }).toList(),
-          ),
-        );
-      },
-    );
-  }
-
-  String _monthName(int m) => const [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-      ][m - 1];
-
-  bool _inSelectedMonth(DateTime? dt) {
-    if (dt == null) return false;
-    return dt.year == _selectedMonth.year && dt.month == _selectedMonth.month;
-  }
+  // REMOVED (Aug 11 2026): _pickMonth / _monthName / _inSelectedMonth.
+  // The month-only picker was replaced by the shared AnalyticsRange
+  // presets (60 min / 24 h / Today / This month / This year / All time)
+  // per Nizam's request — see the _range field above.
 
   @override
   Widget build(BuildContext context) {
@@ -124,16 +168,6 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
             Tab(text: 'Disputes'),
           ],
         ),
-        actions: [
-          TextButton.icon(
-            onPressed: _pickMonth,
-            icon: const Icon(Icons.calendar_month_rounded, color: _gold),
-            label: Text(
-              '${_monthName(_selectedMonth.month)} ${_selectedMonth.year}',
-              style: GoogleFonts.outfit(color: _gold, fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
       ),
       body: TabBarView(
         controller: _tabController,
@@ -146,40 +180,30 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
   }
 
   Widget _buildCompanyPaymentsTab() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('company_payments_received')
-          .orderBy('collectedAt', descending: true)
-          .limit(300)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              'Failed to load: ${snapshot.error}',
-              style: GoogleFonts.outfit(color: _red),
-            ),
-          );
-        }
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator(color: _purple));
-        }
-        final docs = snapshot.data!.docs.where((d) {
-          final data = d.data() as Map<String, dynamic>;
-          final ts = data['collectedAt'] as Timestamp?;
-          return _inSelectedMonth(ts?.toDate());
-        }).toList();
+    return CachedAnalyticsView<List<dynamic>>(
+      cacheKey: 'admin_company_payments',
+      fetch: _fetchCompanyPayments,
+      emptyMessage: 'No collections loaded yet.',
+      extraActions: [
+        Expanded(
+          child: AnalyticsRangeChips(
+            selected: _range,
+            onChanged: (r) => setState(() => _range = r),
+          ),
+        ),
+      ],
+      builder: (context, raw) {
+        final docs = _inRange(raw, 'collectedAtMs');
 
         double totalAmount = 0;
         for (final d in docs) {
-          final data = d.data() as Map<String, dynamic>;
-          totalAmount += (data['amount'] as num?)?.toDouble() ?? 0;
+          totalAmount += (d['amount'] as num?)?.toDouble() ?? 0;
         }
 
         if (docs.isEmpty) {
           return Center(
             child: Text(
-              'No MyAllin1 UPI collections this month.',
+              'No MyAllin1 UPI collections in "${_range.label}".',
               style: GoogleFonts.outfit(color: _muted),
             ),
           );
@@ -197,12 +221,22 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '${docs.length} collections',
-                    style: GoogleFonts.outfit(color: _muted, fontWeight: FontWeight.w600),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${docs.length} collections',
+                        style: GoogleFonts.outfit(
+                            color: _muted, fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        'Total collected • ${_range.label}',
+                        style: GoogleFonts.outfit(color: _muted, fontSize: 10.5),
+                      ),
+                    ],
                   ),
                   Text(
-                    '₹${totalAmount.toStringAsFixed(0)}',
+                    '₹${totalAmount.toStringAsFixed(2)}',
                     style: GoogleFonts.outfit(
                       color: _green,
                       fontWeight: FontWeight.w900,
@@ -218,9 +252,12 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
                 itemCount: docs.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 10),
                 itemBuilder: (context, index) {
-                  final data = docs[index].data() as Map<String, dynamic>;
-                  final ts = (data['collectedAt'] as Timestamp?)?.toDate();
-                  final verified = data['verified'] as bool? ?? false;
+                  final data = docs[index];
+                  final tsMs = (data['collectedAtMs'] as num?)?.toInt() ?? 0;
+                  final ts = tsMs == 0
+                      ? null
+                      : DateTime.fromMillisecondsSinceEpoch(tsMs);
+                  final verified = data['verified'] == true;
                   return Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
@@ -263,11 +300,24 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
                               side: const BorderSide(color: _green),
                               padding: const EdgeInsets.symmetric(horizontal: 10),
                             ),
+                            // Writes by document id — the cached snapshot
+                            // holds plain maps now, not DocumentSnapshots,
+                            // so there's no `.reference` to use. Updates
+                            // local state optimistically too, since there
+                            // is no live listener to push the change back.
                             onPressed: () async {
-                              await docs[index].reference.update({
+                              final id = data['id'] as String? ?? '';
+                              if (id.isEmpty) return;
+                              await FirebaseFirestore.instance
+                                  .collection('company_payments_received')
+                                  .doc(id)
+                                  .update({
                                 'verified': true,
                                 'verifiedAt': FieldValue.serverTimestamp(),
                               });
+                              if (context.mounted) {
+                                setState(() => data['verified'] = true);
+                              }
                             },
                             child: const Text('Verify'),
                           )
@@ -298,40 +348,25 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
     // a single-field equality filter) and sorts by disputeRaisedAt
     // client-side after fetching — genuine unpaid-ride disputes are a
     // small collection, so client-side sort is not a real cost here.
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('rides')
-          .where('paymentDispute', isEqualTo: true)
-          .limit(300)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              'Failed to load: ${snapshot.error}',
-              style: GoogleFonts.outfit(color: _red),
-            ),
-          );
-        }
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator(color: _purple));
-        }
-        final docs = snapshot.data!.docs.where((d) {
-          final data = d.data() as Map<String, dynamic>;
-          final ts = data['disputeRaisedAt'] as Timestamp?;
-          return _inSelectedMonth(ts?.toDate());
-        }).toList()
-          ..sort((a, b) {
-            final tsA = (a.data() as Map<String, dynamic>)['disputeRaisedAt'] as Timestamp?;
-            final tsB = (b.data() as Map<String, dynamic>)['disputeRaisedAt'] as Timestamp?;
-            return (tsB?.millisecondsSinceEpoch ?? 0)
-                .compareTo(tsA?.millisecondsSinceEpoch ?? 0);
-          });
+    return CachedAnalyticsView<List<dynamic>>(
+      cacheKey: 'admin_payment_disputes',
+      fetch: _fetchDisputes,
+      emptyMessage: 'No disputes loaded yet.',
+      extraActions: [
+        Expanded(
+          child: AnalyticsRangeChips(
+            selected: _range,
+            onChanged: (r) => setState(() => _range = r),
+          ),
+        ),
+      ],
+      builder: (context, raw) {
+        final docs = _inRange(raw, 'raisedAtMs');
 
         if (docs.isEmpty) {
           return Center(
             child: Text(
-              'No unpaid-ride disputes this month.',
+              'No unpaid-ride disputes in "${_range.label}".',
               style: GoogleFonts.outfit(color: _muted),
             ),
           );
@@ -342,10 +377,12 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
           itemCount: docs.length,
           separatorBuilder: (_, __) => const SizedBox(height: 10),
           itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
-            final ts = (data['disputeRaisedAt'] as Timestamp?)?.toDate();
-            final fare = (data['finalFare'] ?? data['estimatedFare'] ?? data['fare']) as num?;
-            final resolved = data['adminAlertRequired'] == false;
+            final data = docs[index];
+            final tsMs = (data['raisedAtMs'] as num?)?.toInt() ?? 0;
+            final ts =
+                tsMs == 0 ? null : DateTime.fromMillisecondsSinceEpoch(tsMs);
+            final fare = data['amount'] as num?;
+            final resolved = data['resolved'] == true;
             return Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -362,7 +399,7 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Ride ${docs[index].id}',
+                          'Ride ${data['id']}',
                           style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 4),
@@ -380,11 +417,22 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
                         side: const BorderSide(color: _gold),
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                       ),
+                      // Writes by id (cached snapshot holds plain maps,
+                      // no `.reference`), with an optimistic local update
+                      // since there's no live listener to echo it back.
                       onPressed: () async {
-                        await docs[index].reference.update({
+                        final id = data['id'] as String? ?? '';
+                        if (id.isEmpty) return;
+                        await FirebaseFirestore.instance
+                            .collection('rides')
+                            .doc(id)
+                            .update({
                           'adminAlertRequired': false,
                           'disputeResolvedAt': FieldValue.serverTimestamp(),
                         });
+                        if (context.mounted) {
+                          setState(() => data['resolved'] = true);
+                        }
                       },
                       child: const Text('Mark Resolved'),
                     )

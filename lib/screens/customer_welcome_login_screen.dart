@@ -43,6 +43,8 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// Phone cache warm-up on sign-in (Aug 11 2026).
+import '../services/auth_service.dart';
 import '../services/local_sync_service.dart';
 import '../services/localization_service.dart';
 
@@ -185,6 +187,19 @@ class _CustomerWelcomeLoginScreenState
       // Existing account (existingDoc.exists == true): the typed
       // mobile number is intentionally discarded — never overwrites an
       // already-registered profile — this just becomes a normal login.
+
+      // Phone cache (Aug 11 2026): warm it here so this customer's first
+      // booking costs zero Firestore reads and waits on no network call
+      // before the hero ping goes out. Uses the number we already have in
+      // hand for a new account, or the stored one for a returning login.
+      await AuthService().cacheCustomerPhone(
+        user.uid,
+        existingDoc.exists
+            ? ((existingDoc.data()?['phoneNumber'] as String?) ??
+                (existingDoc.data()?['phone'] as String?) ??
+                '')
+            : mobile,
+      );
 
       await _afterSignIn(user.uid);
     } catch (e) {

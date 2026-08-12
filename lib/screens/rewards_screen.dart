@@ -92,7 +92,7 @@ class _RewardsScreenState extends State<RewardsScreen>
           .collection('users')
           .doc(user.uid)
           .get();
-      DbUsageTracker.instance.recordRead();
+      DbUsageTracker.instance.recordRead(1, 'rewards_screen', 'profile_fetch');
       final data = snap.data() ?? <String, dynamic>{};
       final rewardsV2 = (data['rewardsV2'] as Map<String, dynamic>?) ?? {};
 

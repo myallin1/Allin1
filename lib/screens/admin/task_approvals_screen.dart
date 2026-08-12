@@ -46,7 +46,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
             style: GoogleFonts.outfit(
               color: kText,
               fontWeight: FontWeight.w800,
-              fontSize: 17,
+              fontSize: 18, // FIX (UI standardization, Aug 11 2026): app-bar titles are 18sp app-wide
             ),
           ),
         ],

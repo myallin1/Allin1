@@ -11,6 +11,8 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../providers/cart_provider.dart';
+// GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../services/auth_prompt_service.dart';
 import '../services/auth_service.dart';
 
 const Color kSurface = Color(0xFF0D0D18);
@@ -395,8 +397,27 @@ class _CartScreenState extends State<CartScreen> {
       return;
     }
 
+    // GUEST MODE (Aug 11 2026): also not in the spec's list — found by
+    // grepping direct writes to the gated collections. This one writes
+    // straight to orders/{id}, which isRealUser() now blocks for guests.
+    // Note the bare `return` below: before this guard, a signed-out
+    // customer tapping "Place Order" got absolutely no feedback at all.
+    if (!await requireRealAuth(
+      context,
+      reason: 'Sign in and we’ll get this order moving',
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
+      // GUEST MODE: this used to be a bare `return` — the button did
+      // nothing at all and said nothing about why. Silent failure is
+      // worse than a harsh red box, so it gets the branded snack too.
+      if (mounted) {
+        showSignInRequiredSnack(context, message: 'Sign in to place your order');
+      }
       return;
     }
 

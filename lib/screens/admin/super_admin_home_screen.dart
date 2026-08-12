@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/app_minimizer_service.dart';
 import '../../services/db_usage_tracker.dart';
 import '../../services/pwa_cache_platform_stub.dart'
     if (dart.library.html) '../../services/pwa_cache_platform_web.dart';
@@ -19,13 +20,18 @@ import '../../widgets/download_app_banner.dart';
 import 'admin_ai_settings_screen.dart';
 import 'admin_dashboard_screen.dart';
 import 'admin_food_orders_screen.dart';
+import 'admin_orders_cleanup_screen.dart';
+import 'admin_qr_generator_screen.dart';
 import 'admin_service_requests_screen.dart';
 import 'admin_sos_kyc_approvals_screen.dart';
 import 'admin_taxi_rides_screen.dart';
 import 'admin_ux_audit_screen.dart';
 import 'commission_settings_screen.dart';
 import 'customer_usage_tracking_screen.dart';
+import 'bug_reports_screen.dart';
+import 'customer_demand_screen.dart';
 import 'payments_received_screen.dart';
+import 'usage_fee_ledger_screen.dart';
 import 'erode_offers_management_screen.dart';
 
 class SuperAdminHomeScreen extends StatefulWidget {
@@ -121,8 +127,10 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
 
     // DB usage monitor — side-channel count, shares the same
     // broadcast stream StreamBuilder already listens to, no extra reads.
-    _waitingRequestsStream.listen((s) => DbUsageTracker.instance.recordRead(s.docs.length));
-    _sosAlertsStream.listen((s) => DbUsageTracker.instance.recordRead(s.docs.length));
+    _waitingRequestsStream.listen((s) => DbUsageTracker.instance
+        .recordRead(s.docs.length, 'admin_home_waiting_requests'));
+    _sosAlertsStream.listen((s) => DbUsageTracker.instance
+        .recordRead(s.docs.length, 'admin_home_sos_alerts'));
   }
 
   @override
@@ -236,49 +244,42 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
   // tucked away one tap deeper, same drawer pattern any admin panel uses.
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // FIX (back-button audit, per Nizam's request): this screen — the
-  // admin app's root home — had zero back-press handling, exactly the
-  // same gap found in the Hero app's dashboard shell. Pressing back
-  // (hardware button or the browser back button on the PWA) hit
-  // Navigator.canPop()==false at the root and fell straight through to
-  // the OS/browser default action, closing the app instantly instead of
-  // stepping back tab-by-tab like dashboard_screen.dart (customer app)
-  // already does. Same pattern applied here for consistency.
-  Future<bool> _handleBackPress() async {
+  // FIX (Aug 12 2026 — CTO mandate: "System Back Button Overhaul"): this
+  // used to show a Yes/No "leave the app?" dialog and call
+  // SystemNavigator.pop() on Yes, which FINISHES the Activity (a real
+  // close) — exactly the "app terminates / blank on PWA / full cold-boot
+  // rebuild on reopen" bug this feature fixes. Minimizing is safe and
+  // fully reversible, so it no longer needs a confirmation dialog at
+  // all. Tab-reset-first behavior is unchanged.
+  void _handleBackPress() {
     if (_tabIndex != 0) {
       _goToTab(0);
-      return false;
+      return;
     }
-    final exit = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: _bg,
-        title: const Text('Leave the app?',
-            style: TextStyle(fontWeight: FontWeight.w700),),
-        content: const Text('Close Allin1 Admin?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('No'),
+    if (kIsWeb) {
+      // A browser tab cannot minimize itself to the OS home screen — no
+      // such API exists. Show the "use your device's Home button" hint
+      // once per session, then silently swallow further back-presses.
+      if (AppMinimizer.consumeWebHintOnce()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Press your device's Home button to minimize"),
+            duration: Duration(seconds: 3),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Yes', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-    return exit ?? false;
+        );
+      }
+      return;
+    }
+    unawaited(AppMinimizer.moveToBackground());
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
+      onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        final shouldExit = await _handleBackPress();
-        if (shouldExit && context.mounted) SystemNavigator.pop();
+        _handleBackPress();
       },
       child: Scaffold(
       key: _scaffoldKey,
@@ -755,6 +756,22 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
   // hamburger icon in _buildHeader(), same as any standard admin-panel
   // side drawer, so the main page stays focused on daily-glance content.
   Widget _buildDrawer(BuildContext context) {
+    // FIX (Aug 12 2026 — Nizam: "hamburger tray kulla list full aiduchu,
+    // scroll panni vitu keela iruka update buttons pakka mudila"): this
+    // whole drawer used to be ONE plain, non-scrolling Column with a
+    // Spacer() pinning the download banner + version text to the
+    // bottom. That layout only works while every tile fits in the
+    // drawer's fixed height; the list has grown (UX Audit, Orders
+    // Cleanup, Poster QR Generator, etc.) past that point, so the
+    // bottom tiles (Check for Updates, Logout) were pushed off-screen
+    // with literally no way to reach them — a plain Column has no
+    // scroll behavior on its own, Spacer() included.
+    //
+    // FIX: header stays fixed at top, the tile list is now the ONLY
+    // scrollable region (Expanded + ListView), and the version text
+    // stays pinned at the very bottom outside the scroll area — same
+    // visual layout as before, just actually reachable now. Not one
+    // tile's onTap/order/icon was touched.
     return Drawer(
       backgroundColor: _surface,
       child: SafeArea(
@@ -763,17 +780,23 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
           children: [
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
+              // FIX (UI standardization, Aug 11 2026): section headers
+              // are 16sp app-wide, distinct from 18sp app-bar titles.
               child: Text(
                 'Settings',
                 style: TextStyle(
                   color: _text,
-                  fontSize: 18,
+                  fontSize: 16,
                   fontWeight: FontWeight.w800,
                 ),
               ),
             ),
             Divider(color: _purple.withValues(alpha: 0.15), height: 1),
             const SizedBox(height: 8),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
             ListTile(
               leading: const Icon(Icons.settings_outlined, color: _gold),
               title: const Text('App Settings', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
@@ -890,6 +913,93 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 );
               },
             ),
+            // NEW (Aug 11 2026 — Nizam's "Phase 2" revenue-tracking
+            // audit request): real-time, chronological feed of every
+            // platform infra usage-fee deduction (see
+            // HeroWalletService.flushUsageCost() /
+            // usage_fee_ledger_screen.dart), which had zero admin-side
+            // visibility before this screen — the fee was being deducted
+            // correctly but recorded nowhere Admin could see it.
+            // NEW (Aug 11 2026 — Nizam's request): surfaces what
+            // customers actually want (top places / hotels / vehicles /
+            // services) so supply can be pointed at real demand. Reads a
+            // single aggregate doc — see customer_demand_screen.dart.
+            ListTile(
+              leading: const Icon(Icons.insights_rounded, color: Color(0xFF00B8D4)),
+              title: const Text('Customer Demand', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Top places, hotels, vehicles & services customers use',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const CustomerDemandScreen()),
+                );
+              },
+            ),
+            // NEW (Aug 11 2026): admin queue for bug reports filed by the
+            // customer app's AI agent (guru_chat_screen's report_app_bug
+            // tool → app_bug_reports).
+            ListTile(
+              leading: const Icon(Icons.bug_report_rounded, color: Color(0xFFFF5252)),
+              title: const Text('Bug Reports', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Issues customers reported through the AI agent',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const BugReportsScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.bolt_rounded, color: Color(0xFFFFBB00)),
+              title: const Text('Usage Fee Ledger', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Live feed of infra usage fees deducted from heroes',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const UsageFeeLedgerScreen()),
+                );
+              },
+            ),
+            // NEW (Aug 11 2026 — Test Data Cleanup System): the `orders`
+            // collection (cart_screen.dart's catalog checkout) had no
+            // admin screen at all before this. Minimal list + delete
+            // screen so dev/test junk in there can be cleaned up too.
+            ListTile(
+              leading: const Icon(Icons.delete_sweep_rounded, color: Color(0xFFFF5252)),
+              title: const Text('Orders Cleanup', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Remove test/dummy catalog orders',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const AdminOrdersCleanupScreen()),
+                );
+              },
+            ),
+            // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch" follow-up):
+            // hardcoded-URL QR generator for poster/flex boards. See
+            // admin_qr_generator_screen.dart's header for why the URL is
+            // hardcoded rather than pulled from config.
+            ListTile(
+              leading: const Icon(Icons.qr_code_2_rounded, color: Color(0xFFFF4FA3)),
+              title: const Text('Poster QR Generator', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Generate the official app QR for posters/flex',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const AdminQrGeneratorScreen()),
+                );
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.update_rounded, color: _purple),
               title: const Text('Check for Updates', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
@@ -922,7 +1032,9 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
             // "Download App" CTA as the Customer app's drawer, now
             // shared via widgets/download_app_banner.dart.
             const DownloadAppBanner(appVariant: 'admin'),
-            const Spacer(),
+                ],
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.all(20),
               child: Text(

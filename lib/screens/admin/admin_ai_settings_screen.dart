@@ -25,6 +25,45 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 const String _kGroqKeyPrefsKey = 'personal_ai_api_key';
 const String _kGeminiKeyPrefsKey = 'personal_gemini_api_key';
+// Aug 11 2026 — admin-only third agent. Must match
+// DeepSeekApiService._savedApiKeyPrefsKey exactly; a mismatch here is
+// silent (the key saves, the agent just never sees it).
+const String _kDeepSeekKeyPrefsKey = 'personal_deepseek_api_key';
+
+// NEW (Aug 12 2026 — Nizam: "api key podumbothu athuku keelaye model
+// select pannalam"): one model-selection dropdown per provider,
+// directly under its key field. Prefs keys here must match each
+// service's own _modelPrefsKey exactly (guru_admin_api_service.dart,
+// gemini_api_service.dart, deepseek_api_service.dart) — same
+// "silent mismatch" risk called out for the key-prefs constants
+// above, so triple-checked to match.
+const String _kGroqModelPrefsKey = 'personal_ai_model';
+const String _kGeminiModelPrefsKey = 'personal_gemini_model';
+const String _kDeepSeekModelPrefsKey = 'personal_deepseek_model';
+
+// Hardcoded per the CTO's own approved answer ("Hardcoded known-models
+// list per provider") — avoids an extra network call just to populate
+// a dropdown, and these three lists mirror the exact model IDs each
+// service already knows how to call (Groq's _textModel default,
+// Gemini's _modelCandidates fallback order, DeepSeek's _model
+// default/documented alternative).
+const List<String> _kGroqModels = [
+  'llama-3.1-8b-instant',
+  'llama-3.3-70b-versatile',
+  'gemma2-9b-it',
+  'mixtral-8x7b-32768',
+];
+const List<String> _kGeminiModels = [
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-001',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
+  'gemini-flash-latest',
+];
+const List<String> _kDeepSeekModels = [
+  'deepseek-chat',
+  'deepseek-reasoner',
+];
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF0D0D18);
@@ -45,8 +84,16 @@ class AdminAiSettingsScreen extends StatefulWidget {
 class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
   final TextEditingController _groqCtrl = TextEditingController();
   final TextEditingController _geminiCtrl = TextEditingController();
+  final TextEditingController _deepseekCtrl = TextEditingController();
   bool _loading = true;
   bool _saving = false;
+
+  // NEW (Aug 12 2026 — per-key model selection): each provider's
+  // currently-selected model, defaulting to that provider's first
+  // (fastest/default) hardcoded model until the CTO picks otherwise.
+  String _groqModel = _kGroqModels.first;
+  String _geminiModel = _kGeminiModels.first;
+  String _deepseekModel = _kDeepSeekModels.first;
 
   @override
   void initState() {
@@ -58,6 +105,19 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     _groqCtrl.text = prefs.getString(_kGroqKeyPrefsKey) ?? '';
     _geminiCtrl.text = prefs.getString(_kGeminiKeyPrefsKey) ?? '';
+    _deepseekCtrl.text = prefs.getString(_kDeepSeekKeyPrefsKey) ?? '';
+    final savedGroqModel = prefs.getString(_kGroqModelPrefsKey);
+    final savedGeminiModel = prefs.getString(_kGeminiModelPrefsKey);
+    final savedDeepSeekModel = prefs.getString(_kDeepSeekModelPrefsKey);
+    if (savedGroqModel != null && _kGroqModels.contains(savedGroqModel)) {
+      _groqModel = savedGroqModel;
+    }
+    if (savedGeminiModel != null && _kGeminiModels.contains(savedGeminiModel)) {
+      _geminiModel = savedGeminiModel;
+    }
+    if (savedDeepSeekModel != null && _kDeepSeekModels.contains(savedDeepSeekModel)) {
+      _deepseekModel = savedDeepSeekModel;
+    }
     if (mounted) setState(() => _loading = false);
   }
 
@@ -65,6 +125,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
   void dispose() {
     _groqCtrl.dispose();
     _geminiCtrl.dispose();
+    _deepseekCtrl.dispose();
     super.dispose();
   }
 
@@ -74,6 +135,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
       final prefs = await SharedPreferences.getInstance();
       final groq = _groqCtrl.text.trim();
       final gemini = _geminiCtrl.text.trim();
+      final deepseek = _deepseekCtrl.text.trim();
       if (groq.isEmpty) {
         await prefs.remove(_kGroqKeyPrefsKey);
       } else {
@@ -84,6 +146,17 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
       } else {
         await prefs.setString(_kGeminiKeyPrefsKey, gemini);
       }
+      if (deepseek.isEmpty) {
+        await prefs.remove(_kDeepSeekKeyPrefsKey);
+      } else {
+        await prefs.setString(_kDeepSeekKeyPrefsKey, deepseek);
+      }
+      // Model choices always save, independent of whether a key is
+      // present — picking a model ahead of pasting a key is fine, the
+      // service just won't be called until a key exists.
+      await prefs.setString(_kGroqModelPrefsKey, _groqModel);
+      await prefs.setString(_kGeminiModelPrefsKey, _geminiModel);
+      await prefs.setString(_kDeepSeekModelPrefsKey, _deepseekModel);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Admin AI Co-Pilot keys saved on this device.')),
@@ -95,6 +168,36 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  // NEW (Aug 12 2026 — per-key model selection): one shared dropdown
+  // builder for all three providers, styled to match the existing
+  // TextFields directly above each of them.
+  Widget _modelDropdown({
+    required String value,
+    required List<String> options,
+    required ValueChanged<String> onChanged,
+    required Color accent,
+  }) {
+    return DropdownButtonFormField<String>(
+      initialValue: value,
+      dropdownColor: _card,
+      icon: Icon(Icons.expand_more_rounded, color: accent),
+      style: const TextStyle(color: _text, fontSize: 13.5),
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: _bg,
+        prefixIcon: Icon(Icons.smart_toy_rounded, color: accent, size: 20),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+      items: options
+          .map((m) => DropdownMenuItem<String>(value: m, child: Text(m, overflow: TextOverflow.ellipsis)))
+          .toList(),
+      onChanged: (v) {
+        if (v != null) onChanged(v);
+      },
+    );
   }
 
   @override
@@ -126,7 +229,9 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'These keys power the Quick Task chatbox\'s two agents — Groq (Fast Logic) and Gemini (Deep Reasoning).',
+                            'These keys power the Quick Task chatbox\'s three agents — Groq, Gemini, and DeepSeek. '
+                            'Pick a model under each key; whichever agent is active in Quick Task uses that model as '
+                            'your full admin assistant.',
                             style: GoogleFonts.outfit(color: _muted, fontSize: 12.5, height: 1.4),
                           ),
                         ),
@@ -148,6 +253,13 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
                       ),
                     ),
+                    const SizedBox(height: 10),
+                    _modelDropdown(
+                      value: _groqModel,
+                      options: _kGroqModels,
+                      accent: _red,
+                      onChanged: (v) => setState(() => _groqModel = v),
+                    ),
                     const SizedBox(height: 20),
                     Text('Gemini API Key', style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 8),
@@ -163,6 +275,39 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
                         fillColor: _bg,
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
                       ),
+                    ),
+                    const SizedBox(height: 10),
+                    _modelDropdown(
+                      value: _geminiModel,
+                      options: _kGeminiModels,
+                      accent: _purple,
+                      onChanged: (v) => setState(() => _geminiModel = v),
+                    ),
+                    const SizedBox(height: 18),
+                    // NEW (Aug 11 2026): admin-only third agent, used as
+                    // the backup when Groq/Gemini free limits run out.
+                    Text('DeepSeek API Key (backup agent)',
+                        style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700),),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _deepseekCtrl,
+                      obscureText: true,
+                      style: const TextStyle(color: _text),
+                      decoration: InputDecoration(
+                        hintText: 'Paste your DeepSeek API key',
+                        hintStyle: const TextStyle(color: _muted),
+                        prefixIcon: const Icon(Icons.bolt_rounded, color: _purple),
+                        filled: true,
+                        fillColor: _bg,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _modelDropdown(
+                      value: _deepseekModel,
+                      options: _kDeepSeekModels,
+                      accent: _purple,
+                      onChanged: (v) => setState(() => _deepseekModel = v),
                     ),
                     const SizedBox(height: 22),
                     SizedBox(

@@ -31,6 +31,8 @@ import 'credentials_admin_screen.dart';
 import 'customer_rides_screen.dart';
 import 'fare_management_screen.dart';
 import 'hero_approvals_screen.dart';
+// NEW (Aug 11 2026): Service Flow Monitor sub-page — fetch-on-demand.
+import 'service_flow_monitor_screen.dart';
 
 // ── Theme ──────────────────────────────────────────────────────
 const Color _bg = Color(0xFF0A0A1A);
@@ -82,6 +84,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     {'icon': Icons.electric_bike_outlined, 'label': 'Rides'},
     {'icon': Icons.people_outline, 'label': 'Customers'},
     {'icon': Icons.assignment_late_outlined, 'label': 'New Orders'},
+    // NEW (Aug 11 2026, per Nizam): Service Flow Monitor — every
+    // category's requests in one place, with delivery health. Added as
+    // a bottom-nav tab INSIDE the existing Taxi & Transportation screen
+    // rather than a new top-level entry, so it sits where an admin is
+    // already looking when they ask "did that booking reach a hero?".
+    // Fetch-on-demand only — see the quota note in
+    // service_flow_monitor_screen.dart.
+    {'icon': Icons.monitor_heart_outlined, 'label': 'Monitor'},
   ];
 
   // Cached wallet total — computed once on load to avoid massive reads
@@ -173,10 +183,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     // Firestore reads (Firestore snapshots() streams are broadcast
     // streams — StreamBuilder above and this .listen() share the same
     // underlying query/watch). See lib/services/db_usage_tracker.dart.
-    _pendingHeroApprovalsStream.listen((s) => DbUsageTracker.instance.recordRead(s.docs.length));
-    _adminReviewCountStream.listen((s) => DbUsageTracker.instance
-        .recordRead(s.docs.where((d) => d.data()['status'] == 'admin_review').length));
-    _pendingSellerApprovalsStream.listen((s) => DbUsageTracker.instance.recordRead(s.docs.length));
+    _pendingHeroApprovalsStream.listen((s) => DbUsageTracker.instance
+        .recordRead(s.docs.length, 'admin_dashboard_pending_hero_approvals'));
+    _adminReviewCountStream.listen((s) => DbUsageTracker.instance.recordRead(
+        s.docs.where((d) => d.data()['status'] == 'admin_review').length,
+        'admin_dashboard', 'review_count_listener'));
+    _pendingSellerApprovalsStream.listen((s) => DbUsageTracker.instance
+        .recordRead(s.docs.length, 'admin_dashboard_pending_seller_approvals'));
 
     unawaited(_fetchStatCards());
     unawaited(_fetchOnlineHeroes());
@@ -202,7 +215,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         .orderBy('createdAt', descending: true)
         .limit(300)
         .get();
-    DbUsageTracker.instance.recordRead(snap.docs.length);
+    DbUsageTracker.instance
+        .recordRead(snap.docs.length, 'admin_dashboard_today_rides');
     if (!mounted) return;
     setState(() {
       _statCardsSnapshot = snap;
@@ -235,7 +249,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         .orderBy('createdAt', descending: true)
         .limit(15)
         .get();
-    DbUsageTracker.instance.recordRead(snap.docs.length);
+    DbUsageTracker.instance
+        .recordRead(snap.docs.length, 'admin_dashboard_recent_transactions');
     if (!mounted) return;
     setState(() {
       _recentTransactionsSnapshot = snap;
@@ -711,7 +726,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     ? _buildRidesList()
                     : _selectedTab == 2
                         ? const CustomerRidesScreen()
-                        : const AdminNewOrdersScreen(),
+                        : _selectedTab == 3
+                            ? const AdminNewOrdersScreen()
+                            : const ServiceFlowMonitorScreen(),
           ),
           if (_isLoggingOut)
             const ColoredBox(
@@ -752,7 +769,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             style: GoogleFonts.outfit(
               color: _text,
               fontWeight: FontWeight.w800,
-              fontSize: 17,
+              fontSize: 18, // FIX (UI standardization, Aug 11 2026): app-bar titles are 18sp app-wide
             ),
           ),
         ],

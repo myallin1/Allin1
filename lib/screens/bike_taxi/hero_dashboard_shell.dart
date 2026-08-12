@@ -1,6 +1,9 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+
+import '../../services/app_minimizer_service.dart';
 import 'hero_history_screen.dart';
 import 'hero_home_screen.dart';
 import 'hero_side_drawer.dart';
@@ -101,50 +104,43 @@ class _HeroDashboardShellState extends State<HeroDashboardShell> {
     );
   }
 
-  // FIX (back-button audit, per Nizam's request): this shell had zero
-  // back-press handling — unlike dashboard_screen.dart (customer app),
-  // which already traps back to reset to tab 0 first / confirm-exit on
-  // tab 0. Without this, pressing back (hardware button or the browser's
-  // back button on the PWA) while on any tab hit Navigator.canPop()==
-  // false at the root and fell straight through to the OS/browser's
-  // default action — the app just closed instantly, no step-by-step
-  // "go back to previous tab" behavior a hero would expect. Mirrors the
-  // exact same pattern for consistency across apps.
-  Future<bool> _handleBackPress() async {
+  // FIX (Aug 12 2026 — CTO mandate: "System Back Button Overhaul"): this
+  // used to show a Yes/No "leave the app?" dialog and call
+  // SystemNavigator.pop() on Yes, which FINISHES the Activity (a real
+  // close) — exactly the "app terminates / blank on PWA / full cold-boot
+  // rebuild on reopen" bug this feature fixes. Minimizing is safe and
+  // fully reversible, so it no longer needs a confirmation dialog at
+  // all. Tab-reset-first behavior (back on a non-Radar tab returns to
+  // Radar before anything else) is unchanged.
+  void _handleBackPress() {
     if (_tabIndex != 0) {
       _goToTab(0);
-      return false;
+      return;
     }
-    final exit = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: _surface,
-        title: const Text('Leave the app?',
-            style: TextStyle(fontWeight: FontWeight.w700),),
-        content: const Text('Close Allin1 Hero?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('No', style: TextStyle(color: _pink)),
+    if (kIsWeb) {
+      // A browser tab cannot minimize itself to the OS home screen — no
+      // such API exists. Show the "use your device's Home button" hint
+      // once per session, then silently swallow further back-presses.
+      if (AppMinimizer.consumeWebHintOnce()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Press your device's Home button to minimize"),
+            duration: Duration(seconds: 3),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Yes', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-    return exit ?? false;
+        );
+      }
+      return;
+    }
+    unawaited(AppMinimizer.moveToBackground());
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
+      onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        final shouldExit = await _handleBackPress();
-        if (shouldExit && context.mounted) SystemNavigator.pop();
+        _handleBackPress();
       },
       child: Scaffold(
       backgroundColor: _bg,

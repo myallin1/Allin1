@@ -12,6 +12,8 @@
 // (admin_service_requests_screen.dart).
 import 'package:flutter/material.dart';
 
+import '../services/cloudinary_upload_service.dart';
+
 /// Compact horizontal strip of thumbnails, tap any one to open the
 /// full-screen viewer. Renders nothing if [imageUrls] is empty, so
 /// callers can drop this in unconditionally.
@@ -68,7 +70,14 @@ class OrderPhotoGallery extends StatelessWidget {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: Image.network(
-                  imageUrls[i],
+                  // Thumbnails are the single worst bandwidth offender:
+                  // without a width cap this slot downloads the full
+                  // stored original just to render it at thumbnailSize.
+                  // 2x for retina/high-DPI sharpness.
+                  CloudinaryUploadService.optimizedUrl(
+                    imageUrls[i],
+                    width: (thumbnailSize * 2).round(),
+                  ),
                   width: thumbnailSize,
                   height: thumbnailSize,
                   fit: BoxFit.cover,
@@ -147,7 +156,10 @@ class _OrderPhotoViewerState extends State<_OrderPhotoViewer> {
                 maxScale: 4,
                 child: Center(
                   child: Image.network(
-                    widget.imageUrls[i],
+                    // Full-screen viewer — no width cap (the user is
+                    // zooming into detail here), but f_auto/q_auto still
+                    // cut 30-50% via WebP/AVIF at identical quality.
+                    CloudinaryUploadService.optimizedUrl(widget.imageUrls[i]),
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stack) =>
                         const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
