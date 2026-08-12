@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
  import '../../services/localization_service.dart';
  import '../../services/map_service.dart';
  import '../../services/theme_service.dart';
+ import 'hero_payment_qr_screen.dart';
 
 class HeroSettingsScreen extends StatefulWidget {
   const HeroSettingsScreen({super.key});
@@ -170,6 +171,15 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
             const SizedBox(height: 12),
             _buildMapProviderSettings(),
             const SizedBox(height: 28),
+            // NEW (Aug 12 2026 — Nizam: "Hero app setting kulla payment
+            // qr nu oru new option create pannu"): lets an already
+            // registered hero view/replace/remove their saved payment
+            // QR any time, without going back through the whole
+            // registration form. See hero_payment_qr_screen.dart.
+            _buildSectionHeader('Payment QR'),
+            const SizedBox(height: 12),
+            _buildPaymentQrSettings(),
+            const SizedBox(height: 28),
             _buildSectionHeader('Language & Region'),
             const SizedBox(height: 12),
             _buildLanguageSettings(),
@@ -238,6 +248,55 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentQrSettings() {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _pink.withValues(alpha: 0.2)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12FF4FA3),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ListTile(
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: _pink.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(Icons.qr_code_2_rounded, color: _pink, size: 22),
+        ),
+        title: Text(
+          'Your Payment QR',
+          style: GoogleFonts.outfit(
+            color: _text,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        subtitle: Text(
+          'View, replace, or remove the QR customers scan to pay you',
+          style: GoogleFonts.outfit(
+            color: _muted,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right_rounded, color: _muted),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute<void>(builder: (_) => const HeroPaymentQrScreen()),
+        ),
       ),
     );
   }

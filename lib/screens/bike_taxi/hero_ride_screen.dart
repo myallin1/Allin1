@@ -24,6 +24,7 @@ import '../../services/hero_wallet_service.dart';
 import '../../services/map_service.dart';
 import '../../utils/otp_utils.dart';
 import '../../widgets/allin1_map_widget.dart';
+import '../../widgets/hero_payment_qr_popup.dart';
 
 class CaptainRideScreen extends StatefulWidget {
   final RideModel ride;
@@ -1086,6 +1087,22 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   // reference-number field, hero visually confirms the customer's
   // screen and taps. This is a trust-based control, same trust level as
   // the pre-existing cash flow already had.
+  // NEW (Aug 12 2026 — Nizam's "Self" QR-collection flow: "self option
+  // um action nadakanum and same time popup open aagi... customer pay
+  // pannuratha hero oathutu qr pop corner la iruka close mark press
+  // pannitu hero payment recieve nu kudupparu"): tapping "PAID AS CASH
+  // (SELF)" now shows the hero's saved payment QR big enough for the
+  // customer to scan FIRST — _markPaymentReceived('self') (the actual
+  // wallet-credit + ride-settle write) only fires once the hero taps
+  // the popup's own close (X), i.e. after they've visually confirmed
+  // the customer actually paid. HeroPaymentQrPopup.show() awaits until
+  // that close tap, so this sequencing falls out naturally from await.
+  Future<void> _showSelfQrThenMarkPaid() async {
+    await HeroPaymentQrPopup.show(context);
+    if (!mounted) return;
+    await _markPaymentReceived('self');
+  }
+
   Future<void> _markPaymentReceived(String method) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -1357,81 +1374,6 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   }
 
   // ── UI Builders ──────────────────────────────────────────────
-  Widget _buildStatusBadge() {
-    Color badgeColor;
-    String statusText;
-    switch (_rideStatus) {
-      case 'accepted':
-      case 'hero_assigned':
-        badgeColor = _gold;
-        statusText = 'Navigate to Pickup';
-        break;
-      case 'arriving':
-        badgeColor = _purple;
-        statusText = 'Arriving at Pickup';
-        break;
-      case 'arrived':
-        badgeColor = _purple;
-        statusText = 'Waiting at Pickup';
-        break;
-      case 'started':
-      case 'in_progress':
-        badgeColor = _green;
-        statusText = _isCargoRide ? 'Navigate to Drop' : 'Navigate to Destination';
-        break;
-      case 'completed':
-        badgeColor = _muted;
-        statusText = _isCargoRide ? 'Delivery Complete' : 'Collect Payment';
-        break;
-      case 'paid':
-        badgeColor = _green;
-        statusText = 'Payment Received';
-        break;
-      // FIX (Real-Time Cancellation Sync, Aug 11 2026): brief display
-      // window between the status flipping and the cancellation dialog
-      // popping this screen — was falling through to "Unknown Status".
-      case 'cancelled':
-      case 'cancelled_by_captain':
-        badgeColor = _red;
-        statusText = 'Cancelled';
-        break;
-      default:
-        badgeColor = _muted;
-        statusText = 'Unknown Status';
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: badgeColor.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: badgeColor.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: badgeColor,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            statusText,
-            style: TextStyle(
-              color: badgeColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildActionButtons() {
     if (_rideStatus == 'paid') {
       return const SizedBox.shrink();
@@ -1555,7 +1497,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () => _markPaymentReceived('self'),
+                    onPressed: _showSelfQrThenMarkPaid,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _green,
                       foregroundColor: Colors.white,
@@ -1648,8 +1590,25 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           // Navigate Button
-          SizedBox(
+          // FIX (Aug 12 2026 — Nizam: wallet page's pink/purple gradient
+          // "nallarku so athayue... ride track and navigate pandra page
+          // kum vachcha hero app premium look vanthrum"): matches
+          // hero_wallet_screen.dart's balance-card gradient (same two
+          // colors, same topLeft→bottomRight direction) — the main CTA
+          // on this screen now carries the same premium identity instead
+          // of a flat _purple fill. ElevatedButton itself can't paint a
+          // gradient, so the gradient lives on a wrapping Container and
+          // the button underneath goes transparent.
+          Container(
             width: double.infinity,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [_purple, Color(0xFFFF4FA3)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: ElevatedButton.icon(
               onPressed: (isAccepted || isArrived)
                   ? _navigateToPickup
@@ -1663,7 +1622,8 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
                     const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: _purple,
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
@@ -1756,11 +1716,17 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Status Badge
+          // FIX (Aug 12 2026 — Nizam: "current location nu kaaturathukku
+          // mela navigate to pickup nu oru dummy iruku atha remove
+          // pannu"): _buildStatusBadge() was a purely decorative pill
+          // (no onTap) that just repeated whatever the real "Navigate to
+          // Pickup"/"Navigate to Destination" button below already says
+          // and does — confusing since it LOOKS tappable sitting right
+          // next to the (actually interactive) call button. Removed;
+          // the call button now sits alone, right-aligned.
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              _buildStatusBadge(),
               IconButton(
                 onPressed: _callCustomer,
                 icon: const Icon(Icons.phone, color: _green),
@@ -2073,23 +2039,28 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
                       icon: const Icon(Icons.arrow_back, color: _text),
                     ),
                   ),
-                  // Ride ID badge
+                  // Ride ID badge — same wallet-card gradient as the
+                  // Navigate button above (Aug 12 2026 premium-look pass).
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: _surface,
+                      gradient: const LinearGradient(
+                        colors: [_purple, Color(0xFFFF4FA3)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _border),
                     ),
                     child: Text(
                       'Ride: ${widget.rideDocId.substring(0, 8)}...',
                       style: const TextStyle(
-                        color: _muted,
+                        color: Colors.white,
                         fontSize: 12,
                         fontFamily: 'monospace',
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),

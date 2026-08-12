@@ -17,7 +17,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config/city_config.dart';
 import '../services/cloudinary_upload_service.dart';
+import '../services/hero_payment_qr_service.dart';
 import '../services/location_service.dart';
+import '../widgets/hero_qr_pick_crop.dart';
 // ROUTING FIX (merge duplicate registration/status flows): this screen is
 // now reached DIRECTLY, before any sign-in step, so a fresh hero may have
 // no Firebase Auth session at all when they hit Submit — Google Sign-In is
@@ -255,6 +257,14 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
   // the 3 doc photos above already use.
   Uint8List? _selfieBytes;
   String? _selfieFileName;
+  // NEW (Aug 12 2026 — Nizam: payment QR upload point on the
+  // registration form): OPTIONAL, unlike the 3 doc photos + selfie
+  // above — a hero can add this later from Settings → Payment QR if
+  // they don't have it handy right now. Saved LOCALLY on this device
+  // the moment it's cropped (see _pickPaymentQr below), never uploaded
+  // to Cloudinary or Firestore — see hero_payment_qr_service.dart's
+  // header for why.
+  Uint8List? _paymentQrBytes;
   // FIX: was only true during the doc-upload step, with a silent gap
   // during Google sign-in and the duplicate-phone Firestore check right
   // before it — the button looked idle/clickable again during that gap,
@@ -879,6 +889,76 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     );
   }
 
+  // NEW (Aug 12 2026 — payment QR upload point): pick from gallery,
+  // crop to a tight square (see hero_qr_pick_crop.dart), save straight
+  // to this device via HeroPaymentQrService — never Cloudinary, never
+  // Firestore. Saved immediately on crop, not deferred to Submit, so a
+  // hero who fills the form over multiple sittings doesn't lose it.
+  Future<void> _pickPaymentQr() async {
+    final cropped = await pickAndCropPaymentQr(context);
+    if (cropped == null || !mounted) return;
+    await HeroPaymentQrService.instance.saveQr(cropped);
+    if (!mounted) return;
+    setState(() => _paymentQrBytes = cropped);
+  }
+
+  Widget _paymentQrTile() {
+    return InkWell(
+      onTap: _pickPaymentQr,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _paymentQrBytes != null
+                ? _green.withValues(alpha: 0.5)
+                : _muted.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(
+          children: [
+            if (_paymentQrBytes != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  color: Colors.white,
+                  child: Image.memory(_paymentQrBytes!, fit: BoxFit.contain),
+                ),
+              )
+            else
+              const Icon(Icons.qr_code_2_rounded, color: _muted, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _paymentQrBytes != null
+                    ? 'Payment QR saved on this device'
+                    : 'Add your payment QR (optional)',
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.outfit(
+                  color: _paymentQrBytes != null ? _text : _muted,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            if (_paymentQrBytes != null)
+              IconButton(
+                icon: const Icon(Icons.close, size: 16, color: _muted),
+                onPressed: () async {
+                  await HeroPaymentQrService.instance.deleteQr();
+                  if (!mounted) return;
+                  setState(() => _paymentQrBytes = null);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildHeroCategorySelector() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1199,6 +1279,24 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
               Text(
                 'Required — used to confirm your face matches your ID documents. '
                 'Please use your front camera in good lighting, no filters.',
+                style: GoogleFonts.outfit(color: _muted, fontSize: 11),
+              ),
+              const SizedBox(height: 20),
+
+              // NEW (Aug 12 2026 — Nizam's payment QR upload point):
+              // optional, saved locally only. Same "Show your QR to
+              // the customer" popup (see hero_payment_qr_popup.dart)
+              // reads whatever is saved here — a hero who skips this
+              // now can still add it later from Settings.
+              _sectionLabel('💳  Payment QR (optional)'),
+              const SizedBox(height: 12),
+              _paymentQrTile(),
+              const SizedBox(height: 4),
+              Text(
+                'Your UPI/payment QR — shown to customers who pay you '
+                'directly after a ride/task. Cropped to just the QR and '
+                'saved on this device only, never uploaded anywhere. You '
+                'can add or change this later from Settings.',
                 style: GoogleFonts.outfit(color: _muted, fontSize: 11),
               ),
               const SizedBox(height: 20),

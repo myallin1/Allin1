@@ -588,6 +588,16 @@
   <link rel="stylesheet"
     href="https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;500;600;700&display=swap">
 
+  <!-- cropperjs — required by the image_cropper package's Web
+       implementation (Aug 12 2026, Hero Payment QR upload). Only used
+       by hero_register_screen.dart / hero_payment_qr_screen.dart's
+       crop-to-square step; every other app/screen is unaffected. Kept
+       here (not per-flavor) since web/index.html is shared across all
+       4 flavors' web builds — a small CDN CSS+JS pair costs nothing on
+       screens that never open the cropper. -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
+
   <!-- Structured Data (JSON-LD) -->
   <script type="application/ld+json">
   {

@@ -1,7 +1,7 @@
 ﻿name: erode_superapp
 description: Erode All-in-One Super App - Multi-vendor Commerce MVP by NJ TECH
 publish_to: 'none'
-version: 1.0.9+192
+version: 1.0.9+195
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -39,6 +39,14 @@ dependencies:
   # it. Used only by selfie_capture_screen.dart (hero_register_screen.dart's
   # live selfie step). Run `flutter pub get` after this change.
   camera: ^0.11.0+2
+  # NEW (Aug 12 2026 — Hero Payment QR upload): verified publisher
+  # (hunghd.dev), 2.44k likes, 445k downloads. Android/iOS/Web crop UI
+  # (uCrop / TOCropViewController / Cropper.js respectively) — used to
+  # square-crop a hero's gallery-picked UPI QR screenshot down to just
+  # the QR itself before it's saved locally. Web needs cropperjs's CSS
+  # + JS added to web/index.html (see that file) — no config needed on
+  # Android/iOS.
+  image_cropper: ^12.2.1
   firebase_analytics: any
   firebase_auth: ^6.2.0
   firebase_core: ^4.5.0
@@ -110,12 +118,21 @@ dependencies:
   qr_flutter: ^4.1.0
   # NEW (Aug 12 2026 — Admin QR Generator "Share to WhatsApp" follow-up):
   # verified publisher (fluttercommunity.dev, Flutter Favorite), 3.15M
-  # downloads, 150 points. Wraps Android's ACTION_SEND / iOS
+  # downloads, 140 points. Wraps Android's ACTION_SEND / iOS
   # UIActivityViewController so the OS's native share sheet (WhatsApp
   # included, if installed) opens with the generated QR PNG attached —
   # used only by admin_qr_generator_screen.dart. Also has real Web Share
   # API support for the Admin PWA build.
-  share_plus: ^13.3.0
+  #
+  # PINNED to 12.0.2, not latest (13.x): `flutter pub get` failed with a
+  # real version conflict — share_plus >=13.1.0 requires win32 ^6.0.1,
+  # but our own package_info_plus ^9.0.0 requires win32 ^5.5.3, and both
+  # can't be satisfied at once. 12.0.2 depends on win32 ^5.5.3 (same
+  # range package_info_plus already needs), so it resolves cleanly.
+  # Verified on pub.dev: same verified publisher, same SharePlus/
+  # ShareParams/XFile.fromData API used in admin_qr_generator_screen.dart
+  # — no code changes needed for this downgrade.
+  share_plus: ^12.0.2
   shorebird_code_push: ^2.0.5
   speech_to_text: ^7.3.0
   url_launcher: ^6.3.2
