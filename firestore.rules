@@ -125,6 +125,140 @@ service cloud.firestore {
     }
 
     // ==============================================================
+    // AFFILIATE_CODES COLLECTION (Aug 12 2026 — Affiliate QR Generator)
+    // ==============================================================
+    // Admin creates/deletes codes (metadata: type/label/createdBy).
+    // Any authenticated session — including the anonymous guest session
+    // every customer already has from boot (see isAuth() comment above)
+    // — may touch a code doc, but ONLY to increment its 'scans'/'signups'
+    // counters (AffiliateService.logScanIfPending() /
+    // attributeConversionIfPending()). affectedKeys().hasOnly([...])
+    // means a scan/signup write can never smuggle in a change to
+    // type/label/createdBy, so this stays safe even though it's the one
+    // collection in this file writable by an unregistered visitor.
+    match /affiliate_codes/{code} {
+      allow read: if isAdminAny();
+
+      // CUSTOMER SELF-REFERRAL (Aug 13 2026): a real (non-anonymous)
+      // customer may create exactly one campaign doc representing their
+      // own referral link. Locked down so a customer can only ever
+      // create a record ABOUT THEMSELVES, of the customer_referral type,
+      // with both counters starting at zero — they cannot mint a
+      // pre-inflated campaign, impersonate another user, or create the
+      // admin poster types. Reads stay admin-only, so one customer can
+      // never enumerate anyone else's referral performance.
+      allow create: if isAdminAny()
+        || (isRealUser()
+            && request.resource.data.ownerUid == request.auth.uid
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.type == 'customer_referral'
+            && request.resource.data.code == code
+            && request.resource.data.scans == 0
+            && request.resource.data.signups == 0
+            && request.resource.data.active == true
+            && request.resource.data.destination == 'https://my-allin1.web.app/');
+      allow update: if isAdminAny()
+        || (isAuth()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['scans', 'signups']));
+      allow delete: if isAdminAny();
+    }
+
+    // NEW (Aug 12 2026 — affiliate LEADS, per Nizam's request for an
+    // exportable list of who actually signed up through each QR).
+    // Contains contact details (phone/email), so reads are strictly
+    // admin-only — a hero/customer/seller must never be able to list
+    // other people's contact information.
+    //
+    // Writes: a signed-in user may create/update ONLY their own lead
+    // row (docId == their uid, enforced below), which is exactly what
+    // AffiliateService.recordLeadIfPending() does at signup. They can
+    // never write a row on someone else's behalf, and they can never
+    // read the collection back. Deletes are admin-only so a user can't
+    // erase their own attribution after converting.
+    // NEW (Aug 13 2026 — dynamic QR redirect, see web/q/index.html).
+    // PUBLIC READ is intentional and safe: this collection holds ONLY
+    // {destination, active} per code. It is the minimum a scanner's
+    // browser must know to be forwarded, and it is deliberately kept
+    // SEPARATE from affiliate_codes (which holds campaign names, scan
+    // counts and createdBy, and stays admin-only). Nothing here is
+    // sensitive, and nothing here can be enumerated usefully — a reader
+    // must already know the exact 6-char code, which they only get by
+    // physically scanning the printed QR.
+    //
+    // Writes are admin-only, so a scanner can never repoint a campaign.
+    match /qr_links/{code} {
+      allow read: if true;
+
+      // Admin may point a campaign anywhere (that is the whole point of
+      // the dynamic poster QRs).
+      allow create, update, delete: if isAdminAny();
+
+      // CUSTOMER SELF-REFERRAL (Aug 13 2026): a signed-in real customer
+      // may create their own link doc so their share/QR works without
+      // an admin generating it.
+      //
+      // *** OPEN-REDIRECT GUARD — do not relax this. ***
+      // The /q/ page follows whatever `destination` it finds here. If a
+      // customer could set that freely, anyone with an account could
+      // create my-allin1.web.app/q/?c=XXX pointing at a phishing site
+      // and hand out a link that looks like ours — our own domain
+      // laundering their scam. So a non-admin writer may ONLY pin the
+      // destination to our app root, and may not write any other field.
+      // Update/delete stay admin-only, so an existing link can never be
+      // repointed by a customer after the fact.
+      allow create: if isRealUser()
+        && request.resource.data.keys().hasOnly(['destination', 'active'])
+        && request.resource.data.destination == 'https://my-allin1.web.app/'
+        && request.resource.data.active == true;
+    }
+
+    // NEW (Aug 13 2026 — per-scan analytics behind the QR dashboard).
+    // PUBLIC CREATE, because the scan is logged by the unauthenticated
+    // /q/ redirect page before the visitor has any session at all (they
+    // may never even open the app). This is the one genuinely open
+    // write surface in this ruleset, so it is tightly shaped:
+    //   * create only — no update, no delete, ever.
+    //   * the document must carry exactly the expected keys, so it can
+    //     never be used as free-form storage.
+    //   * string lengths are capped so a single write cannot be inflated.
+    // NOTE (be honest about the limits): `ts` is CLIENT-supplied — the
+    // /q/ page sends its own clock, because an unauthenticated REST
+    // write cannot use FieldValue.serverTimestamp(). It is shape-checked
+    // as a timestamp but NOT trustworthy to the second, and a determined
+    // actor could POST fake scan rows for a code they physically
+    // scanned. That is an acceptable trade for marketing-funnel counts
+    // (the same exposure every public QR analytics product has); it is
+    // explicitly NOT suitable for billing or anything money-adjacent.
+    // Reads are admin-only: a scanner can add a row but can never list
+    // the collection back or learn anything about other people's scans.
+    match /affiliate_scans/{scanId} {
+      allow read: if isAdminAny();
+      allow delete: if isAdminAny();
+      allow update: if false;
+      allow create: if
+        request.resource.data.keys().hasOnly(['code', 'os', 'isUnique', 'ref', 'ts'])
+        && request.resource.data.code is string
+        && request.resource.data.code.size() > 0
+        && request.resource.data.code.size() <= 32
+        && request.resource.data.os is string
+        && request.resource.data.os.size() <= 16
+        && request.resource.data.isUnique is bool
+        && request.resource.data.ref is string
+        && request.resource.data.ref.size() <= 256
+        && request.resource.data.ts is timestamp;
+    }
+
+    match /affiliate_leads/{leadId} {
+      allow read: if isAdminAny();
+      allow create, update: if isAdminAny()
+        || (isAuth()
+            && request.auth.uid == leadId
+            && request.resource.data.uid == request.auth.uid);
+      allow delete: if isAdminAny();
+    }
+
+    // ==============================================================
     // SELLERS COLLECTION
     // ==============================================================
     // Customers:   read only

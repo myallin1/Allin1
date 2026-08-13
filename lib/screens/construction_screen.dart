@@ -89,7 +89,14 @@ class ConstructionScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
-                (_, i) => _ServiceCard(service: _services[i]),
+                // FIX (per Nizam's request — "1st irukka call and whatsapp
+                // button mattum vitru athuku keela irukuratha remove
+                // panniru"): only the first service card keeps its own
+                // Call/WhatsApp row now; cards below it no longer repeat
+                // it. The pinned bottom bar still has Call/WA, so contact
+                // is always reachable — this just removes the redundant
+                // duplicate per-card buttons.
+                (_, i) => _ServiceCard(service: _services[i], showActions: i == 0),
                 childCount: _services.length,
               ),
             ),
@@ -176,7 +183,8 @@ class ConstructionScreen extends StatelessWidget {
 // ================================================================
 class _ServiceCard extends StatelessWidget {
   final _ConstructionService service;
-  const _ServiceCard({required this.service});
+  final bool showActions;
+  const _ServiceCard({required this.service, this.showActions = true});
 
   @override
   Widget build(BuildContext context) {
@@ -308,24 +316,26 @@ class _ServiceCard extends StatelessWidget {
                             fontWeight: FontWeight.w600,),),
                   ),).toList(),
                 ),
-                const SizedBox(height: 16),
-                Row(children: [
-                  Expanded(
-                    child: _ActionButton(
-                      label: '📞  Call Now',
-                      color: _kPink,
-                      onTap: () => _launch(_telUri),
+                if (showActions) ...[
+                  const SizedBox(height: 16),
+                  Row(children: [
+                    Expanded(
+                      child: _ActionButton(
+                        label: '📞  Call Now',
+                        color: _kPink,
+                        onTap: () => _launch(_telUri),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _ActionButton(
-                      label: '💬  WhatsApp',
-                      color: const Color(0xFF25D366),
-                      onTap: () => _launch(_waUri),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _ActionButton(
+                        label: '💬  WhatsApp',
+                        color: const Color(0xFF25D366),
+                        onTap: () => _launch(_waUri),
+                      ),
                     ),
-                  ),
-                ],),
+                  ],),
+                ],
               ],
             ),
           ),
@@ -338,6 +348,7 @@ class _ServiceCard extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<_ConstructionService>('service', service));
+    properties.add(DiagnosticsProperty<bool>('showActions', showActions));
   }
 }
 

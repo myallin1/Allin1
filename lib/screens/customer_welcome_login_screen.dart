@@ -45,6 +45,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 // Phone cache warm-up on sign-in (Aug 11 2026).
 import '../services/auth_service.dart';
+import '../services/hive_cache.dart';
 import '../services/local_sync_service.dart';
 import '../services/localization_service.dart';
 
@@ -192,14 +193,28 @@ class _CustomerWelcomeLoginScreenState
       // booking costs zero Firestore reads and waits on no network call
       // before the hero ping goes out. Uses the number we already have in
       // hand for a new account, or the stored one for a returning login.
-      await AuthService().cacheCustomerPhone(
-        user.uid,
-        existingDoc.exists
-            ? ((existingDoc.data()?['phoneNumber'] as String?) ??
-                (existingDoc.data()?['phone'] as String?) ??
-                '')
-            : mobile,
-      );
+      final cachedPhone = existingDoc.exists
+          ? ((existingDoc.data()?['phoneNumber'] as String?) ??
+              (existingDoc.data()?['phone'] as String?) ??
+              '')
+          : mobile;
+      await AuthService().cacheCustomerPhone(user.uid, cachedPhone);
+
+      // Cache full profile (Zero DB Wastage optimization)
+      if (existingDoc.exists) {
+        final data = existingDoc.data() ?? {};
+        await HiveCache.cacheUserProfile({
+          'name': data['name'] ?? user.displayName ?? '',
+          'email': data['email'] ?? user.email ?? '',
+          'phone': cachedPhone,
+        });
+      } else {
+        await HiveCache.cacheUserProfile({
+          'name': user.displayName ?? '',
+          'email': user.email ?? '',
+          'phone': cachedPhone,
+        });
+      }
 
       await _afterSignIn(user.uid);
     } catch (e) {

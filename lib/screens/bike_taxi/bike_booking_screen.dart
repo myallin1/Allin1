@@ -31,13 +31,11 @@ import '../../services/localization_service.dart';
 import '../../services/location_service.dart';
 import '../../services/map_service.dart';
 import '../../services/recent_places_service.dart';
-import '../../services/session_service.dart';
 import '../../widgets/cancellation_reason_sheet.dart';
 import '../../services/usage_tracking_service.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../../widgets/server_busy_dialog.dart';
 import '../../widgets/vehicle_selection_bottom_sheet.dart';
-import '../login_screen.dart';
 import '../payment_screen.dart';
 import 'ride_search_screen.dart';
 import 'ride_tracking_screen.dart';
@@ -1570,41 +1568,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   void _ensureDummyTrafficInitialized() {
-    if (_ambientVehicles.isNotEmpty) {
-      return;
-    }
-
-    final trafficMix = <String, int>{
-      'bike': 4,
-      'auto': 3,
-      'cab': 2,
-    };
-
-    for (final entry in trafficMix.entries) {
-      final random = Random(entry.key.hashCode);
-      final slotGap = 1 / entry.value;
-      final laneBase = _baseLaneOffsetForVehicleType(entry.key);
-      final progressBias = _progressBiasForVehicleType(entry.key);
-      for (var index = 0; index < entry.value; index++) {
-        final loopIndex =
-            (index + entry.key.length) % _erodeTrafficLoops.length;
-        final baseProgress = ((index * slotGap) + progressBias) % 1;
-        final jitter = (random.nextDouble() - 0.5) * 0.08;
-        final vehicle = _DummyVehicleState(
-          id: '${entry.key}_$index',
-          vehicleType: entry.key,
-          busy: index.isOdd,
-          loopIndex: loopIndex,
-          progress: (baseProgress + jitter) % 1,
-          direction: random.nextBool() ? 1 : -1,
-          speedStep: 0.0025 + (random.nextDouble() * 0.0028),
-          laneOffset: laneBase,
-        );
-        _ambientVehicles.add(vehicle);
-        _scheduleVehicleTick(vehicle, random.nextInt(1600));
-      }
-    }
-    unawaited(_hydrateDummyTrafficRoutes());
+    // Moved to MapSimulationService
   }
 
   Future<void> _hydrateDummyTrafficRoutes() async {
@@ -1668,7 +1632,6 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       return;
     }
 
-    _ensureDummyTrafficInitialized();
     final liveNearbyMarkers = _onlineHeroSnapshots.where((hero) {
       final lat = hero['lat'] as double?;
       final lng = hero['lng'] as double?;
@@ -1704,22 +1667,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       },
     ).toList();
 
-    final busyMarkers = _ambientVehicles
-        .map(
-          (vehicle) => MapMarker(
-            point: vehicle.project(),
-            color: _successGreen,
-            assetPath: _assetForVehicleType(vehicle.vehicleType),
-            icon: _fallbackIconForVehicleType(vehicle.vehicleType),
-            bearingDegrees:
-                vehicle.bearing() + _assetBearingOffset(vehicle.vehicleType),
-            size: 45,
-          ),
-        )
-        .toList();
-
     _nearbyCaptainMarkersNotifier.value = liveNearbyMarkers;
-    _dummyHeroMarkersNotifier.value = busyMarkers;
+    _dummyHeroMarkersNotifier.value = [];
   }
 
   Future<void> _loadRoadRoute() async {
@@ -2209,35 +2158,47 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     }
     if (!mounted) return;
 
-    final user = FirebaseAuth.instance.currentUser;
+    var user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      // GUEST MODE (Aug 11 2026): was _showError('Authentication
-      // required') — Colors.redAccent, the same red this screen uses for
-      // real failures like "no route found". Needing an account is not a
-      // failure, so it now gets the brand-pink treatment instead.
-      // _showError() itself is deliberately left red for genuine errors.
-      showSignInRequiredSnack(context, message: 'Sign in to book your ride');
-      // Redirect to login after a brief delay so the user sees the error
-      Future.delayed(const Duration(seconds: 1), () {
+      // FIX (Aug 13 2026 audit — "customer app login pannamaye book
+      // aachu" / lost-booking-state report): this branch is a genuine
+      // edge case, not the normal path — requireRealAuth() above already
+      // returned true, meaning the stack-preserving auth_gate_sheet.dart
+      // sheet completed successfully. The only way to land here is a
+      // rare race where FirebaseAuth.authStateChanges() hasn't
+      // propagated the new user to `currentUser` in the same frame the
+      // sheet popped.
+      //
+      // The OLD fix for this race was to declare defeat and
+      // pushReplacement straight to a full LoginScreen. That was doubly
+      // wrong: (a) LoginScreen.dart never pops a result back to its
+      // caller — it internally does its OWN pushReplacement(Named) to
+      // the dashboard on success (see login_screen.dart:155/284/291), so
+      // awaiting a result from it here would simply hang forever, and
+      // (b) even if it did return, pushReplacement had already destroyed
+      // THIS route, taking _pickupLocation/_dropLocation/the whole
+      // booking with it — exactly the "signed in but had to re-pick
+      // everything" symptom reported.
+      //
+      // Correct fix: there is no need for a SECOND login UI at all — the
+      // sheet already succeeded. Just give authStateChanges() longer to
+      // catch up (this is a listener propagation delay, not a real
+      // failure). If it still hasn't arrived after a generous timeout,
+      // ask the customer to tap Book again rather than silently sending
+      // them into a second, stack-destroying login flow.
+      user = await FirebaseAuth.instance
+          .authStateChanges()
+          .firstWhere((u) => u != null)
+          .timeout(const Duration(seconds: 6), onTimeout: () => null);
+
+      if (user == null) {
         if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute<void>(
-            builder: (_) => const LoginScreen(
-              presetUserType: UserType.customer,
-              // Without lockUserType this still rendered the full
-              // Hero / Customer / Admin selector. A customer who taps
-              // "book a ride" is, unambiguously, a customer — offering
-              // them a Hero or Admin login is confusing at best and an
-              // invitation to sign in to the wrong role at worst.
-              lockUserType: true,
-              lockedUserLabel: 'Customer',
-              title: 'Sign in to book',
-              subtitle: 'One quick step and your ride is on the way',
-            ),
-          ),
+        showSignInRequiredSnack(
+          context,
+          message: "Signed in — tap Book once more to confirm your ride",
         );
-      });
-      return;
+        return;
+      }
     }
     if (_pickupLocation == null || _dropLocation == null) {
       _showError('Please select pickup and destination');

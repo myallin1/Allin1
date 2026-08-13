@@ -194,7 +194,18 @@ function Build-And-Deploy {
         Write-Host "  Cleared build\web (prevents deploying another flavor's output)." -ForegroundColor DarkGray
     }
 
-    flutter build web -t $Entry | Out-Host
+    # UPDATED (Aug 12 2026 — Aug 15 Erode launch hardening). Flags:
+    #   --release           explicit (it is the default, but be certain).
+    #   --tree-shake-icons  strips unused icon-font glyphs. NOTE: an
+    #                       earlier --no-tree-shake-icons build-speed hack
+    #                       was correctly reverted; do not reintroduce it,
+    #                       it costs real payload size.
+    #   --no-source-maps    source maps are large AND publicly served.
+    #   --pwa-strategy=none stops Flutter generating flutter_service_worker.js,
+    #                       which would otherwise compete with our own
+    #                       web/pwa_fallback_sw.js (the cache-first worker
+    #                       that makes repeat opens cost zero bytes).
+    flutter build web --release -t $Entry --tree-shake-icons --no-source-maps --pwa-strategy=none | Out-Host
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""

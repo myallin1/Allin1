@@ -33,7 +33,6 @@ import 'hero_booking_status_screen.dart';
 import 'hero_booking_tracking_screen.dart';
 import 'location_picker_screen.dart';
 import '../services/theme_context_extensions.dart';
-
 // Batch 1 retrofit: former hardcoded hex constants (_kPink, _kPinkDark,
 // _kPinkBg, _kBg, _kSurface, _kText, _kMuted, _kBorder) removed in favor
 // of context.colors.* (theme_context_extensions.dart) so this screen is

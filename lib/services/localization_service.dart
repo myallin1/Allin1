@@ -11,6 +11,20 @@ class LocalizationService extends ChangeNotifier {
 
   static const String _prefsKey = 'customer_language_code';
 
+  // NEW (Aug 12 2026 — Nizam's "personal touch" request): shared by both
+  // the Customer and Hero home headers (see dashboard_screen.dart /
+  // hero_home_screen.dart) so the same hour-of-day → greeting-key
+  // mapping is defined exactly once. Plain wall-clock hour on the
+  // device — no timezone lookup needed since this app only ever serves
+  // Tamil Nadu (see the multi-city work elsewhere in this codebase).
+  static String greetingKeyForNow() {
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 12) return 'greeting_morning';
+    if (hour >= 12 && hour < 17) return 'greeting_afternoon';
+    if (hour >= 17 && hour < 21) return 'greeting_evening';
+    return 'greeting_night';
+  }
+
   static const Map<String, Map<String, String>> _translations = {
     'en': {
       'app_title': 'my allin1',
@@ -107,6 +121,17 @@ class LocalizationService extends ChangeNotifier {
       'construction_mega_subtitle': 'Usha Constructions, Contracts & Plans',
       'printing_mega_title': 'Designing & Printing',
       'printing_mega_subtitle': 'Visiting Cards, Flex, Bill Books & Notices',
+      'eseva_mega_title': 'E-Seva Online Services',
+      'eseva_mega_subtitle': 'PAN, Aadhaar, Passport, Voter ID & more',
+      'hero_guide_title': 'How to register (3 steps)',
+      'hero_guide_hint': 'Tap to see what you need',
+      'hero_guide_s1_title': 'Fill your details',
+      'hero_guide_s1_body': 'Name, phone, date of birth, address and your city. Use "Use my current location", or pick your city manually.',
+      'hero_guide_s2_title': 'Add your documents',
+      'hero_guide_s2_body': 'Driving License, Aadhaar and PAN — number plus a clear photo of each. Then take one live selfie in good lighting.',
+      'hero_guide_s3_title': 'Submit and wait for approval',
+      'hero_guide_s3_body': 'Pick your vehicle category, accept the SOS agreement, then Submit. Admin verifies and calls you — usually within 2-4 hours.',
+      'hero_guide_tip': 'Tip: keep all documents ready before you start. Trouble uploading? Use the WhatsApp button below.',
       'otherservices_mega_title': 'Other Services',
       'otherservices_mega_subtitle': 'Broadband, Mobile Puncture & More',
       'other_internet_label': 'Internet',
@@ -114,6 +139,15 @@ class LocalizationService extends ChangeNotifier {
       'other_cleaning_label': 'Cleaning',
       'other_electrician_label': 'Electrician',
       'greeting_hi': 'Hi',
+      // NEW (Aug 12 2026 — Nizam's "personal touch" request): time-of-day
+      // greeting shown on both the Customer and Hero home headers (see
+      // dashboard_screen.dart / hero_home_screen.dart), replacing the
+      // always-on generic 'greeting_hi'. Picked by hour-of-day — see
+      // greeting_utils.dart's timeGreetingKey().
+      'greeting_morning': 'Good morning',
+      'greeting_afternoon': 'Good afternoon',
+      'greeting_evening': 'Good evening',
+      'greeting_night': 'Good night',
       // ── Food Hub screen ──
       'food_hub_prompt': 'What would you like to order?',
       'food_hub_custom_subtitle': 'Order from any shop in Erode',
@@ -345,6 +379,17 @@ class LocalizationService extends ChangeNotifier {
       'construction_mega_subtitle': 'உஷா கன்ஸ்ட்ரக்சன்ஸ், ஒப்பந்தங்கள் & திட்டங்கள்',
       'printing_mega_title': 'டிசைனிங் & பிரிண்டிங்',
       'printing_mega_subtitle': 'விசிட்டிங் கார்டு, ஃப்ளெக்ஸ், பில் புக்ஸ் & நோட்டீஸ்',
+      'eseva_mega_title': 'இ-சேவா ஆன்லைன் சேவைகள்',
+      'eseva_mega_subtitle': 'பான், ஆதார், பாஸ்போர்ட், வாக்காளர் அட்டை & மேலும்',
+      'hero_guide_title': 'எப்படி பதிவு செய்வது (3 படிகள்)',
+      'hero_guide_hint': 'என்ன தேவை என்று பார்க்க தட்டவும்',
+      'hero_guide_s1_title': 'உங்கள் விவரங்களை நிரப்புங்கள்',
+      'hero_guide_s1_body': 'பெயர், தொலைபேசி, பிறந்த தேதி, முகவரி மற்றும் உங்கள் நகரம். "எனது தற்போதைய இருப்பிடம்" பயன்படுத்தவும் அல்லது நகரத்தை நீங்களே தேர்ந்தெடுக்கவும்.',
+      'hero_guide_s2_title': 'உங்கள் ஆவணங்களைச் சேர்க்கவும்',
+      'hero_guide_s2_body': 'ஓட்டுநர் உரிமம், ஆதார் மற்றும் பான் — எண் மற்றும் ஒவ்வொன்றின் தெளிவான புகைப்படம். பிறகு நல்ல வெளிச்சத்தில் ஒரு நேரடி செல்ஃபி எடுக்கவும்.',
+      'hero_guide_s3_title': 'சமர்ப்பித்து ஒப்புதலுக்குக் காத்திருங்கள்',
+      'hero_guide_s3_body': 'உங்கள் வாகன வகையைத் தேர்ந்தெடுத்து, SOS ஒப்பந்தத்தை ஏற்று, சமர்ப்பிக்கவும். நிர்வாகம் சரிபார்த்து உங்களை அழைப்பார் — பொதுவாக 2-4 மணி நேரத்தில்.',
+      'hero_guide_tip': 'குறிப்பு: தொடங்குவதற்கு முன் அனைத்து ஆவணங்களையும் தயாராக வைத்திருங்கள். பதிவேற்றுவதில் சிக்கலா? கீழே உள்ள WhatsApp பொத்தானைப் பயன்படுத்தவும்.',
       'otherservices_mega_title': 'மற்ற சேவைகள்',
       'otherservices_mega_subtitle': 'ப்ராட்பேண்ட், மொபைல் பஞ்சர் & மேலும்',
       'other_internet_label': 'இணையம்',
@@ -352,6 +397,10 @@ class LocalizationService extends ChangeNotifier {
       'other_cleaning_label': 'சுத்தம்',
       'other_electrician_label': 'எலக்ட்ரீஷியன்',
       'greeting_hi': 'ஹாய்',
+      'greeting_morning': 'காலை வணக்கம்',
+      'greeting_afternoon': 'மதிய வணக்கம்',
+      'greeting_evening': 'மாலை வணக்கம்',
+      'greeting_night': 'இரவு வணக்கம்',
       'food_hub_prompt': 'என்ன ஆர்டர் செய்ய விரும்புகிறீர்கள்?',
       'food_hub_custom_subtitle': 'ஈரோட்டில் எந்த கடையிலிருந்தும் ஆர்டர் செய்யுங்கள்',
       'food_hub_shops_heading': 'உங்களுக்கு பிடித்த கடைகளிலிருந்து ஆர்டர் செய்யுங்கள்',
@@ -584,6 +633,17 @@ class LocalizationService extends ChangeNotifier {
       'construction_mega_subtitle': 'Usha Constructions, contracts & plans',
       'printing_mega_title': 'Designing & Printing',
       'printing_mega_subtitle': 'Visiting card, flex, bill book & notice',
+      'eseva_mega_title': 'E-Seva Online Services',
+      'eseva_mega_subtitle': 'PAN, Aadhaar, Passport, Voter ID & more',
+      'hero_guide_title': 'Register panra vidham (3 steps)',
+      'hero_guide_hint': 'Enna venum-nu paakka tap pannunga',
+      'hero_guide_s1_title': 'Ungaloda details fill pannunga',
+      'hero_guide_s1_body': 'Peyar, phone, DOB, address matrum ungaloda city. "Use my current location" use pannunga, illa city-a neengale select pannunga.',
+      'hero_guide_s2_title': 'Ungaloda documents add pannunga',
+      'hero_guide_s2_body': 'Driving License, Aadhaar matrum PAN — number kooda ovvondrukkum clear photo. Apparam nalla lighting-la oru live selfie edunga.',
+      'hero_guide_s3_title': 'Submit panni approval-ku wait pannunga',
+      'hero_guide_s3_body': 'Vehicle category select panni, SOS agreement accept panni, Submit pannunga. Admin verify panni call panuvanga — pothuva 2-4 hours-la.',
+      'hero_guide_tip': 'Tip: start panradhukku munnadi ellaa documents-um ready-a vachukonga. Upload panradhula problem-a? Keela irukkura WhatsApp button use pannunga.',
       'otherservices_mega_title': 'Other Services',
       'otherservices_mega_subtitle': 'Broadband, mobile puncture & more',
       'other_internet_label': 'Internet',
@@ -591,6 +651,10 @@ class LocalizationService extends ChangeNotifier {
       'other_cleaning_label': 'Cleaning',
       'other_electrician_label': 'Electrician',
       'greeting_hi': 'Hi',
+      'greeting_morning': 'Kaalai Vanakkam',
+      'greeting_afternoon': 'Madhiya Vanakkam',
+      'greeting_evening': 'Malai Vanakkam',
+      'greeting_night': 'Iravu Vanakkam',
       'food_hub_prompt': 'Enna order pannanum?',
       'food_hub_custom_subtitle': 'Erode la ethachum shop-la irunthu order pannunga',
       'food_hub_shops_heading': 'Unga favourite shops-la irunthu order pannunga',
@@ -827,6 +891,17 @@ class LocalizationService extends ChangeNotifier {
       'construction_mega_subtitle': 'उषा कंस्ट्रक्शन्स, अनुबंध और योजनाएं',
       'printing_mega_title': 'डिज़ाइनिंग और प्रिंटिंग',
       'printing_mega_subtitle': 'विज़िटिंग कार्ड, फ्लेक्स, बिल बुक और नोटिस',
+      'eseva_mega_title': 'ई-सेवा ऑनलाइन सेवाएं',
+      'eseva_mega_subtitle': 'पैन, आधार, पासपोर्ट, वोटर आईडी और अधिक',
+      'hero_guide_title': 'पंजीकरण कैसे करें (3 चरण)',
+      'hero_guide_hint': 'क्या चाहिए यह देखने के लिए टैप करें',
+      'hero_guide_s1_title': 'अपना विवरण भरें',
+      'hero_guide_s1_body': 'नाम, फ़ोन, जन्म तिथि, पता और आपका शहर। "मेरा वर्तमान स्थान" का उपयोग करें, या शहर स्वयं चुनें।',
+      'hero_guide_s2_title': 'अपने दस्तावेज़ जोड़ें',
+      'hero_guide_s2_body': 'ड्राइविंग लाइसेंस, आधार और पैन — नंबर के साथ हर एक की साफ़ फ़ोटो। फिर अच्छी रोशनी में एक लाइव सेल्फ़ी लें।',
+      'hero_guide_s3_title': 'जमा करें और स्वीकृति की प्रतीक्षा करें',
+      'hero_guide_s3_body': 'अपना वाहन प्रकार चुनें, SOS समझौता स्वीकार करें, फिर सबमिट करें। व्यवस्थापक सत्यापित करके आपको कॉल करेंगे — आमतौर पर 2-4 घंटे में।',
+      'hero_guide_tip': 'सुझाव: शुरू करने से पहले सभी दस्तावेज़ तैयार रखें। अपलोड में परेशानी? नीचे दिए WhatsApp बटन का उपयोग करें।',
       'otherservices_mega_title': 'अन्य सेवाएं',
       'otherservices_mega_subtitle': 'ब्रॉडबैंड, मोबाइल पंक्चर और अधिक',
       'other_internet_label': 'इंटरनेट',
@@ -834,6 +909,10 @@ class LocalizationService extends ChangeNotifier {
       'other_cleaning_label': 'सफाई',
       'other_electrician_label': 'इलेक्ट्रीशियन',
       'greeting_hi': 'नमस्ते',
+      'greeting_morning': 'सुप्रभात',
+      'greeting_afternoon': 'शुभ दोपहर',
+      'greeting_evening': 'शुभ संध्या',
+      'greeting_night': 'शुभ रात्रि',
       'food_hub_prompt': 'आप क्या ऑर्डर करना चाहेंगे?',
       'food_hub_custom_subtitle': 'ईरोड की किसी भी दुकान से ऑर्डर करें',
       'food_hub_shops_heading': 'अपनी पसंदीदा दुकानों से ऑर्डर करें',
@@ -1070,6 +1149,17 @@ class LocalizationService extends ChangeNotifier {
       'construction_mega_subtitle': 'ഉഷ കൺസ്ട്രക്ഷൻസ്, കരാറുകൾ & പ്ലാനുകൾ',
       'printing_mega_title': 'ഡിസൈനിംഗ് & പ്രിന്റിംഗ്',
       'printing_mega_subtitle': 'വിസിറ്റിംഗ് കാർഡ്, ഫ്ലെക്സ്, ബിൽ ബുക്ക് & നോട്ടീസ്',
+      'eseva_mega_title': 'ഇ-സേവാ ഓൺലൈൻ സേവനങ്ങൾ',
+      'eseva_mega_subtitle': 'പാൻ, ആധാർ, പാസ്‌പോർട്ട്, വോട്ടർ ഐഡി & കൂടുതൽ',
+      'hero_guide_title': 'എങ്ങനെ രജിസ്റ്റർ ചെയ്യാം (3 ഘട്ടങ്ങൾ)',
+      'hero_guide_hint': 'എന്താണ് വേണ്ടതെന്ന് കാണാൻ ടാപ്പ് ചെയ്യുക',
+      'hero_guide_s1_title': 'നിങ്ങളുടെ വിവരങ്ങൾ പൂരിപ്പിക്കുക',
+      'hero_guide_s1_body': 'പേര്, ഫോൺ, ജനനത്തീയതി, വിലാസം, നിങ്ങളുടെ നഗരം. "എന്റെ നിലവിലെ ലൊക്കേഷൻ" ഉപയോഗിക്കുക, അല്ലെങ്കിൽ നഗരം സ്വയം തിരഞ്ഞെടുക്കുക.',
+      'hero_guide_s2_title': 'നിങ്ങളുടെ രേഖകൾ ചേർക്കുക',
+      'hero_guide_s2_body': 'ഡ്രൈവിംഗ് ലൈസൻസ്, ആധാർ, പാൻ — നമ്പറും ഓരോന്നിന്റെയും വ്യക്തമായ ഫോട്ടോയും. പിന്നെ നല്ല വെളിച്ചത്തിൽ ഒരു ലൈവ് സെൽഫി എടുക്കുക.',
+      'hero_guide_s3_title': 'സമർപ്പിച്ച് അംഗീകാരത്തിനായി കാത്തിരിക്കുക',
+      'hero_guide_s3_body': 'വാഹന വിഭാഗം തിരഞ്ഞെടുത്ത്, SOS കരാർ അംഗീകരിച്ച്, സമർപ്പിക്കുക. അഡ്മിൻ പരിശോധിച്ച് നിങ്ങളെ വിളിക്കും — സാധാരണയായി 2-4 മണിക്കൂറിനുള്ളിൽ.',
+      'hero_guide_tip': 'നുറുങ്ങ്: തുടങ്ങുന്നതിന് മുമ്പ് എല്ലാ രേഖകളും തയ്യാറാക്കി വയ്ക്കുക. അപ്‌ലോഡ് ചെയ്യാൻ ബുദ്ധിമുട്ടാണോ? താഴെയുള്ള WhatsApp ബട്ടൺ ഉപയോഗിക്കുക.',
       'otherservices_mega_title': 'മറ്റ് സേവനങ്ങൾ',
       'otherservices_mega_subtitle': 'ബ്രോഡ്ബാൻഡ്, മൊബൈൽ പഞ്ചർ & കൂടുതൽ',
       'other_internet_label': 'ഇന്റർനെറ്റ്',
@@ -1077,6 +1167,10 @@ class LocalizationService extends ChangeNotifier {
       'other_cleaning_label': 'ക്ലീനിംഗ്',
       'other_electrician_label': 'ഇലക്ട്രീഷ്യൻ',
       'greeting_hi': 'ഹായ്',
+      'greeting_morning': 'സുപ്രഭാതം',
+      'greeting_afternoon': 'ശുഭ മധ്യാഹ്നം',
+      'greeting_evening': 'ശുഭ സന്ധ്യ',
+      'greeting_night': 'ശുഭ രാത്രി',
       'food_hub_prompt': 'നിങ്ങൾക്ക് എന്താണ് ഓർഡർ ചെയ്യേണ്ടത്?',
       'food_hub_custom_subtitle': 'ஈரோட்டിലെ ഏത് കടയിൽ നിന്നും ഓർഡർ ചെയ്യൂ',
       'food_hub_shops_heading': 'നിങ്ങളുടെ പ്രിയപ്പെട്ട കടകളിൽ നിന്ന് ഓർഡർ ചെയ്യൂ',

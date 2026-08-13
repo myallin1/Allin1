@@ -20,7 +20,6 @@ import 'config/app_variant.dart';
 import 'config/web_push_config.dart';
 import 'firebase_options.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
-import 'screens/app_splash_video_screen.dart';
 import 'screens/admin/ads_management_screen.dart';
 import 'screens/admin/credentials_admin_screen.dart';
 import 'screens/admin/fare_management_screen.dart';
@@ -147,19 +146,42 @@ const String _kSplashVideoSeenEverKey = 'admin_splash_video_seen_ever_v1';
 // very first time this device/browser ever opens the admin app (see
 // _kSplashVideoSeenEverKey above). Every later launch skips this widget
 // entirely and goes straight to AdminApp — see the branch in main() below.
-class _BootLoadingApp extends StatelessWidget {
+// UPDATED (Aug 12 2026 — CEO/CTO "nuke the videos"): this used to mount
+// AppSplashVideoScreen, which streamed the 2.1MB app_splash.mp4 before
+// anything else. On web that was 2.1MB of Firebase Hosting bandwidth per
+// visitor for a decorative splash; the pure CSS/SVG route-draw animation
+// now living in web/index.html covers that same pre-engine moment for
+// zero bytes, and it paints even earlier (before main.dart.js is parsed).
+// Native simply goes straight to the branded frame.
+//
+// CRITICAL: onVideoFinished completes the `videoDone` completer that
+// main()'s boot sequence awaits. It MUST still fire exactly once or the
+// app hangs on this screen forever — hence the StatefulWidget + a
+// post-frame callback in initState (fires once per mount) rather than
+// calling it from build(), which can run many times.
+class _BootLoadingApp extends StatefulWidget {
   const _BootLoadingApp({required this.onVideoFinished});
 
   final VoidCallback onVideoFinished;
 
   @override
+  State<_BootLoadingApp> createState() => _BootLoadingAppState();
+}
+
+class _BootLoadingAppState extends State<_BootLoadingApp> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onVideoFinished();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: AppSplashVideoScreen(
-        nextScreen: const BrandedLoadingScreen(),
-        onFinished: onVideoFinished,
-      ),
+      home: BrandedLoadingScreen(),
     );
   }
 }

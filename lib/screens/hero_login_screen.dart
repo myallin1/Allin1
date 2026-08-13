@@ -8,6 +8,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+import '../widgets/economic_vision_banner.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'hero_pending_screen.dart';
@@ -507,6 +509,17 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
               // here on the opening page, ABOVE the Google sign-in /
               // Register as Hero options below, with a graphic icon per
               // step (not just a number) so it reads at a glance.
+              // NEW (Aug 13 2026): same பொருளாதாரப் புரட்சி banner the
+              // customer app shows, reused verbatim from the shared
+              // widget so both apps can never drift apart. compact:true
+              // because this page already carries a logo, a title and
+              // the 3-step guide card below.
+              const EconomicVisionBanner(
+                horizontalPadding: 0,
+                compact: true,
+                heroApp: true,
+              ),
+              const SizedBox(height: 20),
               const _HowToBecomeHeroCard(),
               const SizedBox(height: 28),
               // THEME FIX: was a transparent-outline/white-text button

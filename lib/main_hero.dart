@@ -16,13 +16,14 @@ import 'config/api_config.dart';
 import 'config/app_variant.dart';
 import 'config/web_push_config.dart';
 import 'firebase_options.dart';
-import 'screens/app_splash_video_screen.dart';
 import 'screens/bike_taxi/hero_dashboard_shell.dart';
 import 'screens/hero_login_screen.dart';
 import 'screens/hero_pending_screen.dart';
 import 'screens/hero_register_screen.dart';
+import 'services/affiliate_service.dart';
 import 'services/db_usage_tracker.dart';
 import 'services/hero_foreground_service.dart';
+import 'services/hero_onboarding_cache.dart';
 import 'services/hero_ride_notification_service.dart';
 import 'services/hero_web_audio_service.dart';
 import 'services/localization_service.dart';
@@ -161,19 +162,42 @@ Future<void> _ensureFirebaseInitialized() async {
 // very first time this device/browser ever opens the hero app (see
 // _kSplashVideoSeenEverKey above). Every later launch skips this widget
 // entirely and goes straight to HeroApp — see the branch in main() below.
-class _BootLoadingApp extends StatelessWidget {
+// UPDATED (Aug 12 2026 — CEO/CTO "nuke the videos"): this used to mount
+// AppSplashVideoScreen, which streamed the 2.1MB app_splash.mp4 before
+// anything else. On web that was 2.1MB of Firebase Hosting bandwidth per
+// visitor for a decorative splash; the pure CSS/SVG route-draw animation
+// now living in web/index.html covers that same pre-engine moment for
+// zero bytes, and it paints even earlier (before main.dart.js is parsed).
+// Native simply goes straight to the branded frame.
+//
+// CRITICAL: onVideoFinished completes the `videoDone` completer that
+// main()'s boot sequence awaits. It MUST still fire exactly once or the
+// app hangs on this screen forever — hence the StatefulWidget + a
+// post-frame callback in initState (fires once per mount) rather than
+// calling it from build(), which can run many times.
+class _BootLoadingApp extends StatefulWidget {
   const _BootLoadingApp({required this.onVideoFinished});
 
   final VoidCallback onVideoFinished;
 
   @override
+  State<_BootLoadingApp> createState() => _BootLoadingAppState();
+}
+
+class _BootLoadingAppState extends State<_BootLoadingApp> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onVideoFinished();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: AppSplashVideoScreen(
-        nextScreen: const BrandedLoadingScreen(),
-        onFinished: onVideoFinished,
-      ),
+      home: BrandedLoadingScreen(),
     );
   }
 }
@@ -508,6 +532,21 @@ void main() async {
       final hasSeenSplashVideoEver =
           earlyPrefs.getBool(_kSplashVideoSeenEverKey) ?? false;
 
+      // NEW (Aug 12 2026 — Affiliate QR Generator): same ?ref=CODE&rtype=
+      // capture as main_customer.dart, for hero-recruitment affiliate
+      // links opened on the Hero PWA. No-op on the Android APK (kIsWeb
+      // false) and harmless if the hero never came from a referral link.
+      if (kIsWeb) {
+        final refCode = Uri.base.queryParameters['ref'];
+        if (refCode != null && refCode.isNotEmpty) {
+          await earlyPrefs.setString(AffiliateService.kPendingCodeKey, refCode);
+          final refType = Uri.base.queryParameters['rtype'];
+          if (refType != null && refType.isNotEmpty) {
+            await earlyPrefs.setString(AffiliateService.kPendingTypeKey, refType);
+          }
+        }
+      }
+
       final videoDone = Completer<void>();
       if (!hasSeenSplashVideoEver) {
         runApp(_BootLoadingApp(onVideoFinished: () {
@@ -604,6 +643,9 @@ Future<void> _warmHeroServices() async {
     await ApiConfig.ensureEnvLoaded();
     debugPrint('[main_hero] Initializing MapService...');
     await MapService().initialize();
+    // REMOVED (Aug 12 2026 — customer-facing demo-vehicle removal): see
+    // matching comment in main_customer.dart. The simulation now lives
+    // ONLY in admin_map_simulation_screen.dart.
     debugPrint(
       '[main_hero] MapService ready provider=${MapService().currentProvider.name} '
       'fallback=${MapService().isUsingFallback}',
@@ -753,6 +795,34 @@ class _HeroSetupGateState extends State<_HeroSetupGate> {
   Future<DocumentSnapshot<Map<String, dynamic>>>? _usersDocFuture;
   Future<DocumentSnapshot<Map<String, dynamic>>>? _heroDocFuture;
 
+  // NEW (Aug 12 2026 — Local Cache Strategy, per Nizam's request): a
+  // one-time local disk read at gate creation, cheap enough to not need
+  // its own FutureBuilder wrapping the whole subtree below. If this
+  // resolves 'pending' or 'approved' before build() runs, the two
+  // Firestore .get() calls in _ensureFuturesFor below are skipped
+  // entirely for that decision — zero DB read cost on the common case
+  // of "nothing has changed since last launch". If it resolves null
+  // (first-ever launch on this device, or the cache was cleared), or
+  // hasn't finished loading yet, build() below falls straight through
+  // to the existing Firestore-based gate unchanged — this can only ever
+  // skip a read, never strand a hero on a stale/wrong screen, since
+  // hero_pending_screen.dart's own live Firestore listener is still the
+  // real source of truth for the actual approval transition.
+  String? _cachedOnboardingStatus;
+  bool _onboardingCacheLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    HeroOnboardingCache.read().then((value) {
+      if (!mounted) return;
+      setState(() {
+        _cachedOnboardingStatus = value;
+        _onboardingCacheLoaded = true;
+      });
+    });
+  }
+
   void _ensureFuturesFor(String uid) {
     if (_cachedUid == uid && _usersDocFuture != null && _heroDocFuture != null) {
       return;
@@ -838,10 +908,29 @@ class _HeroSetupGateState extends State<_HeroSetupGate> {
           _cachedUid = null;
           _usersDocFuture = null;
           _heroDocFuture = null;
+          // Signed out — a stale local onboarding flag must never block a
+          // fresh sign-in/re-registration on this device.
+          unawaited(HeroOnboardingCache.clear());
+          _cachedOnboardingStatus = null;
+          _onboardingCacheLoaded = false;
           return _buildFadingChild('hero-login', const HeroLoginScreen());
         }
 
         _ensureFuturesFor(user.uid);
+
+        // NEW (Aug 12 2026 — Local Cache Strategy): if the one-time disk
+        // read in initState() already resolved to a known status, route
+        // straight there with zero Firestore read for the decision
+        // itself. Cache miss/still-loading falls straight through to the
+        // existing Firestore-based gate below, unchanged.
+        if (_onboardingCacheLoaded) {
+          if (_cachedOnboardingStatus == 'approved') {
+            return _buildFadingChild('hero-dashboard', const HeroDashboardShell());
+          }
+          if (_cachedOnboardingStatus == 'pending') {
+            return _buildFadingChild('hero-pending', const HeroPendingScreen());
+          }
+        }
 
         return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           // FIX (approved-hero stuck on pending, root cause): this used to

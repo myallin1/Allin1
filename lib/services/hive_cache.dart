@@ -29,11 +29,13 @@ class HiveCache {
   static const kSellersList   = 'sellers_list';
   static const kProductsList  = 'products_list';
   static const kBanners       = 'banners';
+  static const kSellerOrders  = 'seller_orders';
 
   static const ttlErodeOffers  = Duration(hours: 1);
   static const ttlSellersList  = Duration(minutes: 45);
   static const ttlProductsList = Duration(minutes: 45);
   static const ttlBanners      = Duration(hours: 2);
+  static const ttlSellerOrders = Duration(hours: 1);
 
   static Future<Box> _box() async {
     if (Hive.isBoxOpen(_boxName)) return Hive.box(_boxName);
@@ -57,6 +59,37 @@ class HiveCache {
     } catch (e) {
       debugPrint('[HiveCache] put error ($key): $e');
     }
+  }
+
+  static Future<void> cacheErodeOffers(List<Map<String, dynamic>> offers) async {
+    await put(kErodeOffers, offers, ttl: ttlErodeOffers);
+  }
+
+  static Future<void> cacheUserProfile(Map<String, dynamic> profileData) async {
+    // 30 mins TTL is fine, as changes are explicitly written back to cache on edit
+    await put(kUserProfile, profileData, ttl: ttlUserProfile);
+  }
+
+  static Future<Map<String, dynamic>?> getCachedUserProfile() async {
+    final data = await get<Map>(kUserProfile);
+    if (data == null) return null;
+    return Map<String, dynamic>.from(data);
+  }
+
+  static Future<List<Map<String, dynamic>>?> getCachedErodeOffers() async {
+    final list = await get<List>(kErodeOffers);
+    if (list == null) return null;
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  static Future<void> cacheSellerOrders(String sellerId, List<Map<String, dynamic>> orders) async {
+    await put('${kSellerOrders}_$sellerId', orders, ttl: ttlSellerOrders);
+  }
+
+  static Future<List<Map<String, dynamic>>?> getCachedSellerOrders(String sellerId) async {
+    final list = await get<List>('${kSellerOrders}_$sellerId');
+    if (list == null) return null;
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
   static Future<T?> get<T>(String key) async {

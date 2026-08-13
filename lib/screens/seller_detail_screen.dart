@@ -3,6 +3,7 @@
 // Seller details with product menu and cart integration
 // ================================================================
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/material.dart';
@@ -591,6 +592,51 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
     try {
       final sellerId = cart.currentSellerId ?? '';
       final sellerName = cart.currentSellerName ?? 'Seller';
+      
+      // 1. Reserve stock via Transaction (Strict Concurrency Lock)
+      final db = FirebaseFirestore.instance;
+      await db.runTransaction((tx) async {
+        final itemDocs = <String, DocumentSnapshot>{};
+        
+        // Read phase
+        for (final item in cart.items) {
+          final docRef = db
+              .collection('sellers')
+              .doc(sellerId)
+              .collection('menu')
+              .doc(item.id);
+          final snap = await tx.get(docRef);
+          if (!snap.exists) throw Exception('Item ${item.name} not found');
+          itemDocs[item.id] = snap;
+        }
+        
+        // Validation phase
+        for (final item in cart.items) {
+          final data = itemDocs[item.id]!.data() as Map<String, dynamic>;
+          final isAvailable = data['isAvailable'] as bool? ?? true;
+          final stockQuantity = (data['stockQuantity'] as num?)?.toInt();
+
+          if (!isAvailable) {
+            throw Exception('${item.name} is currently unavailable.');
+          }
+          if (stockQuantity != null && stockQuantity < item.quantity) {
+            throw Exception('Only $stockQuantity ${item.name} left in stock.');
+          }
+        }
+
+        // Write phase
+        for (final item in cart.items) {
+          final data = itemDocs[item.id]!.data() as Map<String, dynamic>;
+          final stockQuantity = (data['stockQuantity'] as num?)?.toInt();
+          if (stockQuantity != null) {
+            tx.update(itemDocs[item.id]!.reference, {
+              'stockQuantity': stockQuantity - item.quantity,
+            });
+          }
+        }
+      });
+
+      // 2. Create the Order
       final itemsDetail = cart.items
           .map((item) => {
                 'itemId': item.id,
@@ -598,7 +644,7 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
                 'price': item.price,
                 'quantity': item.quantity,
                 'total': item.total,
-              },)
+              })
           .toList();
 
       final resolvedCustomerPhone = await AuthService().resolveCustomerPhone(user);

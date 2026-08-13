@@ -61,7 +61,11 @@ class _BannerAdsSliderState extends State<BannerAdsSlider> {
   void initState() {
     super.initState();
     _pageController = PageController(viewportFraction: widget.viewportFraction);
-    _timer = Timer.periodic(const Duration(seconds: 3), (timer) {
+    // FIX (Aug 12 2026 — Nizam: "one by one ah slow va move aaguramari set
+    // pannlam" for the new 10-slide promo set): slowed the auto-scroll from
+    // 3s/400ms to 5s/700ms so each slide sits on screen long enough to
+    // actually read before it moves on, with a gentler glide between slides.
+    _timer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (!mounted) return;
       final total = widget.textSlides.length + widget.imageUrls.length;
       if (total <= 1) return;
@@ -70,7 +74,7 @@ class _BannerAdsSliderState extends State<BannerAdsSlider> {
         if (_pageController.hasClients) {
           _pageController.animateToPage(
             _currentPage,
-            duration: const Duration(milliseconds: 400),
+            duration: const Duration(milliseconds: 700),
             curve: Curves.easeInOut,
           );
         }

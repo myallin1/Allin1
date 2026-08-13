@@ -9,6 +9,9 @@ import 'package:flutter/foundation.dart';
 import 'dart:async';
 
 import 'package:google_sign_in/google_sign_in.dart';
+// NEW (Aug 12 2026 — Affiliate QR Generator): attributes a signup back
+// to whichever affiliate code, if any, is pending for this device.
+import 'affiliate_service.dart';
 // Phone cache (Aug 11 2026): removes a users/{uid} read from every booking.
 import 'hive_cache.dart';
 // GUEST MODE: upgradeGuestWithGoogle() reads the same 'campaign_source'
@@ -490,6 +493,7 @@ class AuthService {
         // assumes any real customer already has a complete profile.
         final prefs = await SharedPreferences.getInstance();
         final String? source = prefs.getString('campaign_source');
+        final String? refCode = prefs.getString(AffiliateService.kPendingCodeKey);
 
         await userDocRef.set({
           'uid': user.uid,
@@ -499,10 +503,23 @@ class AuthService {
           'phoneNumber': mobile,
           'phone': mobile,
           if (source != null) 'source': source,
+          if (refCode != null) 'referredBy': refCode,
           'isSetupComplete': true,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
+        // Fire-and-forget: writes the affiliate_leads/{uid} row (so the
+        // Admin monitor can list/filter/export WHO signed up through
+        // this QR, with the contact details needed to send offers) and
+        // then increments affiliate_codes/{refCode}.signups + clears the
+        // pending code so this account is never attributed twice.
+        unawaited(AffiliateService.instance.completeConversion(
+          uid: user.uid,
+          name: user.displayName ?? '',
+          phone: mobile,
+          email: user.email ?? '',
+          role: 'customer',
+        ));
       }
       // Existing profile: the typed mobile number is intentionally
       // discarded rather than overwriting a registered one.

@@ -26,9 +26,17 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show compute;
 import 'package:http/http.dart' as http;
-import 'package:image/image.dart' as img;
+
+// FIX (Aug 12 2026 — Nizam's non-blocking compression mandate): the
+// compression step now lives in its own conditionally-imported file so
+// web/PWA gets a browser-native Canvas encoder (fast, non-freezing)
+// while native (Android/iOS) keeps the existing compute()-isolate pure
+// -Dart ladder — see image_compressor_web.dart / image_compressor_stub.dart
+// for the full rationale. Same `if (dart.library.html)` convention
+// already used by crop_source_provider_*.dart and qr_image_saver_*.dart.
+import 'image_compressor_stub.dart'
+    if (dart.library.html) 'image_compressor_web.dart' as compressor;
 
 /// Your Cloudinary cloud name, e.g. 'dxyz1234a'. Find it on your
 /// Cloudinary dashboard home page (console.cloudinary.com).
@@ -86,8 +94,6 @@ class CloudinaryUploadService {
   // single knob for every KYC upload path in the app.
   static const int kDocumentTargetBytes = 500 * 1024; // ~500KB — KYC/ID
   static const int _defaultTargetBytes = kPhotoTargetBytes;
-  static const List<int> _qualitySteps = [88, 82, 75, 68, 60];
-  static const List<int> _dimensionSteps = [1920, 1600, 1280, 1080];
 
   // ── Delivery-side optimization ──────────────────────────────────
   /// Rewrites a Cloudinary `secure_url` to request an
@@ -147,30 +153,6 @@ class CloudinaryUploadService {
   // the hero/customer actually sees why (via debugPrint) instead of an
   // oversized file slipping through unnoticed.
 
-  /// Decodes + downscales + re-encodes [bytes] as a JPEG before upload,
-  /// stepping quality/dimension down until the result is at or under
-  /// [targetBytes] (or the floor of both step lists is reached — at
-  /// that point the smallest attempt made is used, since further
-  /// shrinking would make the document illegible).
-  /// Runs [_compressSync] on a background isolate.
-  ///
-  /// FIX (Aug 11 2026 — "Silicon Valley standard" pass): compression
-  /// used to run synchronously on the MAIN isolate. Decoding a 12MB
-  /// camera photo and then re-encoding it (up to 25 times, in the old
-  /// nested loop) froze the entire UI for several seconds on every
-  /// upload — by far the most user-visible defect in this pipeline.
-  /// `compute()` moves the whole thing to a background isolate on
-  /// native. On web, where real isolates aren't available, `compute()`
-  /// degrades to running inline — but the loop rewrite below cuts the
-  /// worst case from ~25 full JPEG encodes to ~9, so even the web path
-  /// is substantially faster than before.
-  Future<Uint8List> _compress(Uint8List bytes, {required int targetBytes}) {
-    return compute(
-      _compressInIsolate,
-      _CompressRequest(bytes: bytes, targetBytes: targetBytes),
-    );
-  }
-
   /// Uploads raw image bytes to Cloudinary and returns the resulting
   /// `secure_url`. [folder] is optional and just organizes uploads in
   /// the Cloudinary media library (e.g. 'home_kitchen_menu/{sellerId}').
@@ -194,7 +176,25 @@ class CloudinaryUploadService {
       );
     }
 
-    final compressed = await _compress(bytes, targetBytes: targetBytes);
+    // UPDATED (Aug 12 2026 — Nizam's non-blocking compression mandate):
+    // compression now runs through the conditionally-imported
+    // `compressor` module — image_compressor_web.dart's browser-native
+    // Canvas encoder on web/PWA (fast enough not to freeze the UI, see
+    // that file's header), image_compressor_stub.dart's compute()
+    // -isolate pure-Dart ladder on native (already off the UI thread
+    // there). Per explicit instruction, no user-facing "photo too
+    // large/slow" error is surfaced anymore — this generous 90s ceiling
+    // exists ONLY as a last-resort safety net so a genuinely stuck
+    // device can never re-create the old "Submit button disabled
+    // forever" bug; hitting it is treated as a normal upload failure
+    // (same catch/retry path as a dropped network call), not a
+    // size-blaming message.
+    final compressed = await compressor.compressImage(bytes, targetBytes: targetBytes).timeout(
+      const Duration(seconds: 90),
+      onTimeout: () => throw Exception(
+        'Could not process this photo right now. Please try again.',
+      ),
+    );
 
     final uri = Uri.parse(
       'https://api.cloudinary.com/v1_1/$kCloudinaryCloudName/image/upload',
@@ -209,8 +209,30 @@ class CloudinaryUploadService {
       request.fields['folder'] = folder;
     }
 
-    final streamedResponse = await request.send();
-    final response = await http.Response.fromStream(streamedResponse);
+    // FIX (Aug 12 2026 — root cause of "Hero Registration stuck forever,
+    // can't retry" bug report): request.send() had NO timeout anywhere.
+    // On a flaky/dropped connection this `await` can simply hang
+    // indefinitely — no exception, no error snackbar, nothing. Every
+    // caller (hero_register_screen.dart's _submitRegistration among
+    // others) awaits this INSIDE a try/finally that only resets its
+    // "submitting" flag in the finally block — which never runs if the
+    // await itself never resolves. That's exactly why the submit button
+    // stayed disabled forever and nothing ever reached the Firestore
+    // batch.commit() a few lines later in the caller (so nothing was
+    // ever written, and the hero never appeared in Admin's approval
+    // queue) — the whole flow was frozen mid-upload, not failing.
+    final streamedResponse = await request.send().timeout(
+      const Duration(seconds: 25),
+      onTimeout: () => throw Exception(
+        'Upload timed out — check your connection and try again.',
+      ),
+    );
+    final response = await http.Response.fromStream(streamedResponse).timeout(
+      const Duration(seconds: 15),
+      onTimeout: () => throw Exception(
+        'Upload timed out while finishing — check your connection and try again.',
+      ),
+    );
 
     if (response.statusCode != 200) {
       throw Exception(
@@ -227,81 +249,6 @@ class CloudinaryUploadService {
   }
 }
 
-/// Payload for [_compressInIsolate] — `compute()` accepts exactly one
-/// argument, so the two inputs are bundled here.
-class _CompressRequest {
-  const _CompressRequest({required this.bytes, required this.targetBytes});
-
-  final Uint8List bytes;
-  final int targetBytes;
-}
-
-/// Top-level (required by `compute()` — it cannot take a closure or an
-/// instance method) isolate entry point for image compression.
-Uint8List _compressInIsolate(_CompressRequest request) {
-  final decoded = img.decodeImage(request.bytes);
-  if (decoded == null) {
-    // Deliberately throws instead of falling back to the original raw
-    // bytes. See the class-level comment: a silent raw-bytes fallback is
-    // exactly how an 8.35MB document once reached Cloudinary untouched.
-    throw Exception(
-      'Could not read this image (unsupported or corrupt format). '
-      'Please try a different photo (JPEG works best).',
-    );
-  }
-
-  final targetBytes = request.targetBytes;
-  Uint8List? best;
-
-  // OPTIMIZED LOOP (Aug 11 2026): the old version tried every
-  // quality at every dimension — up to 5x5 = 25 full JPEG encodes,
-  // each one costing real CPU on a large image. This version probes
-  // each dimension ONCE at the lowest permitted quality first: if even
-  // that is over budget, no higher quality at this dimension could
-  // possibly fit, so we skip straight to the next (smaller) dimension
-  // after a single encode instead of five wasted ones. Only once a
-  // dimension is known to be viable do we step quality downward from
-  // the top to find the BEST quality that still fits. Worst case drops
-  // from 25 encodes to ~9, and the common case (a normal phone photo,
-  // which fits at the very first dimension) is 2-3.
-  //
-  // Preference order is deliberate and unchanged: a larger dimension at
-  // slightly lower quality beats a smaller dimension at higher quality,
-  // because detail/legibility (especially printed text on an ID) tracks
-  // pixel dimensions far more than it tracks JPEG quality.
-  for (final dimension in CloudinaryUploadService._dimensionSteps) {
-    img.Image resized = decoded;
-    if (decoded.width > dimension || decoded.height > dimension) {
-      resized = decoded.width >= decoded.height
-          ? img.copyResize(decoded, width: dimension)
-          : img.copyResize(decoded, height: dimension);
-    }
-
-    final qualities = CloudinaryUploadService._qualitySteps;
-
-    // Cheap viability probe at the quality floor.
-    final floorQuality = qualities.last;
-    final floorJpg =
-        Uint8List.fromList(img.encodeJpg(resized, quality: floorQuality));
-    if (best == null || floorJpg.length < best.length) best = floorJpg;
-    if (floorJpg.length > targetBytes) {
-      // Even the floor doesn't fit at this size — go smaller.
-      continue;
-    }
-
-    // This dimension IS viable. Find the highest quality that fits.
-    for (final quality in qualities) {
-      if (quality == floorQuality) return floorJpg; // already computed
-      final jpg = Uint8List.fromList(img.encodeJpg(resized, quality: quality));
-      if (jpg.length <= targetBytes) return jpg;
-    }
-    return floorJpg;
-  }
-
-  // Dimension floor reached without hitting the target — use the
-  // smallest attempt made (a genuine best-effort, not a silent no-op)
-  // so document text stays as legible as possible rather than being
-  // crushed further. Note the floors are now 1080px/q60, so even this
-  // worst case is still a legitimately HD result.
-  return best!;
-}
+// Compression itself now lives entirely in image_compressor_web.dart /
+// image_compressor_stub.dart (imported above as `compressor`) — see
+// those files for the per-platform implementation.

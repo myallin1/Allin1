@@ -8,6 +8,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 // Phone cache warm-up on sign-in (Aug 11 2026).
 import '../services/auth_service.dart';
+import '../services/hive_cache.dart';
 import '../services/local_sync_service.dart';
 
 // ================================================================
@@ -163,6 +164,20 @@ class _CustomerLoginScreenState extends State<CustomerLoginScreen> {
       // caches for good.
       if (!existingDoc.exists) {
         await AuthService().cacheCustomerPhone(user.uid, mobile);
+        await HiveCache.cacheUserProfile({
+          'name': user.displayName ?? '',
+          'email': user.email ?? '',
+          'phone': mobile,
+        });
+      } else {
+        final data = existingDoc.data() ?? {};
+        final cachedPhone = (data['phoneNumber'] as String?) ?? (data['phone'] as String?) ?? '';
+        await AuthService().cacheCustomerPhone(user.uid, cachedPhone);
+        await HiveCache.cacheUserProfile({
+          'name': (data['name'] as String?) ?? user.displayName ?? '',
+          'email': (data['email'] as String?) ?? user.email ?? '',
+          'phone': cachedPhone,
+        });
       }
 
       // FIX (CTO-confirmed edge case): existingDoc.exists == true means

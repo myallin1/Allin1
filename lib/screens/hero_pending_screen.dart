@@ -14,10 +14,18 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../services/hero_onboarding_cache.dart';
 import '../services/theme_service.dart';
-import 'bike_taxi/hero_dashboard_shell.dart';
 import 'hero_login_screen.dart';
+import 'hero_welcome_screen.dart';
+
+// NEW (Aug 12 2026 — Nizam: "register page la kaatura mariye whatsapp
+// admin to raise ur onboarding reuest nu whatsapp button kaatanum"):
+// same placeholder pattern as hero_register_screen.dart's
+// _adminWhatsApp — replace with the real number before release.
+const String _kAdminWhatsApp = '91XXXXXXXXXX';
 
 // THEME FIX (merge duplicate registration/status flows): this screen used
 // to be dark theme and only showed a generic hourglass card. It's now the
@@ -231,15 +239,30 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
       }
 
       if (approvalStatus == 'approved') {
+        // Sync the local boot-routing cache the moment we learn about
+        // approval, so the NEXT app boot on this device skips straight
+        // to HeroDashboardShell with zero Firestore read (see
+        // hero_onboarding_cache.dart / main_hero.dart's _HeroSetupGate).
+        unawaited(HeroOnboardingCache.setApproved());
+        // UPDATED (Aug 12 2026 — Nizam: "admin kuduthathum onboarding
+        // animation la irunthu 'welcome to allin1' nu screen la
+        // kaatanum"): used to jump straight to HeroDashboardShell here.
+        // Now routes through HeroWelcomeScreen first, which plays a
+        // short celebratory animation and then continues into the
+        // dashboard on its own — same "no need to reopen/tap anything"
+        // guarantee, just with the welcome moment in between.
         _triggerNavigation(() {
           if (mounted) {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute<void>(builder: (_) => const HeroDashboardShell()),
+              MaterialPageRoute<void>(builder: (_) => const HeroWelcomeScreen()),
             );
           }
         });
       } else if (approvalStatus == 'rejected' || approvalStatus == 'blocked') {
+        // Clear the local cache so a stale 'pending' flag can never block
+        // a legitimate future re-registration attempt after sign-out.
+        unawaited(HeroOnboardingCache.clear());
         _triggerNavigation(() async {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -263,6 +286,61 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
       }
       // else: remain on pending screen
     });
+  }
+
+  bool _manualChecking = false;
+
+  // NEW (Aug 12 2026 — Nizam: "a manual 'Check Approval Status' refresh
+  // button"): a one-off .get() distinct from the always-on .snapshots()
+  // stream above — purely a reassurance affordance for the hero (the
+  // live listener already reacts instantly; this just lets them
+  // confirm nothing is stuck).
+  Future<void> _checkApprovalNow() async {
+    if (_manualChecking) return;
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+    setState(() => _manualChecking = true);
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('heroes')
+          .doc(currentUser.uid)
+          .get();
+      final status = snap.data()?['approvalStatus']?.toString().trim().toLowerCase();
+      if (!mounted) return;
+      if (status != null && status != _approvalStatus) {
+        setState(() => _approvalStatus = status);
+      }
+      if (status != 'approved') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Still pending admin approval. We\'ll auto-open your dashboard the moment it\'s approved.')),
+        );
+      }
+      // approved/rejected transitions are handled by the live listener
+      // above, which will fire independently of this manual check.
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not check status right now. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _manualChecking = false);
+    }
+  }
+
+  Future<void> _launchWhatsAppFollowUp() async {
+    final message = Uri.encodeComponent(
+      'I have submitted my registration. Please check and verify my proof '
+      'details, then approve soon.',
+    );
+    final url = Uri.parse('https://wa.me/$_kAdminWhatsApp?text=$message');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to open WhatsApp')),
+      );
+    }
   }
 
   void _triggerNavigation(FutureOr<void> Function() navigateAction) {
@@ -373,7 +451,17 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
   @override
   Widget build(BuildContext context) {
     _syncHeroPendingPalette(context);
-    return Scaffold(
+    // NEW (Aug 12 2026 — Nizam: "antha page vittu hero app again
+    // register page ku pogakudathu... onboarding waiting page laye
+    // irukanum"): blocks back navigation off this screen entirely while
+    // still pending — the only ways out are the live approval listener
+    // above (pushReplacement into HeroWelcomeScreen) or the
+    // rejected/blocked branch (which explicitly signs out first). A
+    // hero can never back-button their way into a stale registration
+    // form or a half-set-up state.
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
       backgroundColor: kBg,
       body: SafeArea(
         child: Center(
@@ -501,6 +589,54 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
                     ],
                   ),
                 ),
+                if (!_isApproved) ...[
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _manualChecking ? null : _checkApprovalNow,
+                      icon: _manualChecking
+                          ? SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: kPurple),
+                            )
+                          : Icon(Icons.refresh_rounded, color: kPurple, size: 20),
+                      label: Text(
+                        _manualChecking ? 'Checking…' : 'Check Approval Status',
+                        style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: kPurple),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // NEW (Aug 12 2026 — Nizam: "register page la kaatura
+                  // mariye whatsapp admin to raise ur onboarding reuest
+                  // nu whatsapp button kaatanum"): same fallback pattern
+                  // as the registration form's WhatsApp card, so a hero
+                  // waiting on approval can nudge admin directly instead
+                  // of just staring at the tracker.
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _launchWhatsAppFollowUp,
+                      icon: const Icon(Icons.chat_rounded, color: Color(0xFF25D366), size: 20),
+                      label: Text(
+                        'Raise Onboarding Request via WhatsApp',
+                        style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFF25D366)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 CircularProgressIndicator(
                   color: _isApproved ? kGreen : kPurple,
@@ -510,6 +646,7 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

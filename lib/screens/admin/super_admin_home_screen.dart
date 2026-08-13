@@ -21,6 +21,9 @@ import 'admin_ai_settings_screen.dart';
 import 'admin_dashboard_screen.dart';
 import 'admin_food_orders_screen.dart';
 import 'admin_orders_cleanup_screen.dart';
+import 'admin_affiliate_leads_screen.dart';
+import 'admin_affiliate_qr_screen.dart';
+import 'admin_map_simulation_screen.dart';
 import 'admin_qr_generator_screen.dart';
 import 'admin_service_requests_screen.dart';
 import 'admin_sos_kyc_approvals_screen.dart';
@@ -252,6 +255,22 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
   // fully reversible, so it no longer needs a confirmation dialog at
   // all. Tab-reset-first behavior is unchanged.
   void _handleBackPress() {
+    // FIX (Aug 12 2026 — ROOT CAUSE of "back button minimizes the admin
+    // app instead of navigating back"): this screen wraps its Scaffold
+    // in PopScope(canPop: false). Flutter's Scaffold normally installs
+    // its OWN back handler to close an open drawer — but a
+    // canPop:false PopScope sits ABOVE the Scaffold in the widget tree
+    // and intercepts the system back press first, so that built-in
+    // drawer-close handler never runs. The press fell straight through
+    // to the minimize branch below: admin opens the drawer, presses
+    // back expecting the drawer to close, and the whole app minimizes
+    // instead. Closing an open drawer must therefore be handled
+    // explicitly here, BEFORE any tab-reset or minimize logic.
+    final scaffold = _scaffoldKey.currentState;
+    if (scaffold != null && scaffold.isDrawerOpen) {
+      Navigator.of(context).pop();
+      return;
+    }
     if (_tabIndex != 0) {
       _goToTab(0);
       return;
@@ -871,7 +890,15 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute<void>(builder: (_) => const AdminTaxiRidesScreen()),
+                  MaterialPageRoute<void>(
+                    // Named to match admin_alert_notification_service.dart's
+                    // dedupe check — without this, opening Taxi from the
+                    // drawer and THEN tapping a ride notification would
+                    // still stack a second copy (each with its own live
+                    // rides listener). Same name = one instance, always.
+                    settings: const RouteSettings(name: '/admin/taxi-rides'),
+                    builder: (_) => const AdminTaxiRidesScreen(),
+                  ),
                 );
               },
             ),
@@ -1000,6 +1027,59 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 );
               },
             ),
+            // NEW (Aug 12 2026 — "QR Monkey" affiliate system): trackable
+            // referral QR codes for hero recruitment, customer growth
+            // campaigns, and seller onboarding agents. See
+            // admin_affiliate_qr_screen.dart / affiliate_service.dart.
+            ListTile(
+              leading: const Icon(Icons.share_rounded, color: Color(0xFFFF4FA3)),
+              title: const Text('Affiliate QR Generator', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Trackable referral QR codes with live scan/signup stats',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const AdminAffiliateQrScreen()),
+                );
+              },
+            ),
+            // NEW (Aug 12 2026 — Nizam: "yevlo peru link kulla vanthanga,
+            // yevlo peru login pandranga... mobile number and mail id
+            // list... pdf and excel export"): the WHO behind the QR
+            // counters, with filters, funnel analytics and CSV export.
+            // Uses incremental fetch (only rows newer than the local
+            // cache) to keep Firestore reads down — see the screen's
+            // header for the full reasoning.
+            ListTile(
+              leading: const Icon(Icons.insights_rounded, color: Color(0xFFFF4FA3)),
+              title: const Text('QR Leads & Analytics', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Who joined via QR + contacts, filters & CSV export',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const AdminAffiliateLeadsScreen()),
+                );
+              },
+            ),
+            // NEW (Aug 12 2026 — isolated, watermarked internal load-test
+            // harness). See admin_map_simulation_screen.dart's header for
+            // why this exists ONLY here, never in the customer/hero apps.
+            ListTile(
+              leading: const Icon(Icons.speed_rounded, color: Color(0xFFFF3B30)),
+              title: const Text('Map Load-Test (Internal)', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Fake-vehicle stress test — admin-only, watermarked',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const AdminMapSimulationScreen()),
+                );
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.update_rounded, color: _purple),
               title: const Text('Check for Updates', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
@@ -1016,6 +1096,26 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
               onTap: () {
                 Navigator.pop(context);
                 unawaited(_runAdminManualUpdateCheck(context));
+              },
+            ),
+            StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance.collection('system_settings').doc('app_status').snapshots(),
+              builder: (context, snapshot) {
+                final data = snapshot.data?.data() as Map<String, dynamic>?;
+                final showDemoVehicles = data?['show_demo_vehicles'] as bool? ?? false;
+                return SwitchListTile(
+                  secondary: const Icon(Icons.airport_shuttle, color: Color(0xFFB21FFF)),
+                  title: const Text('Demo Vehicles (Simulation)', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+                  subtitle: Text('Show simulated traffic loops on the map',
+                      style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+                  activeColor: const Color(0xFFB21FFF),
+                  value: showDemoVehicles,
+                  onChanged: (val) {
+                    FirebaseFirestore.instance.collection('system_settings').doc('app_status').set(
+                      {'show_demo_vehicles': val}, SetOptions(merge: true)
+                    );
+                  },
+                );
               },
             ),
             ListTile(

@@ -12,6 +12,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:provider/provider.dart';
 
+import '../services/hive_cache.dart';
 import '../services/local_sync_service.dart';
 import '../services/theme_service.dart';
 
@@ -74,44 +75,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadUserData();
   }
 
-  void _loadUserData() {
+  void _loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      setState(() {
-        _currentUser = user;
-        _nameController.text = user.displayName ?? '';
-        _emailController.text = user.email ?? '';
-        // FIX (audit: "mobile number view agala" — customer-reported
-        // bug): this used to read user.phoneNumber straight off the
-        // FirebaseAuth object, which is ONLY ever populated by actual
-        // phone-OTP auth. Every Google-Sign-In customer's real mobile
-        // number lives in Firestore (users/{uid}.phoneNumber, with
-        // .phone kept in sync — see customer_login_screen.dart's
-        // _signUpWithGoogle), never in FirebaseAuth's own phoneNumber
-        // field, so this field was blank for every Google-Sign-In
-        // customer even though the number was on file. Falls back to
-        // the Auth field too, in case a future phone-OTP flow does
-        // populate it directly.
-        _phoneController.text = user.phoneNumber ?? '';
-      });
-      unawaited(_loadPhoneFromFirestore(user.uid));
+      _currentUser = user;
+      
+      // Zero Database Wastage: Try local cache first
+      final cachedProfile = await HiveCache.getCachedUserProfile();
+      if (cachedProfile != null) {
+        if (mounted) {
+          setState(() {
+            _nameController.text = cachedProfile['name']?.toString() ?? user.displayName ?? '';
+            _emailController.text = cachedProfile['email']?.toString() ?? user.email ?? '';
+            _phoneController.text = cachedProfile['phone']?.toString() ?? user.phoneNumber ?? '';
+          });
+        }
+      } else {
+        // Fallback to Auth + Firestore if cache is totally empty
+        if (mounted) {
+          setState(() {
+            _nameController.text = user.displayName ?? '';
+            _emailController.text = user.email ?? '';
+            _phoneController.text = user.phoneNumber ?? '';
+          });
+        }
+        unawaited(_loadProfileFromFirestore(user.uid));
+      }
     }
   }
 
-  Future<void> _loadPhoneFromFirestore(String uid) async {
+  Future<void> _loadProfileFromFirestore(String uid) async {
     try {
       final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      final data = doc.data();
-      final phone = (data?['phoneNumber'] as String?)?.trim();
-      final phoneAlt = (data?['phone'] as String?)?.trim();
-      final resolved = (phone != null && phone.isNotEmpty)
+      final data = doc.data() ?? {};
+      final phone = (data['phoneNumber'] as String?)?.trim();
+      final phoneAlt = (data['phone'] as String?)?.trim();
+      final resolvedPhone = (phone != null && phone.isNotEmpty)
           ? phone
           : (phoneAlt != null && phoneAlt.isNotEmpty ? phoneAlt : null);
-      if (resolved != null && mounted) {
-        setState(() => _phoneController.text = resolved);
+          
+      final name = data['name'] as String? ?? _currentUser?.displayName ?? '';
+      final email = data['email'] as String? ?? _currentUser?.email ?? '';
+
+      if (mounted) {
+        setState(() {
+          if (resolvedPhone != null) _phoneController.text = resolvedPhone;
+          if (name.isNotEmpty) _nameController.text = name;
+          if (email.isNotEmpty) _emailController.text = email;
+        });
       }
+      
+      // Warm up the cache for next time
+      await HiveCache.cacheUserProfile({
+        'name': name,
+        'email': email,
+        'phone': resolvedPhone ?? '',
+      });
     } catch (_) {
-      // Non-fatal — the Auth-field fallback set above stays as-is.
+      // Non-fatal fallback
     }
   }
 
@@ -122,8 +143,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       if (_currentUser != null) {
-        await _currentUser!.updateDisplayName(_nameController.text.trim());
-        // Phone update requires re-verification
+        final newName = _nameController.text.trim();
+        await _currentUser!.updateDisplayName(newName);
+        
+        // Write to Firestore
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(_currentUser!.uid)
+            .set({
+          'name': newName,
+          'email': _emailController.text.trim(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        // Update Local Cache immediately (Zero Wastage)
+        await HiveCache.cacheUserProfile({
+          'name': newName,
+          'email': _emailController.text.trim(),
+          'phone': _phoneController.text.trim(),
+        });
       }
 
       if (mounted) {

@@ -11,6 +11,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/food_models.dart';
+import 'affiliate_service.dart';
 import 'db_usage_tracker.dart';
 
 class FoodSellerService {
@@ -41,6 +42,18 @@ class FoodSellerService {
     try {
       await _sellerDocRef(seller.id).set(seller.toJson());
       debugPrint('[FoodSellerService] Seller profile created: ${seller.id}');
+      // NEW (Aug 12 2026 — Affiliate QR Generator): covers ALL seller
+      // onboarding flows (food/grocery/electronics) since they all call
+      // this one method — increments the referring code's signup
+      // counter if this seller came in from an affiliate link.
+      unawaited(AffiliateService.instance.completeConversion(
+        uid: seller.id,
+        name: seller.name,
+        phone: seller.phone,
+        email: _auth.currentUser?.email ?? '',
+        city: seller.city,
+        role: 'seller',
+      ));
     } catch (e) {
       debugPrint('[FoodSellerService] Failed to create seller profile: $e');
       rethrow;

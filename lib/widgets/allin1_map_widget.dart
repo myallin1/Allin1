@@ -700,6 +700,17 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
                         .toList(),
                   ),
                 MarkerLayer(
+                  // FIX (Aug 12 2026 — customer-facing demo-vehicle
+                  // removal): this used to silently merge
+                  // MapSimulationService.instance.simulatedMarkers into
+                  // EVERY map on EVERY screen (customer + hero), driven by
+                  // a remote Firestore flag. That made it possible for
+                  // fake vehicles to appear on a real customer's live map.
+                  // The simulation is now confined entirely to
+                  // admin_map_simulation_screen.dart, which builds this
+                  // same widget with its own `markers:` list explicitly —
+                  // this widget itself no longer knows the simulation
+                  // service exists.
                   markers: widget.markers
                       .asMap()
                       .entries
@@ -720,6 +731,7 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
                                 icon: m.icon,
                                 assetPath: m.assetPath,
                                 bearingDegrees: m.bearingDegrees,
+                                circular: m.circular,
                               ),
                             ),
                           );
@@ -937,12 +949,14 @@ class _DefaultMarker extends StatelessWidget {
   final IconData icon;
   final String? assetPath;
   final double? bearingDegrees;
+  final bool circular;
 
   const _DefaultMarker({
     required this.color,
     required this.icon,
     this.assetPath,
     this.bearingDegrees,
+    this.circular = false,
   });
 
   @override
@@ -967,24 +981,41 @@ class _DefaultMarker extends StatelessWidget {
     }
 
     if (assetPath != null) {
+      final assetImage = Image.asset(
+        assetPath!,
+        width: 45,
+        height: 45,
+        fit: BoxFit.cover,
+        // gaplessPlayback stops a GIF's animation from restarting from
+        // frame 0 every time this widget is rebuilt (e.g. every 1s
+        // simulation tick) -- that restart-per-rebuild was the exact
+        // cause of the earlier "jittering" bug. With this on, the same
+        // underlying animation controller just keeps playing through.
+        gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => Icon(
+          icon,
+          color: Colors.white,
+          size: 20,
+        ),
+      );
+      final clipped = circular
+          ? ClipOval(
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: [
+                    BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 10, spreadRadius: 1),
+                  ],
+                ),
+                child: assetImage,
+              ),
+            )
+          : assetImage;
       return SizedBox(
         width: 45,
         height: 45,
-        child: Center(
-          child: rotateIfNeeded(
-            Image.asset(
-              assetPath!,
-              width: 45,
-              height: 45,
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => Icon(
-                icon,
-                color: Colors.white,
-                size: 20,
-              ),
-            ),
-          ),
-        ),
+        child: Center(child: rotateIfNeeded(clipped)),
       );
     }
 
@@ -1029,6 +1060,11 @@ class MapMarker {
   final String? assetPath;
   final double? bearingDegrees;
   final double size;
+  // NEW (Aug 12 2026 — circular hero marker request): opt-in only,
+  // defaults false, so every existing caller (real ride markers,
+  // vehicle sim markers, etc.) renders exactly as before. Only
+  // MapSimulationService's hero avatar sets this true.
+  final bool circular;
 
   const MapMarker({
     required this.point,
@@ -1038,6 +1074,7 @@ class MapMarker {
     this.assetPath,
     this.bearingDegrees,
     this.size = 56,
+    this.circular = false,
   });
 }
 

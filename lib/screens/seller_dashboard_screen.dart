@@ -11,12 +11,16 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../models/food_models.dart';
 import '../models/service_request_model.dart';
 import '../services/app_minimizer_service.dart';
 import '../services/db_usage_tracker.dart';
 import '../services/food_seller_service.dart';
+import '../services/hive_cache.dart';
+import '../services/seller_foreground_service.dart';
+import '../services/seller_live_alert_service.dart';
 import 'seller_custom_hotel_builder_screen.dart';
 import 'seller_electronics_dashboard_screen.dart';
 import 'seller_grocery_dashboard_screen.dart';
@@ -195,6 +199,10 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         _isLoadingProfile = false;
       });
 
+      // Start zero-delay background notification alarm
+      SellerForegroundService.start();
+      SellerLiveAlertService.instance.start(uid);
+
       _listenToOrders(uid);
       _listenToCatalogOrders(uid);
       _listenToCustomHotelOrders(uid);
@@ -220,7 +228,15 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   // missing piece that let orders vanish for the seller. Equality-only
   // filters (requestType + details.sellerId + status whereIn), no
   // orderBy, so no composite index is needed.
-  void _listenToCatalogOrders(String sellerId) {
+  void _listenToCatalogOrders(String sellerId) async {
+    // 1. Hydrate from cache immediately
+    final cached = await HiveCache.getCachedSellerOrders('${sellerId}_catalog');
+    if (cached != null && mounted) {
+      setState(() {
+        _catalogOrders = cached.map((c) => ServiceRequestModel.fromJson(c as Map<String, dynamic>)).toList();
+      });
+    }
+
     _catalogOrdersSub = FirebaseFirestore.instance
         .collection('service_requests')
         .where('requestType', isEqualTo: 'catalog_food_order')
@@ -236,9 +252,12 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         .listen((snap) {
       DbUsageTracker.instance
           .recordRead(snap.docs.length, 'seller_catalog_orders');
+      
+      final models = snap.docs.map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id)).toList();
+      HiveCache.cacheSellerOrders('${sellerId}_catalog', models.map((m) => m.toJson()).toList());
+      
       if (mounted) {
-        setState(() => _catalogOrders =
-            snap.docs.map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id)).toList());
+        setState(() => _catalogOrders = models);
       }
     }, onError: (Object e) {
       debugPrint('[SellerDashboard] Catalog orders listener error: $e');
@@ -249,7 +268,15 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   // proven pattern as _listenToCatalogOrders above — requestType
   // 'custom_hotel_order' instead of 'catalog_food_order', everything
   // else identical.
-  void _listenToCustomHotelOrders(String sellerId) {
+  void _listenToCustomHotelOrders(String sellerId) async {
+    // 1. Hydrate from cache immediately
+    final cached = await HiveCache.getCachedSellerOrders('${sellerId}_custom');
+    if (cached != null && mounted) {
+      setState(() {
+        _customHotelOrders = cached.map((c) => ServiceRequestModel.fromJson(c as Map<String, dynamic>)).toList();
+      });
+    }
+
     _customHotelOrdersSub = FirebaseFirestore.instance
         .collection('service_requests')
         .where('requestType', isEqualTo: 'custom_hotel_order')
@@ -265,9 +292,12 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         .listen((snap) {
       DbUsageTracker.instance
           .recordRead(snap.docs.length, 'seller_custom_hotel_orders');
+      
+      final models = snap.docs.map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id)).toList();
+      HiveCache.cacheSellerOrders('${sellerId}_custom', models.map((m) => m.toJson()).toList());
+      
       if (mounted) {
-        setState(() => _customHotelOrders =
-            snap.docs.map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id)).toList());
+        setState(() => _customHotelOrders = models);
       }
     }, onError: (Object e) {
       debugPrint('[SellerDashboard] Custom hotel orders listener error: $e');
@@ -511,7 +541,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
       // NEW (CTO mandate — Universal Side Tray Banner): Seller app had
       // no drawer before this — AppBar auto-shows the hamburger icon
       // once `drawer:` is set.
-      drawer: const SellerSideDrawer(),
+      drawer: SellerSideDrawer(seller: _seller),
       appBar: AppBar(
         title: Text(
           _seller?.name ?? 'Seller Dashboard',
@@ -523,10 +553,16 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         backgroundColor: _surface,
         elevation: 0,
         actions: [
+          if (_seller?.role != 'staff')
+            IconButton(
+              icon: const Icon(Icons.menu_book, color: _muted),
+              tooltip: 'Manage Menu',
+              onPressed: _navigateToMenuSetup,
+            ),
           IconButton(
-            icon: const Icon(Icons.menu_book, color: _muted),
-            tooltip: 'Manage Menu',
-            onPressed: _navigateToMenuSetup,
+            icon: const Icon(Icons.qr_code, color: _muted),
+            tooltip: 'Store QR Code',
+            onPressed: _showQrCodeDialog,
           ),
           IconButton(
             icon: const Icon(Icons.refresh, color: _muted),
@@ -539,17 +575,18 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
           // FIX (Nizam's request: same theme-switcher pattern as
           // customer/hero apps) -- seller app had no Settings entry
           // point at all before this.
-          IconButton(
-            icon: const Icon(Icons.settings_outlined, color: _muted),
-            tooltip: 'Settings',
-            onPressed: () {
-              Navigator.of(context).push<void>(
-                MaterialPageRoute<void>(
-                  builder: (_) => const SellerSettingsScreen(),
-                ),
-              );
-            },
-          ),
+          if (_seller?.role != 'staff')
+            IconButton(
+              icon: const Icon(Icons.settings_outlined, color: _muted),
+              tooltip: 'Settings',
+              onPressed: () {
+                Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const SellerSettingsScreen(),
+                  ),
+                );
+              },
+            ),
         ],
       ),
       body: RefreshIndicator(
@@ -566,7 +603,11 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
             children: <Widget>[
               _buildOnlineToggle(),
               const SizedBox(height: 16),
+              _buildQuickMenuToggle(),
+              const SizedBox(height: 16),
               _buildStatsRow(),
+              const SizedBox(height: 16),
+              _buildWalletCard(),
               const SizedBox(height: 20),
               _buildCustomHotelEntry(),
               const SizedBox(height: 20),
@@ -576,6 +617,156 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         ),
       ),
       ),
+    );
+  }
+
+  void _showQrCodeDialog() {
+    if (_seller == null) return;
+    
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: _card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(
+            'Your Store QR Code',
+            style: GoogleFonts.outfit(
+              color: _text,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Customers can scan this to view your menu instantly.',
+                style: GoogleFonts.outfit(color: _muted, fontSize: 14),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: QrImageView(
+                  data: 'https://allin1.com/store/${_seller!.id}',
+                  version: QrVersions.auto,
+                  size: 200.0,
+                  backgroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'Close',
+                style: GoogleFonts.outfit(color: _teal),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildQuickMenuToggle() {
+    if (_seller == null) return const SizedBox.shrink();
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('sellers')
+          .doc(_seller!.id)
+          .collection('menu')
+          .limit(10) // Show top items
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Quick Toggle',
+              style: GoogleFonts.outfit(
+                color: _text,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 100,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: snapshot.data!.docs.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, index) {
+                  final doc = snapshot.data!.docs[index];
+                  final data = doc.data() as Map<String, dynamic>;
+                  final name = data['name'] as String? ?? 'Item';
+                  final isAvailable = data['isAvailable'] as bool? ?? true;
+
+                  return Container(
+                    width: 140,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: _card,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _border),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            name,
+                            style: GoogleFonts.outfit(
+                              color: _text,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              isAvailable ? 'In Stock' : 'Out',
+                              style: TextStyle(
+                                color: isAvailable ? _green : _red,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Switch(
+                              value: isAvailable,
+                              activeColor: _green,
+                              inactiveThumbColor: _red,
+                              onChanged: (val) async {
+                                await doc.reference.update({'isAvailable': val});
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -704,6 +895,91 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
           color: _gold,
         ),
       ],
+    );
+  }
+
+  Widget _buildWalletCard() {
+    if (_seller == null || _seller!.role == 'staff') return const SizedBox.shrink();
+    
+    // Default to 0 if null
+    final pending = _seller!.pendingPayouts;
+    final settled = _seller!.totalSettled;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Payouts & Settlement',
+            style: GoogleFonts.outfit(
+              color: _text,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pending',
+                      style: GoogleFonts.outfit(
+                        color: _muted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '₹${pending.toStringAsFixed(2)}',
+                      style: GoogleFonts.outfit(
+                        color: _orange,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(width: 1, height: 40, color: _border),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Total Settled',
+                      style: GoogleFonts.outfit(
+                        color: _muted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '₹${settled.toStringAsFixed(2)}',
+                      style: GoogleFonts.outfit(
+                        color: _green,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

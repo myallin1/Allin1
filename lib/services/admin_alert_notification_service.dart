@@ -124,15 +124,42 @@ class AdminAlertNotificationService {
       final type = data['type'] as String? ?? '';
       final navigator = navigatorKey.currentState;
       if (navigator == null) return;
-      if (type == 'admin_new_ride') {
-        await navigator.push(
-          MaterialPageRoute<void>(builder: (_) => const AdminTaxiRidesScreen()),
-        );
-      } else {
-        await navigator.push(
-          MaterialPageRoute<void>(builder: (_) => const AdminNewOrdersScreen()),
-        );
+
+      // FIX (Aug 12 2026 — ROOT CAUSE of "the Taxi page hangs, and back
+      // doesn't go where it should"): this used to push() blindly on
+      // every notification tap. On a busy evening the admin taps 5 ride
+      // alerts and gets FIVE stacked copies of AdminTaxiRidesScreen —
+      // each one mounting its own live rides .snapshots() listener. The
+      // duplicated listeners compete for the same data and steadily eat
+      // memory/CPU (the "hang"), and the back button then has to pop
+      // through every duplicate before returning anywhere useful, which
+      // reads to the admin as back being broken.
+      //
+      // Named routes + a popUntil-first pass make this idempotent: if
+      // the target screen is already somewhere in the stack we return to
+      // the existing instance instead of creating another, so there is
+      // never more than one copy and back always lands on Home.
+      final routeName =
+          type == 'admin_new_ride' ? '/admin/taxi-rides' : '/admin/new-orders';
+
+      var alreadyOpen = false;
+      navigator.popUntil((route) {
+        if (route.settings.name == routeName) alreadyOpen = true;
+        return true; // inspect only — never actually pops
+      });
+      if (alreadyOpen) {
+        navigator.popUntil((route) => route.settings.name == routeName);
+        return;
       }
+
+      await navigator.push(
+        MaterialPageRoute<void>(
+          settings: RouteSettings(name: routeName),
+          builder: (_) => type == 'admin_new_ride'
+              ? const AdminTaxiRidesScreen()
+              : const AdminNewOrdersScreen(),
+        ),
+      );
     } catch (e) {
       debugPrint('[AdminAlertNotificationService] tap navigation failed: $e');
     }

@@ -11,11 +11,14 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../models/food_models.dart';
 import '../widgets/download_app_banner.dart';
 import 'seller_settings_screen.dart';
 
 class SellerSideDrawer extends StatelessWidget {
-  const SellerSideDrawer({super.key});
+  final SellerModel? seller;
+  
+  const SellerSideDrawer({super.key, this.seller});
 
   static const Color _teal = Color(0xFF11998E);
   static const Color _tealLight = Color(0xFF38EF7D);
@@ -63,17 +66,18 @@ class SellerSideDrawer extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            ListTile(
-              leading: const Icon(Icons.settings_rounded, color: _teal),
-              title: const Text('Settings', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(builder: (_) => const SellerSettingsScreen()),
-                );
-              },
-            ),
+            if (seller?.role != 'staff')
+              ListTile(
+                leading: const Icon(Icons.settings_rounded, color: _teal),
+                title: const Text('Settings', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(builder: (_) => const SellerSettingsScreen()),
+                  );
+                },
+              ),
             const Spacer(),
             const DownloadAppBanner(appVariant: 'seller'),
             Padding(

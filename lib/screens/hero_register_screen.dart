@@ -3,6 +3,8 @@
 // Allin1 Super App - Hero Onboarding
 // ================================================================
 
+import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -13,11 +15,16 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config/city_config.dart';
+import '../services/affiliate_service.dart';
 import '../services/cloudinary_upload_service.dart';
+import '../services/hero_onboarding_cache.dart';
 import '../services/hero_payment_qr_service.dart';
+import '../services/localization_service.dart';
 import '../services/location_service.dart';
 import '../widgets/hero_qr_pick_crop.dart';
 // ROUTING FIX (merge duplicate registration/status flows): this screen is
@@ -43,6 +50,16 @@ const Color _njPink = Color(0xFFFF4FA3); // NJ TECH brand pink
 const Color _text  = Color(0xFF201A22);
 const Color _muted = Color(0xFF8C7A88);
 const Color _red   = Color(0xFFE0245E);
+
+/// Result of the concurrent document-upload pass — carries both the
+/// successful URLs and a human-readable list of anything that failed,
+/// so the caller can abort the commit instead of silently registering a
+/// hero with missing proof documents.
+class _DocUploadResult {
+  const _DocUploadResult({required this.urls, required this.failures});
+  final Map<String, String> urls;
+  final List<String> failures;
+}
 
 class _HeroCategory {
   const _HeroCategory({
@@ -185,6 +202,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
             })();
       if (mounted) {
         setState(() => _selectedCity = matched ?? kDefaultCity);
+        _scheduleDraftSave();
       }
     } finally {
       if (mounted) setState(() => _detectingCity = false);
@@ -229,6 +247,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     );
     if (chosen != null && mounted) {
       setState(() => _selectedCity = chosen);
+      _scheduleDraftSave();
     }
   }
   String? _selectedVehicleType;
@@ -273,13 +292,162 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
   // writes) via a single try/finally in _submitRegistration(), and drives
   // a full-screen overlay (see build()) in addition to the button spinner.
   bool _isSubmitting = false;
+  // NEW (Aug 12 2026 — UI/UX re-audit, Nizam: "processing and uploading
+  // your documents... please wait", user must NEVER think the app is
+  // frozen): the overlay used to show one static line for the entire
+  // multi-second flow. Now updated at each real stage transition below
+  // so the hero sees concrete, honest progress (signing in -> uploading
+  // documents -> uploading selfie -> saving your registration) instead
+  // of one generic message the whole time.
+  String _submissionStatus = 'Getting ready…';
+
+  // NEW (Aug 12 2026 — Nizam: "particulara yenga problemo antha section
+  // la error kaatitu athe section la red error kaatanum and screen
+  // layum yenna error nu print aganum"): snackbars vanish after a few
+  // seconds and say nothing about WHERE the problem is. These drive a
+  // persistent red banner pinned above the Submit button
+  // (_buildErrorBanner) that names the failing section and the exact
+  // error text, and stays on screen until the next submit attempt.
+  String? _submitError;
+  String? _submitErrorSection;
+
+  void _setSubmitError(String section, String message) {
+    if (!mounted) return;
+    setState(() {
+      _submitErrorSection = section;
+      _submitError = message;
+    });
+  }
+
+  void _clearSubmitError() {
+    if (!mounted) return;
+    setState(() {
+      _submitErrorSection = null;
+      _submitError = null;
+    });
+  }
 
   // T2: CEO WhatsApp placeholder — replace 91XXXXXXXXXX with real number
   static const String _adminWhatsApp = '91XXXXXXXXXX';
   static const String _adminPhone    = '+91XXXXXXXXXX';
 
+  // NEW (Aug 12 2026 — Nizam: "form submit agalaina data yellame close
+  // agi again hero va front page ku kutitu varuthu, ithu too worst"):
+  // ROOT CAUSE of the total data loss. On WEB/PWA, _ensureSignedIn()
+  // below calls GoogleSignIn().signIn(); when the browser blocks the
+  // popup (very common on mobile Chrome), the plugin falls back to a
+  // full-page REDIRECT. A redirect tears down the entire Flutter app,
+  // so every controller, every picked photo and every selection on this
+  // screen is destroyed — and when the app reloads, _HeroSetupGate sees
+  // an unfinished hero and drops them on a blank registration form.
+  // Nothing was "closed" by our code; the page itself was replaced.
+  //
+  // Fix: continuously mirror the typed fields into SharedPreferences and
+  // restore them in initState(), so even a full page reload (redirect
+  // sign-in, accidental refresh, browser tab restore, app kill) brings
+  // the hero back to their filled-in form instead of an empty one.
+  // NOTE: only TEXT fields are drafted. Picked photo bytes are
+  // deliberately NOT persisted — they can be multi-MB each and would
+  // blow past SharedPreferences' practical size limits; the hero
+  // re-attaches photos only, which is a far smaller ask than retyping
+  // every field.
+  static const String _kDraftKey = 'hero_register_draft_v1';
+  Timer? _draftDebounce;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_restoreDraft());
+    unawaited(_restoreSavedQr());
+    for (final c in <TextEditingController>[
+      _nameController,
+      _phoneController,
+      _dobController,
+      _addressController,
+      _licenseNumberController,
+      _aadhaarController,
+      _panController,
+      _preferredLocationController,
+    ]) {
+      c.addListener(_scheduleDraftSave);
+    }
+  }
+
+  // FIX (Aug 12 2026 — same "QR shows as not uploaded" report): even
+  // once saving works, this screen never LOADED an already-saved QR, so
+  // a hero who added their QR, then reloaded/came back, saw the empty
+  // "Add your payment QR (optional)" state again despite it being
+  // saved on the device. Reads it back on mount.
+  Future<void> _restoreSavedQr() async {
+    final saved = await HeroPaymentQrService.instance.loadQr();
+    if (saved == null || !mounted) return;
+    setState(() => _paymentQrBytes = saved);
+  }
+
+  void _scheduleDraftSave() {
+    _draftDebounce?.cancel();
+    _draftDebounce = Timer(const Duration(milliseconds: 600), _saveDraft);
+  }
+
+  Future<void> _saveDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _kDraftKey,
+        jsonEncode(<String, dynamic>{
+          'name': _nameController.text,
+          'phone': _phoneController.text,
+          'dob': _dobController.text,
+          'address': _addressController.text,
+          'license': _licenseNumberController.text,
+          'aadhaar': _aadhaarController.text,
+          'pan': _panController.text,
+          'preferredLocation': _preferredLocationController.text,
+          'city': _selectedCity,
+          'vehicleType': _selectedVehicleType,
+          'agreed': _agreedEmergencyResponder,
+        }),
+      );
+    } catch (e) {
+      debugPrint('[HeroRegister] draft save failed (non-fatal): $e');
+    }
+  }
+
+  Future<void> _restoreDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kDraftKey);
+      if (raw == null || raw.isEmpty || !mounted) return;
+      final d = jsonDecode(raw) as Map<String, dynamic>;
+      _nameController.text = (d['name'] as String?) ?? '';
+      _phoneController.text = (d['phone'] as String?) ?? '';
+      _dobController.text = (d['dob'] as String?) ?? '';
+      _addressController.text = (d['address'] as String?) ?? '';
+      _licenseNumberController.text = (d['license'] as String?) ?? '';
+      _aadhaarController.text = (d['aadhaar'] as String?) ?? '';
+      _panController.text = (d['pan'] as String?) ?? '';
+      _preferredLocationController.text = (d['preferredLocation'] as String?) ?? '';
+      if (!mounted) return;
+      setState(() {
+        _selectedCity = d['city'] as String?;
+        _selectedVehicleType = d['vehicleType'] as String?;
+        _agreedEmergencyResponder = (d['agreed'] as bool?) ?? false;
+      });
+    } catch (e) {
+      debugPrint('[HeroRegister] draft restore failed (non-fatal): $e');
+    }
+  }
+
+  Future<void> _clearDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_kDraftKey);
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
+    _draftDebounce?.cancel();
     _nameController.dispose();
     _phoneController.dispose();
     _dobController.dispose();
@@ -359,9 +527,40 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     final existing = FirebaseAuth.instance.currentUser;
     if (existing != null) return existing;
 
+    // FIX (Aug 12 2026 — ROOT CAUSE of "form submit aagala, error kaatuchu
+    // but athukulla jump agi sign up page ku vanthuruchu"): on WEB this
+    // used google_sign_in's signIn(), which the console itself flags as
+    // deprecated ("The google_sign_in plugin `signIn` method is
+    // deprecated on the web"). That path opens a popup and then polls
+    // `window.closed` to detect completion — and the four
+    // "Cross-Origin-Opener-Policy policy would block the window.closed
+    // call" errors in the same console show the browser BLOCKING exactly
+    // that check. When the popup handshake can't complete, the plugin
+    // falls back to a full-page REDIRECT. A redirect reloads the entire
+    // Flutter app: the registration screen, the filled form, and the red
+    // error banner I added are all destroyed mid-submit, and the app
+    // re-boots into _HeroSetupGate which — with no completed setup —
+    // lands the hero on the login/sign-up page. That is precisely the
+    // "jump" Nizam described, and it also explains why the
+    // mobile-number error only flashed for an instant before vanishing:
+    // it WAS rendering correctly, the page just got torn down underneath
+    // it. It also explains the [cloud_firestore/permission-denied] in
+    // the console — post-reload code touching Firestore before an auth
+    // session exists.
+    //
+    // FirebaseAuth's own signInWithPopup() is the supported web path: it
+    // never redirects, so this screen stays mounted, the form keeps its
+    // data, and any error surfaces in the banner exactly as designed.
+    if (kIsWeb) {
+      final provider = GoogleAuthProvider()
+        ..addScope('email')
+        ..addScope('profile');
+      final cred = await FirebaseAuth.instance.signInWithPopup(provider);
+      return cred.user;
+    }
+
     final googleSignIn = GoogleSignIn(
-      clientId: kIsWeb ? _googleWebClientId : null,
-      serverClientId: kIsWeb ? null : _googleWebClientId,
+      serverClientId: _googleWebClientId,
       scopes: const ['email', 'profile'],
     );
     final googleUser = await googleSignIn.signIn();
@@ -477,16 +676,48 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
   /// successfully. If a single upload fails (network blip etc.) it's
   /// logged and skipped rather than blocking the whole registration —
   /// the hero can still fall back to WhatsApp/Call for that one doc.
-  Future<Map<String, String>> _uploadPickedDocPhotos(String uid) async {
-    final urls = <String, String>{};
+  /// Human-readable names for the error banner, keyed by the Firestore
+  /// field each upload targets.
+  static const Map<String, String> _docLabels = <String, String>{
+    'licenseDocUrl': 'License photo',
+    'aadhaarDocUrl': 'Aadhaar photo',
+    'panDocUrl': 'PAN photo',
+  };
+
+  /// FIX (Aug 12 2026 — pre-build audit, two real defects in one method):
+  ///
+  /// 1. SILENT PARTIAL SUBMISSION. Every per-document failure used to be
+  ///    swallowed with a debugPrint and skipped, so a hero whose uploads
+  ///    failed still sailed through to a successful Firestore commit —
+  ///    landing in Admin's approval queue with NO photos to verify
+  ///    against, and no indication to anyone that anything went wrong.
+  ///    That is very likely part of what Nizam saw as "form admin ku
+  ///    varala / half-a-varuthu". Failures are now collected and
+  ///    returned to the caller, which aborts the commit and names the
+  ///    exact failing document in the red banner.
+  ///
+  /// 2. SEQUENTIAL UPLOADS. The 3 documents uploaded one after another,
+  ///    each with its own compress + network round trip, so total submit
+  ///    time was the SUM of all of them (and the selfie after that).
+  ///    They're independent, so they now run concurrently via
+  ///    Future.wait — roughly 3-4x faster on the critical path, which is
+  ///    the single biggest UX win available in this pipeline.
+  Future<_DocUploadResult> _uploadPickedDocPhotos(String uid) async {
     final jobs = <String, PlatformFile?>{
       'licenseDocUrl': _licensePhoto,
       'aadhaarDocUrl': _aadhaarPhoto,
       'panDocUrl': _panPhoto,
     };
-    for (final entry in jobs.entries) {
+
+    final urls = <String, String>{};
+    final failures = <String>[];
+
+    await Future.wait(jobs.entries.map((entry) async {
       final file = entry.value;
-      if (file == null || file.bytes == null) continue;
+      if (file == null || file.bytes == null) {
+        failures.add(_docLabels[entry.key] ?? entry.key);
+        return;
+      }
       try {
         final url = await CloudinaryUploadService().uploadImageBytes(
           file.bytes!,
@@ -500,9 +731,11 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
         urls[entry.key] = url;
       } catch (e) {
         debugPrint('[HeroRegister] ${entry.key} upload failed: $e');
+        failures.add('${_docLabels[entry.key] ?? entry.key} ($e)');
       }
-    }
-    return urls;
+    }));
+
+    return _DocUploadResult(urls: urls, failures: failures);
   }
 
   Future<void> _submitRegistration() async {
@@ -562,12 +795,21 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       return;
     }
 
-    if (mounted) setState(() => _isSubmitting = true);
+    _clearSubmitError();
+    if (mounted) {
+      setState(() {
+        _isSubmitting = true;
+        _submissionStatus = 'Signing you in…';
+      });
+    }
     try {
       final user = await _ensureSignedIn();
       if (user == null) {
-        // Google picker was cancelled — not a real error, just stop here
-        // silently so the hero can retry without a scary red banner.
+        _setSubmitError(
+          'Sign-in',
+          'Sign-in was cancelled or blocked. Your details are saved — '
+          'just tap Submit again to retry.',
+        );
         return;
       }
       final vehicleType = _normalizeVehicleType(selectedVehicleType);
@@ -582,9 +824,25 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       // than silently creating a duplicate. Existing duplicates from
       // before this fix are not touched here — that needs Nizam's
       // decision on cleanup, tracked separately.
+      if (mounted) setState(() => _submissionStatus = 'Checking your details…');
+
       final enteredPhone =
           (user.phoneNumber ?? _phoneController.text.trim()).trim();
+      // FIX (Aug 12 2026 — the "mobile number problem" flash Nizam saw):
+      // this duplicate check is a QUERY across the whole heroes
+      // collection. It is a nice-to-have guard, NOT a precondition for
+      // registering — but any failure here (permission-denied on a
+      // collection listing, an offline blip, a missing index) used to
+      // propagate out to the generic catch blocks and abort the entire
+      // submission, blaming the hero's phone number for what is really
+      // an infrastructure problem. It is now best-effort: a genuine
+      // duplicate still blocks (that's the point), but if the CHECK
+      // itself cannot run, we log it and let registration proceed —
+      // heroes/{uid} is keyed by uid anyway, so the worst case is a
+      // duplicate row for admin to merge, which is far better than a
+      // real hero being unable to sign up at all.
       if (enteredPhone.isNotEmpty) {
+        try {
         final existing = await FirebaseFirestore.instance
             .collection('heroes')
             .where('phone', isEqualTo: enteredPhone)
@@ -593,27 +851,59 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
         final duplicate = existing.docs
             .any((doc) => doc.id != user.uid);
         if (duplicate) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'This phone number is already registered as a Hero. '
-                  'Please log in with your existing account instead.',
-                ),
-                backgroundColor: _red,
-              ),
-            );
-          }
+          _setSubmitError(
+            'Contact Number',
+            'This phone number is already registered as a Hero. '
+            'Please log in with your existing account instead, or use a '
+            'different number.',
+          );
           return;
+        }
+        } catch (e) {
+          // Check could not run — proceed rather than blocking a real
+          // hero. See the comment above this block for the reasoning.
+          debugPrint('[HeroRegister] duplicate-phone check skipped: $e');
         }
       }
 
-       // Upload the 3 mandatory doc photos (already validated present above).
-       final docUrls = await _uploadPickedDocPhotos(user.uid);
-       // NEW (CTO mandate — Advanced KYC & Facial Verification): live
-       // selfie, uploaded the same way, merged into the same Firestore
-       // write below via `...selfieUrl` exactly like `...docUrls`.
-       final selfieUrl = await _uploadSelfiePhoto(user.uid);
+       // Upload the 3 mandatory doc photos + the live selfie.
+       // UPDATED (Aug 12 2026 — pre-build audit): documents and selfie
+       // now upload CONCURRENTLY (they were strictly sequential, so the
+       // hero waited for the sum of 4 compress+upload round trips). All
+       // 4 are independent, so Future.wait cuts the critical path
+       // dramatically.
+       if (mounted) {
+         setState(() => _submissionStatus = 'Processing and uploading your documents…');
+       }
+       final uploads = await Future.wait(<Future<Object>>[
+         _uploadPickedDocPhotos(user.uid),
+         _uploadSelfiePhoto(user.uid),
+       ]);
+       final docResult = uploads[0] as _DocUploadResult;
+       final docUrls = docResult.urls;
+       final selfieUrl = uploads[1] as Map<String, String>;
+
+       // FIX (Aug 12 2026 — pre-build audit): previously ANY failed
+       // document upload was silently skipped and the registration
+       // committed anyway, putting a hero into Admin's approval queue
+       // with missing/absent proof photos and nobody aware of it. Since
+       // all 3 documents + the selfie are MANDATORY by policy (enforced
+       // in the validation block above), a failure here must abort the
+       // submission and say exactly which file failed — not quietly
+       // produce a half-registered hero.
+       final allFailures = <String>[
+         ...docResult.failures,
+         if (selfieUrl.isEmpty) 'Live selfie',
+       ];
+       if (allFailures.isNotEmpty) {
+         _setSubmitError(
+           'Document upload',
+           'These could not be uploaded: ${allFailures.join(', ')}. '
+           'Nothing has been submitted yet — check your connection and '
+           'tap Submit again, or re-attach the affected photo.',
+         );
+         return;
+       }
 
        // Save to heroes collection AND mark users/{uid}.isSetupComplete —
        // FIX (Aug 8 2026 — root cause of "already-registered pending hero
@@ -640,6 +930,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
        // the firestore.rules fix on the heroes/{heroId} update rule,
        // which was rejecting this exact write with permission-denied
        // because the pre-created stub doc has no approvalStatus field yet.
+       if (mounted) setState(() => _submissionStatus = 'Saving your registration…');
        final registrationBatch = FirebaseFirestore.instance.batch();
        final heroDocRef =
            FirebaseFirestore.instance.collection('heroes').doc(user.uid);
@@ -711,7 +1002,44 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
          SetOptions(merge: true),
        );
 
-       await registrationBatch.commit();
+       // FIX (Aug 12 2026 — same "stuck forever" audit as the Cloudinary
+       // timeout above): Firestore's WriteBatch.commit() Future only
+       // resolves after the server acknowledges the write, so a long
+       // connectivity drop right here could hang just as badly as the
+       // upload did. This timeout guarantees the try/finally below
+       // always completes within a bounded time, so _isSubmitting is
+       // guaranteed to reset and the Submit button always becomes
+       // pressable again — no more permanent lockout on a bad network.
+       await registrationBatch.commit().timeout(
+         const Duration(seconds: 20),
+         onTimeout: () => throw Exception(
+           'Could not reach the server — check your connection and try again.',
+         ),
+       );
+
+       // NEW (Aug 12 2026 — Affiliate QR Generator): increments the
+       // referring code's signup counter if this hero came in from an
+       // affiliate link; a no-op otherwise. Fire-and-forget — never
+       // blocks or fails registration.
+       unawaited(AffiliateService.instance.completeConversion(
+         uid: user.uid,
+         name: _nameController.text.trim(),
+         phone: user.phoneNumber ?? _phoneController.text.trim(),
+         email: user.email ?? '',
+         city: _selectedCity ?? kDefaultCity,
+         role: 'hero',
+       ));
+
+       // NEW (Aug 12 2026 — Local Cache Strategy): the moment the batch
+       // above actually lands, cache 'pending' locally so the NEXT app
+       // boot (this device, this browser/PWA) can route straight to
+       // HeroPendingScreen with zero Firestore read — see
+       // hero_onboarding_cache.dart and main_hero.dart's _HeroSetupGate.
+       unawaited(HeroOnboardingCache.setPending());
+
+       // Submission fully landed — the draft has served its purpose and
+       // must not resurface on any future visit to this form.
+       unawaited(_clearDraft());
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -738,51 +1066,39 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     } on FirebaseAuthException catch (e) {
       // Task 4: Typed Firebase Auth error — prints exact code to console
       debugPrint('[HeroRegister] FirebaseAuthException: ${e.code} — ${e.message}');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Auth error (${e.code}): ${e.message ?? e.toString()}',
-            ),
-            backgroundColor: _red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      _setSubmitError(
+        'Sign-in',
+        'Auth error (${e.code}): ${e.message ?? e.toString()}',
+      );
     } on FirebaseException catch (e) {
       // Task 4: Typed Firestore / Database error — prints plugin + code
       debugPrint(
         '[HeroRegister] FirebaseException [${e.plugin}]: ${e.code} — ${e.message}',
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Database error (${e.code}): ${e.message ?? e.toString()}',
-            ),
-            backgroundColor: _red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      _setSubmitError(
+        'Saving your registration',
+        'Database error (${e.code}): ${e.message ?? e.toString()}',
+      );
     } catch (e, st) {
       // Task 4: Unexpected error — full stack trace to console for debugging
       debugPrint('[HeroRegister] Unexpected error: $e\n$st');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Registration failed: ${e.toString()}'),
-            backgroundColor: _red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      // _submissionStatus still holds whichever stage was running when
+      // this threw, so the banner can name the exact failing section.
+      _setSubmitError(
+        _submissionStatus.replaceAll('…', ''),
+        e.toString(),
+      );
     } finally {
       // FIX: single point that turns the loading overlay off, covering
       // every exit path (success navigation, cancelled sign-in, and all
       // 3 error branches above) — no more window where the screen looks
       // idle/hung while a network call is actually still in flight.
-      if (mounted) setState(() => _isSubmitting = false);
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+          _submissionStatus = 'Getting ready…';
+        });
+      }
     }
   }
 
@@ -897,9 +1213,26 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
   Future<void> _pickPaymentQr() async {
     final cropped = await pickAndCropPaymentQr(context);
     if (cropped == null || !mounted) return;
-    await HeroPaymentQrService.instance.saveQr(cropped);
-    if (!mounted) return;
-    setState(() => _paymentQrBytes = cropped);
+    // FIX (Aug 12 2026 — "QR upload button not wired?" report): saveQr()
+    // was awaited with no try/catch here, so any failure (Hive not
+    // ready on web, disk write denied on native, etc.) threw an
+    // unhandled Future rejection — the crop dialog would close but
+    // nothing ever visibly happened (setState never ran), which looks
+    // exactly like a dead/unwired button from the hero's side. Now
+    // fails loudly with a snackbar instead of silently, and the
+    // in-memory _paymentQrBytes is only set after the save actually
+    // succeeds.
+    try {
+      await HeroPaymentQrService.instance.saveQr(cropped);
+      if (!mounted) return;
+      setState(() => _paymentQrBytes = cropped);
+    } catch (e) {
+      debugPrint('[HeroRegister] payment QR save failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save QR: $e'), backgroundColor: _red),
+      );
+    }
   }
 
   Widget _paymentQrTile() {
@@ -959,6 +1292,202 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     );
   }
 
+  // ── "How to register (3 steps)" native guide ──────────────────────
+  // NEW (Aug 12 2026 — Nizam's call after the video-vs-native-UI
+  // discussion): replaces the planned tutorial video entirely. Chosen
+  // over a YouTube iframe / MP4 because (a) a video costs ~1-2MB before
+  // the first frame on mobile data, against ~0KB here, (b) a confused
+  // hero can SCAN a native guide to the exact step they're stuck on
+  // instead of scrubbing a timeline — which is what actually reduces
+  // drop-off, and (c) it updates in the same commit as the form,
+  // works offline, is readable with sound off, and is localizable
+  // through the existing LocalizationService (all 5 languages, keys
+  // hero_guide_*). Collapsed by default so it never pushes the form
+  // itself below the fold.
+  bool _guideExpanded = false;
+
+  Widget _buildHowToRegisterGuide(BuildContext context) {
+    final t = context.watch<LocalizationService>().t;
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _njPink.withValues(alpha: 0.35), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _guideExpanded = !_guideExpanded),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: _njPink.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.menu_book_rounded, color: _njPink, size: 18),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          t('hero_guide_title'),
+                          style: GoogleFonts.outfit(
+                            color: _text,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          t('hero_guide_hint'),
+                          style: GoogleFonts.outfit(color: _muted, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: _guideExpanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: const Icon(Icons.keyboard_arrow_down_rounded, color: _njPink),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 200),
+            crossFadeState:
+                _guideExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            firstChild: const SizedBox(width: double.infinity),
+            secondChild: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _guideStep(1, t('hero_guide_s1_title'), t('hero_guide_s1_body'), Icons.person_rounded),
+                  _guideStep(2, t('hero_guide_s2_title'), t('hero_guide_s2_body'), Icons.badge_rounded),
+                  _guideStep(3, t('hero_guide_s3_title'), t('hero_guide_s3_body'), Icons.verified_rounded, isLast: true),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: _gold.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.lightbulb_outline_rounded, color: _gold, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            t('hero_guide_tip'),
+                            style: GoogleFonts.outfit(
+                              color: _text,
+                              fontSize: 11,
+                              height: 1.45,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _guideStep(
+    int number,
+    String title,
+    String body,
+    IconData icon, {
+    bool isLast = false,
+  }) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                decoration: const BoxDecoration(color: _njPink, shape: BoxShape.circle),
+                alignment: Alignment.center,
+                child: Text(
+                  '$number',
+                  style: GoogleFonts.outfit(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              if (!isLast)
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    color: _njPink.withValues(alpha: 0.25),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: isLast ? 8 : 16, top: 2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(icon, size: 14, color: _njPink),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: GoogleFonts.outfit(
+                            color: _text,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    body,
+                    style: GoogleFonts.outfit(
+                      color: _muted,
+                      fontSize: 11.5,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHeroCategorySelector() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -992,6 +1521,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                       setState(() {
                         _selectedVehicleType = category.key;
                       });
+                      _scheduleDraftSave();
                     },
                   ),
                 );
@@ -1012,7 +1542,14 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     // it looking "hung." Stack a full-screen dimmed overlay with its own
     // spinner + status text on top whenever _isSubmitting is true — it's
     // now unmistakable that something is happening, not stuck.
-    return Stack(
+    // NEW (Aug 12 2026 — Nizam: "form filling complete aguravarayum
+    // antha loading page laye irukanum"): blocks the Android back
+    // gesture/button while a submission is in flight, so the hero can't
+    // back out mid-upload into a half-submitted state. No effect once
+    // _isSubmitting is false — the form behaves exactly as before.
+    return PopScope(
+      canPop: !_isSubmitting,
+      child: Stack(
       children: [
         _buildForm(context),
         if (_isSubmitting)
@@ -1043,8 +1580,15 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                           color: _njPink,
                         ),
                         const SizedBox(height: 16),
+                        // UPDATED (Aug 12 2026 — UI/UX re-audit): now
+                        // reflects the real current stage
+                        // (_submissionStatus, set at each step of
+                        // _submitRegistration) instead of one static
+                        // line for the whole flow — the hero can see
+                        // concrete progress, never just a frozen spinner.
                         Text(
-                          'Setting up your Hero account…',
+                          _submissionStatus,
+                          textAlign: TextAlign.center,
                           style: GoogleFonts.outfit(
                             color: _text,
                             fontSize: 14,
@@ -1053,7 +1597,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Signing in, uploading documents — please wait',
+                          'Please wait — do not close or go back',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.outfit(
                             color: _muted,
@@ -1068,6 +1612,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
             ),
           ),
       ],
+      ),
     );
   }
 
@@ -1101,6 +1646,8 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                 'Admin will call you to verify before approving.',
                 style: GoogleFonts.outfit(color: _muted, fontSize: 12),
               ),
+              const SizedBox(height: 16),
+              _buildHowToRegisterGuide(context),
               const SizedBox(height: 20),
 
               // ── Personal Information ──────────────────────────
@@ -1426,6 +1973,56 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
               ),
               const SizedBox(height: 28),
 
+              // NEW (Aug 12 2026 — Nizam: "yenga problemo antha section
+              // la error kaatitu red error kaatanum"): persistent,
+              // section-named failure banner. Unlike the old snackbars
+              // it does not disappear on its own, so the hero can read
+              // it, fix the named field, and retry — with everything
+              // they typed still on screen.
+              if (_submitError != null) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: _red.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _red, width: 1.4),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.error_outline_rounded, color: _red, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Problem in: ${_submitErrorSection ?? 'Submission'}',
+                              style: GoogleFonts.outfit(
+                                color: _red,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _submitError!,
+                        style: GoogleFonts.outfit(color: _text, fontSize: 12, height: 1.45),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Nothing you typed was lost — fix the item above and tap Submit again.',
+                        style: GoogleFonts.outfit(color: _muted, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
+
               // ── Submit ────────────────────────────────────────
               SizedBox(
                 width: double.infinity,
@@ -1532,6 +2129,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
         setState(() {
           _agreedEmergencyResponder = !_agreedEmergencyResponder;
         });
+        _scheduleDraftSave();
       },
       borderRadius: BorderRadius.circular(16),
       child: AnimatedContainer(
@@ -1561,6 +2159,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                 setState(() {
                   _agreedEmergencyResponder = value ?? false;
                 });
+                _scheduleDraftSave();
               },
             ),
             const SizedBox(width: 8),

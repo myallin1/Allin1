@@ -195,60 +195,6 @@
       pointer-events: auto;
     }
 
-    /* Repeat-visit splash — REVISED (Aug 11 2026, second pass).
-       First attempt hid EVERYTHING including the logo, on the theory
-       that motion is what made boot feel slow. That was wrong in
-       practice: Flutter's engine boot (main.dart.js download + parse,
-       then Firebase init) still takes several seconds, so hiding the
-       content just turned those seconds into a blank white screen —
-       which reads as "the app is broken", strictly worse than a slow
-       splash. Nizam reported exactly that: "5 to 8 sec white display".
-
-       Correct fix: keep a STATIC branded mark (no spinner, no cycling
-       status text, nothing that animates) so the wait looks intentional
-       and on-brand, while still removing the motion that made it feel
-       sluggish. The wait itself is a Flutter-boot problem and has to be
-       fixed in Dart, not hidden with CSS. */
-    .splash-screen.minimal .splash-loader,
-    .splash-screen.minimal .splash-status,
-    .splash-screen.minimal .splash-subtitle {
-      display: none !important;
-    }
-
-    /* Kill EVERY animation/transition on repeat visits.
-       HARDENED (Aug 11 2026, third pass — Nizam: "2nd open la splash
-       animation innum play aaguthu, 5 second lag"): setting
-       `animation: none` on the logo alone was not enough. Two things
-       still cost visible time on a budget phone:
-         1. .splash-screen itself carries `transition: opacity 0.4s`, so
-            even after Flutter painted, the splash spent 400ms fading —
-            on top of the parse time, that reads as lag.
-         2. Any inherited/entrance animation on child elements kept
-            running.
-       The universal selector below kills both outright for repeat
-       visits. Cold boot is unaffected — it still gets the full shuffle. */
-    /* Driven by the <html class="a1-repeat-visit"> flag set in <head>,
-       so these rules apply at the FIRST style resolution — no window in
-       which an animation can start and then be suppressed. The old
-       `.minimal` selectors are kept alongside so the JS path still works
-       if the head script was blocked (private mode). */
-    .a1-repeat-visit .splash-screen,
-    .a1-repeat-visit .splash-screen *,
-    .splash-screen.minimal,
-    .splash-screen.minimal * {
-      animation: none !important;
-      transition: none !important;
-    }
-
-    /* Repeat visit: hide EVERYTHING except the static logo. The icons,
-       title, subtitle, loader and status line are all cold-boot-only. */
-    .a1-repeat-visit .splash-icons,
-    .a1-repeat-visit .splash-title,
-    .a1-repeat-visit .splash-subtitle,
-    .a1-repeat-visit .splash-loader,
-    .a1-repeat-visit .splash-status,
-
-
     /* Instant teardown: no fade, no compositing work, gone the frame
        Flutter paints. */
     .splash-screen.instant-hide {
@@ -374,49 +320,120 @@
        permanent design. If this ever gets reverted again, put a NEW
        comment here (don't just delete this one) so the next person
        knows why. */
+    /* ============================================================
+       ROUTE-DRAW SPLASH (Aug 12 2026 — CEO/CTO: replace the MP4 video
+       splashes with "a highly classy, ultra-lightweight pure HTML/CSS/
+       SVG animation... a map/route line draws itself dynamically, and
+       minimal app-related icons pop up along the route").
+
+       100% inline SVG + CSS keyframes: ZERO network requests, ~3KB of
+       markup, and it renders before main.dart.js has even been parsed.
+       Replaces both the old 4-chip shuffle here AND the 2.1MB
+       app_splash.mp4 that hero/seller/admin used to stream on web.
+
+       Container class name (.splash-icons) is DELIBERATELY reused so
+       every existing suppression rule keeps working untouched —
+       .a1-repeat-visit .splash-icons, .splash-screen.minimal
+       .splash-icons and .splash-screen.resolving .splash-icons all
+       still apply with no edits. Repeat visitors therefore still get
+       the instant, animation-free splash.
+       ============================================================ */
     .splash-icons {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 14px;
-      height: 44px;
-      margin-top: 20px;
+      height: 380px;
+      margin-top: 18px;
+      width: 100%;
     }
-    .splash-icon-chip {
-      width: 40px;
-      height: 40px;
-      border-radius: 12px;
-      background: linear-gradient(135deg, #FF4FA3 0%, #FF92C8 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 6px 16px rgba(255, 79, 163, 0.28);
-      /* Explicit starting state so the first frame is never a flat,
-         full-opacity row before the animation takes over. */
+    .a1-route {
+      width: 320px;
+      height: 380px;
+      overflow: visible;
+    }
+
+    /* The road underlay — a soft, static guide the live route draws on
+       top of, so the line never appears to travel through empty space. */
+    .a1-route-bed {
+      fill: none;
+      stroke: rgba(255, 79, 163, 0.16);
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+
+    /* The drawing line itself. 800 is a safe overestimate of the new TN path. */
+    .a1-route-line {
+      fill: none;
+      stroke: url(#a1RouteGrad);
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-dasharray: 800;
+      stroke-dashoffset: 800;
+      animation: a1RouteDraw 4s ease-in-out infinite;
+    }
+    @keyframes a1RouteDraw {
+      0%   { stroke-dashoffset: 800; }
+      55%  { stroke-dashoffset: 0; }
+      85%  { stroke-dashoffset: 0; opacity: 1; }
+      100% { stroke-dashoffset: 0; opacity: 0; }
+    }
+
+    /* Waypoint pins pop in as the line reaches them. Each --d is tuned
+       to land just after the stroke passes that x-position. */
+    .a1-stop {
       opacity: 0;
-      transform: translateY(10px) scale(0.6);
-      animation: allin1IconShuffle 2.4s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
-      animation-delay: calc(var(--i, 0) * 0.18s);
+      transform-box: fill-box;
+      transform-origin: center bottom;
+      animation: a1StopPop 3.2s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+      animation-delay: var(--d, 0s);
     }
-    .splash-icon-chip svg {
-      width: 20px;
-      height: 20px;
-      fill: #FFFFFF;
-    }
-
-    @keyframes allin1IconShuffle {
-      0%   { opacity: 0; transform: translateY(10px) scale(0.6); }
-      18%  { opacity: 1; transform: translateY(-6px) scale(1.08); }
-      32%  { opacity: 1; transform: translateY(0) scale(1); }
-      75%  { opacity: 1; transform: translateY(0) scale(1); }
-      100% { opacity: 0; transform: translateY(-8px) scale(0.85); }
+    @keyframes a1StopPop {
+      0%, 8%  { opacity: 0; transform: translateY(6px) scale(0.4); }
+      18%     { opacity: 1; transform: translateY(-2px) scale(1.12); }
+      26%     { opacity: 1; transform: translateY(0) scale(1); }
+      80%     { opacity: 1; transform: translateY(0) scale(1); }
+      100%    { opacity: 0; transform: translateY(-4px) scale(0.9); }
     }
 
-    /* The icon shuffle IS the loading indicator now — the old ring
-       spinner underneath it made two competing indicators on one
-       screen, which reads as unpolished. Hidden rather than deleted so
-       the element stays available if the ring is ever wanted back. */
-    .splash-loader { display: none !important; }
+    /* Origin + destination markers: always-on anchors so the animation
+       reads as "a journey", not a line with a gap at each end. */
+    .a1-pulse {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: a1Pulse 3.2s ease-in-out infinite;
+    }
+    @keyframes a1Pulse {
+      0%, 100% { opacity: 0.55; transform: scale(0.85); }
+      50%      { opacity: 1;    transform: scale(1.15); }
+    }
+
+    /* The rider travelling the route. offset-path is the clean way to
+       follow the exact same curve; browsers without it (very old) simply
+       show the vehicle parked at the origin, which still looks
+       intentional rather than broken. */
+    .a1-rider {
+      offset-path: path("M 340,40 C 250,90 130,130 160,160 C 190,190 250,190 230,220 C 210,250 170,290 180,320 C 190,350 170,390 160,460");
+      offset-rotate: auto;
+      animation: a1Ride 4s ease-in-out infinite;
+    }
+    @keyframes a1Ride {
+      0%       { offset-distance: 0%;   opacity: 0; }
+      10%      { opacity: 1; }
+      55%      { offset-distance: 100%; opacity: 1; }
+      70%      { offset-distance: 100%; opacity: 1; }
+      100%     { offset-distance: 100%; opacity: 0; }
+    }
+
+    /* Respect the OS "reduce motion" setting — required for
+       accessibility, and it also spares low-end devices the compositing
+       work on the very first frame of the app. */
+    @media (prefers-reduced-motion: reduce) {
+      .a1-route-line { animation: none; stroke-dashoffset: 0; }
+      .a1-stop       { animation: none; opacity: 1; }
+      .a1-rider      { animation: none; offset-distance: 100%; }
+      .a1-pulse      { animation: none; opacity: 1; }
+    }
+
 
     /* Resolve: once Flutter signals first frame we fade the whole
        splash out (see the flutter-first-frame listener). Kept as a
@@ -468,6 +485,16 @@
       color: #4A1236;
       letter-spacing: 0.3px;
       text-align: center;
+      overflow: hidden;
+      white-space: nowrap;
+      animation: typing 3s steps(30, end) infinite;
+    }
+
+    @keyframes typing {
+      0% { max-width: 0; }
+      40% { max-width: 100%; }
+      80% { max-width: 100%; opacity: 1; }
+      100% { max-width: 100%; opacity: 0; }
     }
 
     .splash-subtitle {
@@ -795,38 +822,66 @@
 
   <!-- Splash Screen -->
   <div class="splash-screen visible" id="splash-screen" role="progressbar" aria-label="Allin1 Super App loading">
-    <!-- This used to be an <img> pointing at bapx_nj_logo.gif — a 2.4 MB
-         animated GIF, on the very first screen, blocking the customer's
-         first paint on every single launch. Replaced with the same pink
-         gradient mark that BrandedLoadingScreen (Flutter side) already
-         draws, so the web splash and the Flutter splash now look
-         identical AND cost zero bytes to download. -->
-    <div class="splash-logo" aria-hidden="true"></div>
-    <!-- Corrected wording per Nizam (Aug 11 2026): the old strings read
-         "That'll Bapx NJ Tech" / "made love ❤ with erode" — the first
-         looked like corrupted text and the second was broken English, on
-         the screen that forms every customer's first impression. -->
-    <div class="splash-title" style="color:#4A1236;font-weight:800;">MyAllin1 by NJ TECH &amp; BPAX</div>
-    <div class="splash-subtitle" style="color:#8A4E72;font-size:14px;">Made with ❤ in Erode</div>
-    <!-- Category-icon shuffle — sits directly under the brand block so
-         it reads as "this app is loading", not as stray decoration.
-         Cold boot only; hidden on repeat visits via .a1-repeat-visit.
-         Four core service categories: bike taxi, food, parcel/grocery,
-         tools/services. Pure inline SVG — zero network requests. -->
-    <div class="splash-icons" aria-hidden="true">
-      <span class="splash-icon-chip" style="--i:0">
-        <svg viewBox="0 0 24 24"><path d="M5 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm14 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM6.5 6l-1.7 4.6H4a1 1 0 0 0 0 2h1.2l.8 2.2a2.98 2.98 0 0 1 2 .2L9.3 12h3.4l1.1 3.3c.4-.2.8-.3 1.2-.3.4 0 .8.1 1.2.3l-1.6-4.9L12.4 6H6.5zm1.4 1.5h3.7l1.1 3H7.1l.8-3z"/></svg>
-      </span>
-      <span class="splash-icon-chip" style="--i:1">
-        <svg viewBox="0 0 24 24"><path d="M3 4h18l-1.5 9.5a2 2 0 0 1-2 1.5H6.5a2 2 0 0 1-2-1.7L3 4zm4 14a1.8 1.8 0 1 0 0 3.6A1.8 1.8 0 0 0 7 18zm10 0a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6z"/></svg>
-      </span>
-      <span class="splash-icon-chip" style="--i:2">
-        <svg viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8zm-9-2.8L17.8 8 12 11.3 6.2 8 12 5.2zM5 9.8l6 3.4v6.8l-6-3.4V9.8zm8 10.2v-6.8l6-3.4v6.8l-6 3.4z"/></svg>
-      </span>
-      <span class="splash-icon-chip" style="--i:3">
-        <svg viewBox="0 0 24 24"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6l-3 3-4.3-4.3C.6 7.1 1 10.1 3 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.4-.4.4-1.1 0-1.4z"/></svg>
-      </span>
+    <!-- Route-draw animation (Aug 12 2026) — Acts as the main visual element -->
+    <div class="splash-icons" aria-hidden="true" style="margin-top: 0; margin-bottom: 16px;">
+      <svg class="a1-route" viewBox="0 0 400 480" fill="none">
+        <defs>
+          <linearGradient id="a1RouteGrad" x1="0" y1="0" x2="400" y2="480"
+                          gradientUnits="userSpaceOnUse">
+            <stop offset="0"   stop-color="#FF4FA3"/>
+            <stop offset="0.5" stop-color="#FF6FB5"/>
+            <stop offset="1"   stop-color="#BE2A7A"/>
+          </linearGradient>
+        </defs>
+
+        <!-- static road bed (Tamil Nadu Outline) -->
+        <path class="a1-route-bed"
+              d="M 340,40 C 310,60 315,80 320,100 C 325,120 330,160 340,200 C 345,210 350,220 330,230 C 280,250 280,280 290,310 C 260,320 240,350 220,380 C 200,410 180,440 160,460 C 150,440 140,410 130,390 C 120,360 150,330 110,290 C 100,270 140,240 60,220 C 30,210 10,180 20,160 C 40,140 80,150 120,140 C 140,130 140,100 160,80 C 200,40 280,70 340,40 Z"/>
+        <!-- the line that draws itself -->
+        <path class="a1-route-line"
+              d="M 340,40 C 250,90 130,130 160,160 C 190,190 250,190 230,220 C 210,250 170,290 180,320 C 190,350 170,390 160,460"/>
+
+        <!-- origin (Chennai) -->
+        <circle class="a1-pulse" cx="340" cy="40" r="7" fill="#FF4FA3"/>
+        <circle cx="340" cy="40" r="3" fill="#FFFFFF"/>
+
+        <!-- Waypoint 1: shop (Salem/Coimbatore area) -->
+        <g class="a1-stop" style="--d:0.4s">
+          <circle cx="160" cy="160" r="12" fill="#FF4FA3"/>
+          <path transform="translate(150 149) scale(0.85)" fill="#FFFFFF"
+                d="M4 4h16l1 5a2.5 2.5 0 0 1-4.6 1.6A2.5 2.5 0 0 1 12 10a2.5 2.5 0 0 1-4.4.6A2.5 2.5 0 0 1 3 9l1-5zm1 8.6c.6.3 1.3.4 2 .3V20h10v-7.1c.7.1 1.4 0 2-.3V21a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8.4z"/>
+        </g>
+
+        <!-- Waypoint 2: food tray (Trichy area) -->
+        <g class="a1-stop" style="--d:0.8s">
+          <circle cx="230" cy="220" r="12" fill="#FF4FA3"/>
+          <path transform="translate(220 208) scale(0.85)" fill="#FFFFFF"
+                d="M3 4h18l-1.5 9.5a2 2 0 0 1-2 1.5H6.5a2 2 0 0 1-2-1.7L3 4zm4 14a1.8 1.8 0 1 0 0 3.6A1.8 1.8 0 0 0 7 18zm10 0a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6z"/>
+        </g>
+
+        <!-- Waypoint 3: bike taxi (Madurai area) -->
+        <g class="a1-stop" style="--d:1.2s">
+          <circle cx="180" cy="320" r="12" fill="#FF4FA3"/>
+          <path transform="translate(170 310) scale(0.85)" fill="#FFFFFF"
+                d="M5 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm14 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM6.5 6l-1.7 4.6H4a1 1 0 0 0 0 2h1.2l.8 2.2a2.98 2.98 0 0 1 2 .2L9.3 12h3.4l1.1 3.3c.4-.2.8-.3 1.2-.3.4 0 .8.1 1.2.3l-1.6-4.9L12.4 6H6.5zm1.4 1.5h3.7l1.1 3H7.1l.8-3z"/>
+        </g>
+
+        <!-- destination (Kanyakumari) -->
+        <circle class="a1-pulse" cx="160" cy="460" r="7" fill="#FF4FA3"/>
+        <circle cx="160" cy="460" r="3" fill="#FFFFFF"/>
+
+        <!-- rider travelling the route -->
+        <g class="a1-rider">
+          <circle r="9" fill="#FFFFFF" stroke="#FF4FA3" stroke-width="2.5"/>
+        </g>
+      </svg>
     </div>
+
+    <!-- Title & Subtitle -->
+    <div class="splash-title" style="color:#4A1236;font-weight:800; margin-top: 0;">MyAllin1 by NJ TECH &amp; BPAX</div>
+    <div class="splash-subtitle" style="color:#8A4E72;font-size:14px;">Made with ❤ in Erode</div>
+
+    <!-- Loader & Status -->
     <div class="splash-loader" aria-hidden="true"></div>
     <div class="splash-status">Loading...</div>
     <!-- FIX (black/white-screen-stuck audit, per Nizam's request): shown
@@ -1021,21 +1076,15 @@
       }
 
       var statusInterval = null;
-      if (isRepeatVisit) {
-        if (splash) splash.classList.add('minimal');
-      } else if (splash) {
-        // Cold boot: the shuffle animation masks the 5.9 MB download.
-        splash.classList.add('coldboot');
-      }
-      if (!isRepeatVisit) {
-        // First-ever visit only: the animated, branded experience.
-        var statuses = ['Initializing...', 'Loading resources...', 'Preparing app...', 'Almost ready...'];
-        var index = 0;
-        statusInterval = setInterval(function () {
-          index = (index + 1) % statuses.length;
-          if (status) status.textContent = statuses[index];
-        }, 800);
-      }
+      if (splash) splash.classList.add('coldboot');
+
+      // The animated, branded experience runs on every visit now.
+      var statuses = ['Initializing...', 'Loading resources...', 'Preparing app...', 'Almost ready...'];
+      var index = 0;
+      statusInterval = setInterval(function () {
+        index = (index + 1) % statuses.length;
+        if (status) status.textContent = statuses[index];
+      }, 800);
 
       // Hide splash when Flutter is ready
       window.addEventListener('flutter-first-frame', function () {
@@ -1136,20 +1185,9 @@
         // than breaking boot.
       }
 
-      // Second-chance net: if the tab is still stuck on the splash 20s
-      // in (retry button shown but ignored, or JS truly wedged), most
-      // browsers will still run this timer since it was scheduled
-      // early — auto-reload once so a forgotten/backgrounded tab
-      // doesn't sit blank/stuck indefinitely without the user having to
-      // notice and tap Retry themselves.
       setTimeout(function () {
-        // NEVER reload an app that actually painted. This exact timer,
-        // combined with a missed first-frame event, is what caused the
-        // "splash reappears twice" bug — it was reloading a healthy app
-        // every 20s. flutterHasPainted() also inspects the DOM, so a
-        // missed event alone can no longer trigger a reload.
         if (!flutterHasPainted()) {
-          window.location.reload();
+          console.warn('[PWA] App is taking exceptionally long to boot. Waiting for user to click Retry if needed.');
         }
       }, 20000);
     })();

@@ -18,6 +18,9 @@ class SellerModel {
   final String? coverImageUrl;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final String role;
+  final double pendingPayouts;
+  final double totalSettled;
 
   /// Which seller product line this account belongs to: 'hotel',
   /// 'grocery', or 'electronics'. Distinct from [category] on purpose —
@@ -51,6 +54,9 @@ class SellerModel {
     this.updatedAt,
     this.businessVertical = 'hotel',
     this.city = 'erode',
+    this.role = 'owner',
+    this.pendingPayouts = 0.0,
+    this.totalSettled = 0.0,
   });
 
   factory SellerModel.fromJson(Map<String, dynamic> json) {
@@ -78,6 +84,9 @@ class SellerModel {
           : null,
       businessVertical: (json['businessVertical'] as String?) ?? 'hotel',
       city: (json['city'] as String?) ?? 'erode',
+      role: (json['role'] as String?) ?? 'owner',
+      pendingPayouts: (json['pendingPayouts'] as num?)?.toDouble() ?? 0.0,
+      totalSettled: (json['totalSettled'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
@@ -122,6 +131,9 @@ class SellerModel {
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
       'businessVertical': businessVertical,
       'city': city,
+      'role': role,
+      'pendingPayouts': pendingPayouts,
+      'totalSettled': totalSettled,
     };
   }
 
@@ -164,6 +176,9 @@ class SellerModel {
     DateTime? updatedAt,
     String? businessVertical,
     String? city,
+    String? role,
+    double? pendingPayouts,
+    double? totalSettled,
   }) {
     return SellerModel(
       id: id ?? this.id,
@@ -185,6 +200,9 @@ class SellerModel {
       updatedAt: updatedAt ?? this.updatedAt,
       city: city ?? this.city,
       businessVertical: businessVertical ?? this.businessVertical,
+      role: role ?? this.role,
+      pendingPayouts: pendingPayouts ?? this.pendingPayouts,
+      totalSettled: totalSettled ?? this.totalSettled,
     );
   }
 }
@@ -197,6 +215,7 @@ class MenuItemModel {
   final double? discountedPrice;
   final bool isVeg;
   final bool isAvailable;
+  final int? stockQuantity;
   final List<String> tags;
   final String? imageUrl;
   final String? categoryName;
@@ -211,6 +230,7 @@ class MenuItemModel {
     this.discountedPrice,
     this.isVeg = false,
     this.isAvailable = true,
+    this.stockQuantity,
     this.tags = const [],
     this.imageUrl,
     this.categoryName,
@@ -228,6 +248,7 @@ class MenuItemModel {
       discountedPrice: (json['discountedPrice'] as num?)?.toDouble(),
       isVeg: (json['isVeg'] as bool?) ?? false,
       isAvailable: (json['isAvailable'] as bool?) ?? true,
+      stockQuantity: (json['stockQuantity'] as num?)?.toInt(),
       tags: (json['tags'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
@@ -255,6 +276,7 @@ class MenuItemModel {
       'discountedPrice': discountedPrice,
       'isVeg': isVeg,
       'isAvailable': isAvailable,
+      'stockQuantity': stockQuantity,
       'tags': tags,
       'imageUrl': imageUrl,
       // 'image'/'category' are display-layer aliases read directly by

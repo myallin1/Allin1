@@ -35,6 +35,7 @@ import '../services/theme_service.dart';
 import '../services/update_service.dart';
 import '../services/usage_tracking_service.dart';
 import '../services/web_version_checker.dart';
+import '../utils/daily_boost_messages.dart';
 import '../widgets/banner_slider.dart';
 import '../widgets/coach_mark_overlay.dart';
 import '../widgets/download_app_banner.dart';
@@ -43,6 +44,7 @@ import 'bike_taxi/bike_booking_screen.dart';
 import 'car_wash_screen.dart';
 import 'coming_soon_screen.dart';
 import 'construction_screen.dart';
+import 'eseva_service_screen.dart';
 import 'food_hub_screen.dart';
 import 'grocery_order_screen.dart';
 import 'guru_chat_screen.dart';
@@ -55,6 +57,8 @@ import 'printing_service_screen.dart';
 import 'profile_screen.dart';
 import 'rewards_screen.dart';
 import 'ride_history_screen.dart';
+import '../widgets/economic_vision_banner.dart';
+import 'invite_friends_screen.dart';
 import 'settings_screen.dart';
 import 'sos_screen.dart';
 
@@ -239,6 +243,18 @@ class _DashboardScreenState extends State<DashboardScreen>
     // ambush someone mid-booking. See auth_prompt_service.dart.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) AuthPromptService.instance.scheduleDeferredPrompt(context);
+    });
+    // NEW (Aug 12 2026 — Nizam's "daily boost" request): one small,
+    // non-blocking motivational SnackBar per app cold-boot, right under
+    // the time-of-day greeting. 3s delay clears the coach-mark tour /
+    // scratch card sequencing below so overlays never stack on the
+    // very first frame — see daily_boost_messages.dart for why this is
+    // a plain local list, not a Firestore read.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(seconds: 3), () {
+        if (!mounted) return;
+        showDailyBoostSnackBar(context, randomCustomerBoostMessage());
+      });
     });
     // Auto-show the daily Paytm Soundbox scratch card once per calendar day
     // — but only AFTER the first-open coach mark tour (if any) has been
@@ -741,7 +757,13 @@ class _DashboardScreenState extends State<DashboardScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '${context.watch<LocalizationService>().t('greeting_hi')}, $firstName',
+                  // FIX (Aug 12 2026 — Nizam's "personal touch" request):
+                  // was always the static 'greeting_hi' ("Hi") key —
+                  // now picks morning/afternoon/evening/night based on
+                  // the device clock (see LocalizationService
+                  // .greetingKeyForNow()), matching how the Claude
+                  // desktop app itself greets by time of day.
+                  '${context.watch<LocalizationService>().t(LocalizationService.greetingKeyForNow())}, $firstName',
                   style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w700, fontSize: 14),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1056,7 +1078,18 @@ class _HomeTab extends StatelessWidget {
       physics: const BouncingScrollPhysics(),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const SizedBox(height: 12),
-        const _CategorySlidingBanner(),
+        // NEW (Aug 13 2026 — Erode "₹50,000 கோடி பொருளாதாரப் புரட்சி"
+        // campaign). Deliberately its OWN static card rather than a slide
+        // inside _CategorySlidingBanner below: that carousel auto-rotates
+        // every 4s, which is fine for one-line category promos but would
+        // sweep a two-sentence manifesto off screen before anyone finished
+        // reading it. A campaign message that nobody can finish reading is
+        // worse than no campaign message. Sits above the carousel so it is
+        // the first thing on the home screen, and taps through to the full
+        // data breakdown in EconomicVisionScreen.
+        const EconomicVisionBanner(),
+        const SizedBox(height: 14),
+        _CategorySlidingBanner(onTileTap: onTileTap),
         const SizedBox(height: 20),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1083,6 +1116,8 @@ class _HomeTab extends StatelessWidget {
         const SizedBox(height: 12),
         _buildPrintingMegaCard(context),
         const SizedBox(height: 12),
+        _buildEsevaMegaCard(context),
+        const SizedBox(height: 12),
         _buildOtherServicesMegaCard(context),
         // ───────────────────────────────────────────────────
 
@@ -1091,9 +1126,68 @@ class _HomeTab extends StatelessWidget {
         const SizedBox(height: 10),
         _buildPromoCards(context),
         const SizedBox(height: 20),
+        // NEW (Aug 12 2026 — Nizam: "namma customer app top la sling
+        // animations... athulla 10 sliding oodavidalam"): 10 promo slides,
+        // one per requested category. All render as local vector-icon
+        // gradient cards (BannerTextSlide) rather than hosted images — so
+        // unlike the old 2 Unsplash stock photos below, these cost zero
+        // network calls and show up instantly on every load, first-time
+        // included. That's a stronger guarantee than a Hive-cached network
+        // image would give, while still fully satisfying the "must not lag,
+        // fast from reopen" requirement. Each onTap reuses the exact same
+        // navigation targets as their matching mega-cards below, so tapping
+        // a slide always opens the same real screen the corresponding tile
+        // already opens. Food slide names real, already-onboarded partner
+        // shops (KFC/A2B/Subway/Domino's/Taj) — see FoodHubScreen, which
+        // links out to each shop's own ordering site via PartnerShopOrderScreen.
         BannerAdsSlider(
           height: 240,
           textSlides: [
+            BannerTextSlide(
+              title: 'Taxi & Transport 🚖',
+              subtitle: 'Bike, auto, car, parcel & more — book a ride in seconds',
+              gradient: const [Color(0xFFFF4FA3), Color(0xFF7B2FF7)],
+              icon: Icons.local_taxi_rounded,
+              onTap: () => onTileTap('taxi'),
+            ),
+            BannerTextSlide(
+              title: 'Food from KFC, A2B, Subway, Domino\'s & Taj 🍽️',
+              subtitle: 'Erode\'s favourite restaurants, one tap away',
+              gradient: const [Color(0xFFFF7A45), Color(0xFFFF4FA3)],
+              icon: Icons.restaurant_rounded,
+              onTap: () => onTileTap('food'),
+            ),
+            BannerTextSlide(
+              title: 'Grocery Delivered 🛒',
+              subtitle: 'Daily essentials, straight to your door',
+              gradient: const [Color(0xFF43C6AC), Color(0xFF2E9E7B)],
+              icon: Icons.shopping_basket_rounded,
+              onTap: () => onTileTap('grocery'),
+            ),
+            BannerTextSlide(
+              title: 'Book a Hero 🦸',
+              subtitle: 'On-demand help for any task, any time',
+              gradient: const [Color(0xFF6C63FF), Color(0xFF7B2FF7)],
+              icon: Icons.emoji_people_rounded,
+              onTap: () => Navigator.push<void>(
+                context,
+                MaterialPageRoute(builder: (_) => const HeroBookingScreen()),
+              ),
+            ),
+            BannerTextSlide(
+              title: 'Car Service & Polish 🚗',
+              subtitle: 'Wash, polish & servicing at your doorstep',
+              gradient: const [Color(0xFF2193B0), Color(0xFF6DD5ED)],
+              icon: Icons.local_car_wash_rounded,
+              onTap: () => onTileTap('carwash'),
+            ),
+            BannerTextSlide(
+              title: 'Construction & Alteration 🏗️',
+              subtitle: 'Building work, alterations & crane services',
+              gradient: const [Color(0xFFB79891), Color(0xFF94716B)],
+              icon: Icons.construction_rounded,
+              onTap: () => onTileTap('construction'),
+            ),
             BannerTextSlide(
               title: 'Internet Offers 🌐',
               subtitle: 'Fast recharge plans & broadband deals — tap to explore',
@@ -1105,11 +1199,38 @@ class _HomeTab extends StatelessWidget {
               // mega card's own Internet tile already calls.
               onTap: () => onTileTap('broadband'),
             ),
+            BannerTextSlide(
+              title: 'Electronic Services 🔌',
+              subtitle: 'Repairs, spares & gadget store — all in one place',
+              gradient: const [Color(0xFF0F2027), Color(0xFF2C5364)],
+              icon: Icons.electrical_services_rounded,
+              onTap: () => Navigator.push<void>(
+                context,
+                MaterialPageRoute(builder: (_) => const NJTechStoreScreen()),
+              ),
+            ),
+            BannerTextSlide(
+              title: 'Visiting Cards, Bill Books & Flex Printing 🖨️',
+              subtitle: 'Design & print — delivered to your shop or home',
+              gradient: const [Color(0xFFF7971E), Color(0xFFFFD200)],
+              icon: Icons.print_rounded,
+              onTap: () => Navigator.push<void>(
+                context,
+                MaterialPageRoute(builder: (_) => const PrintingServiceScreen()),
+              ),
+            ),
+            BannerTextSlide(
+              title: 'E-Seva Services 📋',
+              subtitle: 'Government service solutions — coming soon',
+              gradient: const [Color(0xFF11998E), Color(0xFF38EF7D)],
+              icon: Icons.assignment_turned_in_rounded,
+              onTap: () => Navigator.push<void>(
+                context,
+                MaterialPageRoute(builder: (_) => const ComingSoonScreen(role: 'E-Seva')),
+              ),
+            ),
           ],
-          imageUrls: [
-            'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=800&q=80',
-            'https://images.unsplash.com/photo-1546054454-aa26e2b734c7?w=800&q=80',
-          ],
+          imageUrls: const [],
         ),
         const SizedBox(height: 100),
       ],),
@@ -1682,6 +1803,85 @@ class _HomeTab extends StatelessWidget {
     );
   }
 
+  // ── E-SEVA MEGA CARD ────────────────────────────────────────────
+  // NEW (Aug 12 2026 — Nizam: "designing and printing kum other
+  // services kum middile E Seva services kondu varaporom"): opens
+  // EsevaServiceScreen, which lists each e-Seva service (PAN,
+  // Aadhaar, Passport, Voter ID, etc.) as its own icon tile — those
+  // tiles are intentionally dummy (no action) for now, with a
+  // Call/WhatsApp contact section below per his explicit instruction.
+  Widget _buildEsevaMegaCard(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const EsevaServiceScreen()),
+              );
+            },
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        SvgPicture.string(FluentEmojiFlat.scroll, width: 20, height: 20),
+                        const SizedBox(width: 6),
+                        Text(
+                          context.watch<LocalizationService>().t('eseva_mega_title'),
+                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '  ${context.watch<LocalizationService>().t('eseva_mega_subtitle')}',
+                      style: TextStyle(color: kMuted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const EsevaServiceScreen()),
+              );
+            },
+            child: Container(
+              width: double.infinity,
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: kPink.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  SvgPicture.string(FluentEmojiFlat.card_index, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.scroll, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.label, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.office_building, width: 30, height: 30),
+                  SvgPicture.string(FluentEmojiFlat.printer, width: 30, height: 30),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── OTHER SERVICES MEGA CARD ────────────────────────────────────
   Widget _buildOtherServicesMegaCard(BuildContext context) {
     return Padding(
@@ -2036,6 +2236,24 @@ class _ProfileDrawer extends StatelessWidget {
 
               _drawerItem(context, Icons.settings_outlined,
                   t('drawer_settings'), () => onNavigate(const SettingsScreen()),),
+
+              // NEW (Aug 13 2026 — customer referral). TWO entries on
+              // purpose: customers reach for different words depending
+              // on the situation — "share" when messaging a friend,
+              // "QR" when the friend is standing right next to them.
+              // Both open the same screen, which holds the WhatsApp
+              // share button AND the personal QR.
+              _drawerItem(context, Icons.share_rounded,
+                  'Share App via WhatsApp',
+                  () => onNavigate(InviteFriendsScreen(
+                        displayName: user?.displayName,
+                      )),),
+
+              _drawerItem(context, Icons.qr_code_2_rounded,
+                  'My Invite QR',
+                  () => onNavigate(InviteFriendsScreen(
+                        displayName: user?.displayName,
+                      )),),
 
               _drawerItem(context, Icons.support_agent_rounded,
                   t('drawer_help_whatsapp'), () async {
@@ -2967,10 +3185,32 @@ class _KeepAliveTabState extends State<KeepAliveTab> with AutomaticKeepAliveClie
 // ================================================================
 // CATEGORY SLIDING BANNER — Animated marquee per slide
 // ================================================================
+// UPDATED (Aug 12 2026 — Nizam: "top layum replace pannu... top and
+// bottom la namma new service slinding oodite irukanum but even ah top
+// and bottom la same ads same timing la sliding oodama shuffle aagi
+// oodanum"): now shows the SAME 10 categories as the bottom
+// BannerAdsSlider (see _HomeTab.build()'s BannerTextSlide list), each
+// with a richer icon set. Deliberately listed here in REVERSE order
+// from the bottom banner, and on a different auto-scroll interval (4s
+// here vs 5s at the bottom) — together those two things mean the top
+// and bottom banners are never showing the same promo at the same
+// moment, without needing any shared timer/state between two separate
+// widgets. Every icon is a bundled local SVG (FluentEmojiFlat, via
+// _IconMarquee's continuous Timer-driven scroll) — zero network calls
+// and zero Hive/caching needed, since there's nothing to fetch in the
+// first place; that's what keeps this from costing any battery/PWA
+// speed no matter how many categories or icons are added.
 class _CategorySlidingBanner extends StatefulWidget {
-  const _CategorySlidingBanner();
+  final void Function(String) onTileTap;
+  const _CategorySlidingBanner({required this.onTileTap});
   @override
   State<_CategorySlidingBanner> createState() => _CategorySlidingBannerState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(ObjectFlagProperty<void Function(String)>.has('onTileTap', onTileTap));
+  }
 }
 
 class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
@@ -2978,40 +3218,112 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
   int _currentIndex = 0;
   Timer? _autoScrollTimer;
 
-  // Fixed count regardless of language -- used by the auto-scroll timer,
-  // which fires before/independent of any given build() and can't call
-  // t() itself. The actual translated titles are built fresh in build()
-  // via _buildSlides() below so they follow the active language.
-  static const int _slideCount = 4;
+  static const int _slideCount = 10;
 
+  // Same 10 categories as the bottom BannerAdsSlider, listed in REVERSE
+  // order on purpose (see header comment) so the two banners desync.
+  static const List<String> _titles = [
+    'E-Seva Online Services 📋',
+    'Visiting Cards & Flex Printing 🖨️',
+    'Electronic Services 🔌',
+    'Internet Offers 🌐',
+    'Construction & Alteration 🏗️',
+    'Car Service & Polish 🚗',
+    'Book a Hero 🦸',
+    'Grocery Delivered 🛒',
+    'Food from KFC, A2B, Subway, Domino\'s & Taj 🍽️',
+    'Taxi & Transport 🚖',
+  ];
+
+  // NEW: more icons per category than before, so each marquee feels
+  // fuller — food now also names the exact partner shops the icons
+  // stand in for (see FoodHubScreen — these are real onboarded
+  // partners, not a placeholder claim).
   static const List<List<String>> _slideIcons = [
     [
-      FluentEmojiFlat.motor_scooter, FluentEmojiFlat.package, FluentEmojiFlat.auto_rickshaw,
-      FluentEmojiFlat.oncoming_taxi, FluentEmojiFlat.delivery_truck, FluentEmojiFlat.bicycle,
+      FluentEmojiFlat.card_index, FluentEmojiFlat.scroll, FluentEmojiFlat.label,
+      FluentEmojiFlat.office_building, FluentEmojiFlat.printer, FluentEmojiFlat.framed_picture,
     ],
     [
-      FluentEmojiFlat.hamburger, FluentEmojiFlat.pizza, FluentEmojiFlat.chicken,
-      FluentEmojiFlat.french_fries, FluentEmojiFlat.cup_with_straw, FluentEmojiFlat.shortcake,
+      FluentEmojiFlat.printer, FluentEmojiFlat.card_index, FluentEmojiFlat.scroll,
+      FluentEmojiFlat.framed_picture, FluentEmojiFlat.label,
+    ],
+    [
+      FluentEmojiFlat.mobile_phone, FluentEmojiFlat.laptop, FluentEmojiFlat.desktop_computer,
+      FluentEmojiFlat.video_camera, FluentEmojiFlat.television, FluentEmojiFlat.snowflake,
+      FluentEmojiFlat.battery,
+    ],
+    [
+      FluentEmojiFlat.antenna_bars, FluentEmojiFlat.mobile_phone, FluentEmojiFlat.laptop,
+      FluentEmojiFlat.desktop_computer,
+    ],
+    [
+      FluentEmojiFlat.building_construction, FluentEmojiFlat.brick, FluentEmojiFlat.construction_worker,
+      FluentEmojiFlat.triangular_ruler, FluentEmojiFlat.office_building, FluentEmojiFlat.hammer_and_wrench,
+    ],
+    [
+      FluentEmojiFlat.oncoming_taxi, FluentEmojiFlat.sweat_droplets, FluentEmojiFlat.gear,
+      FluentEmojiFlat.hammer_and_wrench, FluentEmojiFlat.sport_utility_vehicle,
+    ],
+    [
+      FluentEmojiFlat.man_superhero, FluentEmojiFlat.high_voltage, FluentEmojiFlat.package,
+      FluentEmojiFlat.shopping_bags, FluentEmojiFlat.man_running,
     ],
     [
       FluentEmojiFlat.leafy_green, FluentEmojiFlat.red_apple, FluentEmojiFlat.carrot,
       FluentEmojiFlat.onion, FluentEmojiFlat.garlic, FluentEmojiFlat.shopping_cart,
     ],
     [
-      FluentEmojiFlat.mobile_phone, FluentEmojiFlat.laptop, FluentEmojiFlat.battery,
-      FluentEmojiFlat.antenna_bars, FluentEmojiFlat.hammer_and_wrench, FluentEmojiFlat.delivery_truck,
+      // KFC/A2B/Subway/Domino's/Taj — real onboarded partner shops
+      // (see FoodHubScreen / PartnerShopOrderScreen), represented here
+      // by their nearest matching bundled food-emoji icons since no
+      // trademarked brand-logo assets are shipped in this repo.
+      FluentEmojiFlat.hamburger, FluentEmojiFlat.pizza, FluentEmojiFlat.chicken,
+      FluentEmojiFlat.french_fries, FluentEmojiFlat.cup_with_straw, FluentEmojiFlat.shortcake,
+    ],
+    [
+      FluentEmojiFlat.motor_scooter, FluentEmojiFlat.package, FluentEmojiFlat.auto_rickshaw,
+      FluentEmojiFlat.oncoming_taxi, FluentEmojiFlat.delivery_truck, FluentEmojiFlat.bicycle,
     ],
   ];
 
-  List<_CategorySlideData> _buildSlides(String Function(String) t) {
-    const titleKeys = [
-      'category_taxi_slide',
-      'category_food_slide',
-      'category_grocery_slide',
-      'category_services_slide',
-    ];
+  // Reverse-order tap ids matching _titles above. 'route:x' entries open
+  // a screen directly instead of going through onTileTap's switch.
+  static const List<String> _tapIds = [
+    'route:eseva',
+    'route:printing',
+    'route:electronics',
+    'broadband',
+    'construction',
+    'carwash',
+    'route:hero',
+    'grocery',
+    'food',
+    'taxi',
+  ];
+
+  List<_CategorySlideData> _buildSlides() {
     return List.generate(_slideCount, (i) =>
-        _CategorySlideData(title: t(titleKeys[i]), icons: _slideIcons[i]),);
+        _CategorySlideData(title: _titles[i], icons: _slideIcons[i], tapId: _tapIds[i]),);
+  }
+
+  void _handleTap(BuildContext context, String tapId) {
+    switch (tapId) {
+      case 'route:eseva':
+        Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const EsevaServiceScreen()));
+        break;
+      case 'route:printing':
+        Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const PrintingServiceScreen()));
+        break;
+      case 'route:electronics':
+        Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const NJTechStoreScreen()));
+        break;
+      case 'route:hero':
+        Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const HeroBookingScreen()));
+        break;
+      default:
+        widget.onTileTap(tapId);
+    }
   }
 
   @override
@@ -3034,8 +3346,7 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
 
   @override
   Widget build(BuildContext context) {
-    final t = context.watch<LocalizationService>().t;
-    final slides = _buildSlides(t);
+    final slides = _buildSlides();
     return Column(
       children: [
         Container(
@@ -3047,24 +3358,27 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
             itemCount: slides.length,
             itemBuilder: (_, i) {
               final slide = slides[i];
-              return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [kPink.withValues(alpha: 0.15), kPink.withValues(alpha: 0.05)],
-                    begin: Alignment.topLeft, end: Alignment.bottomRight,
+              return GestureDetector(
+                onTap: () => _handleTap(context, slide.tapId),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [kPink.withValues(alpha: 0.15), kPink.withValues(alpha: 0.05)],
+                      begin: Alignment.topLeft, end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: kPink.withValues(alpha: 0.2)),
                   ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: kPink.withValues(alpha: 0.2)),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(slide.title, style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 8),
-                    Expanded(child: _IconMarquee(icons: slide.icons)),
-                  ],
+                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(slide.title, style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 8),
+                      Expanded(child: _IconMarquee(icons: slide.icons)),
+                    ],
+                  ),
                 ),
               );
             },
@@ -3092,7 +3406,8 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
 class _CategorySlideData {
   final String title;
   final List<String> icons;
-  const _CategorySlideData({required this.title, required this.icons});
+  final String tapId;
+  const _CategorySlideData({required this.title, required this.icons, required this.tapId});
 }
 
 class _IconMarquee extends StatefulWidget {

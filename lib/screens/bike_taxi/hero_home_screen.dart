@@ -17,6 +17,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -31,13 +32,16 @@ import '../../services/hero_ride_notification_service.dart';
 import '../../services/hero_usage_accumulator_service.dart';
 import '../../services/hero_wallet_service.dart';
 import '../../services/hero_web_audio_service.dart';
+import '../../services/localization_service.dart';
 import '../../services/location_service.dart';
 import '../../services/service_request_service.dart';
 import '../../services/update_service.dart';
+import '../../utils/daily_boost_messages.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../../widgets/hero_premium_loader.dart';
 import '../../widgets/order_photo_gallery.dart';
 import '../earn/rewards_hub_screen.dart';
+import '../../widgets/economic_vision_banner.dart';
 import '../notifications_screen.dart';
 import 'hero_ride_screen.dart';
 
@@ -678,6 +682,17 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   void initState() {
     super.initState();
     unawaited(_checkForAppUpdate());
+    // NEW (Aug 12 2026 — Nizam's "daily boost" request): one small,
+    // non-blocking earn/motivate SnackBar per app cold-boot, right
+    // under the time-of-day greeting. See daily_boost_messages.dart —
+    // hero's list is specifically about earning/growing, not the
+    // generic customer copy.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(seconds: 3), () {
+        if (!mounted) return;
+        showDailyBoostSnackBar(context, randomHeroBoostMessage());
+      });
+    });
     _user = FirebaseAuth.instance.currentUser;
     // Build the query streams exactly once — see the field comments.
     final streamUid = _user?.uid;
@@ -4247,12 +4262,19 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _captainName,
+                  // NEW (Aug 12 2026 — Nizam's "personal touch" request):
+                  // time-of-day greeting, same idea as the Customer app's
+                  // dashboard header and the Claude desktop app itself
+                  // ("Good afternoon, Nizam"). See LocalizationService
+                  // .greetingKeyForNow().
+                  '${context.watch<LocalizationService>().t(LocalizationService.greetingKeyForNow())}, $_captainName',
                   style: const TextStyle(
                     fontSize: 15,
                     color: _text,
                     fontWeight: FontWeight.w700,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const Text(
                   'hero allin1 · Erode',
@@ -5388,12 +5410,26 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       );
 
   Widget _buildOfflineView() {
-    return Center(
+    // NEW (Aug 13 2026): the பொருளாதாரப் புரட்சி banner is placed on the
+    // OFFLINE view deliberately. The online view is a fixed-height
+    // Column whose ride stream takes Expanded — dropping a banner in
+    // there would squeeze the thing a working hero actually needs. The
+    // offline state is exactly when a hero is idle and has time to
+    // read it, so it lands where it can be absorbed rather than where
+    // it competes with live ride cards. Wrapped in a scroll view since
+    // the extra content can exceed a short screen.
+    return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            const EconomicVisionBanner(
+              horizontalPadding: 0,
+              compact: true,
+              heroApp: true,
+            ),
+            const SizedBox(height: 28),
             const Text('😴', style: TextStyle(fontSize: 64)),
             const SizedBox(height: 20),
             Text(

@@ -36,6 +36,7 @@ import 'screens/guru_chat_screen.dart';
 import 'screens/guru_offer_screen.dart';
 import 'screens/hero_booking_screen.dart';
 import 'screens/settings_screen.dart';
+import 'services/affiliate_service.dart';
 import 'services/ai_activation_service.dart';
 import 'services/analytics_service.dart';
 // GUEST MODE (Aug 11 2026): for ensureGuestSession() in main().
@@ -388,7 +389,16 @@ void main() async {
       // was already restored from disk it returns immediately without
       // touching it, so a signed-in customer is never downgraded to a
       // guest on relaunch.
-      unawaited(AuthService().ensureGuestSession());
+      // NEW (Aug 12 2026 — Affiliate QR Generator): chained onto the same
+      // unawaited future so the scan counter only fires once a session
+      // (real or anonymous/guest) actually exists — Firestore would
+      // reject the write otherwise. Both calls stay fire-and-forget;
+      // neither can delay first paint.
+      unawaited(
+        AuthService()
+            .ensureGuestSession()
+            .then((_) => AffiliateService.instance.logScanIfPending()),
+      );
 
       // Everything non-essential to the first frame runs here instead of
       // blocking runApp(): analytics, the deferred Hive boxes, the API
@@ -434,6 +444,29 @@ Future<void> _runBootPhase1() async {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('campaign_source', sourceParam);
       }
+      // NEW (Aug 12 2026 — Affiliate QR Generator): same pattern as the
+      // 'source' capture above, for ?ref=CODE&rtype=... links generated
+      // by the new Admin Affiliate QR screen. The actual scan/signup
+      // writes happen later (see AuthService().ensureGuestSession()
+      // .then(...) below, and auth_service.dart's new-account block) —
+      // this just grabs the code before Google Sign-In's redirect can
+      // clear the URL.
+      //
+      // FIX (Aug 13 2026 audit — "QR/link flow propera run agala"):
+      // this used to be `unawaited(...)`, racing against the
+      // ensureGuestSession().then(logScanIfPending) chain below. Both
+      // are fire-and-forget futures started around the same moment;
+      // logScanIfPending() reads kPendingCodeKey from SharedPreferences,
+      // and there was no guarantee captureRefFromUrl() had FINISHED
+      // WRITING it first — on a fast device / fast connection,
+      // logScanIfPending() would frequently run first, find nothing
+      // pending yet, and the scan/signup for that link would silently
+      // never be counted. captureRefFromUrl() is two cheap
+      // SharedPreferences calls (no network), so awaiting it here costs
+      // nothing measurable and removes the race entirely: by the time
+      // _runBootPhase1() returns, the pending code (if any) is
+      // guaranteed to be on disk before anything downstream can read it.
+      await AffiliateService.instance.captureRefFromUrl();
     }
 
     // If this launch came from Android's share sheet (customer shared a
@@ -554,6 +587,12 @@ Future<void> _warmMapStack() async {
     await ApiConfig.ensureEnvLoaded();
     debugPrint('[main_customer] Initializing MapService...');
     await MapService().initialize();
+    // REMOVED (Aug 12 2026 — customer-facing demo-vehicle removal):
+    // MapSimulationService.instance.initialize() used to start a
+    // Firestore-driven fake-vehicle simulation that could render on this
+    // app's live map. The simulation now lives ONLY in
+    // admin_map_simulation_screen.dart, started manually from there —
+    // this app no longer references MapSimulationService at all.
     debugPrint(
       '[main_customer] MapService ready provider=${MapService().currentProvider.name} '
       'fallback=${MapService().isUsingFallback}',

@@ -13,7 +13,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'config/app_variant.dart';
 import 'firebase_options.dart';
-import 'screens/app_splash_video_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/seller_dashboard_screen.dart';
 import 'screens/seller_home_kitchen_menu_screen.dart';
@@ -24,6 +23,8 @@ import 'services/localization_service.dart';
 import 'services/migration_gate_service.dart';
 import 'services/session_service.dart';
 import 'services/theme_service.dart';
+import 'services/seller_foreground_service.dart';
+import 'services/seller_alert_notification_service.dart';
 import 'widgets/branded_loading_screen.dart';
 import 'widgets/migration_notice_overlay.dart';
 
@@ -52,25 +53,53 @@ const String _kSplashVideoSeenEverKey = 'seller_splash_video_seen_ever_v1';
 // very first time this device/browser ever opens the seller app (see
 // _kSplashVideoSeenEverKey above). Every later launch skips this widget
 // entirely and goes straight to SellerApp — see the branch in main() below.
-class _BootLoadingApp extends StatelessWidget {
+// UPDATED (Aug 12 2026 — CEO/CTO "nuke the videos"): this used to mount
+// AppSplashVideoScreen, which streamed the 2.1MB app_splash.mp4 before
+// anything else. On web that was 2.1MB of Firebase Hosting bandwidth per
+// visitor for a decorative splash; the pure CSS/SVG route-draw animation
+// now living in web/index.html covers that same pre-engine moment for
+// zero bytes, and it paints even earlier (before main.dart.js is parsed).
+// Native simply goes straight to the branded frame.
+//
+// CRITICAL: onVideoFinished completes the `videoDone` completer that
+// main()'s boot sequence awaits. It MUST still fire exactly once or the
+// app hangs on this screen forever — hence the StatefulWidget + a
+// post-frame callback in initState (fires once per mount) rather than
+// calling it from build(), which can run many times.
+class _BootLoadingApp extends StatefulWidget {
   const _BootLoadingApp({required this.onVideoFinished});
 
   final VoidCallback onVideoFinished;
 
   @override
+  State<_BootLoadingApp> createState() => _BootLoadingAppState();
+}
+
+class _BootLoadingAppState extends State<_BootLoadingApp> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onVideoFinished();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: AppSplashVideoScreen(
-        nextScreen: const BrandedLoadingScreen(),
-        onFinished: onVideoFinished,
-      ),
+      home: BrandedLoadingScreen(),
     );
   }
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize notification and foreground services for zero-delay order ringing
+  await SellerAlertNotificationService.initialize();
+  SellerForegroundService.initialize();
+
   // FIX (audit finding — notifications_screen.dart hardcoded
   // 'customer' fallback): see lib/config/app_variant.dart.
   currentAppVariant = 'seller';
