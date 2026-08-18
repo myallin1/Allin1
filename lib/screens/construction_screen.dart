@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
 // ── Brand constants ───────────────────────────────────────────────
 const Color _kPink     = Color(0xFFFF4FA3);
@@ -17,9 +18,9 @@ const Color _kMuted    = Color(0xFF9999BB);
 const Color _kGold     = Color(0xFFFFBB00);
 const Color _kGreen    = Color(0xFF00C853);
 
-const String _phone    = '+918681869091';
-const String _telUri   = 'tel:+918681869091';
-const String _waUri    = 'https://wa.me/918681869091';
+const String _phone    = '+919003803601';
+const String _telUri   = 'tel:+919003803601';
+const String _waUri    = 'https://wa.me/919003803601';
 
 // ── Service data ─────────────────────────────────────────────────
 const _services = [
@@ -138,7 +139,7 @@ class ConstructionScreen extends StatelessWidget {
         background: Stack(
           fit: StackFit.expand,
           children: [
-            Image.network(
+            CachedCloudImage(
               'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=800&q=80',
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => Container(color: _kDark2),
@@ -209,7 +210,7 @@ class _ServiceCard extends StatelessWidget {
               ClipRRect(
                 borderRadius:
                     const BorderRadius.vertical(top: Radius.circular(20)),
-                child: Image.network(
+                child: CachedCloudImage(
                   service.imageUrl,
                   height: 190,
                   width: double.infinity,
@@ -463,3 +464,4 @@ Future<void> _launch(String uriStr) async {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }
+

@@ -36,6 +36,9 @@ import '../services/update_service.dart';
 import '../services/usage_tracking_service.dart';
 import '../services/web_version_checker.dart';
 import '../utils/daily_boost_messages.dart';
+import '../widgets/auto_image_slider.dart';
+import '../widgets/auto_widget_slider.dart';
+import '../widgets/banner_ads_slider.dart';
 import '../widgets/banner_slider.dart';
 import '../widgets/coach_mark_overlay.dart';
 import '../widgets/download_app_banner.dart';
@@ -45,10 +48,11 @@ import 'car_wash_screen.dart';
 import 'coming_soon_screen.dart';
 import 'construction_screen.dart';
 import 'eseva_service_screen.dart';
-import 'food_hub_screen.dart';
+import 'custom_food_order_screen.dart';
 import 'grocery_order_screen.dart';
 import 'guru_chat_screen.dart';
 import 'hero_booking_screen.dart';
+import 'mobiles/mobile_hub_screen.dart';
 import 'my_orders_screen.dart';
 import 'nj_tech_service_screen.dart';
 import 'nj_tech_store_screen.dart';
@@ -58,6 +62,7 @@ import 'profile_screen.dart';
 import 'rewards_screen.dart';
 import 'ride_history_screen.dart';
 import '../widgets/economic_vision_banner.dart';
+import 'hero_promo_screen.dart';
 import 'invite_friends_screen.dart';
 import 'settings_screen.dart';
 import 'sos_screen.dart';
@@ -627,7 +632,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     switch (id) {
       case 'taxi':        _navigate(const BikeBookingScreen()); break;
       case 'broadband':   _launchBroadband(); break;
-      case 'food':        _navigate(const FoodHubScreen()); break;
+      case 'food':        _navigate(const CustomFoodOrderScreen()); break;
       case 'grocery':     _navigate(const GroceryOrderScreen()); break;
       case 'njtech':      _navigate(const NJTechStoreScreen()); break;
       case 'carwash':     _navigate(const CarWashScreen()); break;
@@ -1104,6 +1109,10 @@ class _HomeTab extends StatelessWidget {
         const SizedBox(height: 12),
         _buildTaxiMegaCard(context),
         const SizedBox(height: 12),
+        // 3rd position, per Nizam (Aug 18 2026) — the Mobile Hub sits
+        // directly under Taxi so it's visible without scrolling.
+        _buildMobilesMegaCard(context),
+        const SizedBox(height: 12),
         _buildFoodMegaCard(context),
         const SizedBox(height: 12),
         _buildGroceryMegaCard(context),
@@ -1138,7 +1147,7 @@ class _HomeTab extends StatelessWidget {
         // navigation targets as their matching mega-cards below, so tapping
         // a slide always opens the same real screen the corresponding tile
         // already opens. Food slide names real, already-onboarded partner
-        // shops (KFC/A2B/Subway/Domino's/Taj) — see FoodHubScreen, which
+        // shops (KFC/A2B/Subway/Domino's/Taj) — see CustomFoodOrderScreen, which
         // links out to each shop's own ordering site via PartnerShopOrderScreen.
         BannerAdsSlider(
           height: 240,
@@ -1299,11 +1308,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  SvgPicture.string(FluentEmojiFlat.motor_scooter, width: 32, height: 32),
-                  SvgPicture.string(FluentEmojiFlat.package, width: 32, height: 32),
-                  SvgPicture.string(FluentEmojiFlat.auto_rickshaw, width: 32, height: 32),
-                  SvgPicture.string(FluentEmojiFlat.oncoming_taxi, width: 32, height: 32),
-                  SvgPicture.string(FluentEmojiFlat.delivery_truck, width: 32, height: 32),
+                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.motor_scooter), SvgPicture.string(FluentEmojiFlat.bicycle)])),
+                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.package), SvgPicture.string(FluentEmojiFlat.open_mailbox_with_raised_flag)])),
+                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.auto_rickshaw), SvgPicture.string(FluentEmojiFlat.motor_scooter)])),
+                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(milliseconds: 3500), children: [Image.asset('assets/images/taxi_slides/yellow_car.png'), SvgPicture.string(FluentEmojiFlat.oncoming_taxi)])),
+                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.delivery_truck), SvgPicture.string(FluentEmojiFlat.sport_utility_vehicle)])),
                 ],
               ),
             ),
@@ -1323,7 +1332,7 @@ class _HomeTab extends StatelessWidget {
           GestureDetector(
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const FoodHubScreen()),
+              MaterialPageRoute(builder: (_) => const CustomFoodOrderScreen()),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1355,7 +1364,7 @@ class _HomeTab extends StatelessWidget {
             key: const Key('dashboard_tile_food'),
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const FoodHubScreen()),
+              MaterialPageRoute(builder: (_) => const CustomFoodOrderScreen()),
             ),
             child: Container(
               width: double.infinity,
@@ -1369,11 +1378,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  SvgPicture.string(FluentEmojiFlat.hamburger, width: 32, height: 32),
-                  SvgPicture.string(FluentEmojiFlat.pizza, width: 32, height: 32),
-                  SvgPicture.string(FluentEmojiFlat.chicken, width: 32, height: 32),
-                  SvgPicture.string(FluentEmojiFlat.french_fries, width: 32, height: 32),
-                  SvgPicture.string(FluentEmojiFlat.shortcake, width: 32, height: 32),
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide1.png', 'assets/images/food_slides/slide6.png'], width: 32, height: 32, duration: const Duration(seconds: 3))),
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide2.png', 'assets/images/food_slides/slide7.png'], width: 32, height: 32, duration: const Duration(milliseconds: 3200))),
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide3.png', 'assets/images/food_slides/slide8.jpg'], width: 32, height: 32, duration: const Duration(milliseconds: 2800))),
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide4.jpg', 'assets/images/food_slides/slide1.png'], width: 32, height: 32, duration: const Duration(milliseconds: 3500))),
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide5.jpg', 'assets/images/food_slides/slide2.png'], width: 32, height: 32, duration: const Duration(milliseconds: 3100))),
                 ],
               ),
             ),
@@ -1439,11 +1448,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  SvgPicture.string(FluentEmojiFlat.leafy_green, width: 32, height: 32),
-                  SvgPicture.string(FluentEmojiFlat.red_apple, width: 32, height: 32),
-                  SvgPicture.string(FluentEmojiFlat.carrot, width: 32, height: 32),
-                  SvgPicture.string(FluentEmojiFlat.onion, width: 32, height: 32),
-                  SvgPicture.string(FluentEmojiFlat.shopping_cart, width: 32, height: 32),
+                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.leafy_green), SvgPicture.string(FluentEmojiFlat.broccoli)])),
+                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.red_apple), SvgPicture.string(FluentEmojiFlat.banana)])),
+                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.carrot), SvgPicture.string(FluentEmojiFlat.potato)])),
+                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.onion), SvgPicture.string(FluentEmojiFlat.garlic)])),
+                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.shopping_cart), SvgPicture.string(FluentEmojiFlat.shopping_bags)])),
                 ],
               ),
             ),
@@ -1454,6 +1463,95 @@ class _HomeTab extends StatelessWidget {
   }
 
   // ── ELECTRONICS MEGA CARD (Slim Static Layout) ───────────────────────
+  // ── MOBILES MEGA CARD (Allin1 Mobile Hub) ─────────────────────────
+  // NEW (Aug 18 2026, Nizam: "customer main page la 3rd la oru button…
+  // namma myallin1 mobile hub ah maathanum"). Sits 3rd among the mega
+  // cards, directly after Taxi.
+  //
+  // Deliberately the SAME hand-written shape as every other mega card
+  // (header row + 56px kPink strip of emoji icons) rather than a new
+  // component — a one-off style here would read as a bolted-on section.
+  //
+  // All five icons below are from the set already proven present in
+  // this app's colorful_iconify_flutter version (verified against every
+  // FluentEmojiFlat reference in lib/) — a missing constant would fail
+  // the build for all four flavours.
+  Widget _buildMobilesMegaCard(BuildContext context) {
+    void openHub([int tab = 0]) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => MobileHubScreen(initialTab: tab)),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: openHub,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        SvgPicture.string(FluentEmojiFlat.mobile_phone,
+                            width: 20, height: 20),
+                        const SizedBox(width: 6),
+                        Text(
+                          context
+                              .watch<LocalizationService>()
+                              .t('mobiles_mega_title'),
+                          style: GoogleFonts.outfit(
+                              color: kText,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '  ${context.watch<LocalizationService>().t('mobiles_mega_subtitle')}',
+                      style: TextStyle(color: kMuted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: openHub,
+            child: Container(
+              width: double.infinity,
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: kPink.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(16),
+                border:
+                    Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.mobile_phone), SvgPicture.string(FluentEmojiFlat.laptop)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.battery), SvgPicture.string(FluentEmojiFlat.electric_plug)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.hammer_and_wrench), SvgPicture.string(FluentEmojiFlat.gear)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.shopping_bags), SvgPicture.string(FluentEmojiFlat.shopping_cart)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.label), SvgPicture.string(FluentEmojiFlat.receipt)])),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildElectronicsMegaCard(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1508,12 +1606,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  SvgPicture.string(FluentEmojiFlat.mobile_phone, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.laptop, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.desktop_computer, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.video_camera, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.television, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.snowflake, width: 30, height: 30),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.mobile_phone), SvgPicture.string(FluentEmojiFlat.battery)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.laptop), SvgPicture.string(FluentEmojiFlat.desktop_computer)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.desktop_computer), SvgPicture.string(FluentEmojiFlat.floppy_disk)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.video_camera), SvgPicture.string(FluentEmojiFlat.camera)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.television), SvgPicture.string(FluentEmojiFlat.radio)])),
                 ],
               ),
             ),
@@ -1578,11 +1675,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  SvgPicture.string(FluentEmojiFlat.oncoming_taxi, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.sweat_droplets, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.gear, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.hammer_and_wrench, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.sport_utility_vehicle, width: 30, height: 30),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.oncoming_taxi), SvgPicture.string(FluentEmojiFlat.sport_utility_vehicle)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.sweat_droplets), SvgPicture.string(FluentEmojiFlat.sponge)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.gear), SvgPicture.string(FluentEmojiFlat.nut_and_bolt)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.hammer_and_wrench), SvgPicture.string(FluentEmojiFlat.wrench)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.sport_utility_vehicle), SvgPicture.string(FluentEmojiFlat.oncoming_automobile)])),
                 ],
               ),
             ),
@@ -1647,11 +1744,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  SvgPicture.string(FluentEmojiFlat.building_construction, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.brick, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.construction_worker, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.triangular_ruler, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.office_building, width: 30, height: 30),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.building_construction), SvgPicture.string(FluentEmojiFlat.house)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.brick), SvgPicture.string(FluentEmojiFlat.wood)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.construction_worker), SvgPicture.string(FluentEmojiFlat.man_construction_worker)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.triangular_ruler), SvgPicture.string(FluentEmojiFlat.straight_ruler)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.office_building), SvgPicture.string(FluentEmojiFlat.classical_building)])),
                 ],
               ),
             ),
@@ -1716,11 +1813,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  SvgPicture.string(FluentEmojiFlat.man_superhero, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.high_voltage, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.package, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.shopping_bags, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.man_running, width: 30, height: 30),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.man_superhero), SvgPicture.string(FluentEmojiFlat.woman_superhero)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.high_voltage), SvgPicture.string(FluentEmojiFlat.collision)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.package), SvgPicture.string(FluentEmojiFlat.open_mailbox_with_raised_flag)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.shopping_bags), SvgPicture.string(FluentEmojiFlat.shopping_cart)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.man_running), SvgPicture.string(FluentEmojiFlat.woman_running)])),
                 ],
               ),
             ),
@@ -1789,11 +1886,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  SvgPicture.string(FluentEmojiFlat.card_index, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.scroll, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.framed_picture, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.label, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.printer, width: 30, height: 30),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.card_index), SvgPicture.string(FluentEmojiFlat.card_file_box)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.scroll), SvgPicture.string(FluentEmojiFlat.page_facing_up)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.framed_picture), SvgPicture.string(FluentEmojiFlat.artist_palette)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.label), SvgPicture.string(FluentEmojiFlat.bookmark)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.printer), SvgPicture.string(FluentEmojiFlat.camera)])),
                 ],
               ),
             ),
@@ -1868,11 +1965,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  SvgPicture.string(FluentEmojiFlat.card_index, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.scroll, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.label, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.office_building, width: 30, height: 30),
-                  SvgPicture.string(FluentEmojiFlat.printer, width: 30, height: 30),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.card_index), SvgPicture.string(FluentEmojiFlat.identification_card)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.scroll), SvgPicture.string(FluentEmojiFlat.rolled_up_newspaper)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.label), SvgPicture.string(FluentEmojiFlat.receipt)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.office_building), SvgPicture.string(FluentEmojiFlat.bank)])),
+                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.printer), SvgPicture.string(FluentEmojiFlat.fax_machine)])),
                 ],
               ),
             ),
@@ -2026,44 +2123,6 @@ class _HomeTab extends StatelessWidget {
   Widget _buildPromoCards(BuildContext context) {
     final t = context.watch<LocalizationService>().t;
     return Column(children: [
-      GestureDetector(
-        onTap: () => Navigator.push<void>(context,
-            MaterialPageRoute<void>(builder: (_) => const BikeBookingScreen()),),
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1035),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(children: [
-            const Text('🏍️', style: TextStyle(fontSize: 28)),
-            const SizedBox(width: 12),
-            Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-              // Font switched from notoSansTamil to outfit along with the
-              // copy — notoSansTamil exists to render Tamil glyphs, and
-              // keeping it for English text just loads a font the app
-              // doesn't otherwise need here.
-              Text(t('promo_free_ride_title'),
-                  style: GoogleFonts.outfit(
-                      color: kPink, fontSize: 13, fontWeight: FontWeight.w700,),),
-              const SizedBox(height: 2),
-              Text(t('promo_free_ride_subtitle'),
-                  style: GoogleFonts.outfit(
-                      color: Colors.white60, fontSize: 10,),),
-            ],),),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: kPink, borderRadius: BorderRadius.circular(10),),
-              child: Text(t('promo_book_label'), style: GoogleFonts.outfit(
-                  color: Colors.white, fontSize: 11,
-                  fontWeight: FontWeight.w700,),),
-            ),
-          ],),
-        ),
-      ),
       GestureDetector(
         onTap: () => Navigator.push<void>(context,
             MaterialPageRoute<void>(builder: (_) => const GuruChatScreen()),),
@@ -2300,6 +2359,21 @@ class _ProfileDrawer extends StatelessWidget {
                 await PrefsCache.clearAll();
                 await FirebaseAuth.instance.signOut();
               }, color: kRed,),
+
+              // ── JOIN AS HERO ────────────────────────────────────
+              // MOVED here (Aug 18 2026, per Nizam: "hero invite yella
+              // option kudavum onna kalanthurukku"). It was previously
+              // a plain row in the list above, where it read as just
+              // another menu item and got lost among Profile / Orders /
+              // Settings / Share / QR / Help.
+              //
+              // This is a RECRUITMENT call to action, not navigation —
+              // it deserves to look different from the utility rows. So
+              // it now sits alone in the empty space below Sign Out,
+              // where nothing competes with it, drawn as a proper
+              // bordered card with the hero icon.
+              const SizedBox(height: 22),
+              _buildJoinHeroButton(context, onNavigate),
             ],),
           ),
 
@@ -2330,6 +2404,49 @@ class _ProfileDrawer extends StatelessWidget {
       trailing: Icon(Icons.chevron_right_rounded,
           color: c.withValues(alpha: 0.5), size: 18,),
       dense: true,
+    );
+  }
+
+  Widget _buildJoinHeroButton(BuildContext context, void Function(Widget) onNavigate) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: GestureDetector(
+        onTap: () {
+          Navigator.pop(context);
+          onNavigate(const HeroPromoScreen());
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          decoration: BoxDecoration(
+            color: kPink.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: kPink.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              SvgPicture.string(FluentEmojiFlat.man_superhero, width: 24, height: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Join as Hero',
+                      style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Become a partner & start earning',
+                      style: TextStyle(color: kMuted, fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: kPink),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -3237,7 +3354,7 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
 
   // NEW: more icons per category than before, so each marquee feels
   // fuller — food now also names the exact partner shops the icons
-  // stand in for (see FoodHubScreen — these are real onboarded
+  // stand in for (see CustomFoodOrderScreen — these are real onboarded
   // partners, not a placeholder claim).
   static const List<List<String>> _slideIcons = [
     [
@@ -3275,7 +3392,7 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
     ],
     [
       // KFC/A2B/Subway/Domino's/Taj — real onboarded partner shops
-      // (see FoodHubScreen / PartnerShopOrderScreen), represented here
+      // (see CustomFoodOrderScreen / PartnerShopOrderScreen), represented here
       // by their nearest matching bundled food-emoji icons since no
       // trademarked brand-logo assets are shipped in this repo.
       FluentEmojiFlat.hamburger, FluentEmojiFlat.pizza, FluentEmojiFlat.chicken,
@@ -3465,4 +3582,5 @@ class _IconMarqueeState extends State<_IconMarquee> with SingleTickerProviderSta
     );
   }
 }
+
 

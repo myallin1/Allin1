@@ -4,6 +4,8 @@
 // ================================================================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
+
 import 'cache_service.dart';
 
 enum Category {
@@ -105,7 +107,19 @@ class CategoryGatewayService {
         ..sort((a, b) => ((b['rating'] as num?) ?? 0).compareTo((a['rating'] as num?) ?? 0));
 
       // STEP 3: Update cache
-      await _cache.cacheSellers(categoryKey, sellers);
+      //
+      // Same Timestamp trap as loadSellerProducts below, and the same
+      // two-part fix — see the long comment there. This is the one that
+      // broke the SELLER LIST: seller docs carry createdAt/updatedAt as
+      // Firestore Timestamps (SellerModel.toJson writes them), Hive
+      // cannot serialise those, and the throw propagated out of a
+      // successful read. Sanitise, and never let a cache write take down
+      // a fetch that already succeeded.
+      try {
+        await _cache.cacheSellers(categoryKey, _hiveSafe(sellers));
+      } catch (e) {
+        debugPrint('[CategoryGateway] seller cache write skipped: $e');
+      }
 
       return sellers;
     } catch (e) {
@@ -123,6 +137,42 @@ class CategoryGatewayService {
   }
 
   // ── Load Seller Products (Cache-First Strategy) ─────────────
+  /// Deep-converts Firestore-only types into Hive/JSON-safe primitives.
+  ///
+  /// Hive has no adapter for Firestore's `Timestamp`, `GeoPoint` or
+  /// `DocumentReference`, and throws
+  /// `HiveError: Cannot write, unknown type: ...` on any of them. Under
+  /// dart2js the type name is minified ('minified:iC'), which is why the
+  /// error message alone did not name Timestamp.
+  ///
+  /// Timestamps become ISO-8601 strings — the same representation
+  /// ServiceRequestModel.toJson uses for its Hive round-trip, so a
+  /// cached value reads back through the same flexible parsers already
+  /// in this codebase.
+  ///
+  /// Recurses into nested maps/lists: a menu item's `variants` list
+  /// holds maps, and a future field could nest deeper still.
+  static dynamic _hiveSafeValue(dynamic v) {
+    if (v is Timestamp) return v.toDate().toIso8601String();
+    if (v is DateTime) return v.toIso8601String();
+    if (v is GeoPoint) return {'lat': v.latitude, 'lng': v.longitude};
+    if (v is DocumentReference) return v.path;
+    if (v is Map) {
+      return v.map<String, dynamic>(
+          (k, val) => MapEntry(k.toString(), _hiveSafeValue(val)));
+    }
+    if (v is List) return v.map(_hiveSafeValue).toList();
+    return v;
+  }
+
+  static List<Map<String, dynamic>> _hiveSafe(
+    List<Map<String, dynamic>> rows,
+  ) =>
+      rows
+          .map((r) => Map<String, dynamic>.from(
+              _hiveSafeValue(r) as Map<String, dynamic>))
+          .toList();
+
   Future<List<Map<String, dynamic>>> loadSellerProducts(
     String sellerId,
     Category category,
@@ -169,7 +219,40 @@ class CategoryGatewayService {
           .toList()
         ..sort((a, b) => ((a['name'] as String?) ?? '').compareTo((b['name'] as String?) ?? ''));
 
-      await _cache.cacheProducts(sellerId, products);
+      // ================================================================
+      // ROOT CAUSE FIX (Aug 17 2026) — "Failed to load products"
+      // HiveError: Cannot write, unknown type: minified:iC
+      // ================================================================
+      // 'minified:iC' is Firestore's `Timestamp` after dart2js minifies
+      // it. menu_items docs carry createdAt/updatedAt as Timestamps
+      // (MenuItemModel.toJson writes them, and updateMenuItem stamps
+      // updatedAt with FieldValue.serverTimestamp()), and Hive cannot
+      // serialise a Timestamp without a registered adapter.
+      //
+      // So the Firestore READ succeeded and the products were in hand —
+      // then the CACHE WRITE threw, the exception propagated out of this
+      // method, and the customer saw "Failed to load products" for a
+      // seller whose menu had loaded perfectly. A caching optimisation
+      // took down the feature it was meant to speed up.
+      //
+      // Two independent fixes, because either alone leaves a trap:
+      //
+      //   1. SANITISE — convert Timestamps to ISO-8601 strings before
+      //      caching. This is the same Hive-safe discipline
+      //      ServiceRequestModel.toJson already follows for the same
+      //      reason. Now the cache actually works instead of throwing.
+      //
+      //   2. NEVER LET THE CACHE BREAK THE READ — wrap the write so any
+      //      future unserialisable field (a GeoPoint, a DocumentReference,
+      //      a nested map someone adds next year) degrades to "no cache"
+      //      rather than "no menu". The products are already fetched and
+      //      correct at this point; failing to remember them is a
+      //      performance loss, not a functional one.
+      try {
+        await _cache.cacheProducts(sellerId, _hiveSafe(products));
+      } catch (e) {
+        debugPrint('[CategoryGateway] product cache write skipped: $e');
+      }
 
       return products;
     } catch (e) {

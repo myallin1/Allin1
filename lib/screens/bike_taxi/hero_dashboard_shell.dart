@@ -18,6 +18,8 @@ class HeroDashboardShell extends StatefulWidget {
 }
 
 class _HeroDashboardShellState extends State<HeroDashboardShell> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  
   static const Color _bg = Color(0xFFFFFBFE);
   static const Color _surface = Colors.white;
   static const Color _cardTint = Color(0xFFFFF1F8);
@@ -113,6 +115,11 @@ class _HeroDashboardShellState extends State<HeroDashboardShell> {
   // all. Tab-reset-first behavior (back on a non-Radar tab returns to
   // Radar before anything else) is unchanged.
   void _handleBackPress() {
+    final scaffold = _scaffoldKey.currentState;
+    if (scaffold != null && scaffold.isDrawerOpen) {
+      Navigator.of(context).pop();
+      return;
+    }
     if (_tabIndex != 0) {
       _goToTab(0);
       return;
@@ -143,6 +150,7 @@ class _HeroDashboardShellState extends State<HeroDashboardShell> {
         _handleBackPress();
       },
       child: Scaffold(
+      key: _scaffoldKey,
       backgroundColor: _bg,
       // NEW (CTO mandate — Universal Side Tray Banner): Hero app had no
       // drawer at all before this.

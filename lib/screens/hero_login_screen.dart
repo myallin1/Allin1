@@ -52,9 +52,36 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
         'approved';
   }
 
-  bool _isPendingHero(Map<String, dynamic>? heroData) {
+  bool _isRejectedHero(Map<String, dynamic>? heroData) {
     return heroData?['approvalStatus']?.toString().trim().toLowerCase() ==
-        'pending';
+        'rejected';
+  }
+
+  /// FIX (Aug 17 2026 — Nizam: "customer old form valiya vantha some
+  /// details upload pannathana... ithunala hero login problem aguthu").
+  ///
+  /// This used to be a strict `== 'pending'` equality test. Every caller
+  /// below follows the same shape: approved -> home, pending -> pending
+  /// screen, ANYTHING ELSE -> signOut() + "Your account is pending Admin
+  /// approval". So a hero registered through an older version of the
+  /// form, whose doc has NO approvalStatus field at all (or some legacy
+  /// value), matched neither branch and was SIGNED OUT on every single
+  /// login attempt — while being told they were "pending approval",
+  /// which is not something signing out could ever help with.
+  ///
+  /// _syncHeroIdentityFields() above does backfill approvalStatus:
+  /// 'pending' for exactly these docs — but it writes to Firestore while
+  /// the callers keep testing the STALE in-memory `heroData` map read
+  /// moments earlier, so the repair never helped the login that
+  /// performed it.
+  ///
+  /// Now: only an explicit 'approved' or 'rejected' is treated as such;
+  /// everything else — 'pending', empty, missing, or any legacy value —
+  /// is pending. That is the honest reading: if we cannot prove a hero
+  /// was approved or rejected, they are waiting. Nobody gets ejected
+  /// from the app over a field an old build forgot to write.
+  bool _isPendingHero(Map<String, dynamic>? heroData) {
+    return !_isApprovedHero(heroData) && !_isRejectedHero(heroData);
   }
 
   Future<void> _syncHeroIdentityFields(
@@ -425,14 +452,26 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
         return;
       }
 
+      // Only reachable for an EXPLICITLY rejected hero now (see
+      // _isPendingHero above — every other state, including a legacy doc
+      // with no approvalStatus at all, is treated as pending and lands
+      // on HeroPendingScreen instead of being signed out here).
+      //
+      // Message corrected to match: this used to say "pending Admin
+      // approval", which was wrong twice over — it was shown to
+      // rejected heroes, and it was also the message a legacy-doc hero
+      // saw right before being ejected, telling them to wait for
+      // something that would never happen.
       await FirebaseAuth.instance.signOut();
       await googleSignIn.signOut();
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Your account is pending Admin approval'),
-          backgroundColor: Color(0xFFF5C542),
+          content: Text(
+            'Your Hero application was not approved. Please contact support.',
+          ),
+          backgroundColor: Color(0xFFFF5252),
         ),
       );
     } catch (e) {

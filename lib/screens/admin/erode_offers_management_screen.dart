@@ -17,7 +17,9 @@ import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:latlong2/latlong.dart';
 
+import '../../models/mobile_models.dart' show isValidYoutubeUrl;
 import '../../services/cloudinary_upload_service.dart';
+import '../../widgets/video_link_field.dart';
 import '../location_picker_screen.dart';
 
 const Color _bg = Color(0xFF0F0B14);
@@ -38,6 +40,16 @@ class AdminErodeOffersScreen extends StatelessWidget {
         elevation: 0,
         iconTheme: const IconThemeData(color: _text),
         title: const Text('Erode Offers', style: TextStyle(color: _text, fontWeight: FontWeight.w800)),
+        actions: [
+          TextButton.icon(
+            onPressed: () => _publishRewards(context),
+            icon: const Icon(Icons.publish_rounded, color: _pink, size: 20),
+            label: const Text(
+              'Publish',
+              style: TextStyle(color: _pink, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: _pink,
@@ -71,6 +83,87 @@ class AdminErodeOffersScreen extends StatelessWidget {
         },
       ),
     );
+  }
+
+  // ================================================================
+  // PUBLISH REWARDS  (Aug 18 2026 — Nizam's "admin ping", CTO-approved)
+  // ================================================================
+  // Bumps `rewardsVersion` on system_settings/app_status. Every open
+  // customer app already watches that document (MigrationGateService's
+  // kill-switch listener), so this single write is what makes edits
+  // appear — and removals disappear — on phones that already have the
+  // app open, with no polling and no per-customer listener.
+  //
+  // WHY THIS IS A BUTTON AND NOT AUTOMATIC ON EVERY OFFER SAVE:
+  // each CHANGE to that doc costs 1 Firestore read on every currently
+  // connected app. Bumping per-edit would mean editing 10 offers costs
+  // 10 x (every online customer) reads for zero added benefit. Batching
+  // an editing session behind one explicit Publish keeps that at
+  // exactly 1 x (online customers), which is the whole cost argument.
+  //
+  // Uses FieldValue.increment(1) rather than a client timestamp so it
+  // is immune to device clock skew and to two admins publishing in the
+  // same second. set(merge: true) so it works even if the doc has never
+  // been created.
+  static Future<void> _publishRewards(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _surface,
+        title: const Text('Publish offers to customers?',
+            style: TextStyle(color: _text, fontWeight: FontWeight.w800)),
+        content: const Text(
+          'Every customer will see the current offers — including any you '
+          'removed — the next time their app checks, or straight away if '
+          'they have it open.\n\nPress this once after you finish editing, '
+          'not after every change.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: _pink, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Publish'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await FirebaseFirestore.instance
+          .collection('system_settings')
+          .doc('app_status')
+          .set(
+        <String, dynamic>{
+          'rewardsVersion': FieldValue.increment(1),
+          'rewardsPublishedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Published — customers will see the latest offers.'),
+          backgroundColor: Color(0xFF00C853),
+        ),
+      );
+    } catch (e) {
+      // Never silent: a failed publish means customers keep seeing the
+      // OLD offers, which is exactly the kind of thing that looks like
+      // "the app is broken" if we swallow it.
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Could not publish: $e'),
+          backgroundColor: const Color(0xFFFF5252),
+        ),
+      );
+    }
   }
 
   static void _showOfferDialog(BuildContext context, {String? offerId, Map<String, dynamic>? existing}) {
@@ -245,6 +338,11 @@ class _OfferFormDialogState extends State<_OfferFormDialog> {
   double? _lng;
   String? _imageUrl;
   Uint8List? _pickedImageBytes;
+  // SCHEMA PREP (Aug 18 2026): optional YouTube link per offer.
+  // Stored now, rendered later — the customer side deliberately
+  // ignores it until the Rewards video work lands, so shipping this
+  // early lets admins start collecting links with zero UI risk.
+  late final TextEditingController _videoUrlCtrl;
 
   @override
   void initState() {
@@ -258,6 +356,8 @@ class _OfferFormDialogState extends State<_OfferFormDialog> {
     _lat = (e?['lat'] as num?)?.toDouble();
     _lng = (e?['lng'] as num?)?.toDouble();
     _imageUrl = e?['imageUrl'] as String?;
+    _videoUrlCtrl =
+        TextEditingController(text: e?['videoUrl'] as String? ?? '');
   }
 
   @override
@@ -267,6 +367,7 @@ class _OfferFormDialogState extends State<_OfferFormDialog> {
     _validTillCtrl.dispose();
     _addressCtrl.dispose();
     _phoneCtrl.dispose();
+    _videoUrlCtrl.dispose();
     super.dispose();
   }
 
@@ -311,6 +412,20 @@ class _OfferFormDialogState extends State<_OfferFormDialog> {
 
   Future<void> _save() async {
     if (_shopNameCtrl.text.trim().isEmpty) return;
+
+    // Reject a bad paste at entry rather than storing a link that
+    // renders a dead player once the Rewards video UI ships.
+    final video = _videoUrlCtrl.text.trim();
+    if (video.isNotEmpty && !isValidYoutubeUrl(video)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('That is not a valid YouTube link.'),
+          backgroundColor: Color(0xFFFF5252),
+        ),
+      );
+      return;
+    }
+
     setState(() => _saving = true);
     try {
       var imageUrl = _imageUrl;
@@ -332,6 +447,9 @@ class _OfferFormDialogState extends State<_OfferFormDialog> {
         'lat': _lat,
         'lng': _lng,
         'imageUrl': imageUrl,
+        // Empty string (not null) when cleared, so an admin removing
+        // a link actually clears the stored value on update().
+        'videoUrl': video,
         'active': widget.existing?['active'] as bool? ?? true,
       };
       if (widget.offerId != null) {
@@ -374,6 +492,19 @@ class _OfferFormDialogState extends State<_OfferFormDialog> {
             _field(_validTillCtrl, 'Valid Till (e.g. 31 Aug 2026)'),
             _field(_addressCtrl, 'Address'),
             _field(_phoneCtrl, 'Phone Number', keyboardType: TextInputType.phone),
+            VideoLinkField(
+              controller: _videoUrlCtrl,
+              onChanged: () => setState(() {}),
+              label: 'Offer video',
+              helper: 'Optional. If the shop has a YouTube clip for this '
+                  'offer, paste the share link — customers get a WATCH '
+                  'OFFER badge and can play it inside the app.',
+              fillColor: const Color(0xFF241C2F),
+              textColor: _text,
+              mutedColor: Colors.white54,
+              borderColor: Colors.white24,
+              accentColor: _pink,
+            ),
             _locationPicker(),
           ],
         ),

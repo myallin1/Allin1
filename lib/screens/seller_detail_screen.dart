@@ -16,6 +16,7 @@ import '../services/cart_service.dart';
 import '../services/category_gateway_service.dart';
 import '../services/service_request_service.dart';
 import '../widgets/product_card.dart';
+import 'food_checkout_screen.dart';
 import 'service_request_tracking_screen.dart';
 
 /// Reusing service_requests (rather than a separate food_orders
@@ -300,11 +301,23 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
       return;
     }
 
+    // PHASE 3 (Aug 17 2026): charge the OFFER price when the seller has
+    // set one. This is the load-bearing half of the offer feature — a
+    // discount the customer can see but is not actually charged is worse
+    // than no discount at all, because they find out at checkout.
+    //
+    // Guarded on `< base`, matching the seller-side validation, so a
+    // malformed or stale discountedPrice can never RAISE the price.
+    final basePrice = (product['price'] as num?)?.toDouble() ?? 0.0;
+    final offer = (product['discountedPrice'] as num?)?.toDouble();
+    final effectivePrice =
+        (offer != null && offer > 0 && offer < basePrice) ? offer : basePrice;
+
     final item = CartItem(
       id: product['id'] as String? ?? '',
       sellerId: sellerId,
       name: product['name'] as String? ?? 'Unknown',
-      price: (product['price'] as num?)?.toDouble() ?? 0.0,
+      price: effectivePrice,
       image: product['image'] as String?,
       category: product['category'] as String?,
     );
@@ -449,7 +462,34 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 8),
+            // FIX (Aug 17 2026 — "failed to load products nu red error
+            // varuthu" and nobody could say WHY).
+            //
+            // CategoryGatewayService.loadSellerProducts() deliberately
+            // rethrows instead of swallowing, precisely so a real
+            // failure (permission-denied, missing index, offline) is
+            // distinguishable from an empty menu — its own comment says
+            // so. But this screen caught that error into `_error` and
+            // then never displayed it, throwing away the one piece of
+            // information the rethrow existed to deliver.
+            //
+            // Now shown. Firestore error strings name their own cause
+            // ('permission-denied', 'failed-precondition: The query
+            // requires an index'), so this turns a dead end into a
+            // one-glance diagnosis for whoever is standing in the shop.
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 11.5,
+                  height: 1.4,
+                  color: const Color(0xFF9A9AB8),
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
             ElevatedButton(
               onPressed: _loadProducts,
               child: const Text('Retry'),
@@ -588,6 +628,37 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
       return;
     }
 
+    // NEW (Aug 18 2026 — Nizam: "order book pannunathum udane order
+    // aiduchu... namma food order form open agi... delevery details
+    // nammakita ketu fill pannunathum, payment pannitu than order
+    // confirm aganum"). Previously "Place Order" went straight from
+    // this bottom sheet into the stock transaction + order creation
+    // below with zero screens in between — no delivery address, no
+    // payment step. FoodCheckoutScreen is the missing middle step: it
+    // writes nothing itself, it only collects delivery details + a
+    // payment decision and hands them back here. Everything below
+    // (stock transaction, createServiceRequest, deferBroadcast, the
+    // tracking-screen redirect) is completely unchanged — it now just
+    // runs with real delivery/payment data instead of none at all.
+    final itemsPreview = cart.items
+        .map((item) => {
+              'name': item.name,
+              'quantity': item.quantity,
+              'total': item.total,
+            })
+        .toList();
+    final checkoutResult = await Navigator.push<FoodCheckoutResult>(
+      context,
+      MaterialPageRoute<FoodCheckoutResult>(
+        builder: (_) => FoodCheckoutScreen(
+          hotelName: cart.currentSellerName ?? 'Seller',
+          items: itemsPreview,
+          subtotal: cart.subtotal,
+        ),
+      ),
+    );
+    if (checkoutResult == null || !mounted) return; // customer backed out
+
     setState(() => _isPlacingOrder = true);
     try {
       final sellerId = cart.currentSellerId ?? '';
@@ -599,11 +670,25 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
         final itemDocs = <String, DocumentSnapshot>{};
         
         // Read phase
+        //
+        // FIX (Aug 17 2026 seller-app audit — "seller app dummy mari
+        // iruku"): this read `sellers/{id}/menu`, a subcollection that
+        // DOES NOT EXIST. Menu items are written to
+        // `sellers/{id}/menu_items` (FoodSellerService._menuItemsRef)
+        // and displayed from `menu_items`
+        // (CategoryGatewayService.loadSellerProducts, which carries its
+        // own comment saying the codebase standardised on that name).
+        // Only this checkout transaction was left on the old name, so
+        // tx.get() always came back !exists and every single catalog
+        // checkout threw 'Item ... not found' before an order could be
+        // created. This one word was blocking the ENTIRE catalog order
+        // pipeline — the seller's menu rendered fine, so it looked like
+        // a dead "dummy" app rather than a broken write path.
         for (final item in cart.items) {
           final docRef = db
               .collection('sellers')
               .doc(sellerId)
-              .collection('menu')
+              .collection('menu_items')
               .doc(item.id);
           final snap = await tx.get(docRef);
           if (!snap.exists) throw Exception('Item ${item.name} not found');
@@ -624,16 +709,32 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
           }
         }
 
-        // Write phase
-        for (final item in cart.items) {
-          final data = itemDocs[item.id]!.data() as Map<String, dynamic>;
-          final stockQuantity = (data['stockQuantity'] as num?)?.toInt();
-          if (stockQuantity != null) {
-            tx.update(itemDocs[item.id]!.reference, {
-              'stockQuantity': stockQuantity - item.quantity,
-            });
-          }
-        }
+        // Write phase — DELIBERATELY REMOVED (Aug 17 2026 audit).
+        //
+        // This used to decrement stockQuantity on each menu item from
+        // the CUSTOMER's session. That could never have worked:
+        // firestore.rules:302 allows `update` on
+        // sellers/{id}/menu_items/{itemId} only for isSellerOwner() or
+        // isAdminAny(), so a customer's decrement is rejected with
+        // permission-denied. Fixing the subcollection name above without
+        // also removing this would simply have traded the old
+        // 'Item not found' failure for a permission-denied one — the
+        // checkout would still have been 100% broken.
+        //
+        // Not "fixed" by loosening the rule on purpose: letting any
+        // signed-in customer write stock counts on someone else's shop
+        // means one malicious account can zero out a hotel's entire menu.
+        // Client-authoritative stock cannot be made safe without a
+        // trusted server, and we are on the Spark plan (no Cloud
+        // Functions), so the read-side validation above is kept (it still
+        // blocks ordering an unavailable / insufficient-stock item) and
+        // the seller stays the only writer of stock.
+        //
+        // Zero behavioural regression today: stockQuantity is never
+        // populated by the dish editor UI, so it is null for every real
+        // menu item and this loop was already a no-op in practice.
+        // Seller-side stock entry is Phase 3 of the audit plan; when it
+        // lands, decrement moves to the seller's own order-accept step.
       });
 
       // 2. Create the Order
@@ -647,17 +748,37 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
               })
           .toList();
 
-      final resolvedCustomerPhone = await AuthService().resolveCustomerPhone(user);
+      // customerPhone/customerName now come from the checkout form the
+      // customer just filled (FoodCheckoutScreen) rather than only
+      // whatever Firebase Auth happened to have — same
+      // resolveCustomerPhone() fallback kept for the rare case the form
+      // field was left blank.
+      final resolvedCustomerPhone = checkoutResult.customerPhone.isNotEmpty
+          ? checkoutResult.customerPhone
+          : await AuthService().resolveCustomerPhone(user);
       final requestId = await ServiceRequestService().createServiceRequest(
+        // Aug 17 2026 seller audit: hold the hero ping until the hotel
+        // marks the food ready. Previously heroes were pinged the
+        // instant the customer paid, so a hero rode out and waited at
+        // the counter for however long the cooking took.
+        deferBroadcast: true,
         requestType: kCatalogFoodOrderRequestType,
         customerId: user.uid,
-        customerName: user.displayName ?? 'Customer',
+        customerName: checkoutResult.customerName,
         customerPhone: resolvedCustomerPhone,
         details: {
           'sellerId': sellerId,
           'sellerName': sellerName,
           'items': itemsDetail,
           'subtotal': cart.subtotal,
+          // NEW (Aug 18 2026): catalog_food_order previously carried no
+          // delivery address at all — a hero accepting it had nowhere
+          // to navigate to. custom_hotel_order already has this shape
+          // (deliveryAddress/lat/lng), matched here for consistency.
+          'deliveryAddress': checkoutResult.address,
+          if (checkoutResult.lat != null) 'deliveryLat': checkoutResult.lat,
+          if (checkoutResult.lng != null) 'deliveryLng': checkoutResult.lng,
+          'paymentMethod': checkoutResult.paymentMethod,
         },
       );
 

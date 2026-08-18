@@ -220,6 +220,14 @@ class MenuItemModel {
   final String? imageUrl;
   final String? categoryName;
   final List<ItemVariant>? variants;
+  /// How this dish photo was framed by the seller: 'square' or
+  /// 'circle' (Aug 18 2026, CTO image-quality review). The crop UI
+  /// and the customer-facing card MUST render the same shape — if a
+  /// seller frames a dish inside a circle and the card draws a
+  /// rounded square, the corners they deliberately left empty get
+  /// shown. Defaults to 'square', which is what every pre-existing
+  /// item was effectively cropped as.
+  final String imageShape;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -235,6 +243,7 @@ class MenuItemModel {
     this.imageUrl,
     this.categoryName,
     this.variants,
+    this.imageShape = 'square',
     this.createdAt,
     this.updatedAt,
   });
@@ -258,6 +267,9 @@ class MenuItemModel {
       variants: (json['variants'] as List<dynamic>?)
           ?.map((e) => ItemVariant.fromJson(e as Map<String, dynamic>))
           .toList(),
+      // Legacy items have no imageShape -> 'square', matching how
+      // they already render today. No migration needed.
+      imageShape: (json['imageShape'] as String?) ?? 'square',
       createdAt: json['createdAt'] != null
           ? (json['createdAt'] as Timestamp).toDate()
           : null,
@@ -287,6 +299,7 @@ class MenuItemModel {
       'image': imageUrl,
       'categoryName': categoryName,
       'category': categoryName,
+      'imageShape': imageShape,
       'variants': variants?.map((e) => e.toJson()).toList(),
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
@@ -305,6 +318,7 @@ class MenuItemModel {
     String? imageUrl,
     String? categoryName,
     List<ItemVariant>? variants,
+    String? imageShape,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -320,6 +334,7 @@ class MenuItemModel {
       imageUrl: imageUrl ?? this.imageUrl,
       categoryName: categoryName ?? this.categoryName,
       variants: variants ?? this.variants,
+      imageShape: imageShape ?? this.imageShape,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

@@ -143,7 +143,7 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
             child: Text('Cancel', style: TextStyle(color: _kMuted)),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: _kGreen),
+            style: ElevatedButton.styleFrom(backgroundColor: _kGreen, padding: const EdgeInsets.symmetric(vertical: 12)),
             onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Got it, Open DMart', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
@@ -325,7 +325,7 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            Text('Your grocery list', style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
+            Text('Your grocery list', style: GoogleFonts.outfit(color: _kText, fontSize: 17, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             QuickOrderLineItemsForm(
               items: _lineItems,
@@ -341,7 +341,7 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
             // thumbnail wrap below showing every picked screenshot with its
             // own remove (x) button, so the customer can review/prune the
             // whole batch before submitting.
-            Text('Or upload photos of your list (up to $_maxImages)', style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
+            Text('Or upload photos of your list (up to $_maxImages)', style: GoogleFonts.outfit(color: _kText, fontSize: 17, fontWeight: FontWeight.w700)),
             const SizedBox(height: 2),
             // NEW (per Nizam/CTO's DMart UX workaround): points customers
             // coming back from the "Store Order" DMart WebView straight at
@@ -423,7 +423,7 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
               ),
             ],
             const SizedBox(height: 20),
-            Text('Delivery location', style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
+            Text('Delivery location', style: GoogleFonts.outfit(color: _kText, fontSize: 17, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             TextField(
               controller: _deliveryAddressCtrl,
@@ -467,7 +467,7 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
             children: [
               Expanded(
                 child: SizedBox(
-                  height: 54,
+                  
                   child: ElevatedButton.icon(
                     key: const Key('grocery_send_order_button'),
                     style: ElevatedButton.styleFrom(
@@ -475,20 +475,20 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
                       elevation: 4,
                       shadowColor: _kPink.withValues(alpha: 0.4),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                     ),
                     onPressed: _canSubmit ? _submit : null,
                     icon: _submitting
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                         : const Icon(Icons.shopping_cart_checkout_rounded, color: Colors.white, size: 18),
-                    label: Text('Send Order', style: GoogleFonts.outfit(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                    label: Text('Send Order', style: GoogleFonts.outfit(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: SizedBox(
-                  height: 54,
+                  
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: _kGreen, width: 1.4),
@@ -497,14 +497,14 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
                     ),
                     onPressed: () => _openDmartWithPincodeNotice(context),
                     icon: const Icon(Icons.storefront_rounded, color: _kGreen, size: 18),
-                    label: Text('Store Order', style: GoogleFonts.outfit(color: _kGreen, fontSize: 13, fontWeight: FontWeight.bold)),
+                    label: Text('Store Order', style: GoogleFonts.outfit(color: _kGreen, fontSize: 17, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: SizedBox(
-                  height: 54,
+                  
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: _kPink, width: 1.4),
@@ -516,7 +516,7 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
                       MaterialPageRoute(builder: (_) => const GroceryOrderStatusScreen()),
                     ),
                     icon: const Icon(Icons.receipt_long_rounded, color: _kPink, size: 18),
-                    label: Text('Status', style: GoogleFonts.outfit(color: _kPink, fontSize: 13, fontWeight: FontWeight.bold)),
+                    label: Text('Status', style: GoogleFonts.outfit(color: _kPink, fontSize: 17, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ),

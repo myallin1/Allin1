@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
 // ── Theme tokens (dark) ─────────────────────────────────────────
 const Color _bBg = Color(0xFF0C0A14);
@@ -361,7 +362,7 @@ class _BiriyaniCarouselCard extends StatelessWidget {
             children: [
               // Background image
               Positioned.fill(
-                child: Image.network(
+                child: CachedCloudImage(
                   item.imageUrl,
                   fit: BoxFit.cover,
                   loadingBuilder: (_, child, progress) => progress == null
@@ -678,3 +679,4 @@ class _WhyChooseStrip extends StatelessWidget {
     );
   }
 }
+

@@ -1,45 +1,49 @@
 {
-  "name": "NJ BAPX · Allin1",
-  "short_name": "Allin1",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#0C0A14",
-  "theme_color": "#FF4FA3",
-  "description": "Erode's Super App — Food, Grocery, Bike Taxi & Tech by NJ TECH",
-  "orientation": "portrait-primary",
-  "prefer_related_applications": false,
-  "categories": ["shopping", "food", "lifestyle"],
-  "share_target": {
-    "action": "/",
-    "method": "GET",
-    "params": {
-      "title": "title",
-      "text": "text",
-      "url": "url"
-    }
-  },
-  "icons": [
-    {
-      "src": "icons/Icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
+    "name": "NJ BAPX · Allin1",
+    "short_name": "Allin1",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#FFFFFF",
+    "theme_color": "#FFFFFF",
+    "description": "Erode's Super App — Food, Grocery, Bike Taxi & Tech by NJ TECH",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "categories": [
+        "shopping",
+        "food",
+        "lifestyle"
+    ],
+    "share_target": {
+        "action": "/",
+        "method": "GET",
+        "params": {
+            "title": "title",
+            "text": "text",
+            "url": "url"
+        }
     },
-    {
-      "src": "icons/Icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    },
-    {
-      "src": "icons/Icon-maskable-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "icons/Icon-maskable-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    }
-  ]
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
 }

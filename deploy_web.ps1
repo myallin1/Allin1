@@ -357,6 +357,33 @@ if (-not $NoDeploy) {
     Write-Host ""
 }
 
+# ================================================================
+# REGENERATE THE AI'S APP KNOWLEDGE  (Aug 17 2026)
+# ================================================================
+# Nizam: "namma oru new update vittalum athuvum namma ai ku theriyanum".
+#
+# tools/gen_app_knowledge.dart reads the repository (collections, RTDB
+# nodes, routes, screens, services, pubspec version) and rewrites
+# lib/config/app_knowledge.dart, which is injected into every AI
+# persona's system prompt.
+#
+# It runs HERE — before the builds, after the version bump — so it is
+# structurally impossible to ship app code and stale AI knowledge in the
+# same deploy. That is the entire point: a briefing somebody has to
+# remember to update is a briefing that will be wrong.
+#
+# Non-fatal by design. If dart is missing from PATH, the deploy still
+# proceeds with the previously generated file, which is out of date but
+# valid. Blocking a deploy over an assistant's context would be the
+# wrong trade.
+Write-Host "Regenerating AI app knowledge..." -ForegroundColor Cyan
+dart run tools/gen_app_knowledge.dart | Out-Host
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  WARNING: could not regenerate app_knowledge.dart." -ForegroundColor Yellow
+    Write-Host "  Deploy continues with the existing file (AI knowledge may be stale)." -ForegroundColor Yellow
+}
+Write-Host ""
+
 $results = [ordered]@{}
 foreach ($app in $selected) {
     $results[$app.Name] = Build-And-Deploy $app.Name $app.Entry $app.Target

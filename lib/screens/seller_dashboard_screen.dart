@@ -21,8 +21,10 @@ import '../services/food_seller_service.dart';
 import '../services/hive_cache.dart';
 import '../services/seller_foreground_service.dart';
 import '../services/seller_live_alert_service.dart';
+import '../services/service_request_service.dart';
 import 'seller_custom_hotel_builder_screen.dart';
 import 'seller_electronics_dashboard_screen.dart';
+import 'seller_mobile_dashboard_screen.dart';
 import 'seller_grocery_dashboard_screen.dart';
 import 'seller_home_kitchen_menu_screen.dart';
 import 'seller_pending_screen.dart';
@@ -52,6 +54,7 @@ class SellerDashboardScreen extends StatefulWidget {
 }
 
 class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final FoodSellerService _service = FoodSellerService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
@@ -171,6 +174,20 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         );
         return;
       }
+      // NEW (Aug 18 2026 — Mobile Hub). Note this destination, unlike
+      // the two above, ships with its own PopScope + AppMinimizer: this
+      // pushReplacement destroys the route below, so the target becomes
+      // the seller's literal app root and an unprotected screen there
+      // hard-closes the app on any back-press (the exact bug the Aug 18
+      // navigation audit fixed for grocery/electronics).
+      if (seller.businessVertical == 'mobile') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute<void>(
+              builder: (_) => const SellerMobileDashboardScreen(),),
+        );
+        return;
+      }
 
       // FIX (seller approval gate): a seller stuck in 'pending' (not yet
       // reviewed by admin) or 'rejected' must never land on the live
@@ -203,7 +220,8 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
       SellerForegroundService.start();
       SellerLiveAlertService.instance.start(uid);
 
-      _listenToOrders(uid);
+      // _startFoodOrdersListener(uid) NOT called — see its comment. The
+      // two listeners below are the ones carrying real orders.
       _listenToCatalogOrders(uid);
       _listenToCustomHotelOrders(uid);
       _loadMenuItemCount(uid);
@@ -214,7 +232,34 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
     }
   }
 
-  void _listenToOrders(String sellerId) {
+  // ================================================================
+  // DEAD PIPELINE (Aug 17 2026 seller audit — Phase 2)
+  // ================================================================
+  // This listened to `food_orders` via FoodSellerService.
+  // NOTHING IN THE CUSTOMER APP EVER WRITES TO food_orders — verified by
+  // grepping every placeOrder()/FoodOrderModel() call site. The customer
+  // checkout paths write to `service_requests`
+  // (catalog_food_order / custom_hotel_order), which is what
+  // _listenToCatalogOrders / _listenToCustomHotelOrders below actually
+  // read, and what the seller genuinely sees.
+  //
+  // So this was a permanent live snapshot listener, on every seller
+  // device, watching a collection that can never receive a document.
+  // On the Spark plan that is a standing cost for zero information.
+  //
+  // NOT DELETED, deliberately. The FoodSellerService methods, the
+  // FoodOrderModel and the _buildOrderCard() renderer are all left
+  // exactly as they are — the model is the cleanest of the three order
+  // shapes in this codebase (proper statusTimeline, variants, coupon
+  // fields) and is the natural target if the order pipelines are ever
+  // consolidated. Re-enabling is one line: call _startFoodOrdersListener
+  // below. Until something writes to food_orders, starting it just
+  // spends reads to render an empty list.
+  //
+  // _activeOrders stays an empty list, so every widget that reads it
+  // keeps compiling and simply renders nothing — no UI branch removed.
+  // ignore: unused_element
+  void _startFoodOrdersListener(String sellerId) {
     _ordersSub = _service.listenToIncomingOrders(sellerId).listen(
       (orders) {
         if (mounted) {
@@ -364,6 +409,252 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
     }
   }
 
+  // ================================================================
+  // SELLER KITCHEN ACTIONS on the LIVE order pipeline
+  // ================================================================
+  // (Aug 17 2026 seller audit.) The methods above operate on
+  // `food_orders`, which no customer screen writes to — so every button
+  // that used them was unreachable, and the order cards a seller
+  // actually sees (_buildCatalogOrderCard / _buildCustomHotelOrderCard,
+  // both fed by service_requests) had no buttons at all. That is the
+  // whole of "seller app dummy mari iruku": the seller could watch
+  // orders arrive and do nothing about them.
+  //
+  // These act on service_requests via the seller-scoped rules clause
+  // added in the same change.
+
+  /// Set of request IDs with an action in flight, so a double-tap can't
+  /// fire two broadcasts or two stage writes.
+  final Set<String> _busyRequestIds = <String>{};
+
+  Future<void> _advanceSellerStage(
+    ServiceRequestModel request,
+    String stage, {
+    String? successMessage,
+  }) async {
+    if (_busyRequestIds.contains(request.requestId)) return;
+    setState(() => _busyRequestIds.add(request.requestId));
+    try {
+      await ServiceRequestService().advanceSellerStage(request.requestId, stage);
+      if (mounted && successMessage != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(successMessage), backgroundColor: _teal),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not update order: $e'), backgroundColor: _red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busyRequestIds.remove(request.requestId));
+    }
+  }
+
+  /// "Book Delivery Partner" — releases the held-back hero broadcast.
+  /// From here the EXISTING first-hero-wins logic takes over unchanged:
+  /// ServiceRequestService.acceptServiceRequest() is an atomic RTDB
+  /// transaction, so only one hero can claim it, and it already clears
+  /// every other hero's ping node the moment there's a winner.
+  Future<void> _bookDeliveryPartner(ServiceRequestModel request) async {
+    if (_busyRequestIds.contains(request.requestId)) return;
+    setState(() => _busyRequestIds.add(request.requestId));
+    try {
+      final fired =
+          await ServiceRequestService().requestDeliveryBroadcast(request.requestId);
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            fired
+                ? 'Delivery partners notified — first to accept takes it'
+                : 'A delivery partner is already on this order',
+          ),
+          backgroundColor: fired ? _green : _muted,
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not notify delivery partners: $e'),
+            backgroundColor: _red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busyRequestIds.remove(request.requestId));
+    }
+  }
+
+  /// The Accept -> Preparing -> Food Ready -> Book Delivery Partner
+  /// action strip shown on every live order card.
+  ///
+  /// Once a hero has claimed the order (status leaves the pre-assign
+  /// states) the strip collapses to a status line — the kitchen's part
+  /// is done and the seller should not be able to re-ping heroes.
+  Widget _buildSellerActionStrip(ServiceRequestModel request) {
+    final assignedHeroName = request.assignedHeroName ?? '';
+    if (assignedHeroName.isNotEmpty || request.status == 'hero_assigned') {
+      return _stageBanner(
+        Icons.delivery_dining,
+        assignedHeroName.isNotEmpty
+            ? '$assignedHeroName is collecting this order'
+            : 'Delivery partner assigned',
+        _green,
+      );
+    }
+
+    // A NULL sellerStage means this order was broadcast to heroes at
+    // creation time rather than being held for the kitchen — i.e. a
+    // custom-hotel order (deliberately not deferred, see the long
+    // comment in custom_hotel_view_screen.dart) or any order placed
+    // before this feature shipped. Showing the Accept -> ... -> Book
+    // Delivery Partner strip on those would be a lie: a hero has
+    // already been pinged, and the final button would do nothing.
+    // Show the honest status instead.
+    final stage = request.sellerStage;
+    if (stage == null) {
+      return _stageBanner(
+        Icons.notifications_active_outlined,
+        'Delivery partners already notified — please prepare this order',
+        _gold,
+      );
+    }
+
+    final busy = _busyRequestIds.contains(request.requestId);
+
+    switch (stage) {
+      case ServiceRequestService.kSellerStageNew:
+        return _actionButton(
+          label: 'Accept Order',
+          icon: Icons.check_circle_outline,
+          color: _teal,
+          busy: busy,
+          onTap: () => _advanceSellerStage(
+            request,
+            ServiceRequestService.kSellerStageAccepted,
+            successMessage: 'Order accepted',
+          ),
+        );
+      case ServiceRequestService.kSellerStageAccepted:
+        return _actionButton(
+          label: 'Start Preparing',
+          icon: Icons.soup_kitchen_outlined,
+          color: _orange,
+          busy: busy,
+          onTap: () => _advanceSellerStage(
+            request,
+            ServiceRequestService.kSellerStagePreparing,
+          ),
+        );
+      case ServiceRequestService.kSellerStagePreparing:
+        return _actionButton(
+          label: 'Food Ready',
+          icon: Icons.room_service_outlined,
+          color: _gold,
+          busy: busy,
+          onTap: () => _advanceSellerStage(
+            request,
+            ServiceRequestService.kSellerStageReady,
+          ),
+        );
+      case ServiceRequestService.kSellerStageReady:
+        // THE step the whole audit was about — this is what actually
+        // notifies heroes. Before this change the seller saw only a
+        // passive "Waiting for Hero to pick up" label that pinged nobody.
+        return _actionButton(
+          label: 'Book Delivery Partner',
+          icon: Icons.two_wheeler_rounded,
+          color: _green,
+          busy: busy,
+          onTap: () => _bookDeliveryPartner(request),
+        );
+      case ServiceRequestService.kSellerStageDeliveryRequested:
+        return _stageBanner(
+          Icons.podcasts_rounded,
+          'Notifying delivery partners nearby…',
+          _gold,
+        );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _actionButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required bool busy,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: SizedBox(
+        width: double.infinity,
+        height: 42,
+        child: ElevatedButton.icon(
+          onPressed: busy ? null : onTap,
+          icon: busy
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : Icon(icon, size: 18),
+          label: Text(label,
+              style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: color,
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: color.withValues(alpha: 0.4),
+            disabledForegroundColor: Colors.white70,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _stageBanner(IconData icon, String text, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                text,
+                style: GoogleFonts.outfit(
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _navigateToMenuSetup() async {
     if (_seller == null) return;
     // FIX (per Nizam's request): every seller now authors their own
@@ -466,6 +757,11 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   // to reset first — a single-page dashboard — so back here always goes
   // straight to minimize/hint.
   void _handleBackPress() {
+    final scaffold = _scaffoldKey.currentState;
+    if (scaffold != null && scaffold.isDrawerOpen) {
+      Navigator.of(context).pop();
+      return;
+    }
     if (kIsWeb) {
       // A browser tab cannot minimize itself to the OS home screen — no
       // such API exists. Show the "use your device's Home button" hint
@@ -537,6 +833,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         _handleBackPress();
       },
       child: Scaffold(
+      key: _scaffoldKey,
       backgroundColor: _bg,
       // NEW (CTO mandate — Universal Side Tray Banner): Seller app had
       // no drawer before this — AppBar auto-shows the hamburger icon
@@ -679,10 +976,17 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
     if (_seller == null) return const SizedBox.shrink();
 
     return StreamBuilder<QuerySnapshot>(
+      // FIX (Aug 17 2026 seller-app audit): same wrong-subcollection bug
+      // as seller_detail_screen.dart's checkout transaction — this read
+      // `menu` while every writer/reader elsewhere uses `menu_items`.
+      // Here it failed SILENTLY rather than loudly: the builder below
+      // returns SizedBox.shrink() on an empty snapshot, so the whole
+      // "Quick Toggle" panel simply never rendered and the seller had no
+      // idea the feature existed at all.
       stream: FirebaseFirestore.instance
           .collection('sellers')
           .doc(_seller!.id)
-          .collection('menu')
+          .collection('menu_items')
           .limit(10) // Show top items
           .snapshots(),
       builder: (context, snapshot) {
@@ -1167,6 +1471,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
           ],
           const SizedBox(height: 6),
           Text('₹${total.toStringAsFixed(0)}', style: GoogleFonts.outfit(color: _gold, fontWeight: FontWeight.w800, fontSize: 14)),
+          _buildSellerActionStrip(request),
         ],
       ),
     );
@@ -1216,6 +1521,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
           const SizedBox(height: 6),
           Text('₹${subtotal.toStringAsFixed(0)}',
               style: GoogleFonts.outfit(color: _gold, fontWeight: FontWeight.w800, fontSize: 14),),
+          _buildSellerActionStrip(request),
         ],
       ),
     );

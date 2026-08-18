@@ -6,6 +6,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
 class AdsManagementScreen extends StatefulWidget {
   const AdsManagementScreen({super.key});
@@ -664,7 +665,7 @@ class _AdsManagementScreenState extends State<AdsManagementScreen> {
                     ClipRRect(
                       borderRadius:
                           const BorderRadius.vertical(top: Radius.circular(16)),
-                      child: Image.network(
+                      child: CachedCloudImage(
                         data['imageUrl'] as String,
                         height: 150,
                         width: double.infinity,
@@ -888,3 +889,4 @@ class _AdsManagementScreenState extends State<AdsManagementScreen> {
     );
   }
 }
+

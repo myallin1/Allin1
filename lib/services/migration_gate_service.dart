@@ -54,6 +54,47 @@ class MigrationGateService extends ChangeNotifier {
 
   bool get isMigrating => _migrationUrl != null && _migrationUrl!.isNotEmpty;
 
+  // ================================================================
+  // REWARDS PUBLISH SIGNAL  (Aug 18 2026 — Nizam's "admin ping" idea)
+  // ================================================================
+  // Piggybacks on the listener this service ALREADY runs. That is the
+  // entire point, and it is worth stating plainly:
+  //
+  //   This service already holds one live snapshot listener on
+  //   system_settings/app_status in all four apps. Firestore bills a
+  //   realtime listener 1 read at attach and 1 read per change of the
+  //   watched document — NOT per second, and NOT per field. So reading
+  //   an additional field off the SAME document adds exactly ZERO
+  //   reads and ZERO connections. The transport is already paid for.
+  //
+  // WHY NOT RTDB (the original proposal): Firebase RTDB on the Spark
+  // plan caps at 100 SIMULTANEOUS CONNECTIONS. A live rewards listener
+  // per customer would hold one connection each and break at ~100
+  // concurrent users, with the 101st simply refused — a hard growth
+  // ceiling on a live app. Firestore has no such concurrent-connection
+  // cap, which is why the same "instant push" behaviour is safe here
+  // and was not there.
+  //
+  // WHY A COUNTER AND NOT A TIMESTAMP: an int bumped by
+  // FieldValue.increment(1) is immune to client clock skew and to two
+  // admins publishing in the same second.
+  //
+  // COST DISCIPLINE — read this before wiring any new caller: every
+  // CHANGE to this doc costs 1 read on every currently-connected app.
+  // That is why the admin bumps this ONCE from an explicit "Publish
+  // Rewards" button, never automatically on each individual offer
+  // edit. Editing 10 offers with per-edit bumping would cost
+  // 10 x (every online user) reads for zero user benefit.
+  int _rewardsVersion = 0;
+
+  /// Monotonically increasing counter bumped by the admin's "Publish
+  /// Rewards" action. Consumers cache content locally and only refetch
+  /// when this value differs from the one they cached against.
+  ///
+  /// 0 means "never published, or unknown" — treat that as 'no forced
+  /// refresh', never as 'invalidate everything'.
+  int get rewardsVersion => _rewardsVersion;
+
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _sub;
   bool _started = false;
 
@@ -71,10 +112,36 @@ class MigrationGateService extends ChangeNotifier {
         .snapshots()
         .listen(
       (snap) {
-        final raw = snap.data()?['migrationUrl'] as String?;
+        final data = snap.data();
+
+        // ── Kill-switch (unchanged, and deliberately evaluated FIRST).
+        final raw = data?['migrationUrl'] as String?;
         final next = (raw == null || raw.trim().isEmpty) ? null : raw.trim();
-        if (next == _migrationUrl) return;
+
+        // ── Rewards publish signal. Parsed defensively and in its own
+        // try/catch so a malformed rewardsVersion (wrong type, hand-
+        // edited in the console, whatever) can NEVER throw inside this
+        // handler and take the kill-switch down with it. The kill-
+        // switch is business-continuity insurance; a promo-refresh hint
+        // must never be able to compromise it.
+        var nextVersion = _rewardsVersion;
+        try {
+          final v = data?['rewardsVersion'];
+          if (v is int) {
+            nextVersion = v;
+          } else if (v is num) {
+            nextVersion = v.toInt();
+          }
+        } catch (e) {
+          debugPrint('[MigrationGateService] bad rewardsVersion, ignoring: $e');
+        }
+
+        final urlChanged = next != _migrationUrl;
+        final versionChanged = nextVersion != _rewardsVersion;
+        if (!urlChanged && !versionChanged) return;
+
         _migrationUrl = next;
+        _rewardsVersion = nextVersion;
         notifyListeners();
       },
       onError: (Object e) {

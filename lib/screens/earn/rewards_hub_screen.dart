@@ -171,7 +171,7 @@ const _financeCards = [
     id: 'kotak_811',
     emoji: '🏦',
     bank: 'Kotak 811 Zero Balance Account',
-    tagline: 'Get 1 FREE Ride Pass on completion!',
+    tagline: 'Get 10,000 Coins on completion!',
     subtitle: 'Fully digital savings account. '
         'Open in 2 mins. No minimum balance required.',
     coins: '10,000',
@@ -1169,7 +1169,7 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
                               Expanded(
                                 child: Text(
                                   'Aadhaar + PAN Video KYC mandatory to get '
-                                  '1 Free Ride Pass. Just installing the app '
+                                  '10,000 Coins. Just installing the app '
                                   'will NOT give rewards.',
                                   style: GoogleFonts.notoSansTamil(
                                     fontSize: 9,

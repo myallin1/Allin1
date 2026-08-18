@@ -21,6 +21,7 @@ import 'package:image/image.dart' as img;
 import '../services/auth_service.dart';
 import '../services/cloudinary_upload_service.dart';
 import '../services/custom_hotel_service.dart';
+import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF0D0D18);
@@ -198,7 +199,7 @@ class _ItemCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             child: item.photoUrl.isEmpty
                 ? Container(width: 56, height: 56, color: _bg, child: const Icon(Icons.fastfood_rounded, color: _muted))
-                : Image.network(
+                : CachedCloudImage(
                     CloudinaryUploadService.optimizedUrl(item.photoUrl, width: 112),
                     width: 56,
                     height: 56,
@@ -294,8 +295,18 @@ class _ItemEditorSheetState extends State<_ItemEditorSheet> {
     try {
       final decoded = img.decodeImage(bytes);
       if (decoded == null) return null;
-      final resized = decoded.width > 800 ? img.copyResize(decoded, width: 800) : decoded;
-      return Uint8List.fromList(img.encodeJpg(resized, quality: 75));
+      // Auto-crop to a perfect 1:1 square to maintain uniformity and save bandwidth
+      final size = decoded.width < decoded.height ? decoded.width : decoded.height;
+      final squared = img.copyCrop(
+        decoded,
+        x: (decoded.width - size) ~/ 2,
+        y: (decoded.height - size) ~/ 2,
+        width: size,
+        height: size,
+      );
+      final resized = squared.width > 800 ? img.copyResize(squared, width: 800, height: 800) : squared;
+      // Use 85 quality for "super clarity premium 3D look" while staying ~100kb
+      return Uint8List.fromList(img.encodeJpg(resized, quality: 85));
     } catch (_) {
       return null;
     }
@@ -324,6 +335,13 @@ class _ItemEditorSheetState extends State<_ItemEditorSheet> {
           _pickedBytes!,
           fileName: 'custom_hotel_${widget.sellerId}_${DateTime.now().millisecondsSinceEpoch}.jpg',
           folder: 'custom_hotels',
+          // NEW (Aug 18 2026 bandwidth audit): this screen's own
+          // _compress() above already center-crops to a square and
+          // resizes to 800px — was still uploaded at the default 150KB
+          // (kPhotoTargetBytes) target. Menu/dish photos specifically
+          // now target ~100KB per Nizam's request, matching
+          // seller_home_kitchen_menu_screen.dart's menu-photo pipeline.
+          targetBytes: 100 * 1024,
         );
         setState(() => _uploadingPhoto = false);
       }
@@ -366,7 +384,7 @@ class _ItemEditorSheetState extends State<_ItemEditorSheet> {
                 child: _pickedBytes != null
                     ? Image.memory(_pickedBytes!, width: double.infinity, height: 140, fit: BoxFit.cover)
                     : (_photoUrl.isNotEmpty
-                        ? Image.network(
+                        ? CachedCloudImage(
                             CloudinaryUploadService.optimizedUrl(_photoUrl, width: 800),
                             width: double.infinity,
                             height: 140,
@@ -425,3 +443,4 @@ class _ItemEditorSheetState extends State<_ItemEditorSheet> {
     );
   }
 }
+

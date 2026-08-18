@@ -54,7 +54,15 @@ class _LocationCaptureFieldState extends State<LocationCaptureField> {
   Future<void> _useMyLocation() async {
     setState(() => _locating = true);
     try {
-      final position = await LocationService().getCurrentLocation();
+      // FAST PATH (Aug 16 2026): dashboard_screen.dart already warms up
+      // LocationService on app open (_prefetchLocationInBackground). If
+      // that already produced a cached position by the time the customer
+      // reaches this screen, use it immediately — zero wait, zero GPS
+      // call. Only fall back to a fresh getCurrentLocation() if the cache
+      // is empty (first-ever launch, permission was denied earlier, etc).
+      final locationService = LocationService();
+      var position = locationService.currentPosition;
+      position ??= await locationService.getCurrentLocation();
       if (position == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -74,7 +82,7 @@ class _LocationCaptureFieldState extends State<LocationCaptureField> {
       if (!mounted) return;
       setState(() {
         widget.addressController.text = address;
-        _lastLat = position.latitude;
+        _lastLat = position!.latitude;
         _lastLng = position.longitude;
       });
       widget.onLocationPicked(position.latitude, position.longitude);

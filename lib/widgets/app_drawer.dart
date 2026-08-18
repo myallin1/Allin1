@@ -146,7 +146,7 @@ class AppDrawer extends StatelessWidget {
                     ),
                     _DrawerTile(
                       icon: Icons.download_rounded,
-                      label: 'Download Mobile App',
+                      label: 'Download the Turbo App!',
                       onTap: () {
                         Navigator.of(context).pop();
                         onDownloadMobileAppTap();

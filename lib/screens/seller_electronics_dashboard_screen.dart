@@ -8,11 +8,15 @@
 // seller; any available hero can pick up the job. So there is
 // deliberately no catalog UI to build here.
 // ================================================================
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/food_models.dart';
+import '../services/app_minimizer_service.dart';
 import '../services/food_seller_service.dart';
 
 const Color _bg = Color(0xFF08080F);
@@ -54,8 +58,38 @@ class _SellerElectronicsDashboardScreenState
     }
   }
 
+  // NEW (Aug 18 2026 — Turbo App navigation audit): same fix as
+  // seller_grocery_dashboard_screen.dart — this screen becomes a literal
+  // app root for electronics sellers via seller_dashboard_screen.dart's
+  // Navigator.pushReplacement(), and had zero PopScope of its own.
+  void _handleBackPress() {
+    if (kIsWeb) {
+      if (AppMinimizer.consumeWebHintOnce()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Press your device's Home button to minimize"),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+    unawaited(AppMinimizer.moveToBackground());
+  }
+
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _handleBackPress();
+      },
+      child: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
     if (_loading) {
       return const Scaffold(
         backgroundColor: _bg,

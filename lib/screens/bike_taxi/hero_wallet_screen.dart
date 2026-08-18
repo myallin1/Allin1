@@ -12,6 +12,7 @@
 
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -68,6 +69,8 @@ class _HeroWalletScreenState extends State<HeroWalletScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _buildBalanceCard(wallet),
+                const SizedBox(height: 12),
+                _buildValueCard(heroId, wallet),
                 if (wallet.isLowBalance) ...[
                   const SizedBox(height: 12),
                   _buildLowBalanceBanner(wallet),
@@ -136,14 +139,36 @@ class _HeroWalletScreenState extends State<HeroWalletScreen> {
             ),
           ),
           const SizedBox(height: 6),
+          // MINUS BALANCE (Aug 17 2026 — Nizam: "top up pannatha heros
+          // ku minus la kaatatum... athu poite irukatum").
+          //
+          // A negative balance is NOT an error state here and must not
+          // be dressed as one — by explicit decision there is no limit
+          // and work is never blocked. So it is shown plainly, with a
+          // leading minus and a one-line explanation that the hero can
+          // keep working. Hiding it (or clamping to ₹0) would mean a
+          // hero discovers the debt only when we ask them to pay it.
           Text(
-            '₹${wallet.balance.toStringAsFixed(2)}',
+            wallet.balance < 0
+                ? '− ₹${wallet.balance.abs().toStringAsFixed(2)}'
+                : '₹${wallet.balance.toStringAsFixed(2)}',
             style: GoogleFonts.outfit(
               color: Colors.white,
               fontSize: 34,
               fontWeight: FontWeight.w900,
             ),
           ),
+          if (wallet.balance < 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Pending app usage — you can keep working. Top up when convenient.',
+              style: GoogleFonts.outfit(
+                color: Colors.white.withValues(alpha: 0.85),
+                fontSize: 11.5,
+                height: 1.35,
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           Row(
             children: [
@@ -196,6 +221,145 @@ class _HeroWalletScreenState extends State<HeroWalletScreen> {
         ],
       ),
     );
+  }
+
+  // ================================================================
+  // WHAT THIS APP IS WORTH TO THE HERO  (Aug 17 2026)
+  // ================================================================
+  // Nizam: "hero vera work amount pay panni work pandrathukum namma app
+  // la join panni amount kattaama minus la yevlo use pannaru athunala
+  // namma app la work pandrathunala yevlo save panirukkarunu theriyanum
+  // avaruku."
+  //
+  // A hero staring at "− ₹47" has only half the picture, and it is the
+  // discouraging half. The number that matters is the RATIO: what they
+  // earned through the app against what the app cost them. On this
+  // codebase's own published position — 0% commission, 100% of delivery
+  // income to the hero — that ratio is overwhelming, and showing it is
+  // simply showing the truth.
+  //
+  // Read cost: ONE aggregate count-style read of this hero's own
+  // earnings rows, and only while this screen is open. Deliberately not
+  // a live listener — the comparison does not need to tick in realtime.
+  Widget _buildValueCard(String heroId, HeroWalletModel wallet) {
+    return FutureBuilder<double>(
+      future: _lifetimeEarned(heroId),
+      builder: (context, snap) {
+        final earned = snap.data ?? 0;
+        final spent = wallet.lifetimeCommissionPaid;
+        // Guard the divide: a brand-new hero has spent nothing, and
+        // "earned ÷ 0" must not render as infinity on their first day.
+        final ratio = spent > 0 ? earned / spent : 0;
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1B5E20).withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+                color: const Color(0xFF3DBA6F).withValues(alpha: 0.45)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.savings_rounded,
+                      color: Color(0xFF3DBA6F), size: 18),
+                  const SizedBox(width: 8),
+                  Text('What MyAllin1 has been worth to you',
+                      style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.w800, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('You earned',
+                            style: GoogleFonts.outfit(
+                                fontSize: 11, color: Colors.black54)),
+                        Text('₹${earned.toStringAsFixed(0)}',
+                            style: GoogleFonts.outfit(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF1B5E20))),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('App usage cost',
+                            style: GoogleFonts.outfit(
+                                fontSize: 11, color: Colors.black54)),
+                        Text('₹${spent.toStringAsFixed(2)}',
+                            style: GoogleFonts.outfit(
+                                fontSize: 20, fontWeight: FontWeight.w900)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (ratio > 1) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'For every ₹1 of app usage, you earned about '
+                  '₹${ratio.toStringAsFixed(0)}.',
+                  style: GoogleFonts.outfit(
+                      fontSize: 12.5,
+                      height: 1.4,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF1B5E20)),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                'We take 0% commission on your rides — every rupee a '
+                'customer pays you is yours. This small usage fee is only '
+                'for running the app.',
+                style: GoogleFonts.outfit(
+                    fontSize: 11.5, height: 1.4, color: Colors.black54),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Total credited to this hero through the app, ever.
+  ///
+  /// Same `heroId` equality-only shape (no orderBy, bounded limit) that
+  /// hero_earnings_screen.dart uses, so it needs no composite index. The
+  /// same defensive numeric coercion is used too: these rows can carry
+  /// an int where a double is expected, which throws on native Android
+  /// under a plain `as double` cast.
+  Future<double> _lifetimeEarned(String heroId) async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('wallet_transactions')
+          .where('heroId', isEqualTo: heroId)
+          .limit(500)
+          .get();
+      var total = 0.0;
+      for (final d in snap.docs) {
+        final raw = d.data()['amount'];
+        final a = raw is num
+            ? raw.toDouble()
+            : (raw is String ? (double.tryParse(raw) ?? 0) : 0);
+        final type = (d.data()['type'] as String? ?? '').toLowerCase();
+        if (a > 0 && type != 'debit') total += a;
+      }
+      return total;
+    } catch (e) {
+      debugPrint('[HeroWallet] lifetime earned lookup failed: $e');
+      return 0;
+    }
   }
 
   Widget _buildLowBalanceBanner(HeroWalletModel wallet) {

@@ -57,6 +57,16 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     _pushOrderToFirebase();
   }
 
+  // ⚠️ Writes to the `orders` collection, which NOTHING reads — no
+  // seller screen, no hero screen, no dispatch path. See the long note
+  // on CartScreen's constructor in cart_screen.dart for the full
+  // finding (Aug 17 2026 order-pipeline audit, Phase 2).
+  //
+  // Currently harmless only because this screen is itself unreachable:
+  // its sole caller is StoreLayoutScreen, which nothing navigates to
+  // either. Before wiring either of them back up, repoint this at
+  // ServiceRequestService.createServiceRequest() — otherwise a customer
+  // sees "order placed" and no seller or hero ever hears about it.
   Future<void> _pushOrderToFirebase() async {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid ?? 'guest';

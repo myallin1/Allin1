@@ -61,8 +61,8 @@ const List<String> _kGeminiModels = [
   'gemini-flash-latest',
 ];
 const List<String> _kDeepSeekModels = [
-  'deepseek-chat',
-  'deepseek-reasoner',
+  'deepseek-v4-flash',
+  'deepseek-v4-pro',
 ];
 
 const Color _bg = Color(0xFF0A0A1A);

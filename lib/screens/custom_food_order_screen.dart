@@ -30,10 +30,14 @@ import '../services/service_request_service.dart';
 import '../utils/service_request_labels.dart';
 import '../widgets/quick_order_line_items.dart';
 import '../services/auth_service.dart';
+import '../services/custom_hotel_service.dart';
 import '../widgets/server_busy_dialog.dart';
 import 'category_screen.dart';
+import 'custom_hotel_view_screen.dart';
 import 'food_order_status_screen.dart';
 import 'location_picker_screen.dart';
+import 'partner_shop_order_screen.dart';
+import 'embedded_shop_screen.dart';
 import 'service_request_tracking_screen.dart';
 
 class CustomFoodOrderScreen extends StatefulWidget {
@@ -65,6 +69,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
   final _nameCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   bool _isLoading = false;
+  int _currentTab = 0;
 
   @override
   void initState() {
@@ -137,7 +142,10 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
   Future<void> _useMyLocation() async {
     setState(() => _locatingMe = true);
     try {
-      final position = await LocationService().getCurrentLocation();
+      // FAST PATH (Aug 16 2026): use dashboard's prefetched position first.
+      final locationService = LocationService();
+      var position = locationService.currentPosition;
+      position ??= await locationService.getCurrentLocation();
       if (position == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -157,8 +165,8 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
       if (!mounted) return;
       setState(() {
         _addressCtrl.text = address;
-        _deliveryLat = position.latitude;
-        _deliveryLng = position.longitude;
+        _deliveryLat = position!.latitude;
+        _deliveryLng = position!.longitude;
       });
     } catch (e) {
       if (mounted) {
@@ -274,7 +282,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w700)),
+          Text(label, style: GoogleFonts.outfit(color: kText, fontSize: 17, fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           TextField(
             controller: ctrl,
@@ -295,6 +303,54 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
     );
   }
 
+  Widget _buildActionButtons() {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kPink,
+                    elevation: 4,
+                    shadowColor: kPink.withValues(alpha: 0.4),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: _isLoading ? null : _placeOrder,
+                  icon: _isLoading
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Icon(Icons.restaurant_rounded, color: Colors.white, size: 18),
+                  label: Text('Order Food', style: GoogleFonts.outfit(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SizedBox(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: kPink, width: 1.4),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const FoodOrderStatusScreen()),
+                  ),
+                  icon: Icon(Icons.receipt_long_rounded, color: kPink, size: 18),
+                  label: Text('Order Status', style: GoogleFonts.outfit(color: kPink, fontSize: 17, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     syncAppPalette(context);
@@ -310,65 +366,40 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
         title: Text('Food Genie 🧞‍♂️', style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w800, fontSize: 18)),
         centerTitle: true,
       ),
-      // Row(sidebar, form) — the form itself (everything below) is kept
-      // byte-for-byte as before, per instruction; only the sidebar and
-      // this wrapping Row are new.
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _FoodSidebar(onCategoryTap: _openSidebarCategory),
-          Expanded(child: _buildFormBody()),
+          if (_currentTab == 1) _FoodSidebar(onCategoryTap: _openSidebarCategory),
+          Expanded(
+            child: _currentTab == 0
+                ? Column(
+                    children: [
+                      Expanded(child: _buildFormBody()),
+                      _buildActionButtons(),
+                    ],
+                  )
+                : _buildHotelsGrid(),
+          ),
         ],
       ),
-      // FIX (per Nizam's request): page bottom split into two — left
-      // "Order Food" (the old full-width submit button, just relocated
-      // here so it's always visible without scrolling) and right
-      // "Order Status" (jumps straight to this customer's food-order
-      // tracker instead of making them scroll down to "My Orders").
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-          child: Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 54,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: kPink,
-                      elevation: 4,
-                      shadowColor: kPink.withValues(alpha: 0.4),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                    onPressed: _isLoading ? null : _placeOrder,
-                    icon: _isLoading
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Icon(Icons.restaurant_rounded, color: Colors.white, size: 18),
-                    label: Text('Order Food', style: GoogleFonts.outfit(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: SizedBox(
-                  height: 54,
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: kPink, width: 1.4),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const FoodOrderStatusScreen()),
-                    ),
-                    icon: Icon(Icons.receipt_long_rounded, color: kPink, size: 18),
-                    label: Text('Order Status', style: GoogleFonts.outfit(color: kPink, fontSize: 14, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ),
-            ],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentTab,
+        onTap: (idx) => setState(() => _currentTab = idx),
+        selectedItemColor: kPink,
+        unselectedItemColor: kMuted,
+        backgroundColor: Colors.white,
+        elevation: 8,
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.restaurant_menu_rounded),
+            label: 'Custom Order',
           ),
-        ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.storefront_rounded),
+            label: 'Hotels',
+          ),
+        ],
       ),
     );
   }
@@ -442,7 +473,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('What do you want to eat?', style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w700)),
+                  Text('What do you want to eat?', style: GoogleFonts.outfit(color: kText, fontSize: 17, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
                   QuickOrderLineItemsForm(
                     items: _lineItems,
@@ -464,6 +495,62 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
       );
   }
 
+  Widget _buildHotelsGrid() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      physics: const BouncingScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Available Hotels', style: GoogleFonts.outfit(color: kText, fontSize: 14.5, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text('Tap to view live menu or order online', style: GoogleFonts.outfit(color: kMuted, fontSize: 12)),
+          const SizedBox(height: 14),
+          const _CustomHotelsSection(),
+          const SizedBox(height: 14),
+          GridView.count(
+            key: const Key('food_hub_partner_shops_grid'),
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 14,
+            mainAxisSpacing: 14,
+            childAspectRatio: 1.35,
+            children: kPartnerShops
+                .map(
+                  (shop) => _HubTile(
+                    label: shop.name,
+                    subtitle: shop.subtitle,
+                    icon: Icons.storefront_rounded,
+                    gradient: shop.gradient,
+                    imageAsset: shop.imageAsset,
+                    onTap: () {
+                      if (shop.embedded) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => EmbeddedShopScreen(shop: shop),
+                          ),
+                        );
+                      } else {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => PartnerShopOrderScreen(shop: shop),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 100),
+        ],
+      ),
+    );
+  }
+
   // ── Restaurant / Shop Name field with tap-to-select suggestions —
   // same debounced MapService().search() mechanism the bike-taxi
   // From/To fields use, so typing a few letters of a real Erode hotel
@@ -474,7 +561,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Restaurant / Shop Name', style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w700)),
+          Text('Restaurant / Shop Name', style: GoogleFonts.outfit(color: kText, fontSize: 17, fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           TextField(
             controller: _shopCtrl,
@@ -527,7 +614,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(name, style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w700)),
+                                Text(name, style: GoogleFonts.outfit(color: kText, fontSize: 17, fontWeight: FontWeight.w700)),
                                 if (address.isNotEmpty)
                                   Text(address, maxLines: 1, overflow: TextOverflow.ellipsis,
                                       style: TextStyle(color: kMuted, fontSize: 11),),
@@ -692,7 +779,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
                 children: [
                   Text(
                     (shop != null && shop.isNotEmpty) ? shop : 'Custom food order',
-                    style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w700),
+                    style: GoogleFonts.outfit(color: kText, fontSize: 17, fontWeight: FontWeight.w700),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -797,9 +884,9 @@ class _SidebarIcon extends StatelessWidget {
   Widget? _svgIcon() {
     switch (category.key) {
       case 'fast_food':
-        return SvgPicture.string(FluentEmojiFlat.french_fries, width: 30, height: 30);
+        return SvgPicture.string(FluentEmojiFlat.french_fries, width: 24, height: 24);
       case 'multi_cuisine':
-        return SvgPicture.string(FluentEmojiFlat.pizza, width: 30, height: 30);
+        return SvgPicture.string(FluentEmojiFlat.pizza, width: 24, height: 24);
       default:
         return null;
     }
@@ -817,8 +904,8 @@ class _SidebarIcon extends StatelessWidget {
         child: Column(
           children: [
             Container(
-              width: 58,
-              height: 58,
+              width: 50,
+              height: 50,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -840,7 +927,7 @@ class _SidebarIcon extends StatelessWidget {
               ),
               child: Center(
                 child: svg ??
-                    Text(category.emoji, style: const TextStyle(fontSize: 28)),
+                    Text(category.emoji, style: const TextStyle(fontSize: 24)),
               ),
             ),
             const SizedBox(height: 6),
@@ -865,6 +952,119 @@ class _SidebarIcon extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<FoodSubCategory>('category', category));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+  }
+}
+
+class _CustomHotelsSection extends StatelessWidget {
+  const _CustomHotelsSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: CustomHotelService().openHotelsStream(),
+      builder: (context, snap) {
+        final docs = snap.data?.docs ?? const [];
+        if (docs.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 14,
+              childAspectRatio: 1.35,
+              children: docs.map((doc) {
+                final data = doc.data();
+                final name = (data['hotelName'] as String?)?.trim();
+                return _HubTile(
+                  label: (name == null || name.isEmpty) ? 'Custom Hotel' : name,
+                  subtitle: 'Tap to view live menu',
+                  icon: Icons.storefront_rounded,
+                  gradient: const [Color(0xFF11998E), Color(0xFF38EF7D)],
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CustomHotelViewScreen(
+                        hotelId: doc.id,
+                        hotelName: (name == null || name.isEmpty) ? 'Custom Hotel' : name,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _HubTile extends StatelessWidget {
+  final String label;
+  final String subtitle;
+  final IconData icon;
+  final List<Color> gradient;
+  final String? imageAsset;
+  final VoidCallback onTap;
+
+  const _HubTile({
+    super.key,
+    required this.label,
+    required this.subtitle,
+    required this.icon,
+    required this.gradient,
+    this.imageAsset,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 150),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [BoxShadow(color: gradient.first.withValues(alpha: 0.28), blurRadius: 16, offset: const Offset(0, 8))],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: Colors.white, 
+                shape: BoxShape.circle,
+                image: imageAsset != null
+                    ? DecorationImage(image: AssetImage(imageAsset!), fit: BoxFit.cover)
+                    : null,
+              ),
+              child: imageAsset == null ? Icon(icon, color: gradient.last, size: 22) : null,
+            ),
+            const Spacer(),
+            Text(label, style: GoogleFonts.outfit(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w900), maxLines: 1, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 4),
+            Text(subtitle, style: GoogleFonts.outfit(color: Colors.white.withValues(alpha: 0.85), fontSize: 11), maxLines: 2, overflow: TextOverflow.ellipsis),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('label', label));
+    properties.add(StringProperty('subtitle', subtitle));
+    properties.add(DiagnosticsProperty<IconData>('icon', icon));
+    properties.add(IterableProperty<Color>('gradient', gradient));
     properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }

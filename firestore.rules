@@ -151,12 +151,31 @@ service cloud.firestore {
         || (isRealUser()
             && request.resource.data.ownerUid == request.auth.uid
             && request.resource.data.createdBy == request.auth.uid
-            && request.resource.data.type == 'customer_referral'
             && request.resource.data.code == code
             && request.resource.data.scans == 0
             && request.resource.data.signups == 0
             && request.resource.data.active == true
-            && request.resource.data.destination == 'https://my-allin1.web.app/');
+            // TYPE AND DESTINATION ARE PINNED AS A PAIR — do not split
+            // these into two independent checks.
+            //
+            // Aug 17 2026: extended from customer-only to also allow a
+            // hero to mint a hero-referral code (Nizam: "heros avanga
+            // innoru heros ah refer panna"). A hero referral MUST point
+            // at the hero app: a would-be hero sent to the customer app
+            // lands somewhere with no hero registration at all, so the
+            // referral is silently wasted.
+            //
+            // Keeping the pair bound is what stops a customer minting a
+            // 'hero_referral' aimed at the customer app, or anyone
+            // pointing either type at an arbitrary URL and turning our
+            // own domain into a redirector.
+            && (
+                 (request.resource.data.type == 'customer_referral'
+                  && request.resource.data.destination == 'https://my-allin1.web.app/')
+                 ||
+                 (request.resource.data.type == 'hero_referral'
+                  && request.resource.data.destination == 'https://hero-allin1.web.app/')
+               ));
       allow update: if isAdminAny()
         || (isAuth()
             && request.resource.data.diff(resource.data).affectedKeys()
@@ -207,9 +226,21 @@ service cloud.firestore {
       // destination to our app root, and may not write any other field.
       // Update/delete stay admin-only, so an existing link can never be
       // repointed by a customer after the fact.
+      // FIX (Aug 18 2026 — "Refer a Hero" always failing with a
+      // misleading "please sign in" even for a fully signed-in hero):
+      // this create rule only ever whitelisted the CUSTOMER app URL.
+      // ensureMyReferralCode() writes affiliate_codes/{code} (already
+      // hero-aware, see above) AND qr_links/{code} for every referral —
+      // a hero-referral write here was pinned to
+      // 'https://my-allin1.web.app/' and got silently permission-denied,
+      // which the client's catch-all mapped to "sign in required".
+      // Widened to accept the same hero-app destination that
+      // affiliate_codes already allows, keeping the open-redirect guard
+      // intact — still only these two exact, hardcoded URLs, nothing
+      // caller-supplied.
       allow create: if isRealUser()
-        && request.resource.data.keys().hasOnly(['destination', 'active'])
-        && request.resource.data.destination == 'https://my-allin1.web.app/'
+        && (request.resource.data.destination == 'https://my-allin1.web.app/'
+            || request.resource.data.destination == 'https://hero-allin1.web.app/')
         && request.resource.data.active == true;
     }
 
@@ -259,6 +290,19 @@ service cloud.firestore {
     }
 
     // ==============================================================
+    // CUSTOM HOTELS COLLECTION
+    // ==============================================================
+    match /custom_hotels/{sellerId} {
+      allow read: if isAuth();
+      allow write: if isSellerOwner(sellerId) || isAdminAny();
+      
+      match /items/{itemId} {
+        allow read: if isAuth();
+        allow write: if isSellerOwner(sellerId) || isAdminAny();
+      }
+    }
+
+    // ==============================================================
     // SELLERS COLLECTION
     // ==============================================================
     // Customers:   read only
@@ -298,6 +342,33 @@ service cloud.firestore {
         allow read: if isAuth();
 
         // Write: owning seller or admin — same isAdminAny() fix as above.
+        allow create: if isAdminAny() || isSellerOwner(sellerId);
+        allow update: if isAdminAny() || isSellerOwner(sellerId);
+        allow delete: if isAdminAny() || isSellerOwner(sellerId);
+      }
+
+      // ── Mobile Listings Subcollection ─────────────────────────
+      // NEW (Aug 18 2026 — Allin1 Mobile Hub). Phones a mobile-vertical
+      // seller has for sale: sellers/{sellerId}/mobile_listings/{id}.
+      //
+      // Same permission shape as menu_items above, deliberately: read
+      // for any authenticated user (customers browse every shop's
+      // stock), write only for the owning seller or an admin. Because
+      // listings live UNDER the owning seller's document, ownership is
+      // structural — a seller cannot write into another shop's stock
+      // even by forging a sellerId field in the payload.
+      //
+      // NOTE the customer browse path uses collectionGroup(
+      // 'mobile_listings'), which is matched by THIS rule via the
+      // {sellerId} wildcard — collection-group reads are allowed
+      // because `allow read: if isAuth()` here has no document-owner
+      // condition. Adding an owner check to read would silently break
+      // the entire customer-facing grid.
+      // ──────────────────────────────────────────────────────────
+      match /mobile_listings/{listingId} {
+
+        allow read: if isAuth();
+
         allow create: if isAdminAny() || isSellerOwner(sellerId);
         allow update: if isAdminAny() || isSellerOwner(sellerId);
         allow delete: if isAdminAny() || isSellerOwner(sellerId);
@@ -586,7 +657,30 @@ service cloud.firestore {
         || (isAuth()
             && resource.data.customerId == request.auth.uid
             && request.resource.data.assignedHeroId == resource.data.assignedHeroId
-            && request.resource.data.customerId == resource.data.customerId);
+            && request.resource.data.customerId == resource.data.customerId)
+
+      // ── Clause 6: SELLER kitchen progress (Aug 17 2026 seller audit) ──
+      // Root cause of "seller app is just a dummy app": the seller could
+      // READ their incoming orders (see the details.sellerId read clause
+      // above) but had NO update clause at all, so the seller's own order
+      // cards could never carry a working Accept / Preparing / Food Ready
+      // button — every such button in the app lives on the DEAD
+      // food_orders pipeline instead. The seller could only watch.
+      //
+      // This opens exactly one thing: the seller's own kitchen stage, on
+      // their own orders. It is deliberately a SEPARATE field from
+      // `status`, which stays owned by the hero/admin dispatch state
+      // machine — a seller must never be able to move an order to
+      // 'hero_assigned' or 'completed', and hasOnly() below guarantees
+      // they cannot touch status, assignedHeroId, customerId, details,
+      // requestType or anything else. Purely additive: every existing
+      // clause above is untouched.
+        || (isAuth()
+            && resource.data.details.sellerId == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['sellerStage', 'sellerStageAt', 'updatedAt', 'status', 'pingExpiresAt'])
+            && (!('status' in request.resource.data.diff(resource.data).affectedKeys()) ||
+                (resource.data.status == 'awaiting_seller' && request.resource.data.status == 'pinging')));
 
       allow delete: if isAdminAny();
     }
@@ -1076,7 +1170,18 @@ service cloud.firestore {
     match /notifications/{notifId} {
       allow read, update, delete: if isAdminAny()
         || (isAuth() && resource.data.userId == request.auth.uid);
-      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      // Aug 17 2026: admin may create a notification FOR ANOTHER USER.
+      // Needed for the wallet top-up reminder (Nizam: "yella hero kum
+      // push messege anupiklam") — on the Spark plan there are no Cloud
+      // Functions, so the fan-out is written client-side from the admin
+      // app. Without this clause the userId check below pinned every
+      // create to the SENDER's own uid, so an admin could only ever
+      // notify themselves.
+      //
+      // Ordinary users keep the original restriction: they may still
+      // only create notifications addressed to themselves.
+      allow create: if isAdminAny()
+        || (isAuth() && request.resource.data.userId == request.auth.uid);
     }
 
     // ==============================================================

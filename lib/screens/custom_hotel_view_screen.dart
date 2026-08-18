@@ -36,6 +36,7 @@ import '../services/auth_service.dart';
 import '../services/cloudinary_upload_service.dart';
 import '../services/custom_hotel_service.dart';
 import '../services/service_request_service.dart';
+import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
 const Color _kBg = Color(0xFFFFFFFF);
 const Color _kText = Color(0xFF1A1A2E);
@@ -140,7 +141,38 @@ class _CustomHotelViewScreenState extends State<CustomHotelViewScreen> {
         backgroundColor: _kBg,
         elevation: 0,
         iconTheme: const IconThemeData(color: _kText),
-        title: Text(widget.hotelName, style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 17)),
+        title: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: _service.hotelStream(widget.hotelId),
+          builder: (context, snap) {
+            final logoUrl = (snap.data?.data()?['logoUrl'] as String?)?.trim() ?? '';
+            return Row(
+              children: [
+                if (logoUrl.isNotEmpty) ...[
+                  ClipOval(
+                    child: CachedCloudImage(
+                      logoUrl,
+                      width: 32,
+                      height: 32,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: Text(
+                    widget.hotelName,
+                    style: GoogleFonts.outfit(
+                      color: _kText,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 17,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
         // NEW — Call button (see _callHotel FIX note above). A separate,
         // lightweight StreamBuilder over the same hotelStream doc rather
         // than threading phone data down from the body's own
@@ -229,23 +261,35 @@ class _CustomHotelViewScreenState extends State<CustomHotelViewScreen> {
                         ),
                         child: Row(
                           children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
-                              child: item.photoUrl.isEmpty
-                                  ? Container(
-                                      width: 64,
-                                      height: 64,
-                                      decoration: const BoxDecoration(
-                                        gradient: LinearGradient(colors: [_kPink, _kPinkDark]),
+                            Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.1),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: item.photoUrl.isEmpty
+                                    ? Container(
+                                        width: 80,
+                                        height: 80,
+                                        decoration: const BoxDecoration(
+                                          gradient: LinearGradient(colors: [_kPink, _kPinkDark]),
+                                        ),
+                                        child: const Icon(Icons.restaurant_rounded, color: Colors.white, size: 32),
+                                      )
+                                    : CachedCloudImage(
+                                        CloudinaryUploadService.optimizedUrl(item.photoUrl, width: 256),
+                                        width: 80,
+                                        height: 80,
+                                        fit: BoxFit.cover,
                                       ),
-                                      child: const Icon(Icons.restaurant_rounded, color: Colors.white),
-                                    )
-                                  : Image.network(
-                                      CloudinaryUploadService.optimizedUrl(item.photoUrl, width: 128),
-                                      width: 64,
-                                      height: 64,
-                                      fit: BoxFit.cover,
-                                    ),
+                              ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -457,6 +501,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
       // seller_dashboard_screen.dart) treat details['items'] as a List
       // defensively and know how to render this quantity/price shape.
       final requestId = await ServiceRequestService().createServiceRequest(
+        deferBroadcast: true,
         requestType: 'custom_hotel_order',
         customerId: user.uid,
         customerName: customerName,
@@ -575,3 +620,4 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     );
   }
 }
+

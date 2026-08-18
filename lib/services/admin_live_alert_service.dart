@@ -42,12 +42,14 @@ class AdminLiveAlertService {
   // now-completed doc (e.g. a later payment-status update).
   final Set<String> _alertedRideCompletions = {};
   final Set<String> _alertedRequestCompletions = {};
+  final Set<String> _alertedRequestPingings = {};
 
   void start() {
     stop(); // idempotent — clears any previous session's listeners first.
     final since = Timestamp.now();
     _alertedRideCompletions.clear();
     _alertedRequestCompletions.clear();
+    _alertedRequestPingings.clear();
 
     _ridesSub = FirebaseFirestore.instance
         .collection('rides')
@@ -118,7 +120,18 @@ class AdminLiveAlertService {
           ));
         } else if (change.type == DocumentChangeType.modified) {
           final status = data['status'] as String?;
-          if (status == 'completed' &&
+          if (status == 'pinging' &&
+              _alertedRequestPingings.add(change.doc.id)) {
+            final requestType =
+                (data['requestType'] as String?) ?? 'service request';
+            final customerName = (data['customerName'] as String?) ?? 'A customer';
+            unawaited(AdminAlertNotificationService.showForegroundAlert(
+              title: '🚚 Partner Requested!',
+              body: '$customerName\'s ${requestType.replaceAll('_', ' ')} is ready.',
+              payloadId: 'request_${change.doc.id}',
+              type: 'admin_delivery_requested',
+            ));
+          } else if (status == 'completed' &&
               _alertedRequestCompletions.add(change.doc.id)) {
             final requestType =
                 (data['requestType'] as String?) ?? 'service request';
@@ -150,5 +163,6 @@ class AdminLiveAlertService {
     _requestsSub = null;
     _alertedRideCompletions.clear();
     _alertedRequestCompletions.clear();
+    _alertedRequestPingings.clear();
   }
 }

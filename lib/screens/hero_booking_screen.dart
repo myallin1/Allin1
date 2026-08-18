@@ -172,7 +172,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                         : '${shared.lat.toStringAsFixed(5)}, '
                             '${shared.lng.toStringAsFixed(5)}',
                     style: TextStyle(
-                        color: context.colors.text, fontSize: 13, height: 1.4,),
+                        color: context.colors.text, fontSize: 17, height: 1.4,),
                   ),
                 ),
               ],
@@ -187,7 +187,10 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         actionsAlignment: MainAxisAlignment.spaceBetween,
         actions: [
           OutlinedButton(
-            style: OutlinedButton.styleFrom(foregroundColor: context.colors.accentSecondary),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: context.colors.accentSecondary,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
             onPressed: () {
               Navigator.of(dialogContext).pop();
               unawaited(_applyPickedCoordinates(
@@ -204,6 +207,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: context.colors.accent,
               foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
             ),
             onPressed: () {
               Navigator.of(dialogContext).pop();
@@ -231,8 +235,11 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
   // location permission.
   Future<void> _primeSearchBiasWithCustomerCity() async {
     try {
-      final cached = await LocationService().getLastKnownLocation();
-      final position = cached ?? await LocationService().getCurrentLocation();
+      // FAST PATH (Aug 16 2026): use dashboard's prefetched position first.
+      final locationService = LocationService();
+      var position = locationService.currentPosition;
+      position ??= await locationService.getLastKnownLocation();
+      position ??= await locationService.getCurrentLocation();
       if (position == null) return;
       _mapService.setSearchCenter(
         LatLng(position.latitude, position.longitude),
@@ -630,7 +637,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
             // below: this is what actually helps a customer realise
             // the range of tasks a Hero covers. Tapping a card jumps
             // straight to its matching category.
-            Text('What can a Hero do for you?', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
+            Text('What can a Hero do for you?', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 17, fontWeight: FontWeight.w700)),
             const SizedBox(height: 10),
             _HeroTaskIdeasMarquee(
               onSelect: (key) => setState(() => _selectedCategory = key),
@@ -638,7 +645,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
             const SizedBox(height: 24),
 
             // ── 1. Task category ─────────────────────────────────
-            Text('What kind of task?', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
+            Text('What kind of task?', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 17, fontWeight: FontWeight.w700)),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
@@ -649,7 +656,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
 
             // ── 2. Location(s) — progressive disclosure ──────────
             if (_isPickupDelivery) ...[
-              Text('Pickup location', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
+              Text('Pickup location', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 17, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               _locationField(
                 controller: _fromLocationCtrl,
@@ -657,7 +664,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                 isFrom: true,
               ),
               const SizedBox(height: 16),
-              Text('Drop location', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
+              Text('Drop location', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 17, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               _locationField(
                 controller: _locationCtrl,
@@ -665,7 +672,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                 isFrom: false,
               ),
             ] else ...[
-              Text('Location', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
+              Text('Location', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 17, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               _locationField(
                 controller: _locationCtrl,
@@ -676,7 +683,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
             const SizedBox(height: 16),
 
             // ── 3. Brief task description ─────────────────────────
-            Text('What do you need done?', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
+            Text('What do you need done?', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 17, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             QuickOrderLineItemsForm(
               items: _lineItems,
@@ -707,7 +714,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                 ),
               )
             else ...[
-              Text('Special instructions', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
+              Text('Special instructions', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 17, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               _voiceTextField(
                 controller: _instructionsCtrl,
@@ -718,7 +725,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
             const SizedBox(height: 20),
 
             // ── 5. Preferred timing — optional ────────────────────
-            Text('When do you need this?', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 14, fontWeight: FontWeight.w700)),
+            Text('When do you need this?', style: GoogleFonts.outfit(color: context.colors.text, fontSize: 17, fontWeight: FontWeight.w700)),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -748,7 +755,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                         _scheduledAt != null
                             ? '${_scheduledAt!.day}/${_scheduledAt!.month}/${_scheduledAt!.year} at ${TimeOfDay.fromDateTime(_scheduledAt!).format(context)}'
                             : 'Pick a date & time',
-                        style: GoogleFonts.outfit(color: context.colors.text, fontSize: 13, fontWeight: FontWeight.w600),
+                        style: GoogleFonts.outfit(color: context.colors.text, fontSize: 17, fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
@@ -774,29 +781,31 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
             children: [
               Expanded(
                 child: SizedBox(
-                  height: 54,
+                  
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: context.colors.accent,
                       elevation: 4,
                       shadowColor: context.colors.accent.withValues(alpha: 0.4),
+              padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
                     onPressed: _submitting ? null : _submit,
                     icon: _submitting
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                         : const Icon(Icons.bolt_rounded, color: Colors.white, size: 18),
-                    label: Text('Find Me a Hero', style: GoogleFonts.outfit(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                    label: Text('Find Me a Hero', style: GoogleFonts.outfit(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: SizedBox(
-                  height: 54,
+                  
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(color: context.colors.accent, width: 1.4),
+              padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
                     onPressed: () => Navigator.push(
@@ -804,7 +813,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                       MaterialPageRoute(builder: (_) => const HeroBookingStatusScreen()),
                     ),
                     icon: Icon(Icons.receipt_long_rounded, color: context.colors.accent, size: 18),
-                    label: Text('Booking Status', style: GoogleFonts.outfit(color: context.colors.accent, fontSize: 14, fontWeight: FontWeight.bold)),
+                    label: Text('Booking Status', style: GoogleFonts.outfit(color: context.colors.accent, fontSize: 17, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ),
@@ -958,16 +967,13 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
       }
     });
     try {
-      // Reuses LocationService().getCurrentLocation() — the app's one
-      // canonical current-location fetch (location_service.dart:58-63),
-      // already tuned with LocationAccuracy.high + a 15s time limit and
-      // its own permission check. A bare Geolocator.getCurrentPosition()
-      // call with no settings (what this used to do) can resolve to a
-      // low-effort/cached/network-based fix instead of waiting for a
-      // real GPS lock — on a laptop with no GPS chip, that's exactly
-      // what produced two different, both-wrong locations for pickup
-      // and drop fetched moments apart at the same physical spot.
-      final position = await LocationService().getCurrentLocation();
+      // FAST PATH (Aug 16 2026): dashboard_screen.dart already warms up
+      // LocationService on app open (_prefetchLocationInBackground). Use
+      // the cached position instantly when available — zero GPS wait.
+      // Fall back to a fresh getCurrentLocation() only if no cache exists.
+      final locationService = LocationService();
+      var position = locationService.currentPosition;
+      position ??= await locationService.getCurrentLocation();
       if (position == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -978,8 +984,9 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         }
         return;
       }
+      final pos = position!;
       final result = await _mapService.reverseGeocode(
-        LatLng(position.latitude, position.longitude),
+        LatLng(pos.latitude, pos.longitude),
       );
       final name = (result?['name'] as String?) ??
           (result?['full'] as String?) ??
@@ -988,12 +995,12 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
       setState(() {
         controller.text = name;
         if (isFrom) {
-          _fromLocationLat = position.latitude;
-          _fromLocationLng = position.longitude;
+          _fromLocationLat = pos.latitude;
+          _fromLocationLng = pos.longitude;
           _fromSuggestions = [];
         } else {
-          _locationLat = position.latitude;
-          _locationLng = position.longitude;
+          _locationLat = pos.latitude;
+          _locationLng = pos.longitude;
           _locationSuggestions = [];
         }
       });
@@ -1191,7 +1198,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         ),
         content: Text(
           message,
-          style: TextStyle(color: context.colors.mutedText, fontSize: 13, height: 1.45),
+          style: TextStyle(color: context.colors.mutedText, fontSize: 17, height: 1.45),
         ),
         actions: [
           TextButton(
@@ -1202,6 +1209,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: context.colors.accent,
               foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
             ),
             onPressed: () {
               Navigator.of(dialogContext).pop();
@@ -1294,7 +1302,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         title,
         style: GoogleFonts.outfit(
           color: context.colors.text,
-          fontSize: 14,
+          fontSize: 17,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -1413,7 +1421,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                   leading: Icon(Icons.place_rounded,
                       color: context.colors.accent, size: 18,),
                   title: Text(s['name'] as String? ?? '',
-                      style: TextStyle(fontSize: 13, color: context.colors.text),),
+                      style: TextStyle(fontSize: 17, color: context.colors.text),),
                   onTap: () => isFrom
                       ? _selectFromSuggestion(s)
                       : _selectLocationSuggestion(s),
@@ -1436,7 +1444,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
       controller: controller,
       maxLines: maxLines,
       onChanged: onChanged,
-      style: TextStyle(fontSize: 14, color: context.colors.text),
+      style: TextStyle(fontSize: 17, color: context.colors.text),
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: TextStyle(color: context.colors.mutedText.withValues(alpha: 0.7), fontSize: 13),

@@ -59,26 +59,25 @@ class EconomicVisionData {
   /// over-delivering on the detail page is the stronger position, and
   /// it leaves head-room if a number is ever revised downward.
   static const String bannerTitle =
-      'தமிழ்நாட்டின் ₹50,000 கோடி பொருளாதாரப் புரட்சி! 🚀';
+      'தமிழ்நாட்டின் ₹5,00,00,00,00,000 பொருளாதாரப் புரட்சித் திட்டம்! 🚀';
 
   static const String bannerSubtitle =
-      'வெளிமாநிலங்களுக்குச் செல்லும் நமது பணத்தை மீட்பதற்கான 5 வருட மாபெரும் '
-      'திட்டம். ஈரோட்டிலிருந்து ஒரு சரித்திரத் தொடக்கம்...';
+      'தமிழ்நாட்டை விட்டு வெளியேறும் நமது பணத்தை நம்மிடமே தக்கவைத்து நம் நாட்டின் பொருளாதாரத்தையும் மற்றும் நம் வீட்டின் பொருளாதாரத்தையும் உயர்த்துவதற்கான மாபெரும் திட்டம். ஈரோட்டிலிருந்து ஒரு சரித்திர தொடக்கம்....';
 
   static const String bannerCta = 'மேலும் அறிய கிளிக் செய்க';
   static const String bannerTag = 'ஈரோடு';
 
   // ── Detail-screen hero ────────────────────────────────────────
-  static const String heroAmount = '₹1 லட்சம் கோடி';
-  static const String heroCaption = '5 ஆண்டுகளில் தமிழ்நாட்டை விட்டு வெளியேறும் பணம்';
-  static const String heroRally = 'அதை இங்கேயே வைப்போம். ஈரோட்டிலிருந்து ஒரு தொடக்கம்.';
+  static const String heroAmount = '₹10,00,00,00,00,000';
+  static const String heroCaption = '5 ஆண்டுகளில் தமிழ்நாட்டை விட்டு வெளியேறும் பணத்தை Myallin1 மூலமாக அணை கட்டி தடுப்போம்.';
+  static const String heroRally = 'அதை தமிழ்நாட்டிலேயே தக்க வைப்போம். ஈரோட்டிலிருந்து ஒரு தொடக்கம்.';
   static const String heroBadge = '5 வருட மாபெரும் திட்டம்';
 
   // ── Annual drain ──────────────────────────────────────────────
   static const String annualRange = '₹14,400 – ₹23,400';
   static const String annualIntro =
-      'டாக்ஸி, உணவு, மளிகை, ஈ-காமர்ஸ், பேமெண்ட், AI, OTT, ஆப் சந்தாக்கள் — '
-      'இந்த 8 துறைகள் மூலம் தமிழ்நாட்டிலிருந்து ஒவ்வொரு ஆண்டும்';
+      'டாக்ஸி மற்றும் டிரான்ஸ்போர்ட், உணவு, மளிகை, ஈ-காமர்ஸ், பேமெண்ட், AI, OTT,பொமுது போக்கு ஆப் சந்தாக்கள் — '
+      'இந்த  துறைகள் மூலம் தமிழ்நாட்டிலிருந்து ஒவ்வொரு ஆண்டும்';
 
   /// 5-year build-up. Base ₹18,917 கோடி compounding at 15%/yr.
   /// (label, ₹ crore, bar 0-1)
@@ -114,7 +113,7 @@ class EconomicVisionData {
 
   static const List<VisionSector> addressableSectors = [
     VisionSector(
-      label: 'ஈ-காமர்ஸ் (Amazon/Flipkart)',
+      label: 'ஈ-காமர்ஸ்',
       icon: Icons.shopping_bag_rounded,
       amount: '₹8,540 – 14,940 கோடி',
       barValue: 1.0,
@@ -170,30 +169,39 @@ class EconomicVisionData {
       'கார்ப்பரேட் ஆப்கள் ஒவ்வொரு ஆர்டரிலும் 8%–35% வரை கமிஷன் எடுக்கின்றன. '
       'மொத்தத்தில் மிகப்பெரிய பங்கு ஈ-காமர்ஸ்.';
 
-  // ── Erode ─────────────────────────────────────────────────────
-  static const String erodeTotalLabel =
-      'ஈரோடு மாவட்டம் — மொத்த டிஜிட்டல் பொருளாதாரம்';
-  static const String erodeTotalAmount = '≈ ₹300 கோடி / ஆண்டு';
-  static const String erodeTotalNote = '8 துறைகளிலும் சேர்த்து வெளியேறுகிறது.';
-
-  static const String erodeRestaurantIntro = 'இதில், உணவக துறை மட்டும் ஆண்டுக்கு';
-  static const String erodeRestaurantAmount = '₹36 கோடி';
-  static const String erodeRestaurantNote =
-      '30% கமிஷனாக இழக்கிறது. அந்தக் கணக்கு கீழே:';
-
-  /// The Erode equation, as (operator, value, note).
-  static const List<(String, String, String)> erodeEquation = [
-    ('', '500', 'உணவகங்கள் (ஆன்லைனில்)'),
-    ('×', '₹2,00,000', 'ஒன்றின் மாத விற்பனை'),
-    ('×', '30%', 'கார்ப்பரேட் கமிஷன்'),
-    ('×', '12', 'மாதங்கள்'),
+  // ── MyAllin1 Core Points ──────────────────────────────────────
+  static const List<(String, String, IconData)> myAllin1CorePoints = [
+    (
+      '0% கமிஷன் - 100% உழைப்பவருக்கே',
+      'வெளிநாட்டு நிறுவனங்கள் ஆட்டோ மற்றும் டெலிவரி தொழிலாளர்களிடம் வசூலிக்கும் 30% பகல் கொள்ளைக்கு முற்றுப்புள்ளி! Myallin1 ஆப்பில் கமிஷன் கிடையாது. தொழிலாளர்களின் முழு வருமானமும் அவர்கள் குடும்பத்திற்கே!',
+      Icons.volunteer_activism_rounded,
+    ),
+    (
+      'தமிழ்நாட்டின் பொருளாதாரம் தமிழர்களுக்கே',
+      'கார்ப்பரேட் நிறுவனங்கள் மூலம் வெளி மாநிலங்கள் / நாடுகளுக்குச் செல்லும் பணத்தைத் தடுத்து, நம் மக்களின் பணம் நம் ஈரோடு மாவட்டத்திற்குள்ளேயே சுழலச் செய்து, உள்ளூர் பொருளாதாரத்தை உயர்த்துவதே எங்கள் முக்கிய நோக்கம்.',
+      Icons.trending_up_rounded,
+    ),
+    (
+      'பல வேலைகள்... ஒரே ஆப் (Multiple Earnings)',
+      'ஆட்டோ, பைக் டாக்ஸி மட்டுமல்லாமல், உணவு விநியோகம், பார்சல் சர்வீஸ் எனப் பல வழிகளில் உழைப்பாளிகளுக்குத் தொடர்ந்து வேலைவாய்ப்பை வழங்கி, அவர்களின் தினசரி வருமானத்தை உத்தரவாதப்படுத்துகிறோம்.',
+      Icons.work_rounded,
+    ),
+    (
+      'பெண்களுக்கும், பயணிகளுக்கும் முழு பாதுகாப்பு',
+      'அவசரக் காலங்களில் ஒரு பட்டனை அழுத்தினால் உடனே உதவி கிடைக்கும் நவீன SOS வசதி ஆப்பிற்குள்ளேயே இணைக்கப்பட்டுள்ளது. பயணிகளின் பாதுகாப்பே எங்கள் முதல் முன்னுரிமை.',
+      Icons.security_rounded,
+    ),
+    (
+      'சமூக நீதிக்கு வலு சேர்க்கும் இளைஞர்கள் படை',
+      'மாண்புமிகு முதலமைச்சர் அவர்களின் எல்லோருக்குமான வளர்ச்சி என்ற சமூக நீதிப் பாதையில், ஈரோடு இளைஞர்களால் உருவாக்கப்பட்ட, உழைப்பாளர்களை முதலாளியாக்கும் முதல் தொழில்நுட்ப முன்னெடுப்பு இது!',
+      Icons.groups_rounded,
+    ),
+    (
+      'நம்ம ஊரு... நம்ம ஆப்',
+      'ஈரோடு மக்களின் தேவைகளை நன்கு உணர்ந்து, உள்ளூர் மக்களுக்காக, உள்ளூர் இளைஞர்களால் உருவாக்கப்பட்ட முதல் Super App இதுவே.',
+      Icons.favorite_rounded,
+    ),
   ];
-
-  static const (String, String, String) erodeEquationTotal =
-      ('=', '₹36 கோடி', 'ஆண்டுக்கு இழப்பு');
-
-  static const String erodePerShopLabel = 'ஒரு உணவகத்திற்கு மட்டும்';
-  static const String erodePerShopAmount = '₹60,000 / மாதம்';
 
   // ── Solution ──────────────────────────────────────────────────
   static const String solutionTitle = 'MyAllin1 மாடல்';
@@ -202,7 +210,7 @@ class EconomicVisionData {
     (Icons.delivery_dining_rounded, '100%', 'டெலிவரி பார்ட்னர்களுக்கு முழு வருமானம்'),
     (Icons.groups_rounded, 'நியாயம்', 'மக்களுக்கு நேர்மையான விலை'),
   ];
-  static const String solutionSlogan = '100% உழைப்பவர் வருமானம் உழைப்பவருக்கே.';
+  static const String solutionSlogan = 'உழைப்பவர்களின் வியர்வைக்கு 100% மதிப்பு! 0% கமிஷன்! 💛';
 
   // ── Industry facts ────────────────────────────────────────────
   static const List<(String, String)> industryFacts = [
@@ -213,10 +221,9 @@ class EconomicVisionData {
   ];
 
   // ── CTA ───────────────────────────────────────────────────────
-  static const String ctaTitle = 'இந்த மாற்றம் நம்மிடமிருந்தே தொடங்குகிறது';
+  static const String ctaTitle = 'ஒவ்வொரு ஈரோட்டுக்காரன் போனிலும் Myallin1 இருக்கட்டும்!';
   static const String ctaBody =
-      'நீங்கள் MyAllin1-ல் ஆர்டர் செய்யும் ஒவ்வொரு முறையும், அந்தப் பணம் '
-      'ஈரோட்டிலேயே தங்குகிறது.';
+      'உள்ளூர் தொழிலாளர்களின் வாழ்வாதாரத்தை உயர்த்தும் இந்த புரட்சியில் நீங்களும் இணையுங்கள்! ஷேர் பண்ணுங்க.';
   static const String ctaButton = 'ஆர்டர் செய்யத் தொடங்குங்கள்';
 
   /// Hero-app variant of the CTA — a delivery partner is not "ordering".
@@ -225,7 +232,7 @@ class EconomicVisionData {
   // ── Source footer (LEGALLY LOAD-BEARING — never remove) ───────
   static const String sourceTitle = 'தரவு ஆதாரம்';
   static const String sourceBody =
-      '2026 நிதியாண்டின் வெளியிடப்பட்ட தொழில்துறைத் தரவுகள் (8%–35% கமிஷன் '
+      '2025-2026 நிதியாண்டின் வெளியிடப்பட்ட தொழில் துறை தரவுகள் (8%–35% கமிஷன் '
       'விகிதங்கள்), தேசியச் சந்தையில் தமிழ்நாட்டின் மதிப்பிடப்பட்ட 9% பங்கு, '
       'மற்றும் 15% ஆண்டு வளர்ச்சி அடிப்படையில் கணக்கிடப்பட்டது. இவை '
       'மதிப்பீடுகள் — நிறுவன உறுதிமொழி அல்ல. மொத்தத்தில் மிகப்பெரிய பங்கு '

@@ -20,6 +20,7 @@ import 'city_service.dart';
 import 'hero_usage_accumulator_service.dart';
 import 'hero_wallet_service.dart';
 import 'usage_tracking_service.dart';
+import '../config/hero_service_access.dart';
 
 /// Canonical status enum — the single source of truth for lifecycle state.
 /// UI label sets (task-type vs goods-type) are presentation-only mappings
@@ -120,6 +121,25 @@ class ServiceRequestService {
     required String customerPhone,
     required Map<String, dynamic> details,
     String? preGeneratedRequestId,
+
+    /// Hold the hero broadcast back until the SELLER says the food is
+    /// ready (Aug 17 2026 seller audit — Nizam: "food ready anathum
+    /// 'book delivery partner' nu kaatanum, appo than heros-ku
+    /// notification pogaNum").
+    ///
+    /// Default false keeps every existing caller (hero booking, custom
+    /// order, grocery, custom food) on the unchanged
+    /// broadcast-immediately behaviour. Only shop-menu food orders pass
+    /// true, because only they have a cooking step: broadcasting at
+    /// order time made a hero ride out and wait at the hotel while the
+    /// food was still being cooked, burning their time and ours.
+    ///
+    /// When true the Firestore doc is still created identically (status
+    /// 'pending', so the seller's existing listener and admin's screens
+    /// see it exactly as before) and the RTDB mirror is still written —
+    /// only the ping fan-out is skipped, until
+    /// [requestDeliveryBroadcast] fires it.
+    bool deferBroadcast = false,
   }) async {
     // Allow callers that need the ID before the doc exists (e.g. grocery
     // orders that upload an image to a Storage path keyed by requestId)
@@ -148,6 +168,11 @@ class ServiceRequestService {
       'assignedHeroPhone': null,
       'assignmentMethod': null,
       'city': requestCity,
+      // Seller kitchen stage — only meaningful for deferred-broadcast
+      // (shop menu food) orders. Written as null for every other request
+      // type so the field's absence never has to be special-cased.
+      'sellerStage': deferBroadcast ? kSellerStageNew : null,
+      'sellerStageAt': null,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -190,25 +215,112 @@ class ServiceRequestService {
       'customerName': customerName,
       'customerPhone': customerPhone,
       'details': details,
-      'status': 'pinging',
+      // 'awaiting_seller' is a HOLDING state, not a pinging one — no
+      // hero has been contacted yet and none should treat this node as
+      // claimable. requestDeliveryBroadcast() flips it to 'pinging'.
+      'status': deferBroadcast ? 'awaiting_seller' : 'pinging',
       'currentPingHeroId': '',
       'acceptedHeroId': '',
-      'pingExpiresAt': pingExpiresAt,
+      // Deferred requests get their expiry stamped at BROADCAST time
+      // instead — an expiry computed now would already be half spent (or
+      // fully expired) by the time a 30-minute biriyani is ready, and
+      // every hero would discard the ping the instant it arrived.
+      'pingExpiresAt': deferBroadcast ? 0 : pingExpiresAt,
       'city': requestCity,
       'createdAt': rtdb.ServerValue.timestamp,
     });
 
-    await _broadcastToEligibleHeroes(
-      requestId: requestId,
-      requestType: requestType,
-      customerName: customerName,
-      customerPhone: customerPhone,
-      details: details,
-      pingExpiresAt: pingExpiresAt,
-      requestCity: requestCity,
-    );
+    if (!deferBroadcast) {
+      await _broadcastToEligibleHeroes(
+        requestId: requestId,
+        requestType: requestType,
+        customerName: customerName,
+        customerPhone: customerPhone,
+        details: details,
+        pingExpiresAt: pingExpiresAt,
+        requestCity: requestCity,
+      );
+    }
 
     return requestId;
+  }
+
+  // ================================================================
+  // SELLER KITCHEN FLOW (Aug 17 2026 seller-app audit)
+  // ================================================================
+  // Nizam's flow: order varum -> seller accept -> samaikkiraar -> food
+  // ready -> "Book Delivery Partner" -> heroes-ku notification -> mudhal
+  // hero accept pannaraaro avarukku mattum -> matha heros-kitta maraiyum.
+  //
+  // The last two steps needed NO new code: acceptServiceRequest() below
+  // is already an atomic RTDB transaction where exactly one hero can
+  // win, and it already sweep-clears every other hero's ping node on
+  // accept. What was missing was only the trigger — the seller had no
+  // way to say "now".
+
+  /// Seller kitchen stages. Deliberately a separate axis from `status`,
+  /// which remains owned by the hero/admin dispatch state machine.
+  static const String kSellerStageNew = 'new';
+  static const String kSellerStageAccepted = 'accepted';
+  static const String kSellerStagePreparing = 'preparing';
+  static const String kSellerStageReady = 'ready';
+  static const String kSellerStageDeliveryRequested = 'delivery_requested';
+
+  /// Moves the seller's own kitchen stage forward. Writes ONLY the three
+  /// fields firestore.rules' seller clause permits — adding any other
+  /// field here will make the whole update permission-denied.
+  Future<void> advanceSellerStage(String requestId, String stage) async {
+    await FirebaseFirestore.instance
+        .collection('service_requests')
+        .doc(requestId)
+        .update({
+      'sellerStage': stage,
+      'sellerStageAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Fires the held-back hero broadcast for a deferred order — the
+  /// seller's "Book Delivery Partner" button.
+  ///
+  /// Returns false if there was nothing to broadcast (node already gone,
+  /// already pinging, or already accepted by a hero), so the caller can
+  /// avoid double-pinging when a seller taps twice.
+  Future<bool> requestDeliveryBroadcast(String requestId) async {
+    final nodeRef = rtdb.FirebaseDatabase.instance
+        .ref('active_service_requests/$requestId');
+    final snap = await nodeRef.get();
+    if (!snap.exists || snap.value is! Map) return false;
+
+    final node = Map<String, dynamic>.from(snap.value! as Map);
+    final status = node['status'] as String? ?? '';
+    // Only a request still parked in the holding state may be released.
+    // Guards the double-tap case AND the case where an admin already
+    // dispatched this order by hand while the food was cooking.
+    if (status != 'awaiting_seller') return false;
+
+    // Expiry is stamped NOW, not at order time — this is the whole point
+    // of deferring (see the pingExpiresAt comment in createServiceRequest).
+    final pingExpiresAt = DateTime.now().toUtc().millisecondsSinceEpoch +
+        kServiceRequestPingExpirySeconds * 1000;
+
+    await nodeRef.update({
+      'status': 'pinging',
+      'pingExpiresAt': pingExpiresAt,
+    });
+
+    await _broadcastToEligibleHeroes(
+      requestId: requestId,
+      requestType: (node['requestType'] as String?) ?? '',
+      customerName: (node['customerName'] as String?) ?? 'Customer',
+      customerPhone: (node['customerPhone'] as String?) ?? '',
+      details: node['details'] is Map
+          ? Map<String, dynamic>.from(node['details'] as Map)
+          : <String, dynamic>{},
+      pingExpiresAt: pingExpiresAt,
+      requestCity: (node['city'] as String?) ?? kDefaultCity,
+    );
+    return true;
   }
 
   /// Broadcasts a ping to every hero currently online AND available IN
@@ -258,6 +370,24 @@ class ServiceRequestService {
           ? (heroData['city'] as String).trim().toLowerCase()
           : kDefaultCity;
       if (heroCity != requestCity) return;
+
+      // ── PER-HERO SERVICE ACCESS (Aug 17 2026) ────────────────────
+      // This method's own doc comment above used to state, accurately,
+      // that it did "no category filtering" — every online hero in the
+      // city was pinged for hero bookings, grocery runs, food orders and
+      // custom orders alike, with no way for an admin to say a
+      // particular hero should not be getting a particular kind of job.
+      // That is exactly what Nizam asked for control over.
+      //
+      // serviceKeyForRequestType() returns null for any requestType we
+      // do not gate, and in that case we deliberately do NOT filter —
+      // an unrecognised type must never be silently treated as denied,
+      // or adding a new requestType later would quietly stop dispatching
+      // to everyone.
+      final serviceKey = serviceKeyForRequestType(requestType);
+      if (serviceKey != null && !isServiceAllowed(heroData, serviceKey)) {
+        return;
+      }
 
       futures.add(
         rtdb.FirebaseDatabase.instance
@@ -335,41 +465,20 @@ class ServiceRequestService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
+    // Start the BILLABLE clock here — the moment this hero actually won
+    // the job. Everything before this (being online, receiving pings,
+    // waiting) is free (Aug 17 2026 — Nizam: "summa iruntha bill
+    // agakudathu"). It is stopped when the task completes, is cancelled,
+    // or is released.
+    HeroUsageAccumulatorService().startBillableWork();
+
     // Winner's own ping is always removed (was already the case).
     await rtdb.FirebaseDatabase.instance
         .ref('hero_service_pings/$heroId/$requestId')
         .remove();
 
-    // Bug fix: previously only the WINNING hero's own ping node was
-    // ever removed — every other hero who was also broadcast this
-    // requestId kept their ping node (and, if their dialog was already
-    // open, kept showing "New Service Request" indefinitely) with
-    // nothing telling them it was already taken. Sweep-clear every
-    // other online hero's ping node for this requestId too, same
-    // hero pool _broadcastToEligibleHeroes() used to create them.
-    // Best-effort: a hero who went offline between broadcast and
-    // accept won't be in this snapshot, but their stale ping node
-    // self-expires via the client-side pingExpiresAt check in
-    // hero_home_screen.dart's _listenForServicePings() regardless.
-    try {
-      final onlineSnap =
-          await rtdb.FirebaseDatabase.instance.ref('online_heroes').get();
-      if (onlineSnap.exists && onlineSnap.value is Map) {
-        final heroes = Map<dynamic, dynamic>.from(onlineSnap.value! as Map);
-        final sweepFutures = <Future<void>>[];
-        for (final otherHeroId in heroes.keys) {
-          if (otherHeroId == heroId) continue; // already removed above
-          sweepFutures.add(
-            rtdb.FirebaseDatabase.instance
-                .ref('hero_service_pings/$otherHeroId/$requestId')
-                .remove(),
-          );
-        }
-        await Future.wait(sweepFutures);
-      }
-    } catch (e) {
-      debugPrint('[ServiceRequestService] Ping sweep-clear failed: $e');
-    }
+    // Sweep-clear every other online hero's ping node for this requestId.
+    await _sweepClearPings(requestId, excludeHeroId: heroId);
 
     return true;
   }
@@ -680,8 +789,12 @@ class ServiceRequestService {
         final heroName = (data?['assignedHeroName'] as String?) ??
             (data?['acceptedHeroName'] as String?);
         HeroUsageAccumulatorService().recordRideHandled();
+        // Close the billable-work clock before consuming it — the task
+        // is finished, so the meter must stop here and not keep running
+        // into the hero's idle waiting time (Aug 17 2026 billing fix).
+        HeroUsageAccumulatorService().stopBillableWork();
         final activeMinutes =
-            HeroUsageAccumulatorService().consumeActiveMinutes();
+            HeroUsageAccumulatorService().consumeBillableMinutes();
         final ridesHandled =
             HeroUsageAccumulatorService().consumeRidesHandled();
         await HeroWalletService().flushUsageCost(
@@ -701,6 +814,28 @@ class ServiceRequestService {
       debugPrint(
         '[ServiceRequestService] Wallet usage-fee flush failed (non-fatal): $e',
       );
+    }
+  }
+
+  Future<void> _sweepClearPings(String requestId, {String? excludeHeroId}) async {
+    try {
+      final onlineSnap =
+          await rtdb.FirebaseDatabase.instance.ref('online_heroes').get();
+      if (onlineSnap.exists && onlineSnap.value is Map) {
+        final heroes = Map<dynamic, dynamic>.from(onlineSnap.value! as Map);
+        final sweepFutures = <Future<void>>[];
+        for (final otherHeroId in heroes.keys) {
+          if (excludeHeroId != null && otherHeroId == excludeHeroId) continue;
+          sweepFutures.add(
+            rtdb.FirebaseDatabase.instance
+                .ref('hero_service_pings/$otherHeroId/$requestId')
+                .remove(),
+          );
+        }
+        await Future.wait(sweepFutures);
+      }
+    } catch (e) {
+      debugPrint('[ServiceRequestService] Ping sweep-clear failed: $e');
     }
   }
 
@@ -815,15 +950,21 @@ class ServiceRequestService {
   // it exists for) completely untouched.
   Future<void> cancelServiceRequest(String requestId, {String? reason}) async {
     try {
-      await rtdb.FirebaseDatabase.instance
-          .ref('active_service_requests/$requestId')
-          .update({'status': 'cancelled'});
+      final node = rtdb.FirebaseDatabase.instance.ref('active_service_requests/$requestId');
+      await node.update({'status': 'cancelled'});
+      // Delay to allow in-flight accept transactions to see the 'cancelled' status
+      // and safely abort. Then completely remove the node to free RTDB storage.
+      Future.delayed(const Duration(seconds: 15), () {
+        node.remove().catchError((_) {});
+      });
     } catch (e) {
       // Best-effort — the RTDB node may already be gone (hero accepted
       // and it was cleaned up, or it timed out) — proceed to delete
       // the Firestore doc regardless.
       debugPrint('[ServiceRequestService] RTDB cancel-mark failed (non-fatal): $e');
     }
+
+    await _sweepClearPings(requestId);
 
     if (reason != null && reason.trim().isNotEmpty) {
       try {
@@ -871,18 +1012,18 @@ class ServiceRequestService {
   /// admin-manageable again.
   Future<void> releaseServiceRequest(String requestId) async {
     try {
-      // Same reasoning as cancelServiceRequest()'s RTDB update: mark
-      // rather than delete, reusing 'timeout' (already one of
-      // acceptServiceRequest()'s transaction abort-guard values) so a
-      // stray in-flight accept from the releasing hero's own old ping
-      // can't race back in and revive an assignment that's being
-      // handed back.
-      await rtdb.FirebaseDatabase.instance
-          .ref('active_service_requests/$requestId')
-          .update({'status': 'timeout'});
+      final node = rtdb.FirebaseDatabase.instance.ref('active_service_requests/$requestId');
+      await node.update({'status': 'timeout'});
+      // Safely remove the node from RTDB after a short delay to free storage,
+      // closing the abort window.
+      Future.delayed(const Duration(seconds: 15), () {
+        node.remove().catchError((_) {});
+      });
     } catch (e) {
       debugPrint('[ServiceRequestService] RTDB release-mark failed (non-fatal): $e');
     }
+
+    await _sweepClearPings(requestId);
 
     await FirebaseFirestore.instance
         .collection('service_requests')

@@ -19,6 +19,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../config/economic_vision_data.dart';
 import '../screens/economic_vision_screen.dart';
+import 'pulse_glow_text.dart';
 
 class EconomicVisionBanner extends StatelessWidget {
   const EconomicVisionBanner({
@@ -99,8 +100,8 @@ class EconomicVisionBanner extends StatelessWidget {
                   ],
                 ),
                 SizedBox(height: compact ? 10 : 12),
-                Text(
-                  EconomicVisionData.bannerTitle,
+                PulseGlowText(
+                  text: EconomicVisionData.bannerTitle,
                   style: GoogleFonts.outfit(
                     color: Colors.white,
                     fontSize: titleSize,

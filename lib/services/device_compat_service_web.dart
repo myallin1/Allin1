@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'device_compat_service.dart';
+import 'update_service.dart';
 
 // FIX (root cause of the web "download the app" button 404'ing / "the
 // GitHub link shows the app isn't there"): these used to point at
@@ -11,10 +12,14 @@ import 'device_compat_service.dart';
 // detection below always resolves to CpuArchitecture.universal anyway
 // (see _detectProfile), both the "primary" and "universal" slots now
 // point at the same real, working URL.
-const String _customerApkUrl =
-    'https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-customer.apk';
-const String _heroApkUrl =
-    'https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-hero.apk';
+// SINGLE SOURCE OF TRUTH (Aug 17 2026 — Nizam: "dowload source git
+// orey place ah than irukanum"). These were two more hardcoded copies of
+// the release URLs. Every APK link in the app now resolves through
+// UpdateService, so changing the release naming is a one-file edit
+// instead of a hunt across five files — which is exactly how
+// landing_page.dart ended up pointing at a filename that did not exist.
+const String _customerApkUrl = UpdateService.customerApkUrl;
+const String _heroApkUrl = UpdateService.heroApkUrl;
 
 Future<DeviceCompatProfile> detectCustomerApkProfile() async {
   return _detectProfile(

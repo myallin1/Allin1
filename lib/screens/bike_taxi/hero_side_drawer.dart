@@ -28,6 +28,7 @@ import '../../widgets/download_app_banner.dart';
 import 'hero_earnings_screen.dart';
 import 'hero_incomplete_tasks_screen.dart';
 import 'hero_settings_screen.dart';
+import '../invite_friends_screen.dart';
 
 class HeroSideDrawer extends StatefulWidget {
   const HeroSideDrawer({super.key});
@@ -77,14 +78,20 @@ class _HeroSideDrawerState extends State<HeroSideDrawer> {
   Future<void> _openSettings() async {
     Navigator.pop(context);
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const HeroSettingsScreen()),
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: '/hero/HeroSettingsScreen'),
+        builder: (_) => const HeroSettingsScreen(),
+      ),
     );
   }
 
   Future<void> _openHelpSupport() async {
     Navigator.pop(context);
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const _HeroHelpSupportScreen()),
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: '/hero/_HeroHelpSupportScreen'),
+        builder: (_) => const _HeroHelpSupportScreen(),
+      ),
     );
   }
 
@@ -359,6 +366,7 @@ class _HeroSideDrawerState extends State<HeroSideDrawer> {
                 Navigator.push(
                   context,
                   MaterialPageRoute<void>(
+                    settings: const RouteSettings(name: '/hero/HeroIncompleteTasksScreen'),
                     builder: (_) => const HeroIncompleteTasksScreen(),
                   ),
                 );
@@ -376,7 +384,37 @@ class _HeroSideDrawerState extends State<HeroSideDrawer> {
                 Navigator.push(
                   context,
                   MaterialPageRoute<void>(
+                    settings: const RouteSettings(name: '/hero/HeroEarningsScreen'),
                     builder: (_) => const HeroEarningsScreen(),
+                  ),
+                );
+              },
+            ),
+            // NEW (Aug 17 2026 — Nizam: "heros avanga innoru heros ah
+            // refer panna antha particular hero app la irunthu hero
+            // referral qr and link generation").
+            //
+            // Reuses the customer InviteFriendsScreen in hero mode
+            // rather than a second copied screen — same QR, WhatsApp
+            // share, copy-link and invite count, but a hero-referral
+            // code pointing at the HERO app and a recruitment pitch
+            // instead of a "try this app" pitch.
+            ListTile(
+              leading: const Icon(Icons.group_add_rounded, color: _pink),
+              title: const Text('Refer a Hero',
+                  style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Share your QR / link and grow the team',
+                  style: TextStyle(color: _muted, fontSize: 11)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    settings:
+                        const RouteSettings(name: '/hero/HeroInviteScreen'),
+                    builder: (_) => const InviteFriendsScreen(
+                      mode: InviteMode.hero,
+                    ),
                   ),
                 );
               },

@@ -9,11 +9,15 @@
 // it. So there is deliberately no menu/inventory UI to build here; this
 // screen just confirms the seller's registration and explains why.
 // ================================================================
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/food_models.dart';
+import '../services/app_minimizer_service.dart';
 import '../services/food_seller_service.dart';
 
 const Color _bg = Color(0xFF08080F);
@@ -55,8 +59,47 @@ class _SellerGroceryDashboardScreenState
     }
   }
 
+  // NEW (Aug 18 2026 — Turbo App navigation audit, per Nizam + Gemini
+  // cross-check): this screen becomes a grocery seller's literal APP
+  // ROOT — seller_dashboard_screen.dart's own initState detects
+  // businessVertical == 'grocery' and Navigator.pushReplacement()s
+  // straight here, replacing the app's own root route. With zero
+  // PopScope of its own, a back-press here had nothing to fall back
+  // on and hit Flutter's default un-intercepted last-route behaviour —
+  // a silent, instant SystemNavigator.pop() (real app close), never a
+  // dialog, never a chance to minimize instead. Every grocery seller
+  // hit this on literally any back-press from their home screen. Same
+  // AppMinimizer pattern as the 4 main dashboard roots; no tabs here to
+  // reset first (this screen has none), so it goes straight to
+  // minimize/web-hint.
+  void _handleBackPress() {
+    if (kIsWeb) {
+      if (AppMinimizer.consumeWebHintOnce()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Press your device's Home button to minimize"),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+    unawaited(AppMinimizer.moveToBackground());
+  }
+
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _handleBackPress();
+      },
+      child: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
     if (_loading) {
       return const Scaffold(
         backgroundColor: _bg,

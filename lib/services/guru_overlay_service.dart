@@ -69,6 +69,7 @@ import 'pwa_cache_platform_stub.dart'
     if (dart.library.html) 'pwa_cache_platform_web.dart';
 import 'voice_booking_intent_service.dart';
 import 'web_version_checker.dart';
+import '../widgets/ai_bot_avatar.dart';
 
 class GuruChatTurn {
   const GuruChatTurn({required this.role, required this.text, this.suggestions = const []});
@@ -725,7 +726,11 @@ class GlobalGuruFab extends StatelessWidget {
               // opening a quiet text panel that needed a second tap on
               // its own mic icon.
               onPressed: () => GuruOverlayService.instance.show(autoStartMic: true),
-              child: const Icon(Icons.auto_awesome, color: Colors.white),
+              // The floating AI button — the assistant's most visible
+              // face. Aug 17 2026: was Icons.auto_awesome (a generic
+              // sparkle); now the MyAllin1 robot. See AiBotAvatar for
+              // why the source GIF had to be re-encoded first.
+              child: const AiBotAvatar(size: 30),
             ),
           ),
         );
@@ -887,7 +892,11 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
                       BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12),
                     ],
                   ),
-                  child: const Icon(Icons.auto_awesome, color: Color(0xFFB44CFF)),
+                  // Minimised/collapsed bubble (Aug 17 2026: robot).
+                  child: const AiBotAvatar(
+                    size: 26,
+                    fallbackColor: Color(0xFFB44CFF),
+                  ),
                 ),
               ),
             ),
@@ -943,7 +952,8 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.auto_awesome, color: Colors.white, size: 18),
+          // Chat panel header (Aug 17 2026: robot).
+          const AiBotAvatar(size: 20),
           const SizedBox(width: 8),
           Text('Guru', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
           const Spacer(),

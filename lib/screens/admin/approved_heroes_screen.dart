@@ -8,6 +8,8 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../config/hero_service_access.dart';
+import '../../widgets/admin/hero_service_access_sheet.dart';
 
 // T3: Admin Mirror — full God's Eye hero profile
 import 'admin_hero_mirror_screen.dart';
@@ -329,6 +331,9 @@ class _ApprovedHeroCard extends StatelessWidget {
     required bool isActiveRide,
     required Timestamp? approvedAt,
   }) {
+    // How many work types an admin has switched off for this hero.
+    // Zero for every hero nobody has touched — see hero_service_access.dart.
+    final restrictedCount = deniedServices(data).length;
     final name = data['captainName'] as String? ?? data['name'] as String? ?? 'Unknown';
     final phone = data['phone'] as String? ?? '';
     final vehicleNumber = data['vehicleNumber'] as String? ?? '';
@@ -457,24 +462,68 @@ class _ApprovedHeroCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 14),
-          // Action button
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: onView,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: _muted,
-                side: const BorderSide(color: _border),
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+          // Action buttons
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onView,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _muted,
+                    side: const BorderSide(color: _border),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'View Details',
+                    style:
+                        TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
-              child: const Text(
-                'View Details',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              const SizedBox(width: 8),
+              // NEW (Aug 17 2026 — per-hero work permissions). Sits on
+              // the APPROVED list on purpose: this is post-registration
+              // fleet management ("heros ah handle panna admin ku innum
+              // freedoms"), not part of the approval decision itself.
+              // The label reports the current state so an admin can see
+              // at a glance which heroes are restricted, without opening
+              // each one.
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => showHeroServiceAccessSheet(
+                    context,
+                    uid: uid,
+                    heroData: data,
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: restrictedCount == 0 ? _muted : _red,
+                    side: BorderSide(
+                      color: restrictedCount == 0 ? _border : _red,
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: Icon(
+                    restrictedCount == 0
+                        ? Icons.tune_rounded
+                        : Icons.block_rounded,
+                    size: 14,
+                  ),
+                  label: Text(
+                    restrictedCount == 0
+                        ? 'Services'
+                        : '$restrictedCount off',
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),

@@ -47,6 +47,8 @@ const Color _pink = Color(0xFFFF4FA3);
 const Color _text = Color(0xFF1A1A2E);
 const Color _muted = Color(0xFF8F5A78);
 const Color _green = Color(0xFF00C853);
+// Deductions / negative net (Aug 17 2026 earnings-summary fix).
+const Color _red = Color(0xFFFF5252);
 
 enum _DateMode { today, thisMonth, custom }
 
@@ -144,6 +146,21 @@ class _HeroEarningsScreenState extends State<HeroEarningsScreen> {
   List<Map<String, dynamic>> _rowsOf(dynamic raw) =>
       (raw as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
 
+  /// Coerce a cached numeric field to double WITHOUT asserting its type.
+  ///
+  /// Deliberately not `value as double`. These values survive a trip
+  /// through the Hive analytics cache, and a whole number stored as 50.0
+  /// can come back as int 50. dart2js has a single number type so a cast
+  /// happens to work on web, but on the native Android hero app int and
+  /// double are distinct and the cast throws — meaning this screen could
+  /// be correct in the PWA and broken in the installed app from the same
+  /// source line. Handles num, numeric String, and null.
+  static double _amountOf(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0;
+    return 0;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -188,11 +205,49 @@ class _HeroEarningsScreenState extends State<HeroEarningsScreen> {
             return !t.isBefore(_window.from) && t.isBefore(_window.to);
           }).toList();
 
-          final totalEarnings = earnings
-              .where((r) => (r['amount'] as double? ?? 0) > 0)
-              .fold<double>(0, (sum, r) => sum + (r['amount'] as double? ?? 0));
+          // FIX (Aug 17 2026 — Nizam: "list iruku but sum of total zero
+          // kaathuthu proper calculation ila").
+          //
+          // TWO separate causes, both fixed here.
+          //
+          // 1. UNSAFE CAST. This was `r['amount'] as double?`. These
+          //    rows do not come straight from Firestore — they come back
+          //    out of the Hive analytics cache, and a whole number that
+          //    went in as 50.0 can come back as an int 50. On WEB that
+          //    is harmless (dart2js has one number type), but on the
+          //    NATIVE Android hero app int and double are distinct types
+          //    and `50 as double?` throws. _amountOf() coerces through
+          //    num/String instead of asserting a type, so the same code
+          //    is correct on both platforms.
+          //
+          // 2. THE TOTAL WAS ONLY EVER CREDITS. The old single "total"
+          //    silently filtered to `amount > 0`. Any window containing
+          //    only debits therefore displayed ₹0.00 next to a list full
+          //    of visible rows — which reads as "the app lost my money",
+          //    not as "this window had no credits". A summary that can
+          //    show zero while rows exist is a broken summary.
+          //    Now three explicit numbers: Earned, Deducted, Net.
+          double earned = 0;
+          double deducted = 0;
+          for (final r in earnings) {
+            final a = _amountOf(r['amount']);
+            // Debits are recorded as a NEGATIVE amount by some writers
+            // and as a positive amount with type 'debit' by others
+            // (wallet_transactions is a shared collection with several
+            // writers — see this file's header). Treat both as a debit
+            // rather than trusting one convention.
+            final isDebit =
+                a < 0 || (r['type'] as String? ?? '').toLowerCase() == 'debit';
+            if (isDebit) {
+              deducted += a.abs();
+            } else {
+              earned += a;
+            }
+          }
+          final netEarnings = earned - deducted;
+
           final totalOnlineMinutes = sessions.fold<double>(
-              0, (sum, r) => sum + (r['durationMinutes'] as double? ?? 0));
+              0, (sum, r) => sum + _amountOf(r['durationMinutes']));
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(14, 4, 14, 24),
@@ -201,8 +256,8 @@ class _HeroEarningsScreenState extends State<HeroEarningsScreen> {
                 children: [
                   Expanded(
                     child: _statCard(
-                      label: 'Total Earnings',
-                      value: '₹${totalEarnings.toStringAsFixed(2)}',
+                      label: 'Earned',
+                      value: '₹${earned.toStringAsFixed(2)}',
                       color: _green,
                       icon: Icons.payments_rounded,
                     ),
@@ -218,6 +273,43 @@ class _HeroEarningsScreenState extends State<HeroEarningsScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 10),
+              // Deductions and NET are shown explicitly rather than
+              // folded into one figure. A hero looking at a list of rows
+              // next to a single "₹0.00" cannot tell whether the app
+              // lost their money or the window simply had no credits —
+              // and that ambiguity is the bug that was reported.
+              Row(
+                children: [
+                  Expanded(
+                    child: _statCard(
+                      label: 'Deducted',
+                      value: '−₹${deducted.toStringAsFixed(2)}',
+                      color: _red,
+                      icon: Icons.remove_circle_outline_rounded,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _statCard(
+                      label: 'Net',
+                      value: '₹${netEarnings.toStringAsFixed(2)}',
+                      color: netEarnings < 0 ? _red : _green,
+                      icon: Icons.account_balance_wallet_rounded,
+                    ),
+                  ),
+                ],
+              ),
+              if (earnings.isNotEmpty && earned == 0 && deducted == 0) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'These ${earnings.length} row(s) carry no readable amount. '
+                  'Tap Fetch once to reload from the server — if it stays '
+                  'like this, report it.',
+                  style: GoogleFonts.outfit(
+                      color: _muted, fontSize: 11.5, height: 1.4),
+                ),
+              ],
               const SizedBox(height: 14),
               Text(
                 'RECENT EARNINGS (${earnings.length})',
@@ -285,7 +377,11 @@ class _HeroEarningsScreenState extends State<HeroEarningsScreen> {
   }
 
   Widget _earningRow(Map<String, dynamic> r) {
-    final amount = (r['amount'] as double?) ?? 0;
+    // Same coercion as the totals — see _amountOf(). This line had the
+    // identical unsafe `as double?` cast, so on native Android a cached
+    // int amount would throw here while building the row. Using the
+    // shared helper keeps the row and the summary agreeing on the value.
+    final amount = _amountOf(r['amount']);
     final ms = r['timestampMs'] as int?;
     final when = ms == null
         ? '—'

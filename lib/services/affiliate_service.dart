@@ -33,6 +33,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' as flutter_services;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AffiliateService {
@@ -61,6 +62,39 @@ class AffiliateService {
       await prefs.setString(kPendingTypeKey, type);
     }
   }
+
+  /// Call once on mobile app boot (Aug 16 2026 - Clipboard tracking).
+  /// Checks the system clipboard for a referral code left behind by the 
+  /// landing page's APK download button.
+  Future<void> captureRefFromClipboard() async {
+    if (kIsWeb) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.containsKey(kPendingCodeKey)) return; // Already have one
+      
+      final clipboardData = await flutter_services.Clipboard.getData('text/plain');
+      final text = clipboardData?.text ?? '';
+      
+      if (text.startsWith('allin1_ref:')) {
+        final parts = text.split(':');
+        if (parts.length >= 3) {
+          final code = parts[1];
+          final type = parts[2];
+          if (code.isNotEmpty) {
+            await prefs.setString(kPendingCodeKey, code);
+            if (type.isNotEmpty) {
+              await prefs.setString(kPendingTypeKey, type);
+            }
+            // Clear clipboard so we don't attribute again if they reinstall later
+            await flutter_services.Clipboard.setData(const flutter_services.ClipboardData(text: ''));
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[AffiliateService] clipboard capture failed: $e');
+    }
+  }
+
 
   /// Call once auth (real or guest) is ready. Best-effort — never
   /// throws, never blocks boot; affiliate stats are a nice-to-have, not
@@ -224,6 +258,82 @@ class AffiliateService {
     return buf.toString();
   }
 
+  // ================================================================
+  // CUSTOM (readable) CAMPAIGN SLUGS
+  // ================================================================
+  // NEW (Aug 17 2026 — Nizam: "antha link customer panic aackuramari
+  // text back la varuthu so ovvoru affilate qr generate link ku kum
+  // decentana extension words naane customize pandramari link venum").
+  //
+  // _generateCode() produces things like K7M2XQ, so a printed poster
+  // read ".../q/?c=K7M2XQ". To a customer about to scan an unfamiliar
+  // code, a random uppercase token is indistinguishable from a phishing
+  // link — which is exactly the reaction reported. A human-readable slug
+  // (".../q/?c=erode-hotels") reads like something a local business
+  // would actually print.
+  //
+  // The random generator is KEPT as the fallback: an admin who doesn't
+  // want to think of a name still gets a working code, and every code
+  // already printed keeps resolving unchanged.
+
+  /// Words that must never become a campaign slug — they either collide
+  /// with real paths on this origin or actively invite the suspicion
+  /// this feature exists to remove.
+  static const Set<String> _reservedSlugs = {
+    'q', 'admin', 'api', 'login', 'signin', 'signup', 'auth', 'assets',
+    'index', 'app', 'web', 'null', 'undefined', 'test',
+    // Deliberately blocked: a slug that claims to be a security or
+    // payment action is the classic phishing shape, and printing one on
+    // our own posters would train customers to trust exactly the sort of
+    // link they should distrust.
+    'verify', 'secure', 'account', 'password', 'otp', 'kyc', 'payment',
+    'refund', 'bank', 'upi',
+  };
+
+  /// Normalises admin free-text into a safe URL slug, or returns null if
+  /// it cannot become one.
+  ///
+  /// Lowercase because URLs are copied by hand off posters and mixed
+  /// case is a transcription error waiting to happen; hyphens rather
+  /// than spaces or underscores because a hyphen survives being read
+  /// aloud and typed.
+  static String? normalizeCustomCode(String input) {
+    final slug = input
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\s_]+'), '-')
+        .replaceAll(RegExp(r'[^a-z0-9-]'), '')
+        .replaceAll(RegExp(r'-{2,}'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+
+    if (slug.length < 3 || slug.length > 32) return null;
+    if (_reservedSlugs.contains(slug)) return null;
+    // Must contain at least one letter — an all-digit slug reads as an
+    // account number, which is the opposite of reassuring.
+    if (!RegExp(r'[a-z]').hasMatch(slug)) return null;
+    return slug;
+  }
+
+  /// True if [code] is still free. Checks BOTH collections a code lives
+  /// in — affiliate_codes (admin metadata + counters) and qr_links (the
+  /// public redirect mirror) — because a code present in only one of
+  /// them is still taken, and reusing it would silently repoint or
+  /// double-count an existing campaign.
+  Future<bool> isCodeAvailable(String code) async {
+    try {
+      final results = await Future.wait([
+        _codesRef.doc(code).get(),
+        _linksRef.doc(code).get(),
+      ]);
+      return !results[0].exists && !results[1].exists;
+    } catch (e) {
+      debugPrint('[AffiliateService] availability check failed: $e');
+      // Fail CLOSED — reporting "available" on a network error could
+      // hand an admin a code that silently overwrites a live campaign.
+      return false;
+    }
+  }
+
   /// Admin-only (enforced by firestore.rules) — creates a brand-new
   /// affiliate code doc and returns the code.
   ///
@@ -241,8 +351,17 @@ class AffiliateService {
     int? printRun,
     DateTime? campaignStart,
     DateTime? campaignEnd,
+
+    /// Admin-chosen readable slug, e.g. 'erode-hotels'. Already
+    /// normalised and availability-checked by the caller (the admin
+    /// screen does both so it can show inline feedback as you type).
+    /// Null/empty falls back to the random generator, so nothing about
+    /// the existing flow changes for an admin who doesn't use this.
+    String? customCode,
   }) async {
-    final code = _generateCode();
+    final code = (customCode != null && customCode.trim().isNotEmpty)
+        ? customCode.trim()
+        : _generateCode();
     final dest = (destination == null || destination.trim().isEmpty)
         ? '$kAppBaseUrl/'
         : destination.trim();
@@ -312,6 +431,70 @@ class AffiliateService {
     await _linksRef.doc(code).set({'active': active}, SetOptions(merge: true));
   }
 
+  // ================================================================
+  // DELETE A CAMPAIGN (Aug 17 2026)
+  // ================================================================
+  // Nizam: "admin create pannuna oru wrong affilate qr ah namma admin
+  // nala delete pannamudila".
+  //
+  // firestore.rules has allowed `allow delete: if isAdminAny()` on both
+  // affiliate_codes and qr_links since they were created — the gap was
+  // purely that no UI or service method ever called it. An admin who
+  // mistyped a campaign was stuck with it in the list forever.
+  //
+  // WHY DELETE IS THE RARE CASE, NOT THE DEFAULT:
+  // A printed QR outlives the database row. Deleting the code of a
+  // poster that is already on a wall does NOT un-print the poster — the
+  // /q/ page simply finds nothing and falls back to the app root (see
+  // web/q/index.html), so the scanner still lands somewhere sane, but
+  // that scan is attributed to nobody. For a campaign that was really
+  // used, setActive(false) is almost always the right call: it keeps
+  // every scan/signup number intact for reporting while retiring the
+  // link. Delete is for codes created BY MISTAKE that were never
+  // printed. The UI says so, and makes the destructive path the harder
+  // of the two.
+  //
+  // Deletes BOTH docs. Leaving qr_links behind would keep a live public
+  // redirect for a campaign that no longer exists in the admin list —
+  // an invisible working link nobody can see or manage.
+  Future<void> deleteAffiliateCode(
+    String code, {
+    /// Also delete this code's rows in affiliate_scans. Off by default:
+    /// scan rows are the raw analytics record, and an admin deleting a
+    /// mistaken code usually wants the code gone, not the history of
+    /// every other report rewritten. Bounded to [scanDeleteLimit] so a
+    /// hugely-scanned code can never build an unbounded batch.
+    bool alsoDeleteScans = false,
+    int scanDeleteLimit = 400,
+  }) async {
+    // Order matters: kill the PUBLIC redirect first. If the second
+    // delete fails halfway, the worst outcome is an orphaned admin row
+    // (visible, manageable, deletable again) rather than an orphaned
+    // live redirect (invisible and unmanageable).
+    await _linksRef.doc(code).delete();
+    await _codesRef.doc(code).delete();
+
+    if (!alsoDeleteScans) return;
+    try {
+      final snap = await _fs
+          .collection('affiliate_scans')
+          .where('code', isEqualTo: code)
+          .limit(scanDeleteLimit)
+          .get();
+      if (snap.docs.isEmpty) return;
+      final batch = _fs.batch();
+      for (final d in snap.docs) {
+        batch.delete(d.reference);
+      }
+      await batch.commit();
+    } catch (e) {
+      // Non-fatal: the campaign itself is already gone, which is what
+      // the admin asked for. Orphaned scan rows are invisible in the UI
+      // and harmless.
+      debugPrint('[AffiliateService] scan cleanup failed (non-fatal): $e');
+    }
+  }
+
   Future<void> updateCampaignMeta(
     String code, {
     String? label,
@@ -352,56 +535,103 @@ class AffiliateService {
   // single field instead of querying anything.
   static const String kCustomerReferralType = 'customer_referral';
 
+  /// Hero-refers-hero (Aug 17 2026). Separate type so admin reporting can
+  /// tell fleet growth apart from customer growth — they are different
+  /// businesses and a single "referrals" number would hide which one is
+  /// actually working.
+  static const String kHeroReferralType = 'hero_referral';
+
+  /// Where a hero referral must send the scanner. A would-be hero landing
+  /// in the CUSTOMER app is a dead end — there is no hero registration
+  /// there — so this is pinned separately from kAppBaseUrl and matched
+  /// by firestore.rules.
+  static const String kHeroAppBaseUrl = 'https://hero-allin1.web.app';
+
   /// Returns this customer's personal referral code, creating it on
   /// first use. Idempotent — safe to call on every drawer open.
-  Future<String?> ensureMyReferralCode({String? displayName}) async {
+  /// EXTENDED (Aug 17 2026 — Nizam: "heros avanga innoru heros ah refer
+  /// panna antha particular hero app la irunthu hero referral qr and
+  /// link generation").
+  ///
+  /// Was customer-only and hardcoded three things: the 'customer_referral'
+  /// type, the customer app as the destination, and users/{uid} as the
+  /// place to cache the code. A hero referring another hero needs all
+  /// three to differ — most importantly the DESTINATION, because sending
+  /// a would-be hero to the customer app is a dead end: they land in the
+  /// wrong app with no way to register as a hero.
+  ///
+  /// [referralType] and [destination] are pinned by firestore.rules to
+  /// an allowed pair, so a client cannot mint a code pointing anywhere
+  /// it likes — see the affiliate_codes create rule.
+  Future<String?> ensureMyReferralCode({
+    String? displayName,
+    String referralType = kCustomerReferralType,
+
+    /// Where a scanner of THIS code should land. Defaults to the
+    /// customer app, preserving the original behaviour exactly.
+    String? destination,
+
+    /// Which profile document caches the generated code. Heroes are in
+    /// heroes/{uid}; customers in users/{uid}. Caching it on the profile
+    /// is what makes this idempotent — without it every screen open
+    /// would mint a new code.
+    String profileCollection = 'users',
+  }) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.isAnonymous) return null;
 
-    final userRef = _fs.collection('users').doc(user.uid);
+    final dest = (destination == null || destination.trim().isEmpty)
+        ? '$kAppBaseUrl/'
+        : destination.trim();
+
+    final userRef = _fs.collection(profileCollection).doc(user.uid);
     try {
       final snap = await userRef.get();
       final existing = snap.data()?['referralCode'] as String?;
       if (existing != null && existing.isNotEmpty) return existing;
 
-      // Retry a couple of times in the (very unlikely) event the random
-      // code collides with one that already exists.
+      // We do NOT read the affiliate_codes collection first, because
+      // firestore.rules strictly forbids customers from reading it.
+      // Instead, we directly attempt to create the document. If it
+      // collides with an existing code, the tight security rules will
+      // reject it as an unauthorized "update", which we catch and retry.
       for (var attempt = 0; attempt < 3; attempt++) {
         final code = _generateCode();
         final codeRef = _codesRef.doc(code);
-        final taken = await codeRef.get();
-        if (taken.exists) continue;
 
         final name = (displayName ?? user.displayName ?? '').trim();
-        await codeRef.set({
-          'code': code,
-          'type': kCustomerReferralType,
-          // The customer's NAME is the label, never part of the URL —
-          // so admin sees "Ravi Kumar" in the dashboard while the
-          // forwarded WhatsApp link stays an anonymous short code.
-          'label': name.isEmpty ? 'Customer referral' : name,
-          'ownerUid': user.uid,
-          'createdBy': user.uid,
-          'createdAt': FieldValue.serverTimestamp(),
-          'scans': 0,
-          'signups': 0,
-          'destination': '$kAppBaseUrl/',
-          'active': true,
-        });
+        
+        try {
+          await codeRef.set({
+            'code': code,
+            'type': referralType,
+            'label': name.isEmpty
+                ? (referralType == kHeroReferralType
+                    ? 'Hero referral'
+                    : 'Customer referral')
+                : name,
+            'ownerUid': user.uid,
+            'createdBy': user.uid,
+            'createdAt': FieldValue.serverTimestamp(),
+            'scans': 0,
+            'signups': 0,
+            'destination': dest,
+            'active': true,
+          });
 
-        // Public redirect mirror. SECURITY: the destination written here
-        // is PINNED to the app root and firestore.rules enforces exactly
-        // that for non-admin writers — see the qr_links rule. Without
-        // that pin, any signed-in user could create
-        // my-allin1.web.app/q/?c=XXX pointing at an arbitrary site,
-        // turning our own domain into an open redirect for phishing.
-        await _linksRef.doc(code).set({
-          'destination': '$kAppBaseUrl/',
-          'active': true,
-        });
+          await _linksRef.doc(code).set({
+            'destination': dest,
+            'active': true,
+          });
 
-        await userRef.set({'referralCode': code}, SetOptions(merge: true));
-        return code;
+          await userRef.set({'referralCode': code}, SetOptions(merge: true));
+          return code;
+        } catch (e) {
+          // If we hit permission-denied here, it means the code likely
+          // already exists (update denied), so we just try again.
+          debugPrint('[AffiliateService] code generation collision/error: $e');
+          continue;
+        }
       }
       return null;
     } catch (e) {

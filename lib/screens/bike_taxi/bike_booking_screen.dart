@@ -26,6 +26,7 @@ import '../../services/pickup_memory_service.dart';
 // INSTANT-SEED: the app's existing drag-a-pin picker, reused for the
 // manual pickup path instead of adding tap plumbing to the shared map.
 import '../location_picker_screen.dart';
+import '../../services/app_minimizer_service.dart';
 import '../../services/city_service.dart';
 import '../../services/localization_service.dart';
 import '../../services/location_service.dart';
@@ -122,14 +123,32 @@ const List<List<LatLng>> _erodeTrafficLoops = <List<LatLng>>[
   ],
 ];
 
-const List<List<LatLng>> _dummyTrafficRoutePairs = <List<LatLng>>[
-  <LatLng>[LatLng(11.3468, 77.7210), LatLng(11.3419, 77.7144)],
-  <LatLng>[LatLng(11.3479, 77.7228), LatLng(11.3416, 77.7169)],
-  <LatLng>[LatLng(11.3402, 77.7248), LatLng(11.3460, 77.7182)],
-  <LatLng>[LatLng(11.3398, 77.7283), LatLng(11.3280, 77.7515)],
-  <LatLng>[LatLng(11.3410, 77.7171), LatLng(11.3160, 77.6718)],
-  <LatLng>[LatLng(11.3520, 77.7280), LatLng(11.3792, 77.6974)],
-  <LatLng>[LatLng(11.3290, 77.7190), LatLng(11.3000, 77.7614)],
+// NOTE (Aug 17 2026): a SECOND `_erodeTrafficLoops` declaration used to
+// sit here — a merge artifact. Two top-level consts with the same name
+// is a hard compile error ('already declared in this scope'), and it
+// broke the CUSTOMER, ADMIN and SELLER web builds while HERO happened
+// to compile because it never pulled this file in.
+//
+// The duplicate was the coarser of the two (17 points vs 63) and its
+// corridors are already covered by the block above, which the comment
+// at its head describes as Brough Road / EVN Road / Perundurai Road.
+// Removed the duplicate, kept the detailed original — no traffic loop
+// is lost, the simulation just keeps the smoother path data.
+
+const List<List<LatLng>> _outskirtsTrafficLoops = <List<LatLng>>[
+  <LatLng>[
+    LatLng(11.2900, 77.7000),
+    LatLng(11.3000, 77.7300),
+    LatLng(11.3200, 77.7500),
+    LatLng(11.3500, 77.7600),
+    LatLng(11.3800, 77.7400),
+    LatLng(11.4000, 77.7100),
+    LatLng(11.4000, 77.6800),
+    LatLng(11.3800, 77.6500),
+    LatLng(11.3400, 77.6400),
+    LatLng(11.3100, 77.6600),
+    LatLng(11.2900, 77.7000),
+  ],
 ];
 
 const List<Map<String, dynamic>> _defaultSearchLocations =
@@ -244,24 +263,31 @@ class _DummyVehicleState {
     required this.direction,
     required this.speedStep,
     required this.laneOffset,
+    this.isOutskirts = false,
   });
 
   final String id;
   final String vehicleType;
   final bool busy;
-  final int loopIndex;
+  int loopIndex;
   final double speedStep;
   final double laneOffset;
+  final bool isOutskirts;
   double progress;
   int direction;
   List<LatLng>? roadPath;
+  
+  bool isPaused = false;
+  int pauseRemainingMs = 0;
 
   List<LatLng> activePath() {
     final routedPath = roadPath;
     if (routedPath != null && routedPath.length > 1) {
       return routedPath;
     }
-    return _erodeTrafficLoops[loopIndex];
+    return isOutskirts
+        ? _outskirtsTrafficLoops[loopIndex % _outskirtsTrafficLoops.length]
+        : _erodeTrafficLoops[loopIndex % _erodeTrafficLoops.length];
   }
 
   LatLng project() {
@@ -280,15 +306,80 @@ class _DummyVehicleState {
     );
   }
 
-  void advance(Random random) {
+  void advance(Random random, int deltaMs) {
+    if (isPaused) {
+      pauseRemainingMs -= deltaMs;
+      if (pauseRemainingMs <= 0) {
+        isPaused = false;
+        direction = direction == 1 ? -1 : 1;
+        if (!isOutskirts && roadPath == null && random.nextDouble() < 0.35) {
+          loopIndex = random.nextInt(_erodeTrafficLoops.length);
+          direction = random.nextBool() ? 1 : -1;
+          progress = direction == 1 ? 0 : 1;
+        }
+      }
+      return;
+    }
+
+    // Adjust speedStep for 30 FPS. Original was meant for 2.5s timer.
     final jitter = 0.65 + (random.nextDouble() * 0.7);
-    progress += direction * speedStep * jitter;
-    if (progress >= 1) {
-      progress = 1;
-      direction = -1;
-    } else if (progress <= 0) {
-      progress = 0;
-      direction = 1;
+    double adjustedSpeed = (speedStep / 75.0) * jitter;
+    
+    progress += direction * adjustedSpeed;
+    if (isOutskirts && roadPath == null) {
+      if (progress >= 1) progress -= 1;
+      if (progress < 0) progress += 1;
+    } else {
+      if (progress >= 1) {
+        progress = 1;
+        isPaused = true;
+        pauseRemainingMs = 2000 + random.nextInt(4000);
+      } else if (progress <= 0) {
+        progress = 0;
+        isPaused = true;
+        pauseRemainingMs = 2000 + random.nextInt(4000);
+      }
+    }
+  }
+}
+
+enum HeroState { moving, resting }
+
+class _HeroAvatarState {
+  _HeroAvatarState(this.id, this.position, int seed) : _random = Random(seed) {
+    _pickNewState();
+  }
+
+  final String id;
+  LatLng position;
+  LatLng? destination;
+  HeroState state = HeroState.resting;
+  int stateTicksLeftMs = 0;
+  final Random _random;
+
+  void _pickNewState() {
+    if (state == HeroState.moving) {
+      state = HeroState.resting;
+      stateTicksLeftMs = 5000 + _random.nextInt(11000); 
+    } else {
+      state = HeroState.moving;
+      stateTicksLeftMs = 18000 + _random.nextInt(23000);
+      final dist = 0.003 + _random.nextDouble() * 0.006;
+      final angle = _random.nextDouble() * 2 * pi;
+      destination = LatLng(
+        position.latitude + dist * cos(angle),
+        position.longitude + dist * sin(angle),
+      );
+    }
+  }
+
+  void advance(int deltaMs) {
+    stateTicksLeftMs -= deltaMs;
+    if (stateTicksLeftMs <= 0) {
+      _pickNewState();
+    } else if (state == HeroState.moving && destination != null) {
+      final fraction = deltaMs / stateTicksLeftMs.clamp(1, double.infinity);
+      position = _lerpLatLng(position, destination!, fraction.clamp(0.0, 1.0));
     }
   }
 }
@@ -363,7 +454,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       ValueNotifier<List<MapMarker>>([]);
   List<Map<String, dynamic>> _onlineHeroSnapshots = [];
   StreamSubscription<DatabaseEvent>? _nearbyCaptainsSub;
-  final Map<String, Timer> _dummyVehicleTimers = <String, Timer>{};
+  Timer? _simulationTimer;
   final LocationService _locationService = LocationService();
   final MapService _mapService = MapService();
   List<LatLng> _routePoints = [];
@@ -371,6 +462,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   int? _routeEtaMinutes;
   int _routeRequestId = 0;
   final List<_DummyVehicleState> _ambientVehicles = <_DummyVehicleState>[];
+  final List<_HeroAvatarState> _heroes = <_HeroAvatarState>[];
   final Map<int, List<LatLng>> _dummyRouteCache = <int, List<LatLng>>{};
   final Set<int> _dummyRouteRequests = <int>{};
 
@@ -490,40 +582,44 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   // canPop() is false, the old `if (navigator.canPop())` guard silently
   // skipped everything, and the very next back-press here — one of the
   // most common moments in the whole app, right after finishing a ride —
-  // did nothing at all. Now: if there's something to pop, pop to root
-  // (unchanged); if this genuinely IS the root, show the same
-  // confirm-exit dialog every other app root already uses, instead of a
-  // silent no-op.
+  // did nothing at all.
+  //
+  // UPDATED (Aug 18 2026 — Turbo App navigation audit, cross-verified
+  // with Gemini): the fix above pre-dated the later "System Back Button
+  // Overhaul" CTO mandate, which replaced every dashboard root's
+  // confirm-exit-then-SystemNavigator.pop() (a real Activity finish —
+  // the app actually closing) with AppMinimizer's minimize-to-background
+  // behaviour. This screen and ride_tracking_screen.dart's identical
+  // _returnToRootSafely() were the two places that mandate never
+  // reached, so the single most-used flow in the whole app (taxi
+  // booking, right after finishing a ride) was still hard-closing
+  // instead of minimizing. Now matches the other 4 app roots exactly.
   Future<void> _returnToRootSafely() async {
     if (!mounted) {
       return;
     }
     final navigator = Navigator.of(context);
     if (navigator.canPop()) {
-      navigator.popUntil((route) => route.isFirst);
+      navigator.pop();
       return;
     }
-    final exit = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Leave the app?',
-            style: TextStyle(fontWeight: FontWeight.w700),),
-        content: const Text('Close Allin1?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('No'),
+    if (kIsWeb) {
+      // A browser tab cannot minimize itself to the OS home screen — no
+      // such API exists. Show the "use your device's Home button" hint
+      // once per session, then silently swallow further back-presses.
+      if (AppMinimizer.consumeWebHintOnce()) {
+        if (!mounted) return;
+        final t = context.read<LocalizationService>().t;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(t('press_home_to_minimize')),
+            duration: const Duration(seconds: 3),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Yes', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-    if ((exit ?? false) && mounted) {
-      SystemNavigator.pop();
+        );
+      }
+      return;
     }
+    unawaited(AppMinimizer.moveToBackground());
   }
 
   /// T2: Normalize bottom-sheet vehicle key → hero profile category key.
@@ -1040,10 +1136,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     WidgetsBinding.instance.removeObserver(this);
     _nearbyCaptainsSub?.cancel();
     _nearbyCaptainsAuthWaitSub?.cancel();
-    for (final timer in _dummyVehicleTimers.values) {
-      timer.cancel();
-    }
-    _dummyVehicleTimers.clear();
+    _simulationTimer?.cancel();
     _debounceTimer?.cancel();
     _searchMapIdleTimer?.cancel();
     _pickupController.dispose();
@@ -1324,7 +1417,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         action: SnackBarAction(
           label: 'Set now',
           textColor: Colors.white,
-          onPressed: () => _openSearch(focusDrop: false),
+          onPressed: () => _openManualPickupPicker(),
         ),
       ),
     );
@@ -1568,69 +1661,101 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   void _ensureDummyTrafficInitialized() {
-    // Moved to MapSimulationService
+    if (_ambientVehicles.isNotEmpty || _heroes.isNotEmpty) {
+      return; // Already running
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final random = Random(now);
+
+    for (var i = 0; i < 7; i++) {
+      _ambientVehicles.add(_DummyVehicleState(
+        id: 'hero_bike_$i',
+        vehicleType: 'bike',
+        busy: true,
+        loopIndex: i % _erodeTrafficLoops.length,
+        progress: (i * 0.15) + _progressBiasForVehicleType('bike'),
+        direction: random.nextBool() ? 1 : -1,
+        speedStep: 0.005 + (random.nextDouble() * 0.003),
+        laneOffset: 0.00003,
+      ));
+    }
+    for (var i = 0; i < 6; i++) {
+      _ambientVehicles.add(_DummyVehicleState(
+        id: 'hero_auto_$i',
+        vehicleType: 'auto',
+        busy: true,
+        loopIndex: (i + 1) % _erodeTrafficLoops.length,
+        progress: (i * 0.15) + _progressBiasForVehicleType('auto'),
+        direction: random.nextBool() ? 1 : -1,
+        speedStep: 0.004 + (random.nextDouble() * 0.002),
+        laneOffset: 0.00004,
+      ));
+    }
+    for (var i = 0; i < 5; i++) {
+      _ambientVehicles.add(_DummyVehicleState(
+        id: 'hero_cab_$i',
+        vehicleType: 'cab',
+        busy: true,
+        loopIndex: (i + 2) % _erodeTrafficLoops.length,
+        progress: (i * 0.2) + _progressBiasForVehicleType('cab'),
+        direction: random.nextBool() ? 1 : -1,
+        speedStep: 0.006 + (random.nextDouble() * 0.003),
+        laneOffset: -0.00003,
+      ));
+    }
+    for (var i = 0; i < 5; i++) {
+      _ambientVehicles.add(_DummyVehicleState(
+        id: 'hero_parcel_$i',
+        vehicleType: 'parcel',
+        busy: true,
+        loopIndex: (i + 3) % _outskirtsTrafficLoops.length,
+        progress: (i * 0.2) + _progressBiasForVehicleType('parcel'),
+        direction: random.nextBool() ? 1 : -1,
+        speedStep: 0.005 + (random.nextDouble() * 0.002),
+        laneOffset: -0.00004,
+        isOutskirts: true,
+      ));
+    }
+    
+    // Add Superman heroes
+    const double heroRadiusDegrees = 0.058; // ~6.5km
+    for (var index = 0; index < 10; index++) {
+      final distance = sqrt(random.nextDouble()) * heroRadiusDegrees;
+      final angle = random.nextDouble() * 2 * pi;
+      final pos = LatLng(
+        11.3410 + distance * cos(angle),
+        77.7171 + distance * sin(angle),
+      );
+      _heroes.add(_HeroAvatarState('superman_hero_$index', pos, random.nextInt(1000000)));
+    }
+    
+    _simulationTimer?.cancel();
+    _simulationTimer = Timer.periodic(const Duration(milliseconds: 32), (_) {
+      if (!mounted) return;
+      for (final vehicle in _ambientVehicles) {
+        vehicle.advance(Random(
+          vehicle.id.hashCode ^ DateTime.now().millisecondsSinceEpoch,
+        ), 32);
+      }
+      for (final hero in _heroes) {
+        hero.advance(32);
+      }
+      _refreshHeroMarkers();
+    });
   }
 
   Future<void> _hydrateDummyTrafficRoutes() async {
-    final routeIndexes = _ambientVehicles
-        .map((vehicle) => vehicle.loopIndex)
-        .toSet()
-        .where((index) => !_dummyRouteCache.containsKey(index))
-        .where((index) => !_dummyRouteRequests.contains(index))
-        .toList();
-
-    for (final routeIndex in routeIndexes) {
-      _dummyRouteRequests.add(routeIndex);
-      final pair =
-          _dummyTrafficRoutePairs[routeIndex % _dummyTrafficRoutePairs.length];
-      try {
-        final route = await _mapService.getRoute(pair.first, pair.last);
-        if (!mounted) {
-          return;
-        }
-        final path = route?.points ?? const <LatLng>[];
-        if (path.length > 2) {
-          _dummyRouteCache[routeIndex] = path;
-          for (final vehicle in _ambientVehicles) {
-            if (vehicle.loopIndex == routeIndex) {
-              vehicle.roadPath = path;
-            }
-          }
-          _refreshHeroMarkers();
-        }
-      } catch (e) {
-        debugPrint('Dummy traffic route load error: $e');
-      } finally {
-        _dummyRouteRequests.remove(routeIndex);
-      }
-    }
+    // Deprecated: using pre-recorded multi-point loops now
   }
 
-  void _scheduleVehicleTick(_DummyVehicleState vehicle, [int? initialDelayMs]) {
-    _dummyVehicleTimers[vehicle.id]?.cancel();
-    final seed = vehicle.id.hashCode ^
-        DateTime.now().microsecondsSinceEpoch ^
-        (initialDelayMs ?? 0);
-    final random = Random(seed);
-    final delay = Duration(
-      milliseconds: initialDelayMs ?? (2500 + random.nextInt(2500)),
-    );
-    _dummyVehicleTimers[vehicle.id] = Timer(delay, () {
-      if (!mounted) {
-        return;
-      }
-      vehicle.advance(Random(
-        vehicle.id.hashCode ^ DateTime.now().millisecondsSinceEpoch,
-      ),);
-      _refreshHeroMarkers();
-      _scheduleVehicleTick(vehicle);
-    });
-  }
+
 
   void _refreshHeroMarkers() {
     if (!mounted) {
       return;
     }
+
+    _ensureDummyTrafficInitialized();
 
     final liveNearbyMarkers = _onlineHeroSnapshots.where((hero) {
       final lat = hero['lat'] as double?;
@@ -1667,8 +1792,33 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       },
     ).toList();
 
+    final busyMarkers = _ambientVehicles
+        .map(
+          (vehicle) => MapMarker(
+            point: vehicle.project(),
+            color: _successGreen,
+            assetPath: _assetForVehicleType(vehicle.vehicleType),
+            icon: _fallbackIconForVehicleType(vehicle.vehicleType),
+            bearingDegrees: vehicle.bearing(),
+            label: 'Busy Hero',
+            size: 40,
+          ),
+        )
+        .toList();
+
+    for (final hero in _heroes) {
+      busyMarkers.add(MapMarker(
+        point: hero.position,
+        color: Colors.redAccent,
+        assetPath: 'assets/gifs/superman_hero.webp',
+        icon: Icons.person_pin,
+        size: 40,
+        circular: true,
+      ));
+    }
+
     _nearbyCaptainMarkersNotifier.value = liveNearbyMarkers;
-    _dummyHeroMarkersNotifier.value = [];
+    _dummyHeroMarkersNotifier.value = busyMarkers;
   }
 
   Future<void> _loadRoadRoute() async {
@@ -2583,6 +2733,31 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                           },
                         ),
                       ],
+                    ),
+                  ),
+
+                  // GPS Fallback manual pin
+                  Positioned(
+                    right: 16,
+                    bottom: 275, // Above the my location button
+                    child: Container(
+                      decoration: BoxDecoration(
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: FloatingActionButton.extended(
+                        heroTag: 'manual_pin',
+                        onPressed: _openManualPickupPicker,
+                        backgroundColor: Colors.white,
+                        elevation: 0,
+                        icon: const Icon(Icons.location_on_rounded, color: _accentOrange, size: 20),
+                        label: Text('Set Pin manually', style: GoogleFonts.outfit(color: _accentOrange, fontWeight: FontWeight.w600, fontSize: 13)),
+                      ),
                     ),
                   ),
 

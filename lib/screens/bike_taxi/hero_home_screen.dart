@@ -44,6 +44,10 @@ import '../earn/rewards_hub_screen.dart';
 import '../../widgets/economic_vision_banner.dart';
 import '../notifications_screen.dart';
 import 'hero_ride_screen.dart';
+import '../../config/hero_service_access.dart';
+import 'package:erode_superapp/services/app_update_gate_service.dart';
+import 'package:erode_superapp/services/pwa_cache_platform_stub.dart'
+    if (dart.library.html) 'package:erode_superapp/services/pwa_cache_platform_web.dart';
 
 class HeroHomeScreen extends StatefulWidget {
   const HeroHomeScreen({
@@ -123,6 +127,26 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   // service_request_service.dart / ride_search_screen.dart can filter
   // dispatch candidates by city.
   String _heroCity = kDefaultCity;
+
+  // PER-HERO SERVICE ACCESS (Aug 17 2026 — Nizam: admin needs to be able
+  // to stop a specific hero taking a specific kind of work).
+  //
+  // Loaded from heroes/{uid}.serviceAccess and mirrored into the RTDB
+  // presence node on every write, so ride_search_screen.dart and
+  // service_request_service.dart can filter dispatch without a Firestore
+  // read per hero per booking. See lib/config/hero_service_access.dart.
+  //
+  // Stays NULL for every hero who has never had a restriction set, and
+  // the mirror writes nothing in that case — an absent key means
+  // "allowed", so untouched heroes keep behaving exactly as before.
+  Map<String, dynamic>? _serviceAccess;
+
+  /// Live listener on the hero's own doc, so an admin toggling a service
+  /// takes effect on a hero who is ALREADY online. Without this the
+  /// change would only apply the next time they went offline and back
+  /// on — which, for a hero working a full shift, could be hours.
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+      _serviceAccessSub;
 
   // Cached stats — loaded once per session in _loadHeroData()
   int _totalRides = 0;
@@ -986,9 +1010,19 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           _heroCity = (data['city'] as String?)?.trim().toLowerCase().isNotEmpty ?? false
               ? (data['city'] as String).trim().toLowerCase()
               : kDefaultCity;
+          _serviceAccess = data[kHeroServiceAccessField] is Map
+              ? Map<String, dynamic>.from(
+                  data[kHeroServiceAccessField] as Map)
+              : null;
           _isOnline = restoredOnline;
         });
       }
+
+      // Keep watching so an admin change reaches a hero who is already
+      // mid-shift, instead of waiting for their next offline/online
+      // cycle. One listener on ONE document — negligible read cost, and
+      // it only exists while the hero screen is mounted.
+      _watchServiceAccess();
 
       // FIX BUG #3: If captain was online before restart, restart tracking
       if (_isOnline) {
@@ -1001,6 +1035,8 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         unawaited(_consumePendingServiceRequestPush());
         debugPrint('🔄 Hero online state restored — live tracking restarted');
       }
+
+      // (see _watchServiceAccess below)
 
       // Stats — fetch once per session, cache in state
       if (!_statsLoaded) {
@@ -1191,6 +1227,11 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               'vehicleType': _normalizeHeroVehicleType(_vehicleType),
               'isAvailable': _activeRideId.isEmpty,
               'category': _normalizeHeroVehicleType(_vehicleType).toLowerCase(),
+        // PER-HERO SERVICE ACCESS (Aug 17 2026): mirrored into the
+        // presence node so both dispatchers can honour it without
+        // spending a Firestore read per hero per booking. See
+        // lib/config/hero_service_access.dart.
+        if (_serviceAccess != null) kHeroServiceAccessField: _serviceAccess,
               'city': _heroCity,
               'lastUpdated': ServerValue.timestamp,
             });
@@ -1312,7 +1353,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           final trueSessionStart =
               HeroUsageAccumulatorService().trueSessionStartedAt;
           final activeMinutes =
-              HeroUsageAccumulatorService().consumeActiveMinutes();
+              HeroUsageAccumulatorService().consumeBillableMinutes();
           final ridesHandled =
               HeroUsageAccumulatorService().consumeRidesHandled();
           // FIX (Dynamic Micro-Billing, Aug 11 2026): safety-net flush —
@@ -1433,6 +1474,11 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         'vehicleType': _normalizeHeroVehicleType(_vehicleType),
         'isAvailable': _activeRideId.isEmpty,
         'category': _normalizeHeroVehicleType(_vehicleType).toLowerCase(),
+        // PER-HERO SERVICE ACCESS (Aug 17 2026): mirrored into the
+        // presence node so both dispatchers can honour it without
+        // spending a Firestore read per hero per booking. See
+        // lib/config/hero_service_access.dart.
+        if (_serviceAccess != null) kHeroServiceAccessField: _serviceAccess,
         'city': _heroCity,
         'lastUpdated': ServerValue.timestamp,
         // Clear the disconnect stamp — this is a live reconnect, so the
@@ -1564,6 +1610,11 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           'vehicleType': _normalizeHeroVehicleType(_vehicleType),
           'isAvailable': _activeRideId.isEmpty,
           'category': _normalizeHeroVehicleType(_vehicleType).toLowerCase(),
+        // PER-HERO SERVICE ACCESS (Aug 17 2026): mirrored into the
+        // presence node so both dispatchers can honour it without
+        // spending a Firestore read per hero per booking. See
+        // lib/config/hero_service_access.dart.
+        if (_serviceAccess != null) kHeroServiceAccessField: _serviceAccess,
           'lastUpdated': ServerValue.timestamp,
         });
         // See the matching comment on the other online_heroes.set() call
@@ -1594,6 +1645,182 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
   // _shouldWriteFirestoreLocation REMOVED - Firestore writes only via _syncOnlineStatus
 
+  /// Watches heroes/{uid}.serviceAccess so an admin's change reaches a
+  /// hero who is ALREADY online (Aug 17 2026 — see _serviceAccess).
+  ///
+  /// Without this, disabling e.g. parcel for a hero mid-shift would keep
+  /// sending them parcel jobs until they next went offline and back on,
+  /// because both dispatchers read the mirrored copy in the RTDB
+  /// presence node — and only this screen ever writes that node.
+  void _watchServiceAccess() {
+    final uid = _user?.uid;
+    if (uid == null) return;
+    _serviceAccessSub?.cancel();
+    _serviceAccessSub = FirebaseFirestore.instance
+        .collection('heroes')
+        .doc(uid)
+        .snapshots()
+        .listen((snap) {
+      final data = snap.data();
+      if (data == null) return;
+      final next = data[kHeroServiceAccessField] is Map
+          ? Map<String, dynamic>.from(data[kHeroServiceAccessField] as Map)
+          : null;
+
+      // Cheap equality check — this listener also fires for every other
+      // field on the hero doc (coins, commission, status...), and we do
+      // not want an RTDB presence rewrite on each of those.
+      if (next.toString() == _serviceAccess.toString()) return;
+
+      _serviceAccess = next;
+      if (!mounted) return;
+      setState(() {});
+
+      // Republish presence immediately so dispatch honours the new
+      // permissions on the very next booking, not the next GPS tick.
+      if (_isOnline && _user != null) {
+        FirebaseDatabase.instance
+            .ref('online_heroes/${_user!.uid}')
+            .update({
+          if (next != null) kHeroServiceAccessField: next,
+          if (next == null) kHeroServiceAccessField: null,
+        }).catchError((Object e) {
+          debugPrint('[HeroHome] serviceAccess presence sync failed: $e');
+        });
+      }
+    }, onError: (Object e) {
+      debugPrint('[HeroHome] serviceAccess watcher error: $e');
+    });
+  }
+
+  // ================================================================
+  // UPDATE BANNER (Aug 17 2026)
+  // ================================================================
+  // Nizam: "hero work iruntha athu mudichutu home page irukapo mattum
+  // update button kaati, again instal agi home page ku varramari
+  // pannirlam" — and that instruction is what makes this safe.
+  //
+  // It is rendered ONLY inside the OFFLINE view, which by construction
+  // is the idle state: a hero with a live ride or an accepted service
+  // request is never looking at this widget. Belt and braces, the two
+  // active-work flags are re-checked below anyway, because "which view
+  // am I in" is a UI fact and "am I mid-job" is a data fact, and the
+  // second one is the one that matters.
+  //
+  // Why interrupting a working hero would be serious: installing an APK
+  // kills the process. A hero halfway to a customer would lose their
+  // screen, their tracking, and the customer's ride. So the update is
+  // offered between jobs or not at all. After reinstall the app cold
+  // starts on the hero home page, which is exactly the "same place"
+  // outcome asked for — no state restore machinery needed, because
+  // there is no in-progress state to restore.
+  Widget _buildUpdateBanner() {
+    if (!AppUpdateGateService.instance.updateAvailable) {
+      return const SizedBox.shrink();
+    }
+    // Data-level idle check (see above).
+    if (_activeRideId.isNotEmpty || _hasActiveServiceRequest) {
+      return const SizedBox.shrink();
+    }
+
+    final notes = AppUpdateGateService.instance.notes;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF6C63FF).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF6C63FF)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.system_update_rounded,
+                  color: Color(0xFF6C63FF), size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'New Hero app update available',
+                  style: GoogleFonts.outfit(
+                    color: const Color(0xFF6C63FF),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (notes.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(notes,
+                style: GoogleFonts.outfit(fontSize: 12, height: 1.4)),
+          ],
+          const SizedBox(height: 4),
+          Text(
+            'You have no active job right now — this is a safe moment to '
+            'update. The app will reopen on this home screen.',
+            style: GoogleFonts.outfit(fontSize: 11, height: 1.4),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 40,
+            child: ElevatedButton.icon(
+              onPressed: _runHeroUpdate,
+              icon: const Icon(Icons.download_rounded, size: 17),
+              label: Text('Update now',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.w800)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6C63FF),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(11)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _runHeroUpdate() async {
+    // Re-check at the moment of the tap, not just at render. A ride can
+    // arrive between the banner painting and the hero pressing it.
+    if (_activeRideId.isNotEmpty || _hasActiveServiceRequest) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'You just got a job — finish it first, then update from here.'),
+        ),
+      );
+      return;
+    }
+
+    if (kIsWeb) {
+      // PWA path: no APK. Clear the cached bundle and reload in place —
+      // same mechanism the drawer's Check for Updates already uses.
+      try {
+        await PwaCachePlatform().clearAndReload();
+      } catch (e) {
+        debugPrint('[HeroHome] PWA update reload failed: $e');
+      }
+      return;
+    }
+
+    final url = AppUpdateGateService.instance.apkUrlFor('hero');
+    final ok = await launchUrl(Uri.parse(url),
+        mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the update link.')),
+      );
+    }
+  }
+
   void _stopGlobalLocationTracking() {
     _globalLocationSub?.cancel();
     _globalLocationSub = null;
@@ -1622,6 +1849,10 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     // rest or it leaks across screen rebuilds.
     _serverOffsetSub?.cancel();
     _serverOffsetSub = null;
+    // Per-hero service-access watcher (Aug 17 2026) — one Firestore
+    // listener on this hero's own doc; released like every other stream.
+    _serviceAccessSub?.cancel();
+    _serviceAccessSub = null;
     // Cancel Firestore/RTDB popup streams — background FCM replaces them.
     _stopBroadcastRideStream();
     // Dispose UI-only animation controllers.
@@ -3065,6 +3296,13 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           .ref('hero_pings/$uid/$requestId')
           .remove();
       mark('STEP-2 RTDB remove(hero_pings)');
+
+      // BILLING (Aug 17 2026 — Nizam: "summa iruntha bill agakudathu...
+      // hero ride and yenna service yeduthu follow pandraro apo mattum").
+      // The meter starts HERE — the exact moment this hero won the ride,
+      // not when they came online. Waiting for work is free; doing work
+      // is metered. Stopped at completion in hero_ride_screen.dart.
+      HeroUsageAccumulatorService().startBillableWork();
 
       // FIX (per Nizam's request, mirrors the equivalent fix already
       // shipped in service_request_service.dart's acceptServiceRequest()):
@@ -5424,6 +5662,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            _buildUpdateBanner(),
             const EconomicVisionBanner(
               horizontalPadding: 0,
               compact: true,

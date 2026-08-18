@@ -27,6 +27,29 @@ const Color kMuted = Color(0xFF7777A0);
 const Color kBorder = Color(0x267B6FE0);
 
 class CartScreen extends StatefulWidget {
+  // ================================================================
+  // ⚠️ UNREACHABLE SCREEN — DO NOT WIRE UP WITHOUT READING THIS
+  // (Aug 17 2026 order-pipeline audit, Phase 2)
+  // ================================================================
+  // Nothing in lib/ navigates to CartScreen — verified by grep; the only
+  // occurrence of the class name in the entire codebase is this file
+  // itself. That is the ONLY reason it is not currently losing customer
+  // orders.
+  //
+  // Its _placeOrder() writes to the `orders` collection. NOTHING READS
+  // THAT COLLECTION: not the seller dashboard, not any hero screen, not
+  // dispatch. The only readers are admin_orders_cleanup_screen.dart and
+  // admin_deletion_service.dart, both of which only DELETE. So an order
+  // placed here would tell the customer "Order Placed", and then no
+  // seller and no hero would ever learn it existed.
+  //
+  // If a cart screen is wanted, point it at ServiceRequestService
+  // .createServiceRequest() (requestType 'catalog_food_order') the way
+  // seller_detail_screen.dart's checkout does — that is the pipeline the
+  // seller dashboard and hero dispatch are actually wired to.
+  //
+  // Left in place rather than deleted: it is a complete, working cart UI
+  // and the fix is a write-target change, not a rewrite.
   const CartScreen({super.key});
 
   @override

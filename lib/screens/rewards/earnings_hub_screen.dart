@@ -82,17 +82,7 @@ class _EarningsHubContent extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
 
-                  // Free Ride Progress Bar
-                  Consumer<WalletProvider>(
-                    builder: (context, walletProvider, child) {
-                      return _buildProgressBanner(
-                        walletProvider.njCoinsBalance,
-                        walletProvider.levelProgress,
-                        walletProvider.levelGoal,
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
+
 
                   // Daily Streak Tracker (from Provider)
                   Consumer<WalletProvider>(
@@ -150,102 +140,6 @@ class _EarningsHubContent extends StatelessWidget {
     );
   }
 
-  // ── Free Ride Progress Banner ───────────────────────────────
-  Widget _buildProgressBanner(int balance, int progress, int goal) {
-    const rideCost = 100;
-    final percent = (progress / goal * 100).clamp(0.0, 100.0);
-    final remaining = rideCost - balance;
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF00C853).withValues(alpha: 0.15),
-            const Color(0xFF0A1E0E),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFF00C853).withValues(alpha: 0.3),
-          width: 1.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text('🏍️', style: TextStyle(fontSize: 20)),
-              const SizedBox(width: 8),
-              const Text(
-                'Free Bike Ride Goal',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFFEEEEF5),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '₹$rideCost',
-                style: GoogleFonts.outfit(
-                  fontSize: 16,
-                  color: const Color(0xFF00C853),
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: LinearProgressIndicator(
-              value: percent / 100,
-              backgroundColor: const Color(0xFF00C853).withValues(alpha: 0.2),
-              valueColor:
-                  const AlwaysStoppedAnimation<Color>(Color(0xFF00C853)),
-              minHeight: 8,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '₹$balance / ₹$rideCost',
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFF7777A0),
-                ),
-              ),
-              if (remaining > 0)
-                Text(
-                  '🎯 Earn ₹$remaining more → Get Free Ride!',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Color(0xFF00C853),
-                    fontWeight: FontWeight.w600,
-                  ),
-                )
-              else
-                const Text(
-                  '✅ Ready to redeem!',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Color(0xFF00C853),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   // ── Category Filter ─────────────────────────────────────────
   Widget _buildCategoryFilter(BuildContext context) {

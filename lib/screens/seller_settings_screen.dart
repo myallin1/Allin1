@@ -12,13 +12,21 @@
 // ================================================================
 import 'dart:async';
 
+import 'dart:io';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/cloudinary_upload_service.dart';
+import '../services/custom_hotel_service.dart';
 import '../services/localization_service.dart';
 import '../services/theme_service.dart';
+import '../widgets/cached_cloud_image.dart';
 
 class SellerSettingsScreen extends StatefulWidget {
   const SellerSettingsScreen({super.key});
@@ -37,10 +45,31 @@ class _SellerSettingsScreenState extends State<SellerSettingsScreen> {
   bool _orderNotificationsEnabled = true;
   bool _newOrderSoundEnabled = true;
 
+  bool _isCustomHotel = false;
+  String _hotelLogoUrl = '';
+  bool _isUploadingLogo = false;
+
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _checkCustomHotelStatus();
+  }
+
+  Future<void> _checkCustomHotelStatus() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      final doc = await CustomHotelService().hotelStream(uid).first;
+      if (doc.exists && doc.data() != null) {
+        setState(() {
+          _isCustomHotel = true;
+          _hotelLogoUrl = doc.data()!['logoUrl'] as String? ?? '';
+        });
+      }
+    } catch (e) {
+      debugPrint('❌ SellerSettings custom hotel check error: $e');
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -90,6 +119,12 @@ class _SellerSettingsScreenState extends State<SellerSettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (_isCustomHotel) ...[
+              _buildSectionHeader('Hotel Profile'),
+              const SizedBox(height: 12),
+              _buildHotelProfileSection(),
+              const SizedBox(height: 28),
+            ],
             _buildSectionHeader('Notifications'),
             const SizedBox(height: 12),
             _buildNotificationSettings(),
@@ -205,6 +240,160 @@ class _SellerSettingsScreenState extends State<SellerSettingsScreen> {
         activeThumbColor: _pink,
       ),
     );
+  }
+
+  Widget _buildHotelProfileSection() {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _pink.withValues(alpha: 0.2)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12FF4FA3),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: _pink.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+                border: Border.all(color: _pink.withValues(alpha: 0.3), width: 2),
+              ),
+              child: ClipOval(
+                child: _isUploadingLogo
+                    ? const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: CircularProgressIndicator(color: _pink, strokeWidth: 2),
+                      )
+                    : _hotelLogoUrl.isNotEmpty
+                        ? CachedCloudImage(
+                            _hotelLogoUrl,
+                            width: 72,
+                            height: 72,
+                            fit: BoxFit.cover,
+                          )
+                        : const Icon(Icons.storefront, color: _pink, size: 32),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Profile Logo',
+                    style: GoogleFonts.outfit(
+                      color: _text,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Upload a square logo to display on your storefront',
+                    style: GoogleFonts.outfit(
+                      color: _muted,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _isUploadingLogo ? null : _pickAndUploadLogo,
+                    icon: const Icon(Icons.upload_rounded, size: 18),
+                    label: const Text('Change Logo'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _pink,
+                      side: const BorderSide(color: _pink),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickAndUploadLogo() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile == null) return;
+
+      final croppedFile = await ImageCropper().cropImage(
+        sourcePath: pickedFile.path,
+        compressFormat: ImageCompressFormat.jpg,
+        compressQuality: 85, // Same as menu items — clarity with compression
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1), // Square logo
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop Logo',
+            toolbarColor: _bg,
+            toolbarWidgetColor: _pink,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
+          ),
+          IOSUiSettings(
+            title: 'Crop Logo',
+            aspectRatioLockEnabled: true,
+            resetAspectRatioEnabled: false,
+          ),
+        ],
+      );
+      if (croppedFile == null) return;
+
+      setState(() => _isUploadingLogo = true);
+
+      final bytes = await File(croppedFile.path).readAsBytes();
+      final url = await CloudinaryUploadService().uploadImageBytes(
+        bytes,
+        fileName: 'logo_$uid.jpg',
+      );
+      
+      await CustomHotelService().updateHotelLogo(uid, url);
+
+      setState(() {
+        _hotelLogoUrl = url;
+        _isUploadingLogo = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Logo updated successfully', style: GoogleFonts.outfit()),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Hotel Logo Upload Error: $e');
+      if (mounted) {
+        setState(() => _isUploadingLogo = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update logo', style: GoogleFonts.outfit()),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildLanguageSettings() {

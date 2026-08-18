@@ -128,27 +128,54 @@
       "collectionGroup": "rides",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status",    "order": "ASCENDING"  },
-        { "fieldPath": "category",  "order": "ASCENDING"  },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "rides",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status",    "order": "ASCENDING"  },
-        { "fieldPath": "category",  "order": "ASCENDING"  },
-        { "fieldPath": "createdAt", "order": "ASCENDING"  }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "rides",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "category",  "order": "ASCENDING"  },
-        { "fieldPath": "status",    "order": "ASCENDING"  },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
@@ -301,33 +328,60 @@
       "collectionGroup": "rides",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "completedAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "completedAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "service_requests",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "requestType", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "requestType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "service_requests",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "food_orders",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "sellerId", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "sellerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
@@ -344,6 +398,20 @@
         },
         {
           "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "affiliate_scans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "code",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ts",
           "order": "DESCENDING"
         }
       ]

@@ -152,10 +152,32 @@ self.addEventListener('fetch', (event) => {
   // REST API call) are never intercepted, exactly as before.
   if (req.method !== 'GET') return;
 
-  // Only ever cache THIS origin's own app-shell files — Firebase,
-  // Cloudinary, Ola Maps, Google Fonts, and every other third-party
-  // request is left completely untouched, same as before.
   const url = new URL(req.url);
+
+  // ================================================================
+  // CACHE-FIRST FOR CLOUDINARY IMAGES (Offline Mode + Bandwidth Saver)
+  // ================================================================
+  if (url.hostname === 'res.cloudinary.com') {
+    event.respondWith(
+      caches.match(req).then((cached) => {
+        if (cached) return cached;
+        // Cache miss: fetch from network and store in the "cloudinary-cache"
+        return fetch(req).then((res) => {
+          if (res && res.status === 200) {
+            const clone = res.clone();
+            caches.open('cloudinary-cache-v1').then((cache) => cache.put(req, clone));
+          }
+          return res;
+        }).catch(() => {
+          // Fallback if offline and not in cache
+          return new Response('', { status: 504, statusText: 'Offline' });
+        });
+      })
+    );
+    return;
+  }
+
+  // Only ever cache THIS origin's own app-shell files (bypassing other third-parties)
   if (url.origin !== self.location.origin) return;
 
   // ================================================================

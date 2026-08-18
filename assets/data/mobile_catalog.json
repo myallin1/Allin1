@@ -1,0 +1,89 @@
+{
+  "_comment": "Shared mobile model catalog — Allin1 Mobile Hub. METADATA ONLY, bundled as a local app asset so browsing the catalog costs ZERO Firestore reads. Images are NOT bundled (that would bloat the APK); imageUrl points at a single shared Cloudinary asset per model, reused by every seller who lists that model, and cached on-device for ~30 days by CachedCloudImage. So one photo serves all sellers and downloads once per customer device. Leave imageUrl empty ('') until an admin uploads that model's photo to the common_mobiles/ Cloudinary folder — the UI falls back to a free brand-tinted icon, never a broken image. Adding a model here needs NO database write and NO app-store update if you ship it via Shorebird.",
+  "version": 1,
+  "cloudinaryFolder": "common_mobiles",
+  "brands": [
+    "Samsung",
+    "Xiaomi",
+    "Realme",
+    "vivo",
+    "OPPO",
+    "OnePlus",
+    "Motorola",
+    "iQOO",
+    "Poco",
+    "Nothing",
+    "Apple",
+    "Google",
+    "Infinix",
+    "Tecno",
+    "Lava",
+    "Micromax"
+  ],
+  "models": [
+    { "modelKey": "samsung_galaxy_s24", "brand": "Samsung", "model": "Galaxy S24", "variants": ["8/128", "8/256"], "imageUrl": "" },
+    { "modelKey": "samsung_galaxy_s23", "brand": "Samsung", "model": "Galaxy S23", "variants": ["8/128", "8/256"], "imageUrl": "" },
+    { "modelKey": "samsung_galaxy_a55", "brand": "Samsung", "model": "Galaxy A55 5G", "variants": ["8/128", "8/256"], "imageUrl": "" },
+    { "modelKey": "samsung_galaxy_a35", "brand": "Samsung", "model": "Galaxy A35 5G", "variants": ["6/128", "8/256"], "imageUrl": "" },
+    { "modelKey": "samsung_galaxy_a15", "brand": "Samsung", "model": "Galaxy A15 5G", "variants": ["4/128", "6/128", "8/256"], "imageUrl": "" },
+    { "modelKey": "samsung_galaxy_m14", "brand": "Samsung", "model": "Galaxy M14 5G", "variants": ["4/128", "6/128"], "imageUrl": "" },
+    { "modelKey": "samsung_galaxy_f14", "brand": "Samsung", "model": "Galaxy F14 5G", "variants": ["4/128", "6/128"], "imageUrl": "" },
+
+    { "modelKey": "xiaomi_redmi_note_13", "brand": "Xiaomi", "model": "Redmi Note 13 5G", "variants": ["6/128", "8/256"], "imageUrl": "" },
+    { "modelKey": "xiaomi_redmi_note_13_pro", "brand": "Xiaomi", "model": "Redmi Note 13 Pro 5G", "variants": ["8/128", "8/256", "12/256"], "imageUrl": "" },
+    { "modelKey": "xiaomi_redmi_13c", "brand": "Xiaomi", "model": "Redmi 13C", "variants": ["4/128", "6/128", "8/256"], "imageUrl": "" },
+    { "modelKey": "xiaomi_redmi_12", "brand": "Xiaomi", "model": "Redmi 12 5G", "variants": ["4/128", "6/128", "8/256"], "imageUrl": "" },
+    { "modelKey": "xiaomi_redmi_a3", "brand": "Xiaomi", "model": "Redmi A3", "variants": ["3/64", "4/128"], "imageUrl": "" },
+
+    { "modelKey": "realme_narzo_70", "brand": "Realme", "model": "Narzo 70 5G", "variants": ["6/128", "8/128"], "imageUrl": "" },
+    { "modelKey": "realme_12_5g", "brand": "Realme", "model": "Realme 12 5G", "variants": ["8/128", "8/256"], "imageUrl": "" },
+    { "modelKey": "realme_c53", "brand": "Realme", "model": "Realme C53", "variants": ["4/128", "6/128", "8/128"], "imageUrl": "" },
+    { "modelKey": "realme_c51", "brand": "Realme", "model": "Realme C51", "variants": ["4/64", "4/128"], "imageUrl": "" },
+    { "modelKey": "realme_p1", "brand": "Realme", "model": "Realme P1 5G", "variants": ["6/128", "8/128"], "imageUrl": "" },
+
+    { "modelKey": "vivo_t3", "brand": "vivo", "model": "vivo T3 5G", "variants": ["8/128", "8/256"], "imageUrl": "" },
+    { "modelKey": "vivo_y28", "brand": "vivo", "model": "vivo Y28 5G", "variants": ["4/128", "6/128", "8/128"], "imageUrl": "" },
+    { "modelKey": "vivo_y18", "brand": "vivo", "model": "vivo Y18", "variants": ["4/64", "6/128"], "imageUrl": "" },
+    { "modelKey": "vivo_v30", "brand": "vivo", "model": "vivo V30 5G", "variants": ["8/128", "8/256", "12/256"], "imageUrl": "" },
+
+    { "modelKey": "oppo_a59", "brand": "OPPO", "model": "OPPO A59 5G", "variants": ["4/128", "6/128"], "imageUrl": "" },
+    { "modelKey": "oppo_a3x", "brand": "OPPO", "model": "OPPO A3x", "variants": ["4/64", "4/128"], "imageUrl": "" },
+    { "modelKey": "oppo_reno11", "brand": "OPPO", "model": "OPPO Reno11 5G", "variants": ["8/128", "8/256"], "imageUrl": "" },
+
+    { "modelKey": "oneplus_nord_ce4", "brand": "OnePlus", "model": "OnePlus Nord CE4", "variants": ["8/128", "8/256"], "imageUrl": "" },
+    { "modelKey": "oneplus_nord_ce4_lite", "brand": "OnePlus", "model": "OnePlus Nord CE4 Lite", "variants": ["8/128", "8/256"], "imageUrl": "" },
+    { "modelKey": "oneplus_12r", "brand": "OnePlus", "model": "OnePlus 12R", "variants": ["8/128", "16/256"], "imageUrl": "" },
+
+    { "modelKey": "motorola_g64", "brand": "Motorola", "model": "Moto G64 5G", "variants": ["8/128", "12/256"], "imageUrl": "" },
+    { "modelKey": "motorola_g34", "brand": "Motorola", "model": "Moto G34 5G", "variants": ["4/128", "8/128"], "imageUrl": "" },
+    { "modelKey": "motorola_edge_50", "brand": "Motorola", "model": "Moto Edge 50 Fusion", "variants": ["8/128", "12/256"], "imageUrl": "" },
+
+    { "modelKey": "iqoo_z9", "brand": "iQOO", "model": "iQOO Z9 5G", "variants": ["8/128", "8/256"], "imageUrl": "" },
+    { "modelKey": "iqoo_z9x", "brand": "iQOO", "model": "iQOO Z9x 5G", "variants": ["4/128", "6/128", "8/128"], "imageUrl": "" },
+
+    { "modelKey": "poco_m6_pro", "brand": "Poco", "model": "Poco M6 Pro 5G", "variants": ["4/128", "6/128", "8/256"], "imageUrl": "" },
+    { "modelKey": "poco_x6", "brand": "Poco", "model": "Poco X6 5G", "variants": ["8/256", "12/256"], "imageUrl": "" },
+
+    { "modelKey": "nothing_phone_2a", "brand": "Nothing", "model": "Nothing Phone (2a)", "variants": ["8/128", "12/256"], "imageUrl": "" },
+
+    { "modelKey": "apple_iphone_15", "brand": "Apple", "model": "iPhone 15", "variants": ["128GB", "256GB", "512GB"], "imageUrl": "" },
+    { "modelKey": "apple_iphone_14", "brand": "Apple", "model": "iPhone 14", "variants": ["128GB", "256GB"], "imageUrl": "" },
+    { "modelKey": "apple_iphone_13", "brand": "Apple", "model": "iPhone 13", "variants": ["128GB", "256GB"], "imageUrl": "" },
+    { "modelKey": "apple_iphone_12", "brand": "Apple", "model": "iPhone 12", "variants": ["64GB", "128GB"], "imageUrl": "" },
+    { "modelKey": "apple_iphone_se3", "brand": "Apple", "model": "iPhone SE (3rd gen)", "variants": ["64GB", "128GB"], "imageUrl": "" },
+
+    { "modelKey": "google_pixel_8a", "brand": "Google", "model": "Pixel 8a", "variants": ["8/128", "8/256"], "imageUrl": "" },
+    { "modelKey": "google_pixel_7a", "brand": "Google", "model": "Pixel 7a", "variants": ["8/128"], "imageUrl": "" },
+
+    { "modelKey": "infinix_hot_40i", "brand": "Infinix", "model": "Infinix Hot 40i", "variants": ["4/128", "8/128"], "imageUrl": "" },
+    { "modelKey": "infinix_smart_8", "brand": "Infinix", "model": "Infinix Smart 8", "variants": ["4/64", "4/128"], "imageUrl": "" },
+
+    { "modelKey": "tecno_spark_20", "brand": "Tecno", "model": "Tecno Spark 20", "variants": ["4/128", "8/128"], "imageUrl": "" },
+    { "modelKey": "tecno_pova_6", "brand": "Tecno", "model": "Tecno Pova 6 Pro 5G", "variants": ["8/256", "12/256"], "imageUrl": "" },
+
+    { "modelKey": "lava_blaze_2", "brand": "Lava", "model": "Lava Blaze 2 5G", "variants": ["4/64", "6/128"], "imageUrl": "" },
+    { "modelKey": "lava_yuva_3", "brand": "Lava", "model": "Lava Yuva 3", "variants": ["4/64", "4/128"], "imageUrl": "" },
+
+    { "modelKey": "other_custom", "brand": "Other", "model": "Other / Not listed", "variants": [], "imageUrl": "" }
+  ]
+}

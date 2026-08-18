@@ -21,6 +21,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/cloudinary_upload_service.dart';
+import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -242,7 +243,7 @@ class _AdminSosKycApprovalsScreenState extends State<AdminSosKycApprovalsScreen>
         child: Stack(
           alignment: Alignment.topRight,
           children: [
-            InteractiveViewer(child: Image.network(url, fit: BoxFit.contain)),
+            InteractiveViewer(child: CachedCloudImage(url, fit: BoxFit.contain)),
             IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(ctx)),
           ],
         ),
@@ -277,7 +278,7 @@ class _AdminSosKycApprovalsScreenState extends State<AdminSosKycApprovalsScreen>
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: hasPhoto
-                  ? Image.network(
+                  ? CachedCloudImage(
                       // List thumbnail only — the full-screen KYC viewer
                       // above stays un-transformed for verification.
                       CloudinaryUploadService.optimizedUrl(photoUrl, width: 128),
@@ -557,3 +558,4 @@ class _SosKycApprovalCard extends StatelessWidget {
     properties.add(ObjectFlagProperty<VoidCallback>.has('onCall', onCall));
   }
 }
+

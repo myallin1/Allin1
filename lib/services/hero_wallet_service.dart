@@ -163,7 +163,33 @@ class HeroWalletService {
   // produces exactly zero cost. Tune these two constants to match real
   // observed Firestore/RTDB cost per hero -- they are the entire
   // pricing model now, replacing RiderCommission for heroes.
-  static const double ratePerActiveMinute = 0.05; // ₹ per online minute
+  // ================================================================
+  // RATES (retuned Aug 17 2026 — Nizam)
+  // ================================================================
+  // Target, in Nizam's words: "oru small ride ku 2 rupee range ku
+  // generate aganum, long rides ku five rupee aganum, but flat ah 2,5
+  // rupees agakudathu... 1.85, 2.10, 3.60 nu rupees and paise la
+  // generate aganum."
+  //
+  // So the requirement is not just a price level, it is that the price
+  // must LOOK computed — a metered amount ending in paise, not a tariff.
+  // That falls out naturally here because both inputs (km and billable
+  // minutes) are continuous: no rounding to whole rupees anywhere, only
+  // a final round to 2 decimal places.
+  //
+  // Worked examples with the constants below:
+  //   3 km,  15 min  -> 0.90 + 0.66 + 0.30 = ₹1.86
+  //   4 km,  18 min  -> 0.90 + 0.88 + 0.36 = ₹2.14
+  //   8 km,  25 min  -> 0.90 + 1.76 + 0.50 = ₹3.16
+  //  15 km,  45 min  -> 0.90 + 3.30 + 0.90 = ₹5.10
+  // Small rides land around ₹2, long rides around ₹5, and no two rides
+  // bill the same amount unless they were genuinely identical.
+  //
+  // IMPORTANT: ratePerActiveMinute is now applied to BILLABLE minutes
+  // (time spent on an accepted job), not online minutes. A hero waiting
+  // for work is billed nothing — see HeroUsageAccumulatorService's
+  // startBillableWork/stopBillableWork.
+  static const double ratePerActiveMinute = 0.02; // ₹ per minute ON A JOB
   // FIX (Dynamic Micro-Billing, Aug 11 2026, per Nizam — "switch to a
   // dynamic, fractional model based on the service scope"): this flat
   // rate now applies ONLY to completed activity with no distance
@@ -173,10 +199,74 @@ class HeroWalletService {
   // the per-ride loop in flushUsageCost(). Kept as the fallback for any
   // ride whose distance wasn't passed in, so nothing silently bills
   // ₹0.
-  static const double ratePerRideHandled = 2; // ₹ per completed task (no distance)
-  static const double ratePerRideBase = 0.50; // ₹ base fee per actual ride
-  static const double ratePerKm = 0.15; // ₹ per km travelled
-  static const double maxFeePerRide = 3.00; // cap — never bill more than this per ride
+  // Distance-less tasks (Hero Booking, Custom/Grocery/Food orders).
+  // Lowered from a flat ₹2 so it is not the single most expensive line
+  // on a hero's bill; the billable-minutes term now carries the "how
+  // much work was this" signal instead, which is what makes these vary.
+  static const double ratePerRideHandled = 1.20; // ₹ per completed task
+  static const double ratePerRideBase = 0.90; // ₹ base fee per actual ride
+  static const double ratePerKm = 0.22; // ₹ per km travelled
+  // Raised from ₹3.00: the old cap sat BELOW the ₹5 long-ride target, so
+  // every long ride would have flattened to exactly ₹3.00 — producing
+  // precisely the "flat rate" outcome that was asked to be avoided. The
+  // cap now only catches genuine outliers (a 40km+ trip).
+  static const double maxFeePerRide = 6.50;
+
+  // ================================================================
+  // TOP-UP REMINDER FAN-OUT (Aug 17 2026)
+  // ================================================================
+  // Nizam: "namma hero ku namma use pandrathunala ivlo use pannirukeenga
+  // so unga wallet ah topup pannnikonganu yella hero kum push messege
+  // anupiklam."
+  //
+  // No Cloud Functions on the Spark plan, so the fan-out is written from
+  // the ADMIN app: one notifications/{id} doc per hero, which the hero
+  // app's existing notifications screen already renders. Nothing new to
+  // build on the hero side.
+  //
+  // COST AND SAFETY:
+  //  * Writes only to heroes ACTUALLY IN MINUS beyond [minOwed], not the
+  //    whole fleet. A hero who owes nothing should never be nagged —
+  //    that is how a reminder becomes spam and gets ignored by the
+  //    people who do owe.
+  //  * Batched (500/commit, Firestore's limit) rather than one write at
+  //    a time.
+  //  * The message carries the hero's OWN numbers, because "you owe
+  //    ₹47.20" is actionable and "please top up" is not.
+  //
+  // Returns how many heroes were notified.
+  Future<int> sendTopUpReminders({
+    required String sentByAdminUid,
+    double minOwed = 1.0,
+  }) async {
+    final snap = await _firestore.collection('hero_wallets').limit(500).get();
+
+    final targets = <String, double>{};
+    for (final d in snap.docs) {
+      final bal = (d.data()['balance'] as num?)?.toDouble() ?? 0.0;
+      if (bal < 0 && bal.abs() >= minOwed) targets[d.id] = bal.abs();
+    }
+    if (targets.isEmpty) return 0;
+
+    final batch = _firestore.batch();
+    targets.forEach((heroId, owed) {
+      batch.set(_firestore.collection('notifications').doc(), {
+        'userId': heroId,
+        'title': 'Wallet top-up reminder',
+        'message':
+            'Your app usage so far is ₹${owed.toStringAsFixed(2)}. '
+                'You can keep working as usual — please top up your wallet '
+                'when convenient. We take 0% commission on your rides.',
+        'type': 'wallet_topup',
+        'amountOwed': owed,
+        'read': false,
+        'createdAt': FieldValue.serverTimestamp(),
+        'sentBy': sentByAdminUid,
+      });
+    });
+    await batch.commit();
+    return targets.length;
+  }
 
   /// Called by the Hero App at two batched points ONLY -- a ride
   /// completing, or the hero going Offline (see
@@ -224,8 +314,10 @@ class HeroWalletService {
     if (activeMinutes <= 0 && ridesHandled <= 0) return;
 
     // Distance-based component: base fee + per-km, capped per ride —
-    // e.g. a 5km ride bills ₹0.50 + (5 × ₹0.15) = ₹1.25; a 30km ride
-    // would compute to ₹5.00 but is capped at ₹3.00.
+    // e.g. a 5km ride bills ₹0.90 + (5 × ₹0.22) = ₹2.00 before the
+    // billable-minutes term is added on top. The cap only bites on a
+    // genuine outlier (~25km+), so ordinary long rides still land on a
+    // computed paise amount rather than flattening to the cap.
     var rideComponent = 0.0;
     for (final km in rideDistancesKm) {
       final perRide = ratePerRideBase + (km * ratePerKm);

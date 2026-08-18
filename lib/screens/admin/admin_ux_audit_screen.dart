@@ -16,6 +16,7 @@ import 'dart:async' show unawaited;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -203,7 +204,7 @@ class _ReportRow extends StatelessWidget {
             const SizedBox(height: 10),
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
-              child: Image.network(
+              child: CachedCloudImage(
                 screenshotUrl,
                 height: 140,
                 fit: BoxFit.cover,
@@ -216,3 +217,4 @@ class _ReportRow extends StatelessWidget {
     );
   }
 }
+

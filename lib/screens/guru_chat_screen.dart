@@ -55,6 +55,7 @@ import '../services/grocery_ai_notes_service.dart';
 import '../services/guru_api_service.dart';
 import '../services/guru_suggestion_parser.dart';
 import '../services/localization_service.dart';
+import '../widgets/ai_loading_dialog.dart';
 // NEW (CTO mandate — AI Autonomous App Updating): reuses the exact same
 // web-only cache-clear-and-cache-busted-reload path dashboard_screen.dart's
 // update button already calls, via the same stub/web conditional-import
@@ -231,6 +232,19 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
       _pendingImageBytes = null;
     });
     _scrollToBottom();
+
+    AiLoadingDialog.show(context);
+    try {
+      await _doSendMessage(input, pendingImage);
+    } finally {
+      if (mounted) {
+        AiLoadingDialog.hide(context);
+        if (_isTyping) setState(() => _isTyping = false);
+      }
+    }
+  }
+
+  Future<void> _doSendMessage(String input, Uint8List? pendingImage) async {
 
     // FIX (AI State Mismatch bug): pass the activated key straight from
     // AiActivationService (secure storage) instead of letting

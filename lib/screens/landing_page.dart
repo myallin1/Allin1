@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/device_compat_service.dart';
 import '../services/usage_tracking_service.dart';
+import '../services/update_service.dart';
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
@@ -197,10 +198,23 @@ class _LandingPageState extends State<LandingPage> {
           deviceMemoryGb: null,
           hardwareConcurrency: null,
           isDetectionConfident: false,
-          primaryDownloadUrl:
-              'https://github.com/myallin1/Allin1-update-release/releases/latest/download/customer-armeabi-v7a.apk',
-          universalDownloadUrl:
-              'https://github.com/myallin1/Allin1-update-release/releases/latest/download/customer-armeabi-v7a.apk',
+          // FIX (Aug 17 2026 — Nizam: "yetha thottalum namma git la
+          // latest release app yenna vaikuromo athu than download
+          // aganum... dowload source git orey place ah than irukanum").
+          //
+          // These two were hardcoded to 'customer-armeabi-v7a.apk' — a
+          // filename that does not match what the release actually
+          // publishes. UpdateService's own header states the release
+          // contains ONE universal APK per app
+          // (allin1-customer.apk / allin1-hero.apk / ...), which is what
+          // every other download path in the codebase uses. So this
+          // fallback pointed at a file that isn't there, and the tap
+          // 404'd — while the identical button elsewhere worked.
+          //
+          // Now delegated to UpdateService, which is the single source
+          // of truth for every APK link in the app.
+          primaryDownloadUrl: UpdateService.customerApkUrl,
+          universalDownloadUrl: UpdateService.customerApkUrl,
           primaryFileLabel: 'Customer Universal APK',
         );
 

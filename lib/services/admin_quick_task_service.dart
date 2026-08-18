@@ -57,6 +57,7 @@ import 'deepseek_api_service.dart';
 import 'gemini_api_service.dart';
 import 'guru_admin_api_service.dart';
 import 'voice_booking_intent_service.dart';
+import '../widgets/ai_loading_dialog.dart';
 
 class AdminChatTurn {
   const AdminChatTurn({required this.role, required this.text, this.suggestions = const []});
@@ -261,6 +262,24 @@ class AdminQuickTaskService extends ChangeNotifier {
     messages.add(AdminChatTurn(role: 'user', text: trimmed));
     _sending = true;
     notifyListeners();
+
+    final ctx = navigatorKey.currentContext;
+    if (ctx != null) AiLoadingDialog.show(ctx);
+
+    try {
+      await _doSendMessage(trimmed);
+    } finally {
+      if (ctx != null && ctx.mounted) {
+        AiLoadingDialog.hide(ctx);
+      }
+      if (_sending) {
+        _sending = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> _doSendMessage(String trimmed) async {
 
     // NEW (CTO mandate — Task 3: Automated KYC Report Generator, "The
     // Connection"): if a KYC report is on screen awaiting a decision,

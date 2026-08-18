@@ -138,10 +138,19 @@ class CustomHotelService {
       'ownerId': sellerId,
       'hotelName': hotelName,
       'phoneNumber': sellerPhone.trim(),
+      'logoUrl': '',
       'isOpen': false,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  /// Update the hotel's profile logo.
+  Future<void> updateHotelLogo(String sellerId, String logoUrl) async {
+    await _hotelDoc(sellerId).set(
+      {'logoUrl': logoUrl, 'updatedAt': FieldValue.serverTimestamp()},
+      SetOptions(merge: true),
+    );
   }
 
   Future<void> setHotelOpen({required String sellerId, required bool isOpen}) {

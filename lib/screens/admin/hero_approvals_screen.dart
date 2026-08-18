@@ -11,7 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/city_config.dart';
-import '../../services/cloudinary_upload_service.dart';
+import 'admin_hero_details_screen.dart';
 
 // ── Theme (matches admin dashboard) ────────────────────────────
 const Color _bg = Color(0xFF0A0A1A);
@@ -224,7 +224,21 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
               return _HeroApprovalCard(
                 uid: doc.id,
                 data: data,
-                onView: () => _showDetailDialog(doc.id, data),
+                onView: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (context) => AdminHeroDetailsScreen(
+                        uid: doc.id,
+                        data: data,
+                        onApprove: () => _approveHero(doc.id, data),
+                        onReject: () => _rejectHero(doc.id, data),
+                        onCall: () => _callHero(data['phone'] as String? ?? ''),
+                        getCityLabel: cityLabelFor,
+                      ),
+                    ),
+                  );
+                },
                 onApprove: () => _approveHero(doc.id, data),
                 onReject: () => _rejectHero(doc.id, data),
                 onCall: () => _callHero(data['phone'] as String? ?? ''),
@@ -266,208 +280,16 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
     }
   }
 
-  // ── Detail Dialog ──────────────────────────────────────────────
-  void _showDetailDialog(String uid, Map<String, dynamic> data) {
-    final name = data['name'] as String? ?? 'N/A';
-    final email = data['email'] as String? ?? 'N/A';
-    final phone = data['phone'] as String? ?? 'N/A';
-    final vehicleNumber = data['vehicleNumber'] as String? ?? 'N/A';
-    final vehicleType = data['vehicleType'] as String? ?? 'N/A';
-    final licenseNumber = data['licenseNumber'] as String? ?? 'N/A';
-    final aadhaarNumber = data['aadhaarNumber'] as String? ?? 'N/A';
-    final panNumber = data['panNumber'] as String? ?? 'N/A';
-    final preferredWorkLocation =
-        data['preferredWorkLocation'] as String? ?? '';
-    // Multi-city: hero's self-selected operating city, shown here so
-    // admin can verify it during approval (e.g. catch a hero who
-    // registered from Coimbatore but accidentally left it on Erode).
-    final city = cityLabelFor(data['city'] as String? ?? kDefaultCity);
-    final onboardingMethod = data['onboardingMethod'] as String? ?? 'N/A';
-    final createdAt = data['createdAt'] as Timestamp?;
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: _surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          name,
-          style: GoogleFonts.outfit(
-            color: _text,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _detailRow('Email', email),
-              _detailRow('Phone', phone),
-              _detailRow('City', city),
-              _detailRow('Vehicle No.', vehicleNumber),
-              _detailRow('Vehicle Type', vehicleType),
-              if (preferredWorkLocation.trim().isNotEmpty)
-                _detailRow('Preferred Area', preferredWorkLocation),
-              _detailRow('Onboarding', onboardingMethod),
-              _detailRow(
-                'Submitted',
-                createdAt != null
-                    ? '${createdAt.toDate().day}/${createdAt.toDate().month}/${createdAt.toDate().year} '
-                        '${createdAt.toDate().hour}:${createdAt.toDate().minute.toString().padLeft(2, '0')}'
-                    : 'N/A',
-              ),
-              const SizedBox(height: 14),
-              // FIX: per Nizam's request — pair each typed number
-              // directly with its own proof photo (line by line, same
-              // order the hero filled the registration form), instead
-              // of listing all numbers first and all photos separately
-              // at the bottom. Admin can now read the number straight
-              // off the photo and compare it against what was typed,
-              // right there, without scrolling back and forth.
-              Text('Proof Verification',
-                  style: GoogleFonts.outfit(color: _muted, fontSize: 11, fontWeight: FontWeight.w700),),
-              const SizedBox(height: 8),
-              _detailRowWithPhoto('Aadhaar', aadhaarNumber, data['aadhaarDocUrl'] as String?),
-              _detailRowWithPhoto('PAN', panNumber, data['panDocUrl'] as String?),
-              _detailRowWithPhoto('License', licenseNumber, data['licenseDocUrl'] as String?),
-              // NEW (CTO mandate — Advanced KYC & Facial Verification):
-              // the live selfie hero_register_screen.dart now captures,
-              // shown here so the human admin can eyeball it directly —
-              // same widget, no "typed number" to pair it with, so the
-              // value column is just left blank.
-              _detailRowWithPhoto('Live Selfie', '', data['selfieUrl'] as String?),
-              const SizedBox(height: 8),
-              Text(
-                'UID: $uid',
-                style: const TextStyle(
-                  fontSize: 9,
-                  color: _muted,
-                  fontFamily: 'monospace',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          if (phone != 'N/A' && phone.trim().isNotEmpty)
-            TextButton.icon(
-              onPressed: () => _callHero(phone),
-              icon: const Icon(Icons.call_rounded, size: 16, color: _green),
-              label: const Text('Call Hero', style: TextStyle(color: _green)),
-            ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close', style: TextStyle(color: _muted)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showFullImage(String title, String url) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.black,
-        child: Stack(
-          alignment: Alignment.topRight,
-          children: [
-            InteractiveViewer(
-              child: Image.network(url, fit: BoxFit.contain),
-            ),
-            IconButton(
-              icon: const Icon(Icons.close, color: Colors.white),
-              onPressed: () => Navigator.pop(ctx),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Pairs a typed number with its own proof photo, line by line — see
-  // FIX comment at the _showDetailDialog call site above.
-  Widget _detailRowWithPhoto(String label, String value, String? photoUrl) {
-    final hasPhoto = photoUrl != null && photoUrl.isNotEmpty;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: const TextStyle(fontSize: 11, color: _muted, fontWeight: FontWeight.w600),),
-                const SizedBox(height: 2),
-                Text(value.isNotEmpty ? value : 'N/A',
-                    style: const TextStyle(fontSize: 13, color: _text, fontWeight: FontWeight.w700),),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          GestureDetector(
-            onTap: hasPhoto ? () => _showFullImage(label, photoUrl) : null,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: hasPhoto
-                  ? Image.network(
-                      // List thumbnail only. The full-screen verification
-                      // viewer above is deliberately left un-transformed —
-                      // an admin reading fine print on an ID document
-                      // should never have q_auto in the path.
-                      CloudinaryUploadService.optimizedUrl(photoUrl, width: 128),
-                      width: 64,
-                      height: 64,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        width: 64,
-                        height: 64,
-                        color: _card,
-                        child: const Icon(Icons.broken_image_outlined, color: _muted, size: 20),
-                      ),
-                    )
-                  : Container(
-                      width: 64,
-                      height: 64,
-                      color: _card,
-                      child: const Icon(Icons.image_not_supported_outlined, color: _muted, size: 20),
-                    ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _detailRow(String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 100,
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: _muted,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            Expanded(
-              child: Text(
-                value,
-                style: const TextStyle(fontSize: 12, color: _text),
-              ),
-            ),
-          ],
-        ),
-      );
-
+  // REMOVED (Aug 18 2026 audit — Gemini's later AdminHeroDetailsScreen
+  // replaced this entirely): _showDetailDialog / _showFullImage /
+  // _detailRow / _detailRowWithPhoto used to be the paragraph-style
+  // popup this screen's "View Details" button opened. onView (see the
+  // ListView.builder above) now pushes AdminHeroDetailsScreen instead —
+  // a proper full page with labeled field rows, one photo card per KYC
+  // document (with its typed number), tap-to-zoom, and Approve/Reject
+  // pinned at the bottom. Nothing in this file called the old dialog
+  // anymore (verified — zero call sites), so removing it is a pure
+  // dead-code deletion with no behaviour change.
   // TASK 3 (Aug 8 2026) — KYC & Selfie Guard.
   // There's no single stored "kycComplete" boolean on the hero doc, so
   // completeness is derived from the actual required fields written by

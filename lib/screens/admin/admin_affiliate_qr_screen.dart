@@ -43,6 +43,8 @@ const Color _text = Color(0xFFEEEEF5);
 const Color _muted = Color(0xFF7777A0);
 const Color _pink = Color(0xFFFF4FA3);
 const Color _green = Color(0xFF00C853);
+// Inline validation feedback on the custom-slug field (Aug 17 2026).
+const Color _red = Color(0xFFFF5252);
 
 // NEW (Aug 13 2026 — dynamic QR): the printed code now encodes the
 // /q/?c=CODE short link (see web/q/index.html) instead of the campaign
@@ -98,6 +100,13 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
   final GlobalKey _qrBoundaryKey = GlobalKey();
   final TextEditingController _labelController = TextEditingController();
 
+  /// Optional readable slug for the printed link (Aug 17 2026). Blank =
+  /// the original random 6-char code, so this is purely additive.
+  final TextEditingController _slugController = TextEditingController();
+  final TextEditingController _shareMessageController = TextEditingController(
+    text: 'Welcome to Allin1 Super App! Here is your onboarding link:',
+  );
+
   _AffiliateType _type = _AffiliateType.hero;
   bool _busy = false;
   bool _roundedShape = false;
@@ -129,6 +138,20 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
   /// past that the quiet-zone and finder patterns start to suffer for
   /// reasons error correction cannot fix.
   double _logoScale = 0.22;
+
+  /// Thickness of the white ring around a custom logo, as a fraction of
+  /// the LOGO's width (0.10 = a 5% ring on each side).
+  ///
+  /// Ratio-of-logo, not ratio-of-QR (Aug 17 2026 — Nizam: "logo outer la
+  /// oru white box overa vanthturuthu... logo suththi oralavuku white
+  /// border vantha pothum"). The old code sized the patch off the QR
+  /// width, so shrinking the logo did not shrink its white surround —
+  /// at small logo sizes the box dwarfed the logo inside it.
+  ///
+  /// Do not set this to 0. The ring is functional: it gives scanners a
+  /// clean boundary where a transparent or non-square PNG would
+  /// otherwise leave half-covered dark modules showing.
+  static const double _kLogoBorderRatio = 0.10;
 
   double get _logoAreaPct => _logoScale * _logoScale * 100;
 
@@ -193,6 +216,8 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
   @override
   void dispose() {
     _labelController.dispose();
+    _slugController.dispose();
+    _shareMessageController.dispose();
     super.dispose();
   }
 
@@ -211,16 +236,61 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
       setState(() => _statusMessage = 'Enter a name/label for this affiliate first.');
       return;
     }
+
+    // CUSTOM SLUG (Aug 17 2026 — Nizam: "antha link customer panic
+    // aackuramari text back la varuthu... decentana extension words
+    // naane customize pandramari link venum").
+    //
+    // Optional. Left blank, the random 6-char generator runs exactly as
+    // before, so nothing about the existing flow changes.
+    String? customCode;
+    final rawCustom = _slugController.text.trim();
+    if (rawCustom.isNotEmpty) {
+      customCode = AffiliateService.normalizeCustomCode(rawCustom);
+      if (customCode == null) {
+        setState(() => _statusMessage =
+            'Custom link must be 3–32 characters, letters/numbers/hyphens, '
+            'and include at least one letter. Words like "verify", "otp" or '
+            '"payment" are blocked — they make a link look like a scam.');
+        return;
+      }
+    }
+
     setState(() {
       _busy = true;
       _statusMessage = null;
     });
     try {
       final adminUid = FirebaseAuth.instance.currentUser?.uid ?? 'unknown_admin';
+
+      // Checked here, not inside the service, so the admin gets a clear
+      // "already taken" instead of silently overwriting a live campaign
+      // (which would repoint its QR and merge its scan counts).
+      if (customCode != null &&
+          !await AffiliateService.instance.isCodeAvailable(customCode)) {
+        if (!mounted) return;
+        setState(() {
+          _busy = false;
+          _statusMessage =
+              '"$customCode" is already in use by another campaign. '
+              'Try a different word.';
+        });
+        return;
+      }
+
+      String destination = 'https://erode-super-app.web.app/';
+      if (_type == _AffiliateType.hero) {
+        destination = 'https://hero-allin1.web.app/';
+      } else if (_type == _AffiliateType.seller) {
+        destination = 'https://grow-allin1.web.app/';
+      }
+
       final code = await AffiliateService.instance.createAffiliateCode(
         type: _type.value,
         label: label,
         createdBy: adminUid,
+        destination: destination,
+        customCode: customCode,
       );
       if (!mounted) return;
       setState(() {
@@ -228,6 +298,7 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
         _activeType = _type;
         _activeLabel = label;
         _labelController.clear();
+        _slugController.clear();
         _statusMessage = 'Generated code $code — customize below, then save/share.';
       });
     } catch (e) {
@@ -235,6 +306,168 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
       setState(() => _statusMessage = 'Could not generate code: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  // ================================================================
+  // DELETE / RETIRE A CAMPAIGN  (Aug 17 2026)
+  // ================================================================
+  // Two different needs, deliberately offered as two different actions,
+  // because they have very different consequences and an admin under
+  // time pressure will otherwise reach for whichever one is closest.
+  //
+  //   PAUSE  — the campaign was real. Keeps every scan/signup number for
+  //            reporting; the printed QR stops sending people to the
+  //            campaign destination and lands them on the app root
+  //            instead. Reversible. This is the right choice ~90% of
+  //            the time, so it is the SAFE (non-red) button.
+  //   DELETE — the campaign was a mistake and was never printed. The row
+  //            and the public redirect both go. Irreversible.
+  //
+  // A campaign with scans has been SEEN BY REAL PEOPLE, which usually
+  // means a QR is out in the world. Deleting that does not un-print the
+  // poster — it just makes those future scans attributable to nobody.
+  // So when scans > 0 the delete requires typing the code by hand: not
+  // theatre, it is the difference between "I meant this one" and "I
+  // long-pressed the wrong row".
+  Future<void> _confirmDeleteCampaign({
+    required String code,
+    required String label,
+    required int scans,
+    required int signups,
+    required bool isActive,
+  }) async {
+    final hasTraffic = scans > 0 || signups > 0;
+    final typedCtrl = TextEditingController();
+
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final typedOk = !hasTraffic ||
+              typedCtrl.text.trim().toLowerCase() == code.toLowerCase();
+          return AlertDialog(
+            backgroundColor: _card,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text(
+              hasTraffic ? 'Retire or delete?' : 'Delete this campaign?',
+              style: const TextStyle(color: _text, fontWeight: FontWeight.w800),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: const TextStyle(
+                          color: _text, fontWeight: FontWeight.w700)),
+                  Text(code,
+                      style: const TextStyle(color: _muted, fontSize: 12)),
+                  const SizedBox(height: 12),
+                  if (hasTraffic) ...[
+                    Text(
+                      'This campaign has $scans scan(s) and $signups signup(s). '
+                      'Real people have used it, so a printed QR is probably '
+                      'out there.',
+                      style: const TextStyle(
+                          color: _muted, fontSize: 12.5, height: 1.45),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Deleting will NOT un-print those posters — future '
+                      'scans will just land on the app home page and count '
+                      'for nobody. Pausing keeps all the numbers and can be '
+                      'undone.',
+                      style: TextStyle(
+                          color: _muted, fontSize: 12.5, height: 1.45),
+                    ),
+                    const SizedBox(height: 14),
+                    Text('Type $code to confirm deletion:',
+                        style: const TextStyle(color: _red, fontSize: 12)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: typedCtrl,
+                      autocorrect: false,
+                      style: const TextStyle(color: _text),
+                      onChanged: (_) => setLocal(() {}),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        filled: true,
+                        fillColor: _bg,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: _border),
+                        ),
+                      ),
+                    ),
+                  ] else
+                    const Text(
+                      'No scans and no signups yet — nothing is lost. If this '
+                      'QR was already printed, pause it instead.',
+                      style: TextStyle(
+                          color: _muted, fontSize: 12.5, height: 1.45),
+                    ),
+                ],
+              ),
+            ),
+            actionsOverflowDirection: VerticalDirection.down,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel', style: TextStyle(color: _muted)),
+              ),
+              if (isActive)
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, 'pause'),
+                  child: const Text('Pause instead',
+                      style: TextStyle(
+                          color: _green, fontWeight: FontWeight.w700)),
+                ),
+              TextButton(
+                onPressed: typedOk ? () => Navigator.pop(ctx, 'delete') : null,
+                child: Text(
+                  'Delete',
+                  style: TextStyle(
+                    color: typedOk ? _red : _muted,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    typedCtrl.dispose();
+    if (action == null || !mounted) return;
+
+    try {
+      if (action == 'pause') {
+        await AffiliateService.instance.setActive(code, false);
+        if (!mounted) return;
+        setState(() => _statusMessage =
+            'Campaign $code paused — its numbers are kept and it can be '
+            'resumed any time.');
+        return;
+      }
+
+      await AffiliateService.instance.deleteAffiliateCode(code);
+      if (!mounted) return;
+      setState(() {
+        _statusMessage = 'Campaign $code deleted.';
+        // Clear the preview if the deleted code is the one on screen,
+        // otherwise the QR panel keeps offering Save/Share for a link
+        // that no longer resolves.
+        if (_activeCode == code) {
+          _activeCode = null;
+          _activeLabel = null;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _statusMessage = 'Could not $action campaign: $e');
     }
   }
 
@@ -287,7 +520,7 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
               name: 'allin1_affiliate_${_activeCode}_qr.png',
             ),
           ],
-          text: '${_activeLabel ?? 'Your'} Allin1 referral QR: $_activeUrl',
+          text: '${_shareMessageController.text.trim()} $_activeUrl',
         ),
       );
       if (!mounted) return;
@@ -426,6 +659,51 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
                     ),
+                    const SizedBox(height: 10),
+                    // ── Custom readable link (Aug 17 2026) ──────────
+                    // Optional. A random code like K7M2XQ on a printed
+                    // poster reads like a phishing token to the person
+                    // being asked to scan it; "erode-hotels" reads like
+                    // a local business. Blank keeps the old random code.
+                    TextField(
+                      controller: _slugController,
+                      style: const TextStyle(color: _text),
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        prefixText: 'my-allin1.web.app/q/?c=',
+                        prefixStyle: const TextStyle(
+                            color: _muted, fontSize: 12.5),
+                        hintText: 'erode-hotels',
+                        hintStyle: const TextStyle(color: _muted, fontSize: 13),
+                        helperText: _slugController.text.trim().isEmpty
+                            ? 'Optional — leave blank for an auto code'
+                            : (AffiliateService.normalizeCustomCode(
+                                        _slugController.text) ==
+                                    null
+                                ? 'Not usable — 3–32 chars, letters/numbers/'
+                                    'hyphens, must contain a letter'
+                                : 'Link will be: my-allin1.web.app/q/?c='
+                                    '${AffiliateService.normalizeCustomCode(_slugController.text)}'),
+                        helperStyle: TextStyle(
+                          fontSize: 11,
+                          color: _slugController.text.trim().isNotEmpty &&
+                                  AffiliateService.normalizeCustomCode(
+                                          _slugController.text) ==
+                                      null
+                              ? _red
+                              : _muted,
+                        ),
+                        helperMaxLines: 2,
+                        filled: true,
+                        fillColor: _bg,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: _border),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
@@ -477,36 +755,73 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                                 eyeStyle: QrEyeStyle(eyeShape: qrEyeShape, color: _fgColor),
                                 dataModuleStyle:
                                     QrDataModuleStyle(dataModuleShape: qrModuleShape, color: _fgColor),
-                                // TRUE embedded image — qr_flutter paints
-                                // this into the code itself rather than
-                                // stacking a widget on top, so it is
-                                // centred exactly on the module grid.
-                                embeddedImage:
-                                    (_logoMode == _LogoMode.custom && _logoBytes != null)
-                                        ? MemoryImage(_logoBytes!)
-                                        : null,
-                                embeddedImageStyle: QrEmbeddedImageStyle(
-                                  size: Size.square(qrSize * _logoScale),
-                                ),
+                                // FIX (Aug 17 2026 — Nizam: "qr ku namma
+                                // upload pandra logo outer la oru white
+                                // box overa vanthturuthu").
+                                //
+                                // ROOT CAUSE: the logo was being drawn
+                                // TWICE. qr_flutter's `embeddedImage`
+                                // painted it into the code here, and the
+                                // Stack overlay below then painted the
+                                // SAME image again on top — inside a
+                                // white container 6% wider than the logo
+                                // PLUS 2.5%-of-QR padding on every side.
+                                // Those two paddings compounded into the
+                                // oversized white box, and the doubled
+                                // draw made the logo look soft where the
+                                // two copies were a fraction out of
+                                // alignment.
+                                //
+                                // embeddedImage is dropped and the
+                                // overlay kept, because the overlay is
+                                // the only one of the two that can also
+                                // provide the "quiet patch" a
+                                // transparent/non-square PNG needs (see
+                                // below). One draw, one padding.
+                                embeddedImage: null,
                               ),
-                              // A solid quiet patch behind the custom
-                              // logo. Without it, half-covered dark
+                              // The logo, on a white patch just big
+                              // enough to be a border.
+                              //
+                              // The patch is not decoration — without a
+                              // solid backdrop, half-covered dark
                               // modules peek out around a transparent or
                               // non-square PNG and scanners read noise
                               // where they expect clean data.
+                              //
+                              // Sized as a RATIO OF THE LOGO, not of the
+                              // whole QR, which is what went wrong
+                              // before: _kLogoBorderRatio 0.10 means the
+                              // white ring is always 5% of the logo's
+                              // width on each side, whether the logo is
+                              // set to 14% or 30% of the code. Ratio of
+                              // QR made the border grow independently of
+                              // the logo and swamp it at small sizes.
                               if (_logoMode == _LogoMode.custom && _logoBytes != null)
                                 IgnorePointer(
-                                  child: Container(
-                                    width: qrSize * (_logoScale + 0.03),
-                                    height: qrSize * (_logoScale + 0.03),
-                                    decoration: BoxDecoration(
-                                      color: _bgColor,
-                                      borderRadius: BorderRadius.circular(qrSize * 0.02),
-                                    ),
-                                    child: Padding(
-                                      padding: EdgeInsets.all(qrSize * 0.012),
-                                      child: Image.memory(_logoBytes!, fit: BoxFit.contain),
-                                    ),
+                                  child: Builder(
+                                    builder: (_) {
+                                      final logoBox = qrSize * _logoScale;
+                                      final patch =
+                                          logoBox * (1 + _kLogoBorderRatio);
+                                      return Container(
+                                        width: patch,
+                                        height: patch,
+                                        decoration: BoxDecoration(
+                                          color: _bgColor,
+                                          borderRadius: BorderRadius.circular(
+                                              patch * 0.14),
+                                        ),
+                                        child: Padding(
+                                          padding: EdgeInsets.all(
+                                              logoBox * _kLogoBorderRatio / 2),
+                                          child: Image.memory(
+                                            _logoBytes!,
+                                            fit: BoxFit.contain,
+                                          ),
+                                        ),
+                                      );
+                                    },
                                   ),
                                 ),
                               if (_logoMode == _LogoMode.brand)
@@ -695,6 +1010,41 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: _card,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: _border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'SHARE MESSAGE',
+                        style: TextStyle(color: _muted, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _shareMessageController,
+                        style: const TextStyle(color: _text, fontSize: 13.5),
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          hintText: 'Message to send with link...',
+                          hintStyle: TextStyle(color: _muted.withValues(alpha: 0.5)),
+                          filled: true,
+                          fillColor: const Color(0xFFF5F5FA),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(
@@ -743,6 +1093,15 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                 'ALL AFFILIATE CODES',
                 style: TextStyle(color: _muted, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1),
               ),
+              const SizedBox(height: 4),
+              // Discoverability for the two row gestures. A long-press
+              // action nobody is told about may as well not exist —
+              // that is how the delete capability stayed "missing" even
+              // though firestore.rules has allowed it all along.
+              const Text(
+                'Tap a row for insights · long-press to pause or delete',
+                style: TextStyle(color: _muted, fontSize: 10.5),
+              ),
               const SizedBox(height: 12),
               StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: AffiliateService.instance.watchAffiliateCodes(),
@@ -778,6 +1137,7 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                       // (scans over time, unique vs total, OS split,
                       // live destination editing) — the QRCG-style
                       // detail view Nizam asked for.
+                      final isActive = (data['active'] as bool?) ?? true;
                       return InkWell(
                         onTap: () => Navigator.push(
                           context,
@@ -785,6 +1145,20 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                             builder: (_) =>
                                 AdminCampaignDetailScreen(code: doc.id),
                           ),
+                        ),
+                        // NEW (Aug 17 2026 — Nizam: "wrong affilate qr ah
+                        // namma admin nala delete pannamudila").
+                        // Long-press rather than a visible trash icon on
+                        // every row: tapping a row is the common action
+                        // (open insights) and a delete button sitting
+                        // next to it, on a list of live campaigns, is a
+                        // misfire waiting to happen.
+                        onLongPress: () => _confirmDeleteCampaign(
+                          code: doc.id,
+                          label: (data['label'] as String?) ?? doc.id,
+                          scans: scans,
+                          signups: signups,
+                          isActive: isActive,
                         ),
                         borderRadius: BorderRadius.circular(14),
                         child: Container(

@@ -87,6 +87,7 @@ class FoodHubScreen extends StatelessWidget {
                     subtitle: shop.subtitle,
                     icon: Icons.storefront_rounded,
                     gradient: shop.gradient,
+                    imageAsset: shop.imageAsset,
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => PartnerShopOrderScreen(shop: shop)),
@@ -107,6 +108,7 @@ class _HubTile extends StatelessWidget {
   final IconData icon;
   final List<Color> gradient;
   final VoidCallback onTap;
+  final String? imageAsset;
 
   const _HubTile({
     super.key,
@@ -115,6 +117,7 @@ class _HubTile extends StatelessWidget {
     required this.icon,
     required this.gradient,
     required this.onTap,
+    this.imageAsset,
   });
 
   @override
@@ -135,8 +138,14 @@ class _HubTile extends StatelessWidget {
             Container(
               width: 44,
               height: 44,
-              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-              child: Icon(icon, color: gradient.last, size: 22),
+              decoration: BoxDecoration(
+                color: Colors.white, 
+                shape: BoxShape.circle,
+                image: imageAsset != null
+                    ? DecorationImage(image: AssetImage(imageAsset!), fit: BoxFit.contain)
+                    : null,
+              ),
+              child: imageAsset == null ? Icon(icon, color: gradient.last, size: 22) : null,
             ),
             const Spacer(),
             Text(label, style: GoogleFonts.outfit(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w900), maxLines: 1, overflow: TextOverflow.ellipsis),

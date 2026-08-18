@@ -148,27 +148,65 @@ class _RewardsScreenState extends State<RewardsScreen>
               end: Alignment.bottomRight,
             ),
           ),
+          // RESTRUCTURED (Aug 18 2026 — CTO performance review).
+          //
+          // Header + tab bar are now FIXED, and only the tab body
+          // scrolls. This exists for one specific reason: the Erode
+          // Offers tab was changed to a virtualized ListView.builder,
+          // and a ListView nested inside a SingleChildScrollView must
+          // set shrinkWrap: true — which builds every child anyway and
+          // would have made that optimisation purely cosmetic. Giving
+          // the tab body its own Expanded slot lets the list actually
+          // virtualize.
+          //
+          // Tab 0 (Rewards) keeps its exact previous behaviour: same
+          // SingleChildScrollView, same padding, same children, same
+          // BouncingScrollPhysics — it is just scoped to the tab body
+          // now instead of wrapping the header too.
           child: SafeArea(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(
-                horizontalPadding,
-                18,
-                horizontalPadding,
-                110,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(),
-                  const SizedBox(height: 18),
-                  _buildTopTabBar(),
-                  const SizedBox(height: 22),
-                  if (_topTab == 0) ..._buildRewardsTabContent()
-                  else const ErodeOffersSection(),
-                  const SizedBox(height: 40),
-                ],
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    18,
+                    horizontalPadding,
+                    0,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(),
+                      const SizedBox(height: 18),
+                      _buildTopTabBar(),
+                      const SizedBox(height: 22),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: _topTab == 0
+                      ? SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          padding: EdgeInsets.fromLTRB(
+                            horizontalPadding,
+                            0,
+                            horizontalPadding,
+                            110,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ..._buildRewardsTabContent(),
+                              const SizedBox(height: 40),
+                            ],
+                          ),
+                        )
+                      // Owns its own ListView.builder — see the note in
+                      // erode_offers_section.dart.
+                      : const ErodeOffersSection(),
+                ),
+              ],
             ),
           ),
         ),
@@ -341,26 +379,28 @@ class _RewardsScreenState extends State<RewardsScreen>
         gradient: const [_aiPurple, _aiPurpleDark],
         ctaLabel: _aiQuizClaimed ? 'Already claimed' : 'Tap to answer',
       ),
-      const SizedBox(height: 26),
-      Text(
-        'More launch rewards',
-        style: GoogleFonts.outfit(
-          color: _rewardInk,
-          fontSize: 20,
-          fontWeight: FontWeight.w900,
-        ),
-      ),
-      const SizedBox(height: 12),
-      ...widget.promoOffers.map(
-        (offer) => Padding(
-          padding: const EdgeInsets.only(bottom: 14),
-          child: _RewardOfferTile(
-            offer: offer,
-            onClaim: () => widget.onClaimPromo?.call(offer.id),
+      if (widget.promoOffers.isNotEmpty) ...[
+        const SizedBox(height: 26),
+        Text(
+          'More launch rewards',
+          style: GoogleFonts.outfit(
+            color: _rewardInk,
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
           ),
         ),
-      ),
-      const SizedBox(height: 24),
+        const SizedBox(height: 12),
+        ...widget.promoOffers.map(
+          (offer) => Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: _RewardOfferTile(
+              offer: offer,
+              onClaim: () => widget.onClaimPromo?.call(offer.id),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
       const BannerAdsSlider(
         height: 240,
         imageUrls: [

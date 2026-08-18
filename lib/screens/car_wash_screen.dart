@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
 // ── Brand constants (mirrors dashboard) ─────────────────────────
 const Color _kPink     = Color(0xFFFF4FA3);
@@ -163,7 +164,7 @@ class _CarWashScreenState extends State<CarWashScreen> {
         background: Stack(
           fit: StackFit.expand,
           children: [
-            Image.network(
+            CachedCloudImage(
               'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?w=800&q=80',
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => Container(color: _kDark2),
@@ -234,7 +235,7 @@ class _ServiceCard extends StatelessWidget {
               ClipRRect(
                 borderRadius:
                     const BorderRadius.vertical(top: Radius.circular(20)),
-                child: Image.network(
+                child: CachedCloudImage(
                   service.imageUrl,
                   height: 190,
                   width: double.infinity,
@@ -555,3 +556,4 @@ Future<void> _launch(String uriStr) async {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }
+

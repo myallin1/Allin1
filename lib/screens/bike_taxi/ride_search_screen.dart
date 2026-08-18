@@ -20,6 +20,7 @@ import '../../utils/otp_utils.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../../widgets/cancellation_reason_sheet.dart';
 import 'ride_tracking_screen.dart';
+import '../../config/hero_service_access.dart';
 
 class RideSearchScreen extends StatefulWidget {
   final RideModel ride;
@@ -367,12 +368,52 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         final heroCategory =
             _normalizeCategoryKey((data['vehicleType'] as String?) ?? 'bike');
 
+        // ── PER-HERO SERVICE ACCESS (Aug 17 2026) ──────────────────
+        // Admin can switch individual kinds of work off for a specific
+        // hero — see lib/config/hero_service_access.dart for why.
+        // Checked BEFORE the category logic below, because the whole
+        // point is to override SMART MODE's automatic bike->parcel
+        // assignment for heroes who shouldn't be doing parcels.
+        //
+        // `data` here is the online_heroes/{uid} presence node, into
+        // which hero_home_screen mirrors serviceAccess when going
+        // online. Defaults to allowed when the field is absent, so every
+        // hero registered before this feature keeps receiving exactly
+        // what they receive today.
+        final requiredServiceKey = requestedCategory == 'parcel'
+            ? HeroServiceKeys.parcel
+            : HeroServiceKeys.ride;
+        if (!isServiceAllowed(data, requiredServiceKey)) {
+          debugPrint(
+            '🔥 [REJECTED] Hero $heroId rejected: admin has disabled '
+            '"$requiredServiceKey" for this hero',
+          );
+          continue;
+        }
+
         // ── SMART MODE LOGIC: Parcel requests go to BOTH Parcel and Bike heroes ──
         bool categoryMatch = false;
         if (requestedCategory == 'parcel') {
           categoryMatch = heroCategory == 'parcel' || heroCategory == 'bike';
           if (categoryMatch && heroCategory == 'bike') {
             debugPrint('🔥 [SMART MODE] Hero $heroId matched via bike-fallback for parcel request');
+          }
+          // ADMIN GRANT (Aug 17 2026): SMART MODE above only ever widened
+          // parcel dispatch to BIKE heroes, so an auto/cab hero could
+          // never receive a parcel job no matter what — the permission
+          // toggle could take parcel away but had no way to give it.
+          // An explicit `parcel: true` from admin now opts any hero in,
+          // whatever their vehicle category. Deliberately checked AFTER
+          // the category rules and only ever widens the match: it can
+          // add a hero, never remove one (removal is the
+          // isServiceAllowed() check further up).
+          if (!categoryMatch &&
+              isServiceExplicitlyGranted(data, HeroServiceKeys.parcel)) {
+            categoryMatch = true;
+            debugPrint(
+              '🔥 [ADMIN GRANT] Hero $heroId ($heroCategory) matched for '
+              'parcel via explicit admin permission',
+            );
           }
         } else {
           categoryMatch = (heroCategory == requestedCategory);

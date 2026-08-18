@@ -29,6 +29,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../config/economic_vision_data.dart';
+import '../widgets/pulse_glow_text.dart';
 
 const Color _bg = Color(0xFFFFF6FA);
 const Color _surface = Color(0xFFFFFFFF);
@@ -75,9 +76,11 @@ class EconomicVisionScreen extends StatelessWidget {
                 const SizedBox(height: 10),
                 _categoryBreakdown(),
                 const SizedBox(height: 18),
-                _sectionTitle('📍  ஈரோட்டின் நிலை'),
+                _sectionTitle('🚀  MyAllin1 உறுதிமொழிகள்'),
                 const SizedBox(height: 10),
-                _erodeCard(),
+                _corePointsCard(),
+                const SizedBox(height: 18),
+                _heroImage(),
                 const SizedBox(height: 18),
                 _sectionTitle('💡  MyAllin1 தீர்வு'),
                 const SizedBox(height: 10),
@@ -126,7 +129,8 @@ class EconomicVisionScreen extends StatelessWidget {
                         fontWeight: FontWeight.w700)),
               ),
               const SizedBox(height: 10),
-              Text(EconomicVisionData.heroAmount,
+              PulseGlowText(
+                  text: EconomicVisionData.heroAmount,
                   style: GoogleFonts.outfit(
                       color: Colors.white,
                       fontSize: 36,
@@ -423,169 +427,71 @@ class EconomicVisionScreen extends StatelessWidget {
         ),
       );
 
-  // ── Erode ─────────────────────────────────────────────────────
-  Widget _erodeCard() => _shell(
+  // ── MyAllin1 Core Points ──────────────────────────────────────
+  Widget _corePointsCard() => _shell(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const Icon(Icons.location_city_rounded, color: _pinkDark, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('ஈரோடு மாவட்டம்',
-                      style: GoogleFonts.outfit(
-                          color: _text,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            // Two figures, deliberately separated: the restaurant number is
-            // the one a hotel owner can verify on his own statement, so it
-            // stays the anchor. The district-wide number gives the real
-            // scale across all 8 sectors. Merging them would lose the
-            // verifiable one, which is the more persuasive of the two.
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(13),
-              decoration: BoxDecoration(
-                color: _pink.withValues(alpha: 0.09),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(EconomicVisionData.erodeTotalLabel,
-                      style: GoogleFonts.outfit(
-                          color: _muted, fontSize: 11)),
-                  const SizedBox(height: 4),
-                  Text(EconomicVisionData.erodeTotalAmount,
-                      style: GoogleFonts.outfit(
-                          color: _pinkDark,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900)),
-                  Text(EconomicVisionData.erodeTotalNote,
-                      style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              EconomicVisionData.erodeRestaurantIntro,
-              style: GoogleFonts.outfit(color: _muted, fontSize: 12.5),
-            ),
-            const SizedBox(height: 6),
-            Text(EconomicVisionData.erodeRestaurantAmount,
-                style: GoogleFonts.outfit(
-                    color: _pinkDark, fontSize: 30, fontWeight: FontWeight.w900)),
-            Text(EconomicVisionData.erodeRestaurantNote,
-                style: GoogleFonts.outfit(color: _muted, fontSize: 12.5)),
-            const SizedBox(height: 16),
-            // LAYOUT FIX (Aug 13 2026 — CTO review: "the calculation looks
-            // scattered"). The old version paired two unrelated values per
-            // row (e.g. "× 30% கமிஷன்" next to "× 12 மாதங்கள்"), so the eye
-            // had no single path to follow and the arithmetic was not
-            // actually legible as arithmetic. Rebuilt as a genuine vertical
-            // equation: a fixed operator column on the left, the value, and
-            // a plain-language note on the right — then a rule and the
-            // total, exactly like a hand-written sum. A layman can now read
-            // straight down and see where ₹36 கோடி comes from.
-            Container(
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-              decoration: BoxDecoration(
-                color: _bg,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _card),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('கணக்கு எப்படி?',
-                      style: GoogleFonts.outfit(
-                          color: _muted,
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.4)),
-                  const SizedBox(height: 12),
-                  ...EconomicVisionData.erodeEquation.map((e) => _eqRow(e.$1, e.$2, e.$3)),
-                  const SizedBox(height: 10),
-                  Container(height: 1.2, color: _pinkDark.withValues(alpha: 0.25)),
-                  const SizedBox(height: 10),
-                  _eqRow(EconomicVisionData.erodeEquationTotal.$1, EconomicVisionData.erodeEquationTotal.$2,
-                      EconomicVisionData.erodeEquationTotal.$3, total: true),
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: _pink.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.storefront_rounded,
-                            color: _pinkDark, size: 16),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(EconomicVisionData.erodePerShopLabel,
-                              style: GoogleFonts.outfit(
-                                  color: _text,
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w700)),
+            ...EconomicVisionData.myAllin1CorePoints.map((point) => Padding(
+                  padding: const EdgeInsets.only(bottom: 18),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: _pink.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        Text(EconomicVisionData.erodePerShopAmount,
-                            style: GoogleFonts.outfit(
-                                color: _pinkDark,
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w900)),
-                      ],
-                    ),
+                        child: Icon(point.$3, color: _pinkDark, size: 20),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(point.$1,
+                                style: GoogleFonts.outfit(
+                                    color: _pinkDark,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 6),
+                            Text(point.$2,
+                                style: GoogleFonts.outfit(
+                                    color: _text,
+                                    fontSize: 12.5,
+                                    height: 1.4)),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                )),
           ],
         ),
       );
 
-  /// One line of the Erode equation: a fixed-width operator gutter, the
-  /// value, then a plain-language note. The fixed gutter is what makes
-  /// the ×, × , × and = align vertically down the left edge, so the block
-  /// reads as a sum rather than as four unrelated rows.
-  Widget _eqRow(String op, String value, String note, {bool total = false}) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: total ? 0 : 9),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 16,
-            child: Text(op,
-                style: GoogleFonts.outfit(
-                    color: total ? _pinkDark : _muted,
-                    fontSize: total ? 16 : 14,
-                    fontWeight: FontWeight.w800)),
-          ),
-          SizedBox(
-            width: 96,
-            child: Text(value,
-                style: GoogleFonts.outfit(
-                    color: total ? _pinkDark : _text,
-                    fontSize: total ? 17 : 13.5,
-                    fontWeight: total ? FontWeight.w900 : FontWeight.w800)),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(note,
-                style: GoogleFonts.outfit(
-                    color: _muted,
-                    fontSize: total ? 11.5 : 11,
-                    fontWeight: total ? FontWeight.w700 : FontWeight.w500)),
+  // ── Hero Image ────────────────────────────────────────────────
+  Widget _heroImage() {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: _pink.withValues(alpha: 0.15),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Image.asset(
+          'assets/images/erode_delivery_hero.png',
+          width: double.infinity,
+          fit: BoxFit.fitWidth,
+        ),
       ),
     );
   }

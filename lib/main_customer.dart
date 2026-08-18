@@ -467,6 +467,9 @@ Future<void> _runBootPhase1() async {
       // _runBootPhase1() returns, the pending code (if any) is
       // guaranteed to be on disk before anything downstream can read it.
       await AffiliateService.instance.captureRefFromUrl();
+      
+      // Aug 16 2026: Check clipboard for APK install tracking
+      await AffiliateService.instance.captureRefFromClipboard();
     }
 
     // If this launch came from Android's share sheet (customer shared a

@@ -145,6 +145,22 @@ class ServiceRequestModel {
   final String? paymentStatus;
   final bool? estimateApprovedByCustomer;
 
+  /// Seller's own kitchen stage for shop-menu food orders — 'new',
+  /// 'accepted', 'preparing', 'ready', 'delivery_requested'.
+  /// (Aug 17 2026 seller audit.)
+  ///
+  /// Deliberately a SEPARATE axis from [status]: `status` belongs to the
+  /// hero/admin dispatch state machine (pending -> hero_assigned ->
+  /// in_progress -> completed) and a hotel must never be able to move an
+  /// order along that machine. This tracks only what is happening in the
+  /// kitchen, and it is the field the seller's Accept / Preparing /
+  /// Food Ready / Book Delivery Partner strip drives.
+  ///
+  /// Null for every request type that has no cooking step (hero booking,
+  /// custom order, grocery, taxi) — those still broadcast to heroes
+  /// immediately at creation, exactly as before.
+  final String? sellerStage;
+
   /// Everything from Firestore's `details` map, untouched — so fields
   /// specific to one requestType (deliveryAddress, taskDescription,
   /// sellerName, etc.) are never lost even though this model doesn't
@@ -171,6 +187,7 @@ class ServiceRequestModel {
     this.finalAmountRoot,
     this.paymentStatus,
     this.estimateApprovedByCustomer,
+    this.sellerStage,
     this.createdAt,
     this.updatedAt,
   });
@@ -256,6 +273,7 @@ class ServiceRequestModel {
       finalAmountRoot: map['finalAmount'] as num?,
       paymentStatus: map['paymentStatus'] as String?,
       estimateApprovedByCustomer: map['estimateApprovedByCustomer'] as bool?,
+      sellerStage: map['sellerStage'] as String?,
       createdAt: parseFlexibleTimestamp(map['createdAt']),
       updatedAt: parseFlexibleTimestamp(map['updatedAt']),
     );
@@ -298,6 +316,10 @@ class ServiceRequestModel {
       'status': status,
       if (assignedHeroId != null) 'assignedHeroId': assignedHeroId,
       if (city != null) 'city': city,
+      // Cached so the seller dashboard's Hive-hydrated first paint shows
+      // the correct action button instead of flashing "Accept Order" on
+      // an order that is already cooking.
+      if (sellerStage != null) 'sellerStage': sellerStage,
       'details': {
         ...rawDetails,
         if (items.isNotEmpty) 'items': items.map((i) => i.toJson()).toList(),
@@ -329,6 +351,7 @@ class ServiceRequestModel {
       finalAmountRoot: finalAmountRoot,
       paymentStatus: paymentStatus,
       estimateApprovedByCustomer: estimateApprovedByCustomer,
+      sellerStage: sellerStage,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

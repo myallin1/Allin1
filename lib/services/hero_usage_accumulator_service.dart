@@ -57,8 +57,68 @@ class HeroUsageAccumulatorService {
   /// running does NOT reset the clock, so a lifecycle-resume re-confirming
   /// "still online" never loses already-accrued minutes.
   void startSession() {
+    // NOTE: this starts the ONLINE-TIME clock (used for the hero's own
+    // "online time" stat and the hero_sessions log). It no longer starts
+    // a BILLING clock — see _workStartedAt below.
     _sessionStartedAt ??= DateTime.now();
     _trueSessionStartedAt ??= DateTime.now();
+  }
+
+  // ================================================================
+  // BILLABLE WORK CLOCK (Aug 17 2026)
+  // ================================================================
+  // Nizam: "heros namma app kulla summa iruntha avanagaluku bill
+  // agakudathu... hero ride and yenna service yeduthu follow pandraro
+  // apo mattum".
+  //
+  // Before this, billable minutes were the SAME clock as online minutes:
+  // a hero who flipped Online and then waited two hours for a booking
+  // was billed for two hours of doing nothing. That is indefensible to
+  // the hero and it punishes exactly the behaviour we want (staying
+  // online and available).
+  //
+  // Now a separate clock that runs ONLY between accepting a job and
+  // finishing it. Waiting is free; working is metered.
+  //
+  // Kept as its own field rather than reusing _sessionStartedAt because
+  // the online-time stat still needs the full online period — the hero's
+  // earnings screen shows "online time", and that number should not
+  // shrink just because we stopped billing for idle time.
+  DateTime? _workStartedAt;
+  double _billableMinutesSinceFlush = 0;
+
+  /// Call when the hero ACCEPTS a ride or service request.
+  /// Idempotent — a re-confirm while already working does not restart
+  /// the clock and so cannot lose accrued time.
+  void startBillableWork() {
+    _workStartedAt ??= DateTime.now();
+  }
+
+  /// Call when the ride/task ends (completed, cancelled or released).
+  /// Banks the elapsed time and stops the clock, so nothing accrues
+  /// while the hero waits for the next job.
+  void stopBillableWork() {
+    final startedAt = _workStartedAt;
+    if (startedAt == null) return;
+    final mins = DateTime.now().difference(startedAt).inSeconds / 60.0;
+    if (mins > 0) _billableMinutesSinceFlush += mins;
+    _workStartedAt = null;
+  }
+
+  /// Billable minutes accrued since the last flush. Includes any time
+  /// still running on an open job, so a flush mid-job is accurate.
+  double consumeBillableMinutes() {
+    // Bank whatever is currently running, then restart that clock from
+    // now — same no-double-count discipline as consumeActiveMinutes().
+    final startedAt = _workStartedAt;
+    if (startedAt != null) {
+      final mins = DateTime.now().difference(startedAt).inSeconds / 60.0;
+      if (mins > 0) _billableMinutesSinceFlush += mins;
+      _workStartedAt = DateTime.now();
+    }
+    final out = _billableMinutesSinceFlush;
+    _billableMinutesSinceFlush = 0;
+    return out < 0 ? 0 : out;
   }
 
   /// When this online period truly began — unlike [_sessionStartedAt],
@@ -87,6 +147,19 @@ class HeroUsageAccumulatorService {
   /// from now -- so a mid-session flush (a ride completing) never
   /// double-counts the same minutes on the next flush when the hero
   /// eventually goes Offline.
+  /// NO LONGER USED FOR BILLING (Aug 17 2026).
+  ///
+  /// This returns ONLINE minutes — the whole period the hero was
+  /// available, including waiting. Billing now uses
+  /// [consumeBillableMinutes] instead, which only counts time spent on
+  /// an accepted job (Nizam: "summa iruntha bill agakudathu").
+  ///
+  /// Kept, not deleted, because "how long was this hero online" is still
+  /// a real question — but do NOT wire it back into flushUsageCost() or
+  /// idle time starts being charged again. The hero_sessions online-time
+  /// log deliberately computes its own duration from
+  /// [trueSessionStartedAt] rather than calling this, so it is unaffected
+  /// by the billing change.
   double consumeActiveMinutes() {
     final startedAt = _sessionStartedAt;
     if (startedAt == null) return 0;

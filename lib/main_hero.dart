@@ -30,6 +30,7 @@ import 'services/localization_service.dart';
 import 'services/map_service.dart';
 import 'services/migration_gate_service.dart';
 import 'services/theme_service.dart';
+import 'services/app_update_gate_service.dart';
 import 'widgets/branded_loading_screen.dart';
 import 'widgets/migration_notice_overlay.dart';
 
@@ -621,6 +622,13 @@ void main() async {
       // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch"): fire-and-forget,
       // fails open on any error — see MigrationGateService's own header.
       MigrationGateService.instance.start();
+
+      // NEW (Aug 17 2026 — hero update system). ONE Firestore read per
+      // launch, fire-and-forget, after runApp so it can never delay the
+      // first frame. Deliberately a .get() and not a listener: see
+      // AppUpdateGateService's header for why an update notice does not
+      // justify the standing cost of a live subscription per hero.
+      unawaited(AppUpdateGateService.instance.checkOnce('hero'));
 
       // Mark the video as seen only now that it has actually finished
       // playing (videoDone is only completed by AppSplashVideoScreen's own

@@ -74,7 +74,10 @@ class SellerSideDrawer extends StatelessWidget {
                   Navigator.pop(context);
                   Navigator.push(
                     context,
-                    MaterialPageRoute<void>(builder: (_) => const SellerSettingsScreen()),
+                    MaterialPageRoute<void>(
+                      settings: const RouteSettings(name: '/seller/SellerSettingsScreen'),
+                      builder: (_) => const SellerSettingsScreen(),
+                    ),
                   );
                 },
               ),

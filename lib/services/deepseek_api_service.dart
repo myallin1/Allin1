@@ -49,13 +49,8 @@ class DeepSeekApiService {
   static final Uri _endpoint =
       Uri.parse('https://api.deepseek.com/chat/completions');
 
-  /// deepseek-chat is the general conversational model and the right
-  /// default here: this agent answers plain admin questions (tool-calling
-  /// stays with Groq, exactly as Gemini does). deepseek-reasoner is the
-  /// slower chain-of-thought variant — kept as a documented alternative
-  /// rather than the default, since latency matters more than deep
-  /// reasoning for a quick admin chatbox.
-  static const String _model = 'deepseek-chat';
+  /// Default model: updated to v4-flash per user's IDE alignment.
+  static const String _model = 'deepseek-v4-flash';
 
   // NEW (Aug 12 2026 — Nizam: per-key model selection): mirrors the
   // same _modelPrefsKey/_resolveModel pattern added to

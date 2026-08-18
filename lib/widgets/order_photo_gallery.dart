@@ -13,6 +13,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/cloudinary_upload_service.dart';
+import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
 /// Compact horizontal strip of thumbnails, tap any one to open the
 /// full-screen viewer. Renders nothing if [imageUrls] is empty, so
@@ -69,7 +70,7 @@ class OrderPhotoGallery extends StatelessWidget {
               onTap: () => _openViewer(context, i),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(10),
-                child: Image.network(
+                child: CachedCloudImage(
                   // Thumbnails are the single worst bandwidth offender:
                   // without a width cap this slot downloads the full
                   // stored original just to render it at thumbnailSize.
@@ -81,22 +82,19 @@ class OrderPhotoGallery extends StatelessWidget {
                   width: thumbnailSize,
                   height: thumbnailSize,
                   fit: BoxFit.cover,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return Container(
-                      width: thumbnailSize,
-                      height: thumbnailSize,
-                      color: const Color(0xFF1A1A2E),
-                      child: const Center(
-                        child: SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF4FA3)),
-                        ),
+                  placeholder: Container(
+                    width: thumbnailSize,
+                    height: thumbnailSize,
+                    color: const Color(0xFF1A1A2E),
+                    child: const Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF4FA3)),
                       ),
-                    );
-                  },
-                  errorBuilder: (context, error, stack) => Container(
+                    ),
+                  ),
+                  errorWidget: Container(
                     width: thumbnailSize,
                     height: thumbnailSize,
                     color: const Color(0xFF1A1A2E),
@@ -155,13 +153,13 @@ class _OrderPhotoViewerState extends State<_OrderPhotoViewer> {
                 minScale: 1,
                 maxScale: 4,
                 child: Center(
-                  child: Image.network(
+                  child: CachedCloudImage(
                     // Full-screen viewer — no width cap (the user is
                     // zooming into detail here), but f_auto/q_auto still
                     // cut 30-50% via WebP/AVIF at identical quality.
                     CloudinaryUploadService.optimizedUrl(widget.imageUrls[i]),
                     fit: BoxFit.contain,
-                    errorBuilder: (context, error, stack) =>
+                    errorWidget:
                         const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
                   ),
                 ),
@@ -213,3 +211,4 @@ List<String> orderPhotoUrlsFromDetails(Map details) {
   if (single != null && single.isNotEmpty) return [single];
   return const [];
 }
+

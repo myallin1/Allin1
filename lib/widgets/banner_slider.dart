@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
 /// A text-only promo slide (e.g. "Internet Offers") rendered as a
 /// gradient card, mixed into the same auto-scrolling PageView as the
@@ -164,12 +165,11 @@ class _BannerAdsSliderState extends State<BannerAdsSlider> {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(18),
-              child: Image.network(
+              child: CachedCloudImage(
                 widget.imageUrls[imageIndex],
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const ColoredBox(
-                  color: Color(0xFFFFECF6),
-                  child: Center(child: Icon(Icons.broken_image, color: Color(0xFFFF4FA3))),
+                errorWidget: const Center(
+                  child: Icon(Icons.broken_image_rounded, color: Colors.grey),
                 ),
               ),
             ),
@@ -179,3 +179,4 @@ class _BannerAdsSliderState extends State<BannerAdsSlider> {
     );
   }
 }
+

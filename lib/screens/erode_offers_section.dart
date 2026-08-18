@@ -13,7 +13,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:cached_network_image/cached_network_image.dart';
+
+import '../services/cloudinary_upload_service.dart';
 import '../services/hive_cache.dart';
+import '../models/mobile_models.dart' show youtubeVideoId;
+import '../services/migration_gate_service.dart';
+import 'package:erode_superapp/widgets/cached_cloud_image.dart';
+import '../widgets/premium_theme.dart';
+import 'mobiles/listing_video_player.dart' show showPremiumVideoModal;
 
 const Color _offerInk = Color(0xFF121A3D);
 const Color _offerPink = Color(0xFFFF4FA3);
@@ -31,13 +39,86 @@ class _OfferRecord {
   final Map<String, dynamic> data;
 }
 
-class ErodeOffersSection extends StatelessWidget {
+class ErodeOffersSection extends StatefulWidget {
   const ErodeOffersSection({super.key});
 
-  /// Cache-first offers load. See the comment in [build] for the cost
-  /// rationale. Sorting stays client-side (newest first) exactly as
-  /// before — that was already required to avoid a composite index.
+  @override
+  State<ErodeOffersSection> createState() => _ErodeOffersSectionState();
+}
+
+class _ErodeOffersSectionState extends State<ErodeOffersSection> {
+  // ================================================================
+  // VERSION-GATED CACHE  (Aug 18 2026 — Nizam's "admin ping" model)
+  // ================================================================
+  // The TTL alone had one weakness and one cost:
+  //   * an admin edit could sit invisible for up to an hour, and
+  //   * every customer paid a full refetch each hour whether anything
+  //     had changed or not.
+  //
+  // Now the admin's explicit "Publish Rewards" action bumps
+  // rewardsVersion on system_settings/app_status, which
+  // MigrationGateService ALREADY watches with a listener that exists
+  // regardless of this feature. So:
+  //
+  //   version unchanged -> serve the Hive cache, ZERO Firestore reads,
+  //                        no matter how many times the app is opened
+  //   version changed   -> refetch once, re-cache, stamp the new version
+  //
+  // A customer who opens the app 10 times on a quiet day now costs 0
+  // offer reads instead of up to 10 refetches. And because the
+  // underlying listener is live, a publish reaches phones that already
+  // have the app OPEN — the "ping" behaviour Nizam wanted — without a
+  // single extra listener, connection, or collection.
+  //
+  // The 1-hour TTL is retained underneath as a safety net for the case
+  // where an admin edits offers and forgets to press Publish.
+  static const String _versionCacheKey = 'erode_offers_version';
+
+  Future<List<_OfferRecord>?>? _future;
+  int _lastAppliedVersion = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _loadOffers();
+    // Mid-session publishes: the kill-switch listener notifies on any
+    // app_status change, so a publish while the customer is browsing
+    // refreshes the list without them doing anything.
+    MigrationGateService.instance.addListener(_onGateChanged);
+  }
+
+  @override
+  void dispose() {
+    MigrationGateService.instance.removeListener(_onGateChanged);
+    super.dispose();
+  }
+
+  void _onGateChanged() {
+    final live = MigrationGateService.instance.rewardsVersion;
+    // Only react to an actual version move. migrationUrl changes fire
+    // this same callback and must not trigger a pointless refetch.
+    if (live == _lastAppliedVersion || !mounted) return;
+    setState(() => _future = _loadOffers());
+  }
+
+  Future<void> _refresh() async {
+    final next = _loadOffers();
+    if (mounted) setState(() => _future = next);
+    await next;
+  }
+
+  /// Cache-first offers load, gated on [rewardsVersion]. Sorting stays
+  /// client-side (newest first) — that was already required to avoid a
+  /// composite index.
   Future<List<_OfferRecord>?> _loadOffers() async {
+    // Compare the live published version against the one this device
+    // last cached against. A mismatch is the ONLY thing that forces a
+    // network refetch.
+    final liveVersion = MigrationGateService.instance.rewardsVersion;
+    final cachedVersion = await HiveCache.get<int>(_versionCacheKey) ?? -1;
+    final versionChanged = liveVersion != cachedVersion;
+    _lastAppliedVersion = liveVersion;
+
     final raw = await HiveCache.cachedFetch<List<dynamic>>(
       HiveCache.kErodeOffers,
       () async {
@@ -60,7 +141,25 @@ class ErodeOffersSection extends StatelessWidget {
         }).toList();
       },
       ttl: HiveCache.ttlErodeOffers,
+      // The version bump is what makes a publish land immediately;
+      // the TTL underneath is only the forgot-to-press-Publish net.
+      forceRefresh: versionChanged,
     );
+
+    // Stamp the version we just cached against — but ONLY after a
+    // successful fetch, so a failed refetch (offline, quota) leaves the
+    // old stamp in place and we retry next time instead of silently
+    // pinning stale content to the new version forever.
+    if (versionChanged && raw != null) {
+      await HiveCache.put(
+        _versionCacheKey,
+        liveVersion,
+        // Deliberately long-lived: this is a watermark, not content. If
+        // it expired on its own it would force a pointless refetch.
+        ttl: const Duration(days: 365),
+      );
+    }
+
     if (raw == null) return null;
 
     final records = raw
@@ -96,7 +195,7 @@ class ErodeOffersSection extends StatelessWidget {
     // for promo content — and admins can pull-to-refresh the dashboard
     // to force it sooner).
     return FutureBuilder<List<_OfferRecord>?>(
-      future: _loadOffers(),
+      future: _future,
       // FIX (root cause of "Could not load offers, please try again
       // later" — live bug, security rules were already correctly
       // deployed by this point): a Firestore query combining an
@@ -142,48 +241,81 @@ class ErodeOffersSection extends StatelessWidget {
             subtitle: 'Check back soon — Erode shop offers appear here.',
           );
         }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [_offerPurple, _offerPink],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.local_offer_rounded, color: Colors.white, size: 30),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Live offers from shops around Erode',
-                      style: GoogleFonts.outfit(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        height: 1.3,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+        // VIRTUALIZED (Aug 18 2026 — CTO performance review). This was
+        // a Column with `...docs.map(...)`, which builds EVERY offer
+        // card up-front regardless of how many are off-screen. That was
+        // survivable for image-only cards, but it is the worst possible
+        // container to later put video embeds in — N offers would mean
+        // N players alive at once. ListView.builder builds only what is
+        // visible (plus a small cache extent), so the cost stops
+        // scaling with the number of offers.
+        //
+        // NOTE this list owns its own scrolling — see rewards_screen.dart,
+        // which gives this tab an Expanded slot instead of nesting it in
+        // a SingleChildScrollView. That matters: a ListView inside
+        // another scrollable needs shrinkWrap: true, which builds all
+        // children anyway and would have made this change cosmetic.
+        //
+        // Pull-to-refresh is the manual escape hatch if an admin
+        // forgets to press Publish.
+        return RefreshIndicator(
+          color: _offerPink,
+          onRefresh: _refresh,
+          child: ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
             ),
-            const SizedBox(height: 16),
-            ...docs.map((doc) {
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
+            // +1 for the gradient banner, kept inside the list so it
+            // scrolls away naturally instead of eating permanent space.
+            itemCount: docs.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) return _buildBanner();
+              final doc = docs[index - 1];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 14),
                 child: _OfferCard(offerId: doc.id, data: doc.data),
               );
-            }),
-          ],
+            },
+          ),
         );
       },
+    );
+  }
+
+  Widget _buildBanner() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [_offerPurple, _offerPink],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.local_offer_rounded,
+                color: Colors.white, size: 30),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Live offers from shops around Erode',
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  height: 1.3,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -232,69 +364,194 @@ class _OfferCard extends StatelessWidget {
     final offerPercent = data['offerPercent'];
     final validTill = data['validTill'];
     final imageUrl = data['imageUrl'] as String?;
+    final videoId = youtubeVideoId(data['videoUrl'] as String?);
+    final hasImage = imageUrl != null && imageUrl.isNotEmpty;
 
-    return GestureDetector(
+    // VIP PASS CARD (Aug 18 2026 — Founder's premium brief). The
+    // admin's uploaded offer image becomes a full-bleed poster with a
+    // bottom scrim, so the shop name and discount read as engraved on
+    // the artwork rather than sitting in a separate text strip.
+    //
+    // COST NOTE: this is still the SAME single cached image request as
+    // the old 56x56 thumbnail — just requested at a poster-appropriate
+    // width. CachedNetworkImageProvider + optimizedUrl() are retained
+    // exactly as the bandwidth audit left them; the redesign spends
+    // pixels, not extra network calls.
+    return PremiumCard(
+      radius: kRadiusLg,
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => OfferDetailScreen(offerId: offerId, data: data)),
+          MaterialPageRoute(
+              builder: (_) => OfferDetailScreen(offerId: offerId, data: data)),
         );
       },
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: _offerPink.withValues(alpha: 0.18)),
-          boxShadow: [
-            BoxShadow(color: _offerPink.withValues(alpha: 0.10), blurRadius: 16, offset: const Offset(0, 8)),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [_offerPink, _offerPurple]),
-                borderRadius: BorderRadius.circular(16),
-                image: (imageUrl != null && imageUrl.isNotEmpty)
-                    ? DecorationImage(image: NetworkImage(imageUrl), fit: BoxFit.cover)
-                    : null,
-              ),
-              alignment: Alignment.center,
-              child: (imageUrl != null && imageUrl.isNotEmpty)
-                  ? null
-                  : Text(
-                      offerPercent != null ? '$offerPercent%' : 'OFFER',
-                      style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 156,
+            width: double.infinity,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (hasImage)
+                  Image(
+                    image: CachedNetworkImageProvider(
+                      CloudinaryUploadService.optimizedUrl(imageUrl,
+                          width: 720),
                     ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    shopName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.outfit(
-                      color: _offerPink,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w900,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _posterFallback(offerPercent),
+                  )
+                else
+                  _posterFallback(offerPercent),
+
+                // Scrim so white text stays readable over any photo.
+                const DecoratedBox(
+                  decoration: BoxDecoration(gradient: kImageScrim),
+                  child: SizedBox.expand(),
+                ),
+
+                if (offerPercent != null)
+                  Positioned(
+                    top: 12,
+                    left: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 7),
+                      decoration: BoxDecoration(
+                        gradient: kBrandGradient,
+                        borderRadius: BorderRadius.circular(kRadiusSm),
+                        boxShadow: glowShadow(kPremiumPink, strength: 0.7),
+                      ),
+                      child: Text(
+                        '$offerPercent% OFF',
+                        style: GoogleFonts.outfit(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _formatValidTill(validTill),
-                    style: GoogleFonts.outfit(color: _offerMuted, fontSize: 12.5, fontWeight: FontWeight.w600),
+
+                // WATCH OFFER — only when the admin actually saved a
+                // valid link. Tapping it opens the shared lazy modal
+                // player; nothing heavier than this poster image is
+                // ever built while scrolling.
+                if (videoId != null)
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: GestureDetector(
+                      onTap: () => showPremiumVideoModal(
+                        context,
+                        videoId: videoId,
+                        title: shopName,
+                        subtitle: _formatValidTill(validTill),
+                      ),
+                      child: const VideoGlowBadge(
+                          label: 'WATCH OFFER', compact: false),
+                    ),
                   ),
-                ],
-              ),
+
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 14,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        shopName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(
+                          color: Colors.white,
+                          fontSize: 19,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.3,
+                          shadows: const [
+                            Shadow(color: Colors.black54, blurRadius: 8),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      GlassChip(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.schedule_rounded,
+                                color: Colors.white, size: 12),
+                            const SizedBox(width: 5),
+                            Text(
+                              _formatValidTill(validTill),
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const Icon(Icons.chevron_right_rounded, color: _offerMuted),
-          ],
+          ),
+
+          // Footer strip — the "pass" tear-off edge.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: kPremiumPink.withValues(alpha: 0.10),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.local_offer_rounded,
+                      color: kPremiumPink, size: 15),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    videoId != null
+                        ? 'Tap to view details \u00b7 video available'
+                        : 'Tap to view shop details',
+                    style: premiumBody(size: 11.5),
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios_rounded,
+                    color: kPremiumMuted, size: 13),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Shown when an offer has no image, or its image fails to load.
+  /// Costs nothing — pure gradient + the discount number.
+  Widget _posterFallback(Object? offerPercent) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(gradient: kBrandGradient),
+      child: Center(
+        child: Text(
+          offerPercent != null ? '$offerPercent%' : 'OFFER',
+          style: GoogleFonts.outfit(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            fontSize: 34,
+            letterSpacing: -1,
+          ),
         ),
       ),
     );
@@ -358,7 +615,7 @@ class OfferDetailScreen extends StatelessWidget {
             if (imageUrl != null && imageUrl.isNotEmpty)
               ClipRRect(
                 borderRadius: BorderRadius.circular(22),
-                child: Image.network(
+                child: CachedCloudImage(
                   imageUrl,
                   width: double.infinity,
                   height: 180,
@@ -521,3 +778,4 @@ class OfferDetailScreen extends StatelessWidget {
     properties.add(DiagnosticsProperty<Map<String, dynamic>>('data', data));
   }
 }
+

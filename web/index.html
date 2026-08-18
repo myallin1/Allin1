@@ -81,9 +81,9 @@
   <meta name="supported-color-schemes" content="dark light">
 
   <!-- Primary Meta Tags -->
-  <title>NJ BAPX · Allin1 — نم்ம ஊரு ஆப்</title>
-  <meta name="title" content="NJ BAPX · Allin1 — Erode's Super App">
-  <meta name="description" content="Allin1 Super App — Food, Grocery, Bike Taxi & Tech in Erode">
+  <title>₹50,000,00,00,000 (ஐம்பதாயிரம் கோடி) பொருளாதாரப் புரட்சித் திட்டம்! | MyAllin1</title>
+  <meta name="title" content="₹50,000,00,00,000 (ஐம்பதாயிரம் கோடி) பொருளாதாரப் புரட்சித் திட்டம்! | MyAllin1">
+  <meta name="description" content="MyAllin1 — ஈரோடின் சொந்த சூப்பர் ஆப். பைக் டாக்சி, உணவு, மளிகை, SOS உதவி — எல்லா சேவைகளும் ஒரே ஆப்பில்!">
   <meta name="keywords"
     content="Allin1, food delivery, grocery, bike taxi, tech accessories, Tamil, NJ TECH, online shopping, 16th Road, Fresh">
   <meta name="author" content="NJ TECH">
@@ -125,9 +125,9 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://erode-super-app.njtech.in/">
   <meta property="og:site_name" content="Allin1 Super App">
-  <meta property="og:title" content="Allin1 Super App - Your All-in-One Commerce Platform">
+  <meta property="og:title" content="₹50,000,00,00,000 (ஐம்பதாயிரம் கோடி) பொருளாதாரப் புரட்சித் திட்டம்! | MyAllin1">
   <meta property="og:description"
-    content="Order food from 16th Road, groceries from Allin1 Fresh, tech from NJ TECH, or book a bike taxi. Voice-first AI assistant in Tamil & English.">
+    content="MyAllin1 — ஈரோடின் சொந்த சூப்பர் ஆப். பைக் டாக்சி, உணவு, மளிகை, SOS உதவி — எல்லா சேவைகளும் ஒரே ஆப்பில்!">
   <meta property="og:image" content="https://erode-super-app.njtech.in/og-image.png">
   <meta property="og:image:alt" content="Allin1 Super App Dashboard showing Food, Grocery, Tech, and Bike Taxi services">
   <meta property="og:image:width" content="1200">
@@ -350,6 +350,8 @@
       width: 320px;
       height: 380px;
       overflow: visible;
+      transform: scale(1.35);
+      margin: 20px 0;
     }
 
     /* The road underlay — a soft, static guide the live route draws on
@@ -361,18 +363,18 @@
       stroke-linecap: round;
     }
 
-    /* The drawing line itself. 800 is a safe overestimate of the new TN path. */
+    /* The drawing line itself. 1400 is a safe overestimate of the new TN full boundary path. */
     .a1-route-line {
       fill: none;
       stroke: url(#a1RouteGrad);
       stroke-width: 4;
       stroke-linecap: round;
-      stroke-dasharray: 800;
-      stroke-dashoffset: 800;
-      animation: a1RouteDraw 4s ease-in-out infinite;
+      stroke-dasharray: 1400;
+      stroke-dashoffset: 1400;
+      animation: a1RouteDraw 6s ease-in-out infinite;
     }
     @keyframes a1RouteDraw {
-      0%   { stroke-dashoffset: 800; }
+      0%   { stroke-dashoffset: 1400; }
       55%  { stroke-dashoffset: 0; }
       85%  { stroke-dashoffset: 0; opacity: 1; }
       100% { stroke-dashoffset: 0; opacity: 0; }
@@ -384,14 +386,13 @@
       opacity: 0;
       transform-box: fill-box;
       transform-origin: center bottom;
-      animation: a1StopPop 3.2s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+      animation: a1StopPop 6s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
       animation-delay: var(--d, 0s);
     }
     @keyframes a1StopPop {
-      0%, 8%  { opacity: 0; transform: translateY(6px) scale(0.4); }
-      18%     { opacity: 1; transform: translateY(-2px) scale(1.12); }
-      26%     { opacity: 1; transform: translateY(0) scale(1); }
-      80%     { opacity: 1; transform: translateY(0) scale(1); }
+      0%, 5%  { opacity: 0; transform: translateY(6px) scale(0.4); }
+      10%     { opacity: 1; transform: translateY(-2px) scale(1.12); }
+      15%, 85% { opacity: 1; transform: translateY(0) scale(1); }
       100%    { opacity: 0; transform: translateY(-4px) scale(0.9); }
     }
 
@@ -400,7 +401,7 @@
     .a1-pulse {
       transform-box: fill-box;
       transform-origin: center;
-      animation: a1Pulse 3.2s ease-in-out infinite;
+      animation: a1Pulse 6s ease-in-out infinite;
     }
     @keyframes a1Pulse {
       0%, 100% { opacity: 0.55; transform: scale(0.85); }
@@ -412,9 +413,9 @@
        show the vehicle parked at the origin, which still looks
        intentional rather than broken. */
     .a1-rider {
-      offset-path: path("M 340,40 C 250,90 130,130 160,160 C 190,190 250,190 230,220 C 210,250 170,290 180,320 C 190,350 170,390 160,460");
+      offset-path: path("M 330,40 C 320,100 370,160 370,220 C 320,230 290,260 320,290 C 280,310 240,400 170,450 C 150,410 140,320 160,260 C 80,240 40,200 50,140 C 60,100 150,80 170,70 C 220,50 280,30 330,40 Z");
       offset-rotate: auto;
-      animation: a1Ride 4s ease-in-out infinite;
+      animation: a1Ride 6s ease-in-out infinite;
     }
     @keyframes a1Ride {
       0%       { offset-distance: 0%;   opacity: 0; }
@@ -477,24 +478,29 @@
       animation: shimmer 2.5s ease-in-out infinite;
     }
 
+    .splash-title-wrapper {
+      width: 350px;
+      margin: 50px auto 0;
+      text-align: left;
+    }
     .splash-title {
-      margin-top: 28px;
       font-family: 'Noto Sans Tamil', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 26px;
       font-weight: 800;
       color: #4A1236;
       letter-spacing: 0.3px;
-      text-align: center;
+      display: inline-block;
       overflow: hidden;
       white-space: nowrap;
-      animation: typing 3s steps(30, end) infinite;
+      border-right: 3px solid #FF4FA3;
+      animation: typing 3.5s ease-in-out infinite;
     }
 
     @keyframes typing {
       0% { max-width: 0; }
       40% { max-width: 100%; }
-      80% { max-width: 100%; opacity: 1; }
-      100% { max-width: 100%; opacity: 0; }
+      80% { max-width: 100%; opacity: 1; border-color: transparent; }
+      100% { max-width: 100%; opacity: 0; border-color: transparent; }
     }
 
     .splash-subtitle {
@@ -823,8 +829,8 @@
   <!-- Splash Screen -->
   <div class="splash-screen visible" id="splash-screen" role="progressbar" aria-label="Allin1 Super App loading">
     <!-- Route-draw animation (Aug 12 2026) — Acts as the main visual element -->
-    <div class="splash-icons" aria-hidden="true" style="margin-top: 0; margin-bottom: 16px;">
-      <svg class="a1-route" viewBox="0 0 400 480" fill="none">
+    <div class="splash-icons" aria-hidden="true" style="position: relative; margin-top: 40px; margin-bottom: 16px;">
+      <svg class="a1-route" viewBox="0 0 400 480" fill="none" style="transform: scale(1.35);">
         <defs>
           <linearGradient id="a1RouteGrad" x1="0" y1="0" x2="400" y2="480"
                           gradientUnits="userSpaceOnUse">
@@ -836,64 +842,71 @@
 
         <!-- static road bed (Tamil Nadu Outline) -->
         <path class="a1-route-bed"
-              d="M 340,40 C 310,60 315,80 320,100 C 325,120 330,160 340,200 C 345,210 350,220 330,230 C 280,250 280,280 290,310 C 260,320 240,350 220,380 C 200,410 180,440 160,460 C 150,440 140,410 130,390 C 120,360 150,330 110,290 C 100,270 140,240 60,220 C 30,210 10,180 20,160 C 40,140 80,150 120,140 C 140,130 140,100 160,80 C 200,40 280,70 340,40 Z"/>
+              stroke-linejoin="round"
+              d="M 330,40 C 320,100 370,160 370,220 C 320,230 290,260 320,290 C 280,310 240,400 170,450 C 150,410 140,320 160,260 C 80,240 40,200 50,140 C 60,100 150,80 170,70 C 220,50 280,30 330,40 Z"/>
         <!-- the line that draws itself -->
         <path class="a1-route-line"
-              d="M 340,40 C 250,90 130,130 160,160 C 190,190 250,190 230,220 C 210,250 170,290 180,320 C 190,350 170,390 160,460"/>
+              stroke-linejoin="round"
+              d="M 330,40 C 320,100 370,160 370,220 C 320,230 290,260 320,290 C 280,310 240,400 170,450 C 150,410 140,320 160,260 C 80,240 40,200 50,140 C 60,100 150,80 170,70 C 220,50 280,30 330,40 Z"/>
 
         <!-- origin (Chennai) -->
-        <circle class="a1-pulse" cx="340" cy="40" r="7" fill="#FF4FA3"/>
-        <circle cx="340" cy="40" r="3" fill="#FFFFFF"/>
+        <circle class="a1-pulse" cx="330" cy="40" r="7" fill="#FF4FA3"/>
+        <circle cx="330" cy="40" r="3" fill="#FFFFFF"/>
 
-        <!-- Waypoint 1: shop (Salem/Coimbatore area) -->
-        <g class="a1-stop" style="--d:0.4s">
-          <circle cx="160" cy="160" r="12" fill="#FF4FA3"/>
-          <path transform="translate(150 149) scale(0.85)" fill="#FFFFFF"
+        <!-- Waypoint 1: shop (East Coast) -->
+        <g class="a1-stop" style="--d:0.7s">
+          <circle cx="350" cy="140" r="12" fill="#FF4FA3"/>
+          <path transform="translate(340 129) scale(0.85)" fill="#FFFFFF"
                 d="M4 4h16l1 5a2.5 2.5 0 0 1-4.6 1.6A2.5 2.5 0 0 1 12 10a2.5 2.5 0 0 1-4.4.6A2.5 2.5 0 0 1 3 9l1-5zm1 8.6c.6.3 1.3.4 2 .3V20h10v-7.1c.7.1 1.4 0 2-.3V21a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8.4z"/>
         </g>
 
-        <!-- Waypoint 2: food tray (Trichy area) -->
-        <g class="a1-stop" style="--d:0.8s">
-          <circle cx="230" cy="220" r="12" fill="#FF4FA3"/>
-          <path transform="translate(220 208) scale(0.85)" fill="#FFFFFF"
+        <!-- Waypoint 2: food tray (Kanyakumari) -->
+        <g class="a1-stop" style="--d:1.5s">
+          <circle cx="170" cy="450" r="12" fill="#FF4FA3"/>
+          <path transform="translate(160 438) scale(0.85)" fill="#FFFFFF"
                 d="M3 4h18l-1.5 9.5a2 2 0 0 1-2 1.5H6.5a2 2 0 0 1-2-1.7L3 4zm4 14a1.8 1.8 0 1 0 0 3.6A1.8 1.8 0 0 0 7 18zm10 0a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6z"/>
         </g>
 
-        <!-- Waypoint 3: bike taxi (Madurai area) -->
-        <g class="a1-stop" style="--d:1.2s">
-          <circle cx="180" cy="320" r="12" fill="#FF4FA3"/>
-          <path transform="translate(170 310) scale(0.85)" fill="#FFFFFF"
-                d="M5 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm14 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM6.5 6l-1.7 4.6H4a1 1 0 0 0 0 2h1.2l.8 2.2a2.98 2.98 0 0 1 2 .2L9.3 12h3.4l1.1 3.3c.4-.2.8-.3 1.2-.3.4 0 .8.1 1.2.3l-1.6-4.9L12.4 6H6.5zm1.4 1.5h3.7l1.1 3H7.1l.8-3z"/>
+        <!-- Waypoint 3: bike taxi (West Coast) -->
+        <g class="a1-stop" style="--d:2.2s">
+          <circle cx="160" cy="260" r="12" fill="#FF4FA3"/>
+          <path transform="translate(150 250) scale(0.85)" fill="#FFFFFF"
+                d="M5 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm14 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM6.5 6l-1.7 4.6H4a1 1 0 0 0 0 2h1.2l.8 2.2a2.98 2.98 0 0 1 2 .2L9.3 12h3.4l1.1 3.3c.4-.2.8-.3 1.2-.3l-1.6-4.9L12.4 6H6.5zm1.4 1.5h3.7l1.1 3H7.1l.8-3z"/>
         </g>
 
         <!-- destination (Kanyakumari) -->
         <circle class="a1-pulse" cx="160" cy="460" r="7" fill="#FF4FA3"/>
         <circle cx="160" cy="460" r="3" fill="#FFFFFF"/>
 
-        <!-- rider travelling the route -->
+        <!-- riders travelling the route -->
         <g class="a1-rider">
           <circle r="9" fill="#FFFFFF" stroke="#FF4FA3" stroke-width="2.5"/>
         </g>
+        <g class="a1-rider" style="animation-delay: 0.3s;">
+          <circle r="9" fill="#FFFFFF" stroke="#FF4FA3" stroke-width="2.5"/>
+        </g>
+        <g class="a1-rider" style="animation-delay: 0.6s;">
+          <circle r="9" fill="#FFFFFF" stroke="#FF4FA3" stroke-width="2.5"/>
+        </g>
+        <g class="a1-rider" style="animation-delay: 0.9s;">
+          <circle r="9" fill="#FFFFFF" stroke="#FF4FA3" stroke-width="2.5"/>
+        </g>
       </svg>
+      
+      <!-- Centered Loader and Status -->
+      <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 12px;">
+        <div class="splash-status" style="margin-top: 0;">Loading...</div>
+        <div class="splash-loader" aria-hidden="true" style="margin-top: 0;"></div>
+      </div>
     </div>
 
-    <!-- Title & Subtitle -->
-    <div class="splash-title" style="color:#4A1236;font-weight:800; margin-top: 0;">MyAllin1 by NJ TECH &amp; BPAX</div>
-    <div class="splash-subtitle" style="color:#8A4E72;font-size:14px;">Made with ❤ in Erode</div>
-
-    <!-- Loader & Status -->
-    <div class="splash-loader" aria-hidden="true"></div>
-    <div class="splash-status">Loading...</div>
-    <!-- FIX (black/white-screen-stuck audit, per Nizam's request): shown
-         only if Flutter never boots (see the 8s fallback below). Hidden
-         by default so it never flashes during a normal fast load. -->
-    <button id="splash-retry-btn" style="
-        display:none; margin-top:22px; padding:10px 22px; border:none;
-        border-radius:10px; background:#FF4FA3; color:#fff; font-size:13px;
-        font-weight:700; font-family:'Noto Sans Tamil', sans-serif;
-        cursor:pointer;">
-      Retry
-    </button>
+    <!-- Title & Subtitle (Moved to bottom) -->
+    <div style="margin-top: auto; padding-bottom: 40px; display: flex; flex-direction: column; align-items: center;">
+      <div class="splash-title-wrapper" style="margin: 0; width: 400px;">
+        <div class="splash-title" style="color: #FF4FA3;">MyAllin1 by NJ TECH &amp; BAPX</div>
+      </div>
+      <div class="splash-subtitle" style="color:#8A4E72;font-size:14px; margin-top:-5px;">Made with ❤ in Erode</div>
+    </div>
   </div>
 
   <!-- Custom "Install MyAllin1" banner (hidden until the browser tells
@@ -978,19 +991,63 @@
         } catch (e) { return false; }
       }
 
+      // ================================================================
+      // ROOT CAUSE FIX (Aug 17 2026) — "hero pwa open anathum hero pwa
+      // install pandra button kaatala, seller kum kaatala, admin kum
+      // kaatala, only customer pwa kulla pona mattum install kaatuthu".
+      // ================================================================
+      // This was an EVENT-ORDER RACE, not a manifest or flavor problem
+      // (all four manifests are structurally identical and valid, and
+      // all four register the same service worker).
+      //
+      // The old code registered its 'flutter-first-frame' listener
+      // INSIDE the 'beforeinstallprompt' handler. flutter-first-frame
+      // fires exactly ONCE. So the banner could only ever appear if
+      // Chrome delivered beforeinstallprompt BEFORE Flutter painted:
+      //
+      //   beforeinstallprompt -> then first-frame   = banner shows
+      //   first-frame -> then beforeinstallprompt   = listener attached
+      //                                               to an event that
+      //                                               already fired,
+      //                                               banner NEVER shows
+      //
+      // Which order you get depends on how long the app takes to paint.
+      // CUSTOMER is by far the heaviest bundle and the slowest first
+      // frame, so beforeinstallprompt almost always won that race and
+      // the banner worked. HERO, SELLER and ADMIN are smaller and paint
+      // sooner, so they usually lost it — and silently showed nothing.
+      // The symptom looked flavor-specific; the cause was just speed.
+      //
+      // Fixed by removing the nesting: both events now set a flag and
+      // call one shared function, so the banner appears whichever order
+      // they arrive in.
+      var firstFrameSeen = false;
+      var bannerShown = false;
+
+      function maybeShowInstallBanner() {
+        if (bannerShown) return;
+        if (!banner || !deferredPrompt) return;
+        if (!firstFrameSeen) return;
+        if (recentlyDismissed()) return;
+        bannerShown = true;
+        // Still held back a beat after first paint — showing it over the
+        // splash would cover the boot the user is waiting on, and on a
+        // budget phone it competes for layout work during the most
+        // expensive moment of startup.
+        setTimeout(function () {
+          if (banner && deferredPrompt) banner.classList.add('show');
+        }, 1200);
+      }
+
+      window.addEventListener('flutter-first-frame', function () {
+        firstFrameSeen = true;
+        maybeShowInstallBanner();
+      });
+
       window.addEventListener('beforeinstallprompt', function (e) {
         e.preventDefault();
         deferredPrompt = e;
-        if (recentlyDismissed()) return;
-        // Hold the banner back until Flutter has painted — showing it
-        // over the splash would cover the boot the customer is waiting
-        // on, and on a budget phone it also competes for layout work
-        // during the most expensive moment of startup.
-        window.addEventListener('flutter-first-frame', function () {
-          setTimeout(function () {
-            if (banner && deferredPrompt) banner.classList.add('show');
-          }, 1200);
-        });
+        maybeShowInstallBanner();
       });
 
       if (btn) {
@@ -1136,11 +1193,28 @@
         if (flutterHasPainted()) return;
         clearInterval(statusInterval);
         if (status) status.textContent = 'Taking longer than usual to load.';
-        if (retryBtn) {
-          retryBtn.style.display = 'inline-block';
-          retryBtn.addEventListener('click', function () {
-            window.location.reload();
-          });
+        
+        // Automatic background retry instead of manual button.
+        // We only do this if it's a repeat visit, because on a repeat visit
+        // Hive Cache / pwa_fallback_sw are ready, so a reload can successfully
+        // open the app offline. If it's a first visit, reloading just spins again.
+        // FIX: Also disable this on localhost, since DDC compilation can easily 
+        // exceed 20 seconds and we don't want to abort the compiler.
+        var isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        if (isRepeatVisit && !isLocalhost) {
+          setTimeout(function() {
+            if (!flutterHasPainted()) {
+              // Prevent infinite reload loop on slow networks
+              var hasAutoRetried = sessionStorage.getItem('autoRetried') === 'true';
+              if (!hasAutoRetried) {
+                sessionStorage.setItem('autoRetried', 'true');
+                if (status) status.textContent = 'Retrying connection...';
+                window.location.reload();
+              } else {
+                if (status) status.textContent = 'Network is very slow. Please wait...';
+              }
+            }
+          }, 12000); // Wait 12 more seconds (total 20s) before auto-reloading ONE TIME
         }
       }, 8000);
 
@@ -1241,6 +1315,64 @@
     // like an installed native app.
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
+        // ================================================================
+        // ROOT CAUSE FIX (Aug 17 2026) — "seller app localhost la run
+        // aiduchu but romba nerama front screen laye suthittu iruku"
+        // ================================================================
+        // Symptom: localhost:5000 sits on the splash forever. DevTools
+        // shows ~2000 requests, every one "Pending", and — the tell —
+        // "0 B transferred / 0 B resources". Console shows
+        // "DDC is about to load 2009/2009 scripts with pool size = 1000".
+        //
+        // Why: `flutter run` serves a DEBUG build compiled by DDC, which
+        // is not one main.dart.js but ~2000 individual .dart.lib.js
+        // modules. This service worker's default branch below calls
+        // event.respondWith(...) for EVERY same-origin GET, and on each
+        // one it clones the response and does a cache.put(). That design
+        // is correct and cheap in production (one big bundle, a handful
+        // of files) but on a DDC build it means ~2000 requests are all
+        // funnelled through the single service-worker thread, each
+        // paying a Cache Storage write, on top of the browser's 6
+        // concurrent connections per HTTP/1.1 origin. The worker becomes
+        // the bottleneck and the boot effectively never finishes. The
+        // "0 B transferred" is the fingerprint of requests being served
+        // through a service worker rather than straight from the network.
+        //
+        // Fix: do not run the PWA worker on localhost at all. Same guard
+        // and same reasoning as the boot-watchdog's isLocalhost check
+        // further up this file, which already exists precisely because
+        // "DDC compilation can easily exceed 20 seconds".
+        //
+        // NOTHING IS REMOVED: this is a dev-machine-only guard. On
+        // my-allin1.web.app (and any real host) every line below runs
+        // exactly as before — offline app shell, cache-first heavy
+        // bundles, stale-worker self-heal, FCM worker. Only a developer
+        // hitting localhost skips it, and a developer does not need
+        // offline caching of a build they are actively recompiling.
+        //
+        // It also actively UNREGISTERS any worker already installed on
+        // localhost from previous runs — without this, the worker that
+        // is already controlling this origin keeps intercepting today's
+        // requests no matter what we skip registering now. That is why
+        // the app kept hanging across restarts.
+        const isLocalhost =
+          location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+        if (isLocalhost) {
+          navigator.serviceWorker.getRegistrations().then((regs) => {
+            for (const reg of regs) {
+              console.warn('[PWA] localhost dev build — unregistering service worker:', reg.active?.scriptURL || '(installing)');
+              reg.unregister();
+            }
+            // Drop the caches too: a cache populated by an earlier
+            // production visit to this same origin can otherwise serve a
+            // stale main.dart.js over today's DDC modules.
+            if (window.caches && caches.keys) {
+              caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+            }
+          }).catch(() => {});
+          return;
+        }
+
         // ROOT CAUSE FIX (Aug 8 2026) — "selfie camera MissingPluginException
         // persists even after a completely fresh rebuild + redeploy".
         //

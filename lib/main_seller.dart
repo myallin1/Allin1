@@ -95,9 +95,39 @@ class _BootLoadingAppState extends State<_BootLoadingApp> {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize notification and foreground services for zero-delay order ringing
-  await SellerAlertNotificationService.initialize();
+
+  // FIX (Aug 17 2026 — "seller app phone la install aiduchu but open
+  // agama load aitruku", fresh install, nothing but Android/Sentry logs
+  // and not a single I/flutter line):
+  //
+  // This used to be `await SellerAlertNotificationService.initialize();`
+  // right here — the FIRST await in main(), before Sentry, before
+  // Firebase, and critically before ANY runApp(). Two things made that
+  // a boot-stopper on a freshly installed app:
+  //
+  //   1. initialize() ends with requestNotificationsPermission(). On
+  //      Android 13+ that raises the POST_NOTIFICATIONS system dialog.
+  //      Awaiting a user-facing permission dialog before the engine has
+  //      painted a single frame means the app sits on the bare Android
+  //      launch background until it is answered — which looks exactly
+  //      like "loading forever", and taps land on nothing.
+  //   2. initialize() had no try/catch of its own (it does now, see that
+  //      file). Any throw from the plugin — and a fresh install is
+  //      precisely when channel creation/permission plumbing is most
+  //      likely to fail — propagated out of main() BEFORE runApp() had
+  //      ever been called. The result is an app with no Flutter UI at
+  //      all, forever, with no Dart error visible unless you are
+  //      filtering logcat for it.
+  //
+  // Nothing is removed: notifications still initialise, just fired
+  // unawaited AFTER runApp(SellerApp()) below — the same
+  // "non-essential-to-first-frame work goes after runApp" pattern the
+  // rest of this file (and main_customer.dart's _warmCustomerServices)
+  // already follows. A seller's first order cannot arrive in the
+  // milliseconds this saves, so there is no functional loss.
+  //
+  // SellerForegroundService.initialize() stays here: it is synchronous,
+  // fully wrapped in its own try/catch, and never shows a dialog.
   SellerForegroundService.initialize();
 
   // FIX (audit finding — notifications_screen.dart hardcoded
@@ -109,6 +139,16 @@ void main() async {
       options.dsn =
           'https://208217846f0b9708dc26f1d5d812eefc@o4511799785553920.ingest.us.sentry.io/4511799822843904';
       options.tracesSampleRate = 1.0;
+      // FIX (Aug 17 2026 — while diagnosing "seller app never opens"):
+      // SentryFlutter defaults options.debug to kDebugMode, so on every
+      // debug run the SDK prints its own internal chatter — "Serializing
+      // object: {...}" for EVERY breadcrumb, plus one "Unable to find
+      // scroll/click target" per touch event. That is hundreds of lines
+      // a second, and it completely buries the Dart output (uncaught
+      // exceptions, our own debugPrint) that we actually need to read to
+      // find a boot failure. Error/crash REPORTING is untouched — this
+      // only silences the SDK's own verbose logging about itself.
+      options.debug = false;
     },
     appRunner: () async {
       // videoDone completes when app_splash.mp4 finishes playing; the
@@ -134,9 +174,56 @@ void main() async {
       } else {
         videoDone.complete();
       }
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
+      // ================================================================
+      // ROOT CAUSE FIX (Aug 17 2026) — "seller app phone la install
+      // aiduchu but ulla pogave illa", stuck forever on the branded
+      // loading screen.
+      // ================================================================
+      // This was a BARE, UNGUARDED call — the only one of the four apps
+      // without a guard. Compare:
+      //   main_admin.dart:263    if (Firebase.apps.isEmpty) { ...init... }
+      //   main_customer.dart:109 if (Firebase.apps.isNotEmpty) return;  + try/catch + retry
+      //   main_hero.dart:85      same guard + try/catch
+      //   main_seller.dart       <- nothing
+      //
+      // Why that breaks ONLY on Android, and ONLY for seller:
+      // android/app/google-services.json makes Firebase's native
+      // FirebaseInitProvider create the [DEFAULT] app automatically,
+      // before a single line of Dart runs — using the real appId
+      // registered for com.njtech.allin1.seller. So by the time we get
+      // here, Firebase.apps is already NON-empty. Calling
+      // initializeApp() again with DIFFERENT options then throws
+      // [core/duplicate-app].
+      //
+      // And the options genuinely are different: firebase_options.dart's
+      // android appId is '1:357526153693:android:4aee34', which is not a
+      // valid Firebase Android app id at all (real ones end in a long
+      // hex string — this one looks like the tail of the WEB id pasted
+      // in by hand). It matches no client in google-services.json.
+      //
+      // That throw escaped this appRunner closure, so
+      // runApp(const SellerApp()) below was never reached — leaving
+      // _BootLoadingApp's BrandedLoadingScreen on screen forever, with
+      // no crash and no error dialog. Exactly the reported symptom.
+      //
+      // Fix mirrors what the other three apps already do: skip
+      // initialisation when the native side has already done it, and
+      // never let a failure here stop the app from painting. Nothing is
+      // removed — on a platform where Firebase is NOT pre-initialised
+      // (web), the options path runs exactly as before.
+      try {
+        if (Firebase.apps.isEmpty) {
+          await Firebase.initializeApp(
+            options: DefaultFirebaseOptions.currentPlatform,
+          );
+        }
+      } catch (e) {
+        // Never fatal: a seller staring at a splash screen forever is
+        // strictly worse than a seller getting into the app with a
+        // degraded Firebase. Firestore/Auth calls will surface their own
+        // errors in-app if initialisation really did fail.
+        debugPrint('[main_seller] Firebase init issue (non-fatal): $e');
+      }
       // Enable Firestore offline persistence on web (PWA). Mobile
       // (Android/iOS) already has persistence on by default, so this
       // is guarded to web only; a capped 50MB cache (CTO-specified)
@@ -180,6 +267,11 @@ void main() async {
       // and runApp(SellerApp()) on a repeat launch.
       await videoDone.future;
       runApp(const SellerApp());
+
+      // Moved down from the top of main() — see the long comment there.
+      // Fire-and-forget: the seller's UI is already on screen, and a
+      // failure here must never be able to stop the app from opening.
+      unawaited(SellerAlertNotificationService.initialize());
       // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch"): fire-and-forget,
       // fails open on any error — see MigrationGateService's own header.
       MigrationGateService.instance.start();

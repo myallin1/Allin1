@@ -23,9 +23,11 @@ import '../../config/fare_rates.dart';
 import '../../config/payment_config.dart';
 import '../../models/ride_model.dart';
 import '../../utils/otp_utils.dart';
+import '../../services/app_minimizer_service.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../payment_screen.dart';
 import 'bike_booking_screen.dart';
+import '../location_picker_screen.dart';
 
 class RideTrackingScreen extends StatefulWidget {
   final RideModel ride;
@@ -127,36 +129,39 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   // canPop() is false (this screen ended up as the sole root route,
   // e.g. restored directly on app resume), back-press did nothing at
   // all instead of confirming exit.
+  //
+  // UPDATED (Aug 18 2026 — Turbo App navigation audit, cross-verified
+  // with Gemini): matches the same fix in bike_booking_screen.dart —
+  // this predated the "System Back Button Overhaul" CTO mandate and was
+  // never migrated, so a hard SystemNavigator.pop() (real app close)
+  // could still fire right after a ride, the single most common moment
+  // to hit this screen's root state. Now minimizes instead, same as
+  // every other app root.
   Future<void> _returnToRootSafely() async {
     if (!mounted) {
       return;
     }
     final navigator = Navigator.of(context);
     if (navigator.canPop()) {
-      navigator.popUntil((route) => route.isFirst);
+      navigator.pop();
       return;
     }
-    final exit = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Leave the app?',
-            style: TextStyle(fontWeight: FontWeight.w700),),
-        content: const Text('Close Allin1?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('No'),
+    if (kIsWeb) {
+      // A browser tab cannot minimize itself to the OS home screen — no
+      // such API exists. Show the "use your device's Home button" hint
+      // once per session, then silently swallow further back-presses.
+      if (AppMinimizer.consumeWebHintOnce()) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Press your device's Home button to minimize"),
+            duration: Duration(seconds: 3),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Yes', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-    if ((exit ?? false) && mounted) {
-      SystemNavigator.pop();
+        );
+      }
+      return;
     }
+    unawaited(AppMinimizer.moveToBackground());
   }
 
   bool get _isPaymentSettled {
@@ -1018,6 +1023,48 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     });
   }
 
+  Future<void> _changeDestination() async {
+    final picked = await Navigator.push<PickedLocation>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          initialCenter: LatLng(widget.ride.dropLatitude ?? widget.ride.pickupLatitude ?? 0.0, widget.ride.dropLongitude ?? widget.ride.pickupLongitude ?? 0.0),
+          title: 'Update Destination',
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+
+    double distMeters = Geolocator.distanceBetween(
+      widget.ride.pickupLatitude ?? 0.0, widget.ride.pickupLongitude ?? 0.0,
+      picked.lat, picked.lng
+    );
+    double distKm = distMeters / 1000.0;
+    double roadDistKm = distKm * 1.3;
+
+    double newFare = RideModel.calculateFare(roadDistKm, widget.ride.vehicleType ?? 'bike');
+
+    try {
+      await FirebaseFirestore.instance.collection('rides').doc(widget.ride.id).update({
+        'dropAddress': picked.name,
+        'dropLatitude': picked.lat,
+        'dropLongitude': picked.lng,
+        'distanceKm': roadDistKm,
+        'routeDistanceKm': roadDistKm,
+        'distance_km': roadDistKm,
+        'fare': newFare,
+        'estimatedFare': newFare,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Destination updated! Fare recalculated.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update destination')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -1594,7 +1641,12 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
           children: [
             _rRow('🔴', 'Pickup', widget.ride.pickupAddress ?? ''),
             const SizedBox(height: 10),
-            _rRow('🟢', 'Drop', widget.ride.dropAddress ?? ''),
+            _rRow('🟢', 'Drop', widget.ride.dropAddress ?? '', trailing: IconButton(
+              icon: const Icon(Icons.edit_location_alt_rounded, size: 18, color: _gold),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              onPressed: _changeDestination,
+            )),
             const Divider(color: _border, height: 20),
             if (_tipAmount != null && _tipAmount! > 0) ...[
               Row(
@@ -1885,7 +1937,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     return (math.atan2(y, x) * 180 / math.pi + 360) % 360;
   }
 
-  Widget _rRow(String dot, String lbl, String txt) => Row(
+  Widget _rRow(String dot, String lbl, String txt, {Widget? trailing}) => Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(dot, style: const TextStyle(fontSize: 11)),
@@ -1913,6 +1965,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
               ],
             ),
           ),
+          if (trailing != null) trailing,
         ],
       );
 }

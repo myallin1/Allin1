@@ -23,6 +23,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../services/affiliate_service.dart';
 
@@ -204,6 +205,39 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
     await _load();
   }
 
+  void _showQrImage(String shortUrl) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        contentPadding: const EdgeInsets.all(24),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            QrImageView(
+              data: shortUrl,
+              version: QrVersions.auto,
+              size: 250,
+              backgroundColor: Colors.white,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _pink,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+              ),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold)),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final active = (_campaign?['active'] as bool?) ?? true;
@@ -328,6 +362,11 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
                     const SnackBar(content: Text('Short link copied')),
                   );
                 },
+              ),
+              IconButton(
+                tooltip: 'View QR Code',
+                icon: const Icon(Icons.qr_code_2_rounded, color: _pink, size: 18),
+                onPressed: () => _showQrImage(shortUrl),
               ),
             ],
           ),

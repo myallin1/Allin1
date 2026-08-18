@@ -17,6 +17,7 @@ import 'package:provider/provider.dart';
 import '../config/app_variant.dart';
 import '../services/theme_service.dart';
 import '../services/update_service.dart';
+import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
 // NOTE (Nizam's full Option 2 rollout): kPurple here is this screen's
 // PRIMARY brand color (not a decorative accent), so it gets its own
@@ -535,7 +536,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Image.network(
+              CachedCloudImage(
                 posterUrl,
                 fit: BoxFit.cover,
                 loadingBuilder: (context, child, progress) {
@@ -900,3 +901,4 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     );
   }
 }
+

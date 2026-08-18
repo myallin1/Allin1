@@ -21,6 +21,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
 const Color _kPurple = Color(0xFF7B6FE0);
@@ -29,7 +30,7 @@ const Color _kText = Color(0xFF1A1A2E);
 const Color _kMuted = Color(0xFF9999BB);
 // Same shared Allin1 contact number already used by PrintingServiceScreen
 // and ConstructionScreen for this exact "call/WhatsApp to book" pattern.
-const String _kPhoneNumber = '8681869091';
+const String _kPhoneNumber = '8825812798';
 
 class _EsevaService {
   final String label;
@@ -232,7 +233,7 @@ class _EsevaTile extends StatelessWidget {
                   BoxShadow(color: _kPink.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 4)),
                 ],
               ),
-              child: Image.network(
+              child: CachedCloudImage(
                 service.imageUrl,
                 fit: BoxFit.cover,
                 loadingBuilder: (_, child, progress) => progress == null
@@ -272,3 +273,4 @@ class _EsevaTile extends StatelessWidget {
     );
   }
 }
+

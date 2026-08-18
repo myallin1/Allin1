@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/app_knowledge_briefing.dart';
 
 enum AIPersona {
   customer,
@@ -185,7 +186,28 @@ class AIService {
     );
   }
 
+  /// NEW (Aug 17 2026): every persona is now briefed on the real app
+  /// before its own personality is applied.
+  ///
+  /// Previously each persona prompt described only a TONE ("motivation
+  /// buddy", "local friend") and nothing about the system it lives in,
+  /// so the assistant had no idea what MyAllin1 actually does, which
+  /// collections exist, or that there is no server. It answered from
+  /// generic world knowledge and guessed.
+  ///
+  /// The briefing comes from AppKnowledgeBriefing, whose factual half is
+  /// REGENERATED FROM THE CODEBASE ON EVERY DEPLOY
+  /// (tools/gen_app_knowledge.dart, wired into deploy_web.ps1). That is
+  /// what makes "namma oru new update vittalum athuvum AI-ku theriyum"
+  /// true by construction rather than by remembering to update a prompt.
+  ///
+  /// Persona voice is appended AFTER the briefing so it stays the last
+  /// instruction the model reads.
   String _systemPromptFor(AIPersona persona) {
+    return '${AppKnowledgeBriefing.build()}\n\n${_personaVoiceFor(persona)}';
+  }
+
+  String _personaVoiceFor(AIPersona persona) {
     switch (persona) {
       case AIPersona.hero:
         return 'You are NJ Tech Hero AI, a Motivation Buddy for bike-taxi Heroes. '

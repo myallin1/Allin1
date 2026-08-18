@@ -83,7 +83,7 @@ class CloudinaryUploadService {
   /// f_auto/q_auto transforms added in [optimizedUrl] more than pay
   /// back the extra stored bytes on bandwidth, which is the metric that
   /// actually scales with users.
-  static const int kPhotoTargetBytes = 320 * 1024; // ~320KB — menu/profile
+  static const int kPhotoTargetBytes = 150 * 1024; // ~150KB — menu/profile
   // UPDATED (Aug 11 2026 — Nizam's call): raised 400KB -> 500KB for hero
   // KYC/ID photos. Rationale for tuning THIS number rather than removing
   // the cap: heroes upload 3 documents each at registration, so at 1000
@@ -120,7 +120,7 @@ class CloudinaryUploadService {
   /// Safe on any input: non-Cloudinary URLs, empty strings, and URLs
   /// that already carry a transform are returned unchanged rather than
   /// being double-transformed into something invalid.
-  static String optimizedUrl(String url, {int? width}) {
+  static String optimizedUrl(String url, {int? width, bool enhanceFood = false}) {
     if (url.isEmpty) return url;
     if (!url.contains('res.cloudinary.com')) return url;
     const marker = '/image/upload/';
@@ -133,10 +133,49 @@ class CloudinaryUploadService {
     // Already transformed by a previous call — don't stack transforms.
     if (tail.startsWith('f_auto') || tail.contains('/f_auto')) return url;
 
-    final transform =
-        width != null ? 'f_auto,q_auto,w_$width,c_limit/' : 'f_auto,q_auto/';
-    return '$head$transform$tail';
+    final sizePart = width != null ? ',w_$width,c_limit' : '';
+    final effectPart = enhanceFood ? ',$kFoodEnhanceTransform' : '';
+    return '$head' 'f_auto,q_auto$sizePart$effectPart/' '$tail';
   }
+
+  // ================================================================
+  // FOOD PHOTO AUTO-ENHANCEMENT  (Aug 18 2026 — CTO image-quality
+  // review: "visual presentation is everything, like Swiggy/Zomato")
+  // ================================================================
+  // Applied at DELIVERY time (a URL parameter), never baked into the
+  // uploaded bytes. That choice is the whole architecture:
+  //
+  //   * REVERSIBLE. If this looks garish on real Erode food photos,
+  //     change this ONE constant and every dish across the app updates
+  //     on next load. No re-upload, no re-crop, no data migration, no
+  //     asking sellers to redo anything. Baking it at upload would be
+  //     permanent and unfixable for images already stored.
+  //   * NEAR-ZERO COST. Cloudinary builds each unique derived URL once
+  //     and serves it from CDN afterwards, so 1,000 customers viewing
+  //     the same dish is one transformation plus bandwidth — not 1,000
+  //     transformations. Critically, the effect string is IDENTICAL
+  //     across every width, so we add one derived asset per width that
+  //     already existed, rather than multiplying variants.
+  //
+  // Deliberately NOT `e_improve`: it auto-analyses each image and can
+  // wreck photos that were already well-lit, which is unpredictable
+  // across hundreds of sellers shooting in very different conditions.
+  // A fixed, modest saturation/contrast lift is predictable and safe —
+  // it makes decent food photos look richer without turning good ones
+  // radioactive.
+  //
+  // Tuning guide (only this line needs editing):
+  //   e_saturation:20-40  — colour richness. Above ~50 food looks fake.
+  //   e_contrast:10-25    — depth/pop. Above ~30 shadows go black.
+  //   e_vibrance:N        — gentler than saturation; safe alternative.
+  static const String kFoodEnhanceTransform = 'e_saturation:25,e_contrast:15';
+
+  /// Convenience wrapper for dish/menu photos. Prefer this over calling
+  /// optimizedUrl(..., enhanceFood: true) directly so every food surface
+  /// stays on one consistent look — and so there is exactly one place to
+  /// turn enhancement off if it ever needs to be pulled quickly.
+  static String foodImageUrl(String url, {int? width}) =>
+      optimizedUrl(url, width: width, enhanceFood: true);
 
   // FIX (root cause, confirmed via a hero's actual 8.35MB document
   // upload reaching Cloudinary untouched): the previous version of

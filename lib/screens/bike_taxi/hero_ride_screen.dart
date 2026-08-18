@@ -101,6 +101,8 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   String _paymentStatus = 'pending';
   String _pickupAddress = '---';
   String _dropAddress = '---';
+    double? _dropLatitude;
+    double? _dropLongitude;
   String _customerPhone = 'Contact available';
   // Parcel-only: who the hero should hand the parcel to at drop-off.
   // Empty strings mean the field wasn't collected (e.g. an older ride
@@ -498,8 +500,8 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
             ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
             : null;
     final target = _rideStatus == 'in_progress'
-        ? (widget.ride.dropLatitude != null && widget.ride.dropLongitude != null
-            ? LatLng(widget.ride.dropLatitude!, widget.ride.dropLongitude!)
+        ? (_dropLatitude != null && _dropLongitude != null
+            ? LatLng(_dropLatitude!, _dropLongitude!)
             : null)
         : (widget.ride.pickupLatitude != null &&
                 widget.ride.pickupLongitude != null
@@ -1256,8 +1258,11 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
           (rideData['routeDistanceKm'] as num?)?.toDouble() ?? 0.0,
         );
         HeroUsageAccumulatorService().recordRideHandled(distanceKm: billedDistanceKm);
+        // Ride is over — stop the billable meter before consuming it so
+        // it cannot keep running into the hero's idle time.
+        HeroUsageAccumulatorService().stopBillableWork();
         final activeMinutes =
-            HeroUsageAccumulatorService().consumeActiveMinutes();
+            HeroUsageAccumulatorService().consumeBillableMinutes();
         final ridesHandled =
             HeroUsageAccumulatorService().consumeRidesHandled();
         final rideDistancesKm =
@@ -1346,8 +1351,8 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   }
 
   Future<void> _navigateToDestination() async {
-    final lat = widget.ride.dropLatitude;
-    final lng = widget.ride.dropLongitude;
+    final lat = _dropLatitude;
+    final lng = _dropLongitude;
     if (lat == null || lng == null) {
       return;
     }
@@ -1989,9 +1994,9 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
           color: _gold,
         ),
       // Drop marker
-      if (widget.ride.dropLatitude != null && widget.ride.dropLongitude != null)
+      if (_dropLatitude != null && _dropLongitude != null)
         MapMarker(
-          point: LatLng(widget.ride.dropLatitude!, widget.ride.dropLongitude!),
+          point: LatLng(_dropLatitude!, _dropLongitude!),
           icon: Icons.location_on,
           color: _green,
         ),

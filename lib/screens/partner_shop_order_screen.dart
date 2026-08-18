@@ -29,6 +29,8 @@ class PartnerShop {
   final String logoText; // short brand initials/text shown on the badge
   final String orderUrl;
   final List<Color> gradient;
+  final String? imageAsset; // Custom image asset for the button
+  final bool embedded; // Whether to open in-app via embedded WebView
 
   const PartnerShop({
     required this.name,
@@ -36,6 +38,8 @@ class PartnerShop {
     required this.logoText,
     required this.orderUrl,
     required this.gradient,
+    this.imageAsset,
+    this.embedded = false,
   });
 }
 
@@ -49,6 +53,8 @@ const List<PartnerShop> kPartnerShops = [
     logoText: 'SUBWAY',
     orderUrl: 'https://eversub.dotpe.in/store/939/1/999',
     gradient: [Color(0xFF008938), Color(0xFF00612A)],
+    imageAsset: 'assets/images/subway_logo.png',
+    embedded: true,
   ),
   PartnerShop(
     name: "Domino's Pizza",
@@ -56,6 +62,8 @@ const List<PartnerShop> kPartnerShops = [
     logoText: "DOMINO'S",
     orderUrl: 'https://www.dominos.co.in',
     gradient: [Color(0xFF0F5AA6), Color(0xFF0A3D73)],
+    imageAsset: 'assets/images/dominos_logo.png',
+    embedded: true,
   ),
   PartnerShop(
     name: 'KFC',
@@ -63,6 +71,8 @@ const List<PartnerShop> kPartnerShops = [
     logoText: 'KFC',
     orderUrl: 'https://online.kfc.co.in',
     gradient: [Color(0xFFC8102E), Color(0xFF8E0B20)],
+    imageAsset: 'assets/images/kfc_logo.png',
+    embedded: true,
   ),
   PartnerShop(
     name: 'Taj Hotel',
@@ -75,8 +85,10 @@ const List<PartnerShop> kPartnerShops = [
     name: 'A2B',
     subtitle: 'Adyar Ananda Bhavan',
     logoText: 'A2B',
-    orderUrl: 'https://www.a2bonline.com',
+    orderUrl: 'https://www.aabsweets.com/order/',
     gradient: [Color(0xFFE0A800), Color(0xFFA87900)],
+    imageAsset: 'assets/images/a2b_logo.png',
+    embedded: true,
   ),
   PartnerShop(
     name: 'Jameen Restaurant',

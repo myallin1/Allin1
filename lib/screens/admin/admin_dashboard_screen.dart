@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/app_minimizer_service.dart';
 import '../../services/db_usage_tracker.dart';
 import '../../services/service_requests_listener.dart';
 import '../../services/update_service.dart';
@@ -33,6 +34,7 @@ import 'fare_management_screen.dart';
 import 'hero_approvals_screen.dart';
 // NEW (Aug 11 2026): Service Flow Monitor sub-page — fetch-on-demand.
 import 'service_flow_monitor_screen.dart';
+import 'admin_hero_earnings_screen.dart';
 
 // ── Theme ──────────────────────────────────────────────────────
 const Color _bg = Color(0xFF0A0A1A);
@@ -712,8 +714,48 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
+  // NEW (Aug 18 2026 — Turbo App navigation audit, task #149): this is
+  // the admin app's real root screen (pushed straight after login) and
+  // had zero PopScope — any back-press here hit Flutter's default
+  // un-intercepted behaviour (instant SystemNavigator.pop(), app closes
+  // with no chance to minimize). Same AppMinimizer pattern as the other
+  // 3 app roots (customer/hero/seller). Since this screen has its own
+  // bottom-nav tabs, back first resets to the Overview tab (idx 0) if
+  // the admin is elsewhere, then minimizes on a second back-press from
+  // Overview — matching the tab-reset-then-minimize convention already
+  // used by the other dashboard shells.
+  void _handleBackPress() {
+    if (_selectedTab != 0) {
+      setState(() => _selectedTab = 0);
+      return;
+    }
+    if (kIsWeb) {
+      if (AppMinimizer.consumeWebHintOnce()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Press your device's Home button to minimize"),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+    unawaited(AppMinimizer.moveToBackground());
+  }
+
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _handleBackPress();
+      },
+      child: _buildScaffold(),
+    );
+  }
+
+  Widget _buildScaffold() {
     return Scaffold(
       backgroundColor: _bg,
       appBar: _buildAppBar(),
@@ -1843,6 +1885,27 @@ class _MoreSheet extends StatelessWidget {
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const ApprovedHeroesScreen()));
+              },
+            ),
+            // NEW (Aug 17 2026 — Nizam: "adminala exact hero earning
+            // pakkamudila... hero voda uid vachu than kaatuthu hero name
+            // kaatala"). Resolves uid -> name/phone and gives
+            // Today/7-day/Month/All plus per-hero drill-down. One Fetch
+            // powers every filter — see the screen's own header for the
+            // read-cost reasoning.
+            _sheetTile(
+              context,
+              icon: Icons.payments_outlined,
+              iconColor: _green,
+              label: 'Hero Earnings',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AdminHeroEarningsScreen(),
+                  ),
+                );
               },
             ),
             const SizedBox(height: 16),

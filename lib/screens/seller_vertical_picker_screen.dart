@@ -21,6 +21,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'seller_electronics_onboarding_screen.dart';
 import 'seller_grocery_onboarding_screen.dart';
+import 'seller_mobile_onboarding_screen.dart';
 import 'seller_onboarding_screen.dart';
 
 const Color _bg = Color(0xFF08080F);
@@ -80,6 +81,23 @@ class SellerVerticalPickerScreen extends StatelessWidget {
                   context,
                   MaterialPageRoute<void>(
                     builder: (_) => const SellerGroceryOnboardingScreen(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              // NEW (Aug 18 2026 — Mobile Hub). Unlike Grocery and
+              // Electronics above, this vertical is fully built: a
+              // mobile shop gets a real stock catalog (list new/used
+              // phones with prices), because customers browse specific
+              // phones rather than sending a broadcast request.
+              _VerticalTile(
+                emoji: '📱',
+                title: 'Mobile Shop',
+                subtitle: 'List new & used phones with your own prices',
+                onTap: () => Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const SellerMobileOnboardingScreen(),
                   ),
                 ),
               ),

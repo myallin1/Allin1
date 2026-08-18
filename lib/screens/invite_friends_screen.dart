@@ -19,6 +19,7 @@
 // in the link. It is stored as the campaign label so Admin sees
 // "Ravi Kumar — 6 installs", while the link that gets forwarded around
 // WhatsApp groups is just an anonymous short code.
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -36,9 +37,33 @@ const Color _text = Color(0xFF201A22);
 const Color _muted = Color(0xFF8C7A88);
 const Color _whatsapp = Color(0xFF25D366);
 
+/// Who is doing the inviting (Aug 17 2026 — Nizam: "heros avanga innoru
+/// heros ah refer panna antha particular hero app la irunthu hero
+/// referral qr and link generation").
+///
+/// One screen, two modes, rather than a copied hero_invite_screen.dart.
+/// The layout, QR rendering, WhatsApp share, copy-link and invite count
+/// are identical work; only the referral TYPE, the DESTINATION and the
+/// wording differ. A second copy would have drifted the first time one
+/// of them was fixed.
+enum InviteMode {
+  /// Customer inviting other customers -> lands on the customer app.
+  customer,
+
+  /// Hero inviting other heroes -> MUST land on the hero app. Sending a
+  /// would-be hero to the customer app is a dead end: there is no hero
+  /// registration there, so the referral is silently wasted.
+  hero,
+}
+
 class InviteFriendsScreen extends StatefulWidget {
-  const InviteFriendsScreen({this.displayName, super.key});
+  const InviteFriendsScreen({
+    this.displayName,
+    this.mode = InviteMode.customer,
+    super.key,
+  });
   final String? displayName;
+  final InviteMode mode;
 
   @override
   State<InviteFriendsScreen> createState() => _InviteFriendsScreenState();
@@ -61,13 +86,37 @@ class _InviteFriendsScreenState extends State<InviteFriendsScreen> {
       _loading = true;
       _error = null;
     });
-    final code = await AffiliateService.instance
-        .ensureMyReferralCode(displayName: widget.displayName);
+    final isHero = widget.mode == InviteMode.hero;
+    final code = await AffiliateService.instance.ensureMyReferralCode(
+      displayName: widget.displayName,
+      referralType: isHero
+          ? AffiliateService.kHeroReferralType
+          : AffiliateService.kCustomerReferralType,
+      // Pinned as a pair with the type by firestore.rules — see the
+      // affiliate_codes create rule.
+      destination: isHero ? '${AffiliateService.kHeroAppBaseUrl}/' : null,
+      // Heroes live in heroes/{uid}, customers in users/{uid}. This is
+      // where the generated code is cached, which is what makes the
+      // whole thing idempotent instead of minting a new code per open.
+      profileCollection: isHero ? 'heroes' : 'users',
+    );
     if (!mounted) return;
     if (code == null) {
+      // FIX (Aug 18 2026): ensureMyReferralCode() returns null both when
+      // no real user is signed in AND when the Firestore write itself
+      // was rejected (e.g. a rules mismatch) — those are very different
+      // problems for the person reading this screen. A hero who is
+      // fully logged in and online was seeing "Please sign in" for a
+      // rules bug that had nothing to do with their auth state. Checking
+      // the actual auth state here means the message only claims
+      // "sign in" when that is really the cause.
+      final user = FirebaseAuth.instance.currentUser;
+      final signedIn = user != null && !user.isAnonymous;
       setState(() {
         _loading = false;
-        _error = 'Please sign in to get your invite link.';
+        _error = signedIn
+            ? 'Could not get your invite link right now. Please try again in a moment.'
+            : 'Please sign in to get your invite link.';
       });
       return;
     }
@@ -83,9 +132,14 @@ class _InviteFriendsScreenState extends State<InviteFriendsScreen> {
   String get _link =>
       _code == null ? '' : AffiliateService.shortUrlFor(_code!);
 
-  String get _message =>
-      'Hey! I use MyAllin1 for bike taxi, food, parcel and local services '
-      'in Erode — try it, it works right in your browser:\n$_link';
+  /// Hero wording is a RECRUITMENT pitch, not a "try this app" pitch —
+  /// the person receiving it is being asked to earn, not to order.
+  String get _message => widget.mode == InviteMode.hero
+      ? 'Naan MyAllin1-la Hero-va work panren — bike taxi, food and parcel '
+          'delivery, Erode-la. 100% delivery income Hero-kku thaan, 0% '
+          'commission. Neengalum join pannunga:\n$_link'
+      : 'Hey! I use MyAllin1 for bike taxi, food, parcel and local services '
+          'in Erode — try it, it works right in your browser:\n$_link';
 
   Future<void> _shareWhatsApp() async {
     final uri = Uri.parse(
