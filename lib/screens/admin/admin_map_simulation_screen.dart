@@ -137,26 +137,68 @@ class _AdminMapSimulationScreenState extends State<AdminMapSimulationScreen> {
               child: ListenableBuilder(
                 listenable: _sim,
                 builder: (context, _) {
-                  return Row(
+                  return Column(
                     children: [
-                      Expanded(
-                        child: Text(
-                          _sim.isActive
-                              ? '${_sim.simulatedMarkers.length} markers rendering'
-                              : 'Simulation stopped',
-                          style: const TextStyle(color: _text, fontSize: 12.5, fontWeight: FontWeight.w700),
-                        ),
+                      Row(
+                        children: [
+                          const Text('Density:', style: TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w600)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: SegmentedButton<SimulationDensity>(
+                              style: SegmentedButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                                selectedBackgroundColor: _pink.withValues(alpha: 0.2),
+                                foregroundColor: _text,
+                                selectedForegroundColor: _pink,
+                                side: const BorderSide(color: _border),
+                              ),
+                              segments: const [
+                                ButtonSegment(value: SimulationDensity.normal, label: Text('Normal', style: TextStyle(fontSize: 12))),
+                                ButtonSegment(value: SimulationDensity.busy, label: Text('Busy', style: TextStyle(fontSize: 12))),
+                                ButtonSegment(value: SimulationDensity.peak, label: Text('Peak', style: TextStyle(fontSize: 12))),
+                              ],
+                              selected: {_sim.currentDensity},
+                              onSelectionChanged: (Set<SimulationDensity> newSelection) {
+                                final density = newSelection.first;
+                                // If already active, restart with new density automatically
+                                if (_sim.isActive) {
+                                  setState(() => _sim.start(density: density));
+                                } else {
+                                  // Just update the UI state to show selection, wait for explicit start
+                                  setState(() {
+                                    // we can't directly set density if not started without a setter.
+                                    // But start() handles it. We can just start it directly since they made a selection.
+                                    _sim.start(density: density);
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                        ],
                       ),
-                      ElevatedButton.icon(
-                        onPressed: () => setState(() => _sim.isActive ? _sim.stop() : _sim.start()),
-                        icon: Icon(_sim.isActive ? Icons.stop_rounded : Icons.play_arrow_rounded, size: 18),
-                        label: Text(_sim.isActive ? 'Stop' : 'Start Load Test'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _sim.isActive ? _red : _pink,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _sim.isActive
+                                  ? '${_sim.simulatedMarkers.length} markers rendering'
+                                  : 'Simulation stopped',
+                              style: const TextStyle(color: _text, fontSize: 12.5, fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: () => setState(() => _sim.isActive ? _sim.stop() : _sim.start(density: _sim.currentDensity)),
+                            icon: Icon(_sim.isActive ? Icons.stop_rounded : Icons.play_arrow_rounded, size: 18),
+                            label: Text(_sim.isActive ? 'Stop' : 'Start'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _sim.isActive ? _red : _pink,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   );

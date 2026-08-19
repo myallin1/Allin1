@@ -6,17 +6,17 @@ import '../models/default_menu_data.dart';
 import '../models/food_models.dart';
 import '../services/food_seller_service.dart';
 
-const Color _bg = Color(0xFF08080F);
-const Color _surface = Color(0xFF0D0D18);
-const Color _card = Color(0xFF141420);
-const Color _card2 = Color(0xFF1A1A28);
+const Color _bg = Color(0xFFF7FAF8);
+const Color _surface = Color(0xFFFFFFFF);
+const Color _card = Color(0xFFFFFFFF);
+const Color _card2 = Color(0xFFF1F6F3);
 const Color _teal = Color(0xFF11998E);
 const Color _tealLight = Color(0xFF38EF7D);
-const Color _gold = Color(0xFFF5C542);
-const Color _text = Color(0xFFEEEEF5);
-const Color _muted = Color(0xFF7777A0);
-const Color _border = Color(0x267B6FE0);
-const Color _red = Color(0xFFFF5252);
+const Color _gold = Color(0xFFC79200);
+const Color _text = Color(0xFF1A1A1A);
+const Color _muted = Color(0xFF6B7280);
+const Color _border = Color(0x1A11998E);
+const Color _red = Color(0xFFD64545);
 
 class _MenuItemEntry {
   final DefaultMenuItem defaultItem;

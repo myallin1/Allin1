@@ -1304,6 +1304,39 @@ service cloud.firestore {
     }
 
     // ==============================================================
+    // AFFILIATE / REFERRAL QR CODES (Customer & Hero Referrals)
+    // ==============================================================
+    // FIX (Customer Referral bug): The previous developer added the Dart
+    // AffiliateService to generate codes, but never added the Firestore
+    // rules! This caused every customer/hero's attempt to mint a code to
+    // fail 3 times and return null.
+    match /affiliate_codes/{codeId} {
+      allow read: if isAdminAny();
+      allow create: if isAuth() 
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.type in ['customer_referral', 'hero_referral', 'admin_campaign']
+        || isAdminAny();
+      // Only scans/signups counters can be updated by normal users
+      allow update: if isAuth() 
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['scans', 'signups'])
+        || isAdminAny();
+      allow delete: if isAdminAny();
+    }
+
+    match /affiliate_links/{linkId} {
+      allow read: if true; // public redirect
+      allow create: if isAuth(); // customers create this along with affiliate_codes
+      allow update, delete: if isAdminAny();
+    }
+
+    match /affiliate_scans/{scanId} {
+      allow read: if isAdminAny();
+      allow create: if isAuth(); // anonymous users logging their scan
+      allow update, delete: if isAdminAny();
+    }
+
+    // ==============================================================
     // DEFAULT DENY (catch-all safety net)
     // ==============================================================
     // Any collection not explicitly matched above is denied by

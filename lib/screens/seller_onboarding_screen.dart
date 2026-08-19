@@ -1,8 +1,12 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/city_config.dart';
 import '../config/food_categories.dart';
@@ -11,16 +15,16 @@ import '../services/food_seller_service.dart';
 import '../services/location_service.dart';
 import 'seller_pending_screen.dart';
 
-const Color _bg = Color(0xFF08080F);
-const Color _surface = Color(0xFF0D0D18);
-const Color _card = Color(0xFF141420);
-const Color _card2 = Color(0xFF1A1A28);
+const Color _bg = Color(0xFFF7FAF8);
+const Color _surface = Color(0xFFFFFFFF);
+const Color _card = Color(0xFFFFFFFF);
+const Color _card2 = Color(0xFFF1F6F3);
 const Color _teal = Color(0xFF11998E);
 const Color _tealLight = Color(0xFF38EF7D);
-const Color _gold = Color(0xFFF5C542);
-const Color _text = Color(0xFFEEEEF5);
-const Color _muted = Color(0xFF7777A0);
-const Color _border = Color(0x267B6FE0);
+const Color _gold = Color(0xFFC79200);
+const Color _text = Color(0xFF1A1A1A);
+const Color _muted = Color(0xFF6B7280);
+const Color _border = Color(0x1A11998E);
 
 class SellerOnboardingScreen extends StatefulWidget {
   const SellerOnboardingScreen({super.key});
@@ -81,6 +85,7 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
           _detectedLng = position.longitude;
           _detectedCity = matched ?? kDefaultCity;
         });
+        _scheduleDraftSave();
       }
     } finally {
       if (mounted) setState(() => _detectingLocation = false);
@@ -89,6 +94,87 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
 
   final FoodSellerService _service = FoodSellerService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  // DRAFT AUTOSAVE (Aug 19 2026 — same hardening as hero_register_screen
+  // .dart's _saveDraft()/_restoreDraft(), applied here per Nizam's
+  // explicit request: "namma hero onbording la iruka onboarding flow va
+  // namma seller login kum implement pannanum"). A Google Sign-In
+  // redirect/reload on web (see AuthService.loginWithGoogle's Aug 19
+  // 2026 fix) used to be able to destroy an in-progress registration
+  // with no trace — the seller retyped everything or gave up, and
+  // admin never received anything. Debounced SharedPreferences autosave
+  // means a reload restores exactly what was typed instead of an empty
+  // form.
+  static const String _kDraftKey = 'seller_onboarding_draft_v1';
+  Timer? _draftDebounce;
+
+  void _scheduleDraftSave() {
+    _draftDebounce?.cancel();
+    _draftDebounce = Timer(const Duration(milliseconds: 600), _saveDraft);
+  }
+
+  Future<void> _saveDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _kDraftKey,
+        jsonEncode(<String, dynamic>{
+          'name': _nameController.text,
+          'phone': _phoneController.text,
+          'address': _addressController.text,
+          'hotelType': _selectedHotelType,
+          'subCategory': _selectedSubCategory,
+          'city': _detectedCity,
+          'lat': _detectedLat,
+          'lng': _detectedLng,
+        }),
+      );
+    } catch (e) {
+      debugPrint('[SellerOnboarding] draft save failed (non-fatal): $e');
+    }
+  }
+
+  Future<void> _restoreDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kDraftKey);
+      if (raw == null || raw.isEmpty || !mounted) return;
+      final d = jsonDecode(raw) as Map<String, dynamic>;
+      _nameController.text = (d['name'] as String?) ?? '';
+      _phoneController.text = (d['phone'] as String?) ?? '';
+      _addressController.text = (d['address'] as String?) ?? '';
+      if (!mounted) return;
+      setState(() {
+        _selectedHotelType = (d['hotelType'] as String?) ?? _selectedHotelType;
+        _selectedSubCategory = (d['subCategory'] as String?) ?? _selectedSubCategory;
+        _detectedCity = d['city'] as String?;
+        _detectedLat = (d['lat'] as num?)?.toDouble();
+        _detectedLng = (d['lng'] as num?)?.toDouble();
+      });
+    } catch (e) {
+      debugPrint('[SellerOnboarding] draft restore failed (non-fatal): $e');
+    }
+  }
+
+  Future<void> _clearDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_kDraftKey);
+    } catch (_) {}
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_restoreDraft());
+    for (final c in <TextEditingController>[
+      _nameController,
+      _phoneController,
+      _addressController,
+    ]) {
+      c.addListener(_scheduleDraftSave);
+    }
+  }
 
   static const _hotelTypes = [
     ('both', 'Veg & Non-Veg', 'I serve everything', Icons.restaurant_menu),
@@ -105,6 +191,7 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
 
   @override
   void dispose() {
+    _draftDebounce?.cancel();
     _nameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
@@ -156,6 +243,7 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
       );
 
       await _service.createSellerProfile(seller);
+      unawaited(_clearDraft());
 
       if (!mounted) return;
 
@@ -362,7 +450,10 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
                 subtitle: type.$3,
                 icon: type.$4,
                 isSelected: _selectedHotelType == type.$1,
-                onTap: () => setState(() => _selectedHotelType = type.$1),
+                onTap: () {
+                  setState(() => _selectedHotelType = type.$1);
+                  _scheduleDraftSave();
+                },
               ),
             ),
           ),
@@ -403,7 +494,10 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
               (cat) {
                 final isSelected = _selectedSubCategory == cat.key;
                 return GestureDetector(
-                  onTap: () => setState(() => _selectedSubCategory = cat.key),
+                  onTap: () {
+                    setState(() => _selectedSubCategory = cat.key);
+                    _scheduleDraftSave();
+                  },
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 10,),

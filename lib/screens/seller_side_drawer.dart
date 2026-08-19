@@ -22,9 +22,9 @@ class SellerSideDrawer extends StatelessWidget {
 
   static const Color _teal = Color(0xFF11998E);
   static const Color _tealLight = Color(0xFF38EF7D);
-  static const Color _text = Color(0xFFEEEEF5);
-  static const Color _muted = Color(0xFF7777A0);
-  static const Color _bg = Color(0xFF0A0A1A);
+  static const Color _text = Color(0xFF1A1A1A);
+  static const Color _muted = Color(0xFF6B7280);
+  static const Color _bg = Color(0xFFF7FAF8);
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +66,46 @@ class SellerSideDrawer extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
+            if (seller != null)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: _teal.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.account_balance_wallet_rounded, color: _tealLight, size: 20),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Usage Fee Wallet', style: TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 4),
+                          Text(
+                            '₹${seller!.walletBalance.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              color: seller!.walletBalance < 0 ? Colors.redAccent : Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (seller?.role != 'staff')
               ListTile(
                 leading: const Icon(Icons.settings_rounded, color: _teal),

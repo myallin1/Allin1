@@ -16,7 +16,7 @@ class GuruOfferScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Guru AI Offer',
+          'Chitti AI Offer',
           style: GoogleFonts.outfit(
             color: const Color(0xFF4A1236),
             fontWeight: FontWeight.w700,
@@ -69,7 +69,7 @@ class GuruOfferScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 22),
                 Text(
-                  'Get your Guru AI subscription for 1 year FREE!',
+                  'Get your Chitti AI subscription for 1 year FREE!',
                   style: GoogleFonts.outfit(
                     color: const Color(0xFF351124),
                     fontSize: 30,
@@ -89,7 +89,7 @@ class GuruOfferScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'NJ TECH will help you activate Guru AI for rides, custom orders, and tech support guidance. Advanced users can still connect their own Groq API key later from Settings.',
+                  'NJ TECH will help you activate Chitti AI for rides, custom orders, and tech support guidance. Advanced users can still connect their own Groq API key later from Settings.',
                   style: GoogleFonts.outfit(
                     color: const Color(0xFF7A5568),
                     fontSize: 14,
@@ -128,7 +128,7 @@ class GuruOfferScreen extends StatelessWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Walk into NJ TECH in Erode and ask for the Guru AI activation offer.',
+                          'Walk into NJ TECH in Erode and ask for the Chitti AI activation offer.',
                           style: GoogleFonts.outfit(
                             color: const Color(0xFF4A1236),
                             fontWeight: FontWeight.w700,

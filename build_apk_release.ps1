@@ -35,19 +35,54 @@
 # ================================================================
 
 param(
-    [ValidateSet('all', 'customer', 'hero', 'admin')]
+    [ValidateSet('all', 'customer', 'hero', 'seller', 'admin')]
     [string]$Only = 'all',
-    [switch]$NoVersionBump
+    [switch]$NoVersionBump,
+    # Off by default ON PURPOSE - see the speed note below.
+    [switch]$Clean
 )
 
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
+# SELLER ADDED (Aug 19 2026). This list had only customer/hero/admin,
+# so `.\build_apk_release.ps1` silently produced three APKs and the
+# seller build was never packaged - even though update_service.dart
+# already defines sellerApkUrl and expects allin1-seller.apk to exist
+# in the GitHub release. Any seller tapping Update would have hit a
+# 404, which is the exact failure this script was written to prevent.
 $flavors = @(
     @{ Name = 'customer'; Entry = 'lib/main_customer.dart' }
     @{ Name = 'hero';     Entry = 'lib/main_hero.dart' }
+    @{ Name = 'seller';   Entry = 'lib/main_seller.dart' }
     @{ Name = 'admin';    Entry = 'lib/main_admin.dart' }
 )
+
+# ── SPEED: WHY THERE IS NO `flutter clean` IN THE LOOP ──────────
+# The four flavors share one Dart codebase and one Gradle project.
+# Gradle keeps a SEPARATE output directory per flavor, so building
+# `hero` cannot overwrite `customer` - the outputs are
+# app-customer-release.apk, app-hero-release.apk, and so on, and they
+# sit side by side. Nothing needs cleaning between them.
+#
+# Cleaning between flavors would throw away the Gradle cache, the
+# compiled Kotlin, and every downloaded dependency, then rebuild all
+# of it four times over. That is the single easiest way to turn a
+# ~6 minute all-flavor build into a ~25 minute one, for no benefit.
+#
+# Pass -Clean only when something is genuinely stale (after changing
+# build.gradle, bumping the Flutter SDK, or adding a plugin). It runs
+# ONCE, before the loop, never inside it.
+if ($Clean) {
+    Write-Host "[CLEAN] flutter clean (requested)" -ForegroundColor Yellow
+    flutter clean
+    flutter pub get
+} else {
+    # pub get is cheap and catches a stale package_config.json, which
+    # is what caused the phantom "undefined AppUpdateGateService"
+    # analyzer errors earlier.
+    flutter pub get
+}
 $selected = if ($Only -eq 'all') { $flavors } else { $flavors | Where-Object { $_.Name -eq $Only } }
 
 function Step-SemverPatch {
@@ -179,8 +214,8 @@ if (Get-Command gh -ErrorAction SilentlyContinue) {
     Write-Host "  GitHub CLI (gh) not found. Publish manually:" -ForegroundColor Yellow
     Write-Host "    1. Go to https://github.com/myallin1/Allin1-update-release/releases/new" -ForegroundColor White
     Write-Host "    2. Tag: $tag  (must match or exceed pubspec version above)" -ForegroundColor White
-    Write-Host "    3. Upload all 3 files from .\$releaseDir\ WITHOUT renaming them -" -ForegroundColor White
-    Write-Host "       allin1-customer.apk / allin1-hero.apk / allin1-admin.apk" -ForegroundColor White
+    Write-Host "    3. Upload all 4 files from .\$releaseDir\ WITHOUT renaming them -" -ForegroundColor White
+    Write-Host "       allin1-customer.apk / allin1-hero.apk / allin1-seller.apk / allin1-admin.apk" -ForegroundColor White
     Write-Host "       are the exact names update_service.dart looks for." -ForegroundColor White
     Write-Host "    4. Publish release." -ForegroundColor White
     Write-Host ""

@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:share_plus/share_plus.dart';
 
 // GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
 import '../services/auth_prompt_service.dart';
@@ -146,6 +147,29 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
         ),
         onPressed: () => Navigator.pop(context),
       ),
+      // NEW (Aug 19 2026 — WhatsApp deep link share): lets a customer OR
+      // the seller themselves (this screen has no role gating — a seller
+      // viewing their own shop hits the same code path) share a link that
+      // opens straight to this shop, in the app if installed or the PWA
+      // otherwise. Matches the existing leading-button's pill styling.
+      actions: [
+        IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.ios_share_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
+          ),
+          onPressed: () => _shareShop(shopName),
+        ),
+        const SizedBox(width: 8),
+      ],
       flexibleSpace: FlexibleSpaceBar(
         background: Stack(
           fit: StackFit.expand,
@@ -222,6 +246,23 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── Share (Aug 19 2026 — WhatsApp deep link) ────────────────
+  // Deep link points at Firebase's DEFAULT hosting domain for the
+  // customer target (my-allin1.web.app — see .firebaserc/firebase.json,
+  // "customer" -> "my-allin1"). Path is parsed by
+  // dashboard_screen.dart's _parseDeepLinkPath() on both web
+  // (Uri.base.path) and native (app_links uriLinkStream) cold/warm start.
+  void _shareShop(String shopName) {
+    final sellerId = widget.seller['id'] as String? ?? '';
+    if (sellerId.isEmpty) return;
+    final deepLink = 'https://my-allin1.web.app/shop/$sellerId';
+    SharePlus.instance.share(
+      ShareParams(
+        text: 'Order from $shopName on MyAllin1 Erode! 🍽️\n$deepLink',
       ),
     );
   }

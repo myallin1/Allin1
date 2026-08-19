@@ -90,7 +90,20 @@ class FoodHubScreen extends StatelessWidget {
                     imageAsset: shop.imageAsset,
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => PartnerShopOrderScreen(shop: shop)),
+                      MaterialPageRoute(
+                        // Named + primitive argument (Aug 19 2026
+                        // deep-breadcrumb work) so RouteBreadcrumbObserver
+                        // can persist/restore this on cold start — see
+                        // main_customer.dart '/partner_shop_detail'
+                        // onGenerateRoute, which looks the shop back up
+                        // in kPartnerShops by name (a static const list,
+                        // no refetch needed).
+                        settings: RouteSettings(
+                          name: '/partner_shop_detail',
+                          arguments: <String, dynamic>{'shopName': shop.name},
+                        ),
+                        builder: (_) => PartnerShopOrderScreen(shop: shop),
+                      ),
                     ),
                   ),
                 )

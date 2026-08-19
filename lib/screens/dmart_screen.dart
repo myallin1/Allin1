@@ -111,7 +111,7 @@ class _DmartScreenState extends State<DmartScreen> {
       if (apiKey.trim().isEmpty) {
         if (!mounted) return;
         messenger.showSnackBar(
-          const SnackBar(content: Text("Guru AI isn't available on your account yet.")),
+          const SnackBar(content: Text("Chitti AI isn't available on your account yet.")),
         );
         return;
       }

@@ -18,6 +18,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// currentAppVariant — the Seller app defaults to a light theme.
+import '../config/app_variant.dart';
+
 @immutable
 class AppBrandGradients extends ThemeExtension<AppBrandGradients> {
   const AppBrandGradients({
@@ -564,7 +567,17 @@ class ThemeService extends ChangeNotifier {
     'multicolor',
   ];
 
-  String _themeKey = 'pink_white';
+  // DEFAULT PER APP (Aug 19 2026, Nizam: sellers rejected the dark UI —
+  // "business dull feel iruku dark la").
+  //
+  // The Seller app now starts on a LIGHT theme. Only the default
+  // changes: the picker in seller_settings_screen still offers all five,
+  // and a seller who has already chosen one keeps it, because
+  // _loadTheme() overwrites this with their saved value on startup.
+  //
+  // Customer/Hero/Admin are untouched and still open on pink_white.
+  String _themeKey =
+      currentAppVariant == 'seller' ? 'system_light' : 'pink_white';
 
   String get themeKey => _themeKey;
 

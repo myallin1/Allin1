@@ -1,7 +1,7 @@
 ﻿name: erode_superapp
 description: Erode All-in-One Super App - Multi-vendor Commerce MVP by NJ TECH
 publish_to: 'none'
-version: 1.0.9+235
+version: 1.0.9+239
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -154,6 +154,18 @@ dependencies:
   youtube_player_iframe: ^6.0.2
   uuid: ^4.4.0
   web: ^1.1.0
+  # NEW (Aug 19 2026 — WhatsApp deep link to shop screen): clean-path web
+  # routing (my-allin1.web.app/shop/<id> instead of /#/shop/<id>) so
+  # Android App Links can match by host+path. Ships with the Flutter SDK
+  # (no separate pub.dev version pin needed) — used only in
+  # main_customer.dart, web build only, zero effect on native flavors.
+  flutter_web_plugins:
+    sdk: flutter
+  # NEW (Aug 19 2026 — same deep-link effort): actively maintained
+  # replacement for the deprecated uni_links, used to catch the cold-start
+  # and warm-start Android App Links Uri in main_customer.dart /
+  # dashboard_screen.dart. Web is unaffected (guarded by !kIsWeb).
+  app_links: ^7.2.1
   open_filex: ^4.7.0
   path_provider: ^2.1.5
   flutter_local_notifications: ^21.0.0
@@ -192,6 +204,18 @@ dependencies:
 dev_dependencies:
   build_runner: ^2.4.8
   flutter_launcher_icons: ^0.14.4
+  # NEW (Aug 19 2026 — Nizam: "app open agumbothu ovvonnum vevvera
+  # vidhama kaatuthu"). ROOT CAUSE of the inconsistent splash: there was
+  # no configured splash at all. launch_background.xml was left at the
+  # Flutter template default (plain @android:color/white), a SEPARATE
+  # values-night/styles.xml flipped it dark, and on Android 12+ the OS
+  # ignores most of that and draws its own splash from the launcher
+  # icon. Three different first frames depending on OS version and dark
+  # mode — which is exactly what was being seen.
+  #
+  # DEV dependency only: it GENERATES the native splash resources at
+  # setup time and ships nothing into the APK.
+  flutter_native_splash: ^2.4.1
   flutter_lints: ^4.0.0
   flutter_test:
     sdk: flutter
@@ -225,6 +249,16 @@ flutter:
     - assets/sounds/
     - assets/gifs/
     - assets/images/food_slides/
+    # Taxi mega-card photo slider (Aug 19 2026). Flutter does not
+    # recurse, so this folder was invisible to the bundle even though
+    # yellow_car.png already lived in it — the Taxi row's yellow car
+    # would have silently failed to load in a release build.
+    - assets/images/taxi_slides/
+    # Hero Booking mega-card photo slider (Aug 19 2026) — the 3D
+    # delivery-partner renders.
+    - assets/images/hero_slides/
+    # Native splash source art (Aug 19 2026).
+    - assets/splash/
     # AI assistant robot (Aug 17 2026). Flutter does NOT recurse into
     # subfolders â€” each one has to be listed, which is why the folders
     # above are enumerated individually. Holds one 0.31 MB animated
@@ -257,3 +291,53 @@ flutter_launcher_icons:
   image_path: "assets/images/app_icon.png"
 
 
+
+# ================================================================
+# flutter_native_splash — ONE first frame, everywhere
+# ================================================================
+# Regenerate after ANY change here:
+#     dart run flutter_native_splash:create
+#
+# WHY EVERY KEY BELOW IS SET EXPLICITLY
+# The bug being fixed was inconsistency, so nothing is left to a
+# default that could differ between Android versions or themes:
+#
+#   color / color_dark  — the SAME white in both. Without color_dark,
+#                         values-night keeps its own dark background and
+#                         the splash flips colour with the system theme.
+#   android_12          — Android 12+ uses a separate SplashScreen API
+#                         and IGNORES the legacy drawable. Configuring
+#                         this block is what stops new phones falling
+#                         back to the bare launcher icon.
+#   web: false          — the PWA already has its own hand-built splash
+#                         in web/index.html (logo + saffron/green glow +
+#                         spinner). Letting this package overwrite it
+#                         would throw that away.
+#
+# The tricolour side-glow and the loading text/spinner Nizam asked for
+# live in the FLUTTER splash (branded_loading_screen.dart), not here.
+# A native splash is a static image the OS draws before Dart starts —
+# it cannot animate or run our gradient. Keeping this frame identical
+# in colour to that screen is what makes the handover invisible.
+flutter_native_splash:
+  color: "#FDFDFD"
+  color_dark: "#FDFDFD"
+  image: assets/splash/splash_logo.png
+  image_dark: assets/splash/splash_logo.png
+  android: true
+  ios: true
+  web: false
+  android_gravity: center
+  ios_content_mode: center
+  fullscreen: false
+
+  android_12:
+    color: "#FDFDFD"
+    color_dark: "#FDFDFD"
+    image: assets/splash/splash_logo.png
+    image_dark: assets/splash/splash_logo.png
+    # Android 12 masks the splash icon into a circle and reserves the
+    # outer third for that mask, so art sized for the legacy splash
+    # gets visibly clipped. This is the documented safe size.
+    icon_background_color: "#FDFDFD"
+    icon_background_color_dark: "#FDFDFD"

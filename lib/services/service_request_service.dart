@@ -269,15 +269,27 @@ class ServiceRequestService {
   /// Moves the seller's own kitchen stage forward. Writes ONLY the three
   /// fields firestore.rules' seller clause permits — adding any other
   /// field here will make the whole update permission-denied.
-  Future<void> advanceSellerStage(String requestId, String stage) async {
-    await FirebaseFirestore.instance
+  Future<void> advanceSellerStage(String requestId, String stage, {String? sellerId}) async {
+    final batch = FirebaseFirestore.instance.batch();
+    
+    final reqRef = FirebaseFirestore.instance
         .collection('service_requests')
-        .doc(requestId)
-        .update({
+        .doc(requestId);
+
+    batch.update(reqRef, {
       'sellerStage': stage,
       'sellerStageAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    if (stage == 'accepted' && sellerId != null) {
+      final sellerRef = FirebaseFirestore.instance.collection('sellers').doc(sellerId);
+      batch.update(sellerRef, {
+        'walletBalance': FieldValue.increment(-5.0),
+      });
+    }
+
+    await batch.commit();
   }
 
   /// Fires the held-back hero broadcast for a deferred order — the

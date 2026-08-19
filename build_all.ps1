@@ -1,5 +1,12 @@
-# build_all.ps1 - Allin1 Super App
-Set-Location "C:\Projects\all in one"
+# build_all.ps1 - Allin1 Super App (all 4 PWAs + Firebase Hosting deploy)
+#
+# FIX (Aug 19 2026): this pointed at "C:\Projects\all in one", a path
+# that no longer exists - the project lives in C:\Projects\Allin1. The
+# script would either fail outright or, worse, run against whatever
+# happened to be in the current directory. $PSScriptRoot always
+# resolves to the folder this script sits in, so it cannot drift again
+# if the project is moved or cloned somewhere else.
+Set-Location $PSScriptRoot
 $env:PATH = "C:\Program Files\nodejs;" + $env:PATH
 $FIREBASE = "C:\Users\nijja\AppData\Roaming\npm\firebase.cmd"
 

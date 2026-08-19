@@ -15,6 +15,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/app_minimizer_service.dart';
+import '../../widgets/native_update_button.dart';
 import '../../services/db_usage_tracker.dart';
 import '../../services/service_requests_listener.dart';
 import '../../services/update_service.dart';
@@ -817,6 +818,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         ],
       ),
       actions: [
+        // NEW (Aug 19 2026): Admin had only WebVersionChecker, which
+        // covers the PWA's service-worker refresh and does nothing at
+        // all for the installed Android build. So the admin APK had no
+        // update path — on the one app used to fix everything else.
+        const NativeUpdateButton(appVariant: 'admin'),
         IconButton(
           icon: const Icon(Icons.map_rounded, color: Color(0xFFFF4FA3), size: 22),
           onPressed: () => Navigator.push(

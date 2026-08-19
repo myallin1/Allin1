@@ -220,23 +220,63 @@ class AuthService {
   // ================================================================
   // Login with Google
   // ================================================================
+  //
+  // WEB-SAFE FIX (Aug 19 2026 — Nizam: "seller pwa la kudutha details
+  // namma admin ku varala"). ROOT CAUSE, same bug already diagnosed and
+  // fixed for hero (see hero_register_screen.dart's _ensureSignedIn(),
+  // Aug 12 2026 comment): on WEB, google_sign_in's signIn() is
+  // deprecated and opens a popup, then polls `window.closed` to detect
+  // when it's done. Modern browsers' Cross-Origin-Opener-Policy blocks
+  // that `window.closed` check, so the plugin silently falls back to a
+  // full-page REDIRECT. A redirect reloads the ENTIRE Flutter app —
+  // whatever screen the seller was on (login, or straight into the
+  // onboarding form if a session already existed) gets torn down mid
+  // sign-in, and the app reboots with no completed setup, landing back
+  // on login. From the seller's side this looks exactly like "I filled
+  // the form, hit submit, and got bounced back to the start" — no
+  // Firestore write ever happens, so admin never sees the submission.
+  // This is the SAME shared login_screen.dart -> AuthService path every
+  // flavor's Google button uses, so sellers hit it every time they
+  // signed in on the PWA.
+  //
+  // FirebaseAuth's own signInWithPopup() is the supported web
+  // replacement — it never redirects, so the screen underneath stays
+  // mounted and any in-progress state survives. Native (Android APK)
+  // is untouched below: google_sign_in's signIn() works correctly
+  // there, this bug is web-only.
   Future<AuthResult> loginWithGoogle({
     required UserType userType,
     bool rememberMe = false,
   }) async {
     try {
-      final googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) {
-        return AuthResult(success: false, error: 'Google sign-in cancelled');
+      UserCredential userCredential;
+      if (kIsWeb) {
+        final provider = GoogleAuthProvider()
+          ..addScope('email')
+          ..addScope('profile');
+        try {
+          userCredential = await _auth.signInWithPopup(provider);
+        } on FirebaseAuthException catch (e) {
+          if (e.code == 'popup-closed-by-user' ||
+              e.code == 'cancelled-popup-request') {
+            return AuthResult(success: false, error: 'Google sign-in cancelled');
+          }
+          rethrow;
+        }
+      } else {
+        final googleUser = await _googleSignIn.signIn();
+        if (googleUser == null) {
+          return AuthResult(success: false, error: 'Google sign-in cancelled');
+        }
+
+        final googleAuth = await googleUser.authentication;
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+
+        userCredential = await _auth.signInWithCredential(credential);
       }
-
-      final googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      final userCredential = await _auth.signInWithCredential(credential);
 
       // 🔥 Force refresh to fetch latest claims
       await FirebaseAuth.instance.currentUser?.getIdToken(true);

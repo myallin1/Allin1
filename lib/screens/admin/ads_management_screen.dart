@@ -6,6 +6,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:erode_superapp/models/mobile_models.dart' show isValidYoutubeUrl;
 import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
 class AdsManagementScreen extends StatefulWidget {
@@ -37,6 +38,17 @@ class _AdsManagementScreenState extends State<AdsManagementScreen> {
   final _imageUrlController = TextEditingController();
   final _actionUrlController = TextEditingController();
   final _coinsController = TextEditingController();
+
+  // VIDEO AD (Aug 19 2026, Nizam: "video ad potatthum customer app la
+  // pakka option ila"). The ad arrived on the customer side but had
+  // nowhere to play — because there was no video field at all, only
+  // actionUrl, which merely launches an external browser.
+  //
+  // We store ONLY the YouTube URL string. YouTube does the hosting,
+  // transcoding, streaming and CDN, so a video ad costs us literally
+  // zero storage and zero bandwidth — the only reason video is viable
+  // on the Spark plan at all.
+  final _videoUrlController = TextEditingController();
   String _selectedCategory = 'general';
   String _selectedColor = _orange.toARGB32().toRadixString(16);
   bool _isActive = true;
@@ -50,6 +62,7 @@ class _AdsManagementScreenState extends State<AdsManagementScreen> {
     _imageUrlController.dispose();
     _actionUrlController.dispose();
     _coinsController.dispose();
+    _videoUrlController.dispose();
     super.dispose();
   }
 
@@ -57,6 +70,15 @@ class _AdsManagementScreenState extends State<AdsManagementScreen> {
   Future<void> _saveAd() async {
     if (_shopController.text.trim().isEmpty) {
       _snack('Shop name is required', _red);
+      return;
+    }
+
+    // Reject a bad video paste HERE rather than shipping an ad with a
+    // play button that leads to a dead frame. Empty is fine — video is
+    // optional and most ads are still image-only.
+    final videoUrl = _videoUrlController.text.trim();
+    if (videoUrl.isNotEmpty && !isValidYoutubeUrl(videoUrl)) {
+      _snack('That YouTube link is not valid', _red);
       return;
     }
 
@@ -73,6 +95,7 @@ class _AdsManagementScreenState extends State<AdsManagementScreen> {
         'color': '#$_selectedColor',
         'imageUrl': _imageUrlController.text.trim(),
         'actionUrl': _actionUrlController.text.trim(),
+        'videoUrl': videoUrl,
         'coinsReward': int.tryParse(_coinsController.text.trim()) ?? 50,
         'views': 0,
         'clicks': 0,
@@ -137,6 +160,7 @@ class _AdsManagementScreenState extends State<AdsManagementScreen> {
       _phoneController.text = data['phone'] as String? ?? '';
       _imageUrlController.text = data['imageUrl'] as String? ?? '';
       _actionUrlController.text = data['actionUrl'] as String? ?? '';
+      _videoUrlController.text = data['videoUrl'] as String? ?? '';
       _coinsController.text = (data['coinsReward'] ?? 50).toString();
       _selectedCategory = data['category'] as String? ?? 'general';
       _selectedColor = (data['color'] as String?)?.replaceFirst('#', '') ??
@@ -225,6 +249,29 @@ class _AdsManagementScreenState extends State<AdsManagementScreen> {
                     borderRadius: BorderRadius.circular(12),
                     borderSide:
                         const BorderSide(color: Color(0xFF6C63FF), width: 2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // YouTube Video URL Input — optional. When set, the
+              // customer's Erode Flash Ads card grows a thumbnail with
+              // a play badge that opens an in-app player, so the
+              // customer never has to leave Allin1 to watch the ad.
+              TextFormField(
+                controller: _videoUrlController,
+                style: const TextStyle(color: _text),
+                decoration: InputDecoration(
+                  labelText: '🎬 YouTube Video URL (optional)',
+                  hintText: 'https://youtu.be/xxxxxxxxxxx',
+                  labelStyle: const TextStyle(color: _muted),
+                  hintStyle: const TextStyle(color: _muted),
+                  prefixIcon: const Icon(Icons.smart_display, color: _red),
+                  filled: true,
+                  fillColor: _card,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: _border),
                   ),
                 ),
               ),

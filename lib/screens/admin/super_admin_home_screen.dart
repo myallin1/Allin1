@@ -37,6 +37,7 @@ import 'customer_demand_screen.dart';
 import 'payments_received_screen.dart';
 import 'usage_fee_ledger_screen.dart';
 import 'erode_offers_management_screen.dart';
+import 'admin_home_banner_screen.dart';
 
 class SuperAdminHomeScreen extends StatefulWidget {
   const SuperAdminHomeScreen({super.key});
@@ -856,6 +857,22 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 );
               },
             ),
+            // NEW (Aug 19 2026 — Nizam's "home page banner offer"
+            // request). Separate feature/collection from Erode Offers
+            // above — see admin_home_banner_screen.dart.
+            ListTile(
+              leading: const Icon(Icons.view_carousel_outlined, color: Color(0xFFB21FFF)),
+              title: const Text('Home Page Banner Offers', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Manage the sliding banner on the customer home page',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const AdminHomeBannerScreen()),
+                );
+              },
+            ),
             // NEW (CTO mandate — Synthetic QA Test-Bot, Step 2: Side
             // Hamburger Tray Integration): "must not be hidden — must be
             // directly accessible as a dedicated menu item inside the
@@ -1116,19 +1133,48 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
               stream: FirebaseFirestore.instance.collection('system_settings').doc('app_status').snapshots(),
               builder: (context, snapshot) {
                 final data = snapshot.data?.data() as Map<String, dynamic>?;
-                final showDemoVehicles = data?['show_demo_vehicles'] as bool? ?? false;
-                return SwitchListTile(
-                  secondary: const Icon(Icons.airport_shuttle, color: Color(0xFFB21FFF)),
-                  title: const Text('Demo Vehicles (Simulation)', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
-                  subtitle: Text('Show simulated traffic loops on the map',
-                      style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
-                  activeColor: const Color(0xFFB21FFF),
-                  value: showDemoVehicles,
-                  onChanged: (val) {
-                    FirebaseFirestore.instance.collection('system_settings').doc('app_status').set(
-                      {'show_demo_vehicles': val}, SetOptions(merge: true)
-                    );
-                  },
+                final simMode = data?['simulation_mode'] as String? ?? 'off';
+                
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.airport_shuttle, color: Color(0xFFB21FFF), size: 20),
+                          SizedBox(width: 12),
+                          Text('Customer App Demo Vehicles', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text('Shows fake vehicles on CUSTOMER phones',
+                          style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+                      const SizedBox(height: 12),
+                      SegmentedButton<String>(
+                        style: SegmentedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          selectedBackgroundColor: const Color(0xFFB21FFF).withValues(alpha: 0.2),
+                          foregroundColor: _text,
+                          selectedForegroundColor: const Color(0xFFB21FFF),
+                          side: const BorderSide(color: Color(0xFF262636)),
+                        ),
+                        segments: const [
+                          ButtonSegment(value: 'off', label: Text('Off', style: TextStyle(fontSize: 11))),
+                          ButtonSegment(value: 'normal', label: Text('Normal', style: TextStyle(fontSize: 11))),
+                          ButtonSegment(value: 'busy', label: Text('Busy', style: TextStyle(fontSize: 11))),
+                          ButtonSegment(value: 'peak', label: Text('Peak', style: TextStyle(fontSize: 11))),
+                        ],
+                        selected: {simMode},
+                        onSelectionChanged: (Set<String> newSelection) {
+                          FirebaseFirestore.instance.collection('system_settings').doc('app_status').set(
+                            {'simulation_mode': newSelection.first}, SetOptions(merge: true)
+                          );
+                        },
+                      ),
+                      const Divider(color: Color(0xFF262636), height: 32),
+                    ],
+                  ),
                 );
               },
             ),

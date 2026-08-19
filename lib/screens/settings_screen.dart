@@ -6,7 +6,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:flutter/services.dart'
+    show Clipboard, ClipboardData, HapticFeedback;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive/hive.dart';
 import 'package:provider/provider.dart';
@@ -108,6 +110,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _initServices();
+    unawaited(_loadAiUnlockState());
   }
 
   // FIX #1: Hive optimization + MapService init safety
@@ -146,6 +149,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    // Leaving this running would fire _openAiSettings() on a disposed
+    // State if the customer navigated away mid-hold.
+    _holdTimer?.cancel();
     super.dispose();
   }
 
@@ -389,18 +395,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildThemeTile(ThemeService themeService, String Function(String) t) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: kPurple.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(Icons.palette_outlined, color: kPurple, size: 20),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,7 +415,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   t('theme_title'),
                   style: GoogleFonts.outfit(
                     color: kText,
-                    fontSize: 15,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -417,7 +423,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   t('theme_subtitle'),
                   style: GoogleFonts.outfit(
                     color: kMuted,
-                    fontSize: 12,
+                    fontSize: 11,
                   ),
                 ),
               ],
@@ -469,18 +475,141 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // _buildTapTile rows elsewhere on this page (gradient badge icon,
   // live activation-status subtitle) since this is meant to read as an
   // exciting feature, not routine account settings.
+  // ── HIDDEN UNLOCK (Aug 19 2026, Nizam) ─────────────────────────
+  // The AI configuration screen asks the customer to paste a Groq API
+  // key. That is a power-user action: someone who wanders into it by
+  // accident just sees a form they cannot fill in, and a settings page
+  // full of things you cannot use reads as broken.
+  //
+  // So it is gated the way Android gates Developer Options — repeated
+  // taps on a visible row. Two stages, per Nizam:
+  //   FIRST TIME : 13 taps to unlock it, permanently.
+  //   AFTER THAT : a 5-second long-press opens it again.
+  //
+  // The unlock is PERSISTED, so it survives reopening the app. If it
+  // were not, an unlocked user would have to tap 13 times every single
+  // session — which is a chore, not a secret.
+  //
+  // NOTE ON DISCOVERABILITY: 13 taps is deliberately un-findable. That
+  // means the ONLY way a customer learns this exists is if you tell
+  // them. That's the intent, but it does mean support has to hand out
+  // the gesture — worth remembering when someone asks how to activate
+  // their key.
+  static const int _kAiUnlockTaps = 13;
+  static const String _kAiUnlockedPrefsKey = 'ai_config_unlocked';
+
+  int _aiTapCount = 0;
+  bool _aiUnlocked = false;
+  DateTime? _lastAiTapAt;
+
+  Future<void> _loadAiUnlockState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final unlocked = prefs.getBool(_kAiUnlockedPrefsKey) ?? false;
+      if (mounted && unlocked) setState(() => _aiUnlocked = true);
+    } catch (_) {
+      // Non-fatal: worst case the customer taps 13 times again.
+    }
+  }
+
+  void _openAiSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(builder: (_) => const AiSettingsScreen()),
+    );
+  }
+
+  void _onAiTap() {
+    // Already unlocked: taps do nothing. Opening is long-press only
+    // from here on, exactly as specified — otherwise the row would be
+    // a one-tap shortcut and the long-press would be pointless.
+    if (_aiUnlocked) {
+      _snack('Press and hold for 5 seconds to open AI settings');
+      return;
+    }
+
+    // Reset the run if the taps are too far apart, so 13 accidental
+    // taps spread over a long session don't add up to an unlock.
+    final now = DateTime.now();
+    if (_lastAiTapAt != null &&
+        now.difference(_lastAiTapAt!) > const Duration(seconds: 2)) {
+      _aiTapCount = 0;
+    }
+    _lastAiTapAt = now;
+    _aiTapCount++;
+
+    if (_aiTapCount >= _kAiUnlockTaps) {
+      _aiTapCount = 0;
+      setState(() => _aiUnlocked = true);
+      unawaited(
+        SharedPreferences.getInstance()
+            .then((p) => p.setBool(_kAiUnlockedPrefsKey, true))
+            .catchError((Object _) => false),
+      );
+      HapticFeedback.heavyImpact();
+      _snack('🦸 Chitti unlocked! Press and hold to open.');
+      _openAiSettings();
+      return;
+    }
+
+    // Silent for the first several taps — announcing the countdown from
+    // tap one would give the secret away to anyone who brushed the row.
+    final left = _kAiUnlockTaps - _aiTapCount;
+    if (left <= 5) {
+      HapticFeedback.selectionClick();
+      _snack('$left more…');
+    }
+  }
+
+  Timer? _holdTimer;
+
+  /// Starts the 5-second hold. Only meaningful once unlocked — holding
+  /// a still-locked row must not become a shortcut past the 13 taps.
+  void _startHold() {
+    if (!_aiUnlocked) return;
+    _holdTimer?.cancel();
+    _holdTimer = Timer(const Duration(seconds: 5), () {
+      if (!mounted) return;
+      HapticFeedback.heavyImpact();
+      _openAiSettings();
+    });
+  }
+
+  void _cancelHold() {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+  }
+
+  void _snack(String msg) {
+    final messenger = ScaffoldMessenger.of(context)..removeCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(msg, style: GoogleFonts.outfit(fontSize: 12.5)),
+        duration: const Duration(milliseconds: 900),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   Widget _buildAiAssistantSettings() {
     final aiActivation = context.watch<AiActivationService>();
     final activated = aiActivation.isAiActivated;
 
     return Material(
       color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute<void>(builder: (_) => const AiSettingsScreen()),
-        ),
+      // GestureDetector, not InkWell.onLongPress: Flutter's built-in
+      // long-press fires at ~500ms and is not configurable, and Nizam
+      // asked for a FIVE second hold. So the hold is timed manually
+      // from the raw press-down/press-up events.
+      child: GestureDetector(
+        onTap: _onAiTap,
+        onTapDown: (_) => _startHold(),
+        onTapUp: (_) => _cancelHold(),
+        onTapCancel: _cancelHold,
+        // A drag off the row is a cancel too — otherwise a scroll that
+        // began on this tile would keep the timer running and pop the
+        // screen open five seconds into an unrelated gesture.
+        onVerticalDragStart: (_) => _cancelHold(),
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
@@ -497,7 +626,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               end: Alignment.bottomRight,
             ),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: Row(
             children: [
               Container(
@@ -516,30 +645,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   size: 20,
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Single line now, per Nizam — the old two-line
+                    // title + subtitle said the same thing twice and
+                    // was the tallest row on the page.
                     Text(
-                      'AI Assistant Configuration',
+                      'Activate ur Own Ai superhero Chitti',
                       style: GoogleFonts.outfit(
-                        color: kText,
-                        fontSize: 15,
+                        color: activated ? const Color(0xFF00C853) : kText,
+                        fontSize: 13,
                         fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      activated
-                          ? '✅ Your personal AI superhero is active'
-                          : 'Activate your own AI superhero with a free key',
-                      style: GoogleFonts.outfit(
-                        color: activated
-                            ? const Color(0xFF00C853)
-                            : kMuted,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
@@ -580,7 +699,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final isOla = provider == MapProviderType.ola;
 
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: Row(
             children: [
               Container(
@@ -599,7 +718,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   size: 20,
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -797,18 +916,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required void Function(bool)? onChanged,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: kPurple.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: kPurple, size: 20),
+            child: Icon(icon, color: kPurple, size: 18),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -817,7 +936,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title,
                   style: GoogleFonts.outfit(
                     color: kText,
-                    fontSize: 15,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -825,7 +944,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle,
                   style: GoogleFonts.outfit(
                     color: kMuted,
-                    fontSize: 12,
+                    fontSize: 11,
                   ),
                 ),
               ],
@@ -857,18 +976,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: kPurple.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: kPurple, size: 20),
+                child: Icon(icon, color: kPurple, size: 18),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -877,7 +996,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       title,
                       style: GoogleFonts.outfit(
                         color: titleColor ?? kText,
-                        fontSize: 15,
+                        fontSize: 13.5,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -885,7 +1004,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       subtitle,
                       style: GoogleFonts.outfit(
                         color: kMuted,
-                        fontSize: 12,
+                        fontSize: 11,
                       ),
                     ),
                   ],

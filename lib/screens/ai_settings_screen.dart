@@ -75,8 +75,8 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
       SnackBar(
         content: Text(
           key.isEmpty && geminiKey.isEmpty
-              ? 'Guru AI configuration cleared for this device.'
-              : 'Guru AI is ready on this device.',
+              ? 'Chitti AI configuration cleared for this device.'
+              : 'Chitti AI is ready on this device.',
         ),
         backgroundColor: key.isEmpty && geminiKey.isEmpty
             ? const Color(0xFFFFB74D)
@@ -177,7 +177,7 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
                               ? (geminiActivated
                                   ? 'Groq and Gemini are both activated on this device.'
                                   : 'Groq is activated. Gemini is optional — add it below for photo-reading.')
-                              : 'Save your Groq API key to unlock the full Guru AI chat.',
+                              : 'Save your Groq API key to unlock the full Chitti AI chat.',
                           style: GoogleFonts.outfit(
                             color: const Color(0xFF8A4E72),
                             fontSize: 13,
@@ -348,12 +348,12 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
                       : const Icon(Icons.save_rounded),
                   label: Text(
                     // FIX (same root cause as above): this used to say
-                    // "Update Guru AI Key" whenever Groq alone was
+                    // "Update Chitti AI Key" whenever Groq alone was
                     // already saved — misleading while the customer was
                     // actually trying to save a NEW Gemini key for the
                     // first time. Neutral wording that's accurate no
                     // matter which of the two fields changed.
-                    (groqActivated || geminiActivated) ? 'Update AI Keys' : 'Save & Activate Guru AI',
+                    (groqActivated || geminiActivated) ? 'Update AI Keys' : 'Save & Activate Chitti AI',
                     style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
                   ),
                   style: ElevatedButton.styleFrom(

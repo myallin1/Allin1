@@ -401,7 +401,7 @@ class _OfferCard extends StatelessWidget {
                       CloudinaryUploadService.optimizedUrl(imageUrl,
                           width: 720),
                     ),
-                    fit: BoxFit.cover,
+                    fit: BoxFit.contain, // Changed to contain to show full image
                     errorBuilder: (_, __, ___) => _posterFallback(offerPercent),
                   )
                 else
@@ -612,15 +612,37 @@ class OfferDetailScreen extends StatelessWidget {
             // when an offer actually has one — older offers created
             // before this feature simply skip straight to the gradient
             // banner below.
+            // FULL-SIZE OFFER IMAGE (Aug 19 2026, Nizam: "offer image
+            // full size visible aganum").
+            //
+            // Was a fixed 180px box with BoxFit.cover — which CROPS.
+            // On a tall poster (the usual shape a shop sends on
+            // WhatsApp) that meant the customer saw a horizontal slice
+            // out of the middle and never the offer text printed on it.
+            // The whole point of the image was lost.
+            //
+            // Now BoxFit.contain inside a generous max height: the
+            // image is shown WHOLE at its own aspect ratio, big, with
+            // nothing cut off. 62% of screen height is the ceiling so a
+            // very tall poster still leaves the details below it
+            // visible without scrolling being the only way to know they
+            // exist.
             if (imageUrl != null && imageUrl.isNotEmpty)
               ClipRRect(
                 borderRadius: BorderRadius.circular(22),
-                child: CachedCloudImage(
-                  imageUrl,
+                child: Container(
                   width: double.infinity,
-                  height: 180,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.62,
+                  ),
+                  // Neutral backing so a portrait poster's letterbox
+                  // bars read as a deliberate frame, not a gap.
+                  color: const Color(0xFFF3E7EF),
+                  child: CachedCloudImage(
+                    imageUrl,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
                 ),
               ),
             if (imageUrl != null && imageUrl.isNotEmpty) const SizedBox(height: 16),
@@ -636,7 +658,7 @@ class OfferDetailScreen extends StatelessWidget {
                 children: [
                   Text(
                     shopName,
-                    style: GoogleFonts.outfit(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900),
+                    style: GoogleFonts.outfit(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w900),
                   ),
                   const SizedBox(height: 10),
                   Container(
@@ -647,7 +669,7 @@ class OfferDetailScreen extends StatelessWidget {
                     ),
                     child: Text(
                       offerPercent != null ? '$offerPercent% OFF' : 'SPECIAL OFFER',
-                      style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14),
+                      style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11),
                     ),
                   ),
                 ],
@@ -721,9 +743,9 @@ class OfferDetailScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: GoogleFonts.outfit(color: _offerMuted, fontSize: 11.5, fontWeight: FontWeight.w700)),
+                Text(label, style: GoogleFonts.outfit(color: _offerMuted, fontSize: 9, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 3),
-                Text(value, style: GoogleFonts.outfit(color: _offerInk, fontSize: 14.5, fontWeight: FontWeight.w700)),
+                Text(value, style: GoogleFonts.outfit(color: _offerInk, fontSize: 11.5, fontWeight: FontWeight.w700)),
               ],
             ),
           ),
@@ -750,7 +772,7 @@ class OfferDetailScreen extends StatelessWidget {
           children: [
             Icon(icon, color: Colors.white, size: 22),
             const SizedBox(height: 6),
-            Text(label, style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
+            Text(label, style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 10)),
           ],
         ),
       ),

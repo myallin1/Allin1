@@ -17,44 +17,8 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../widgets/allin1_map_widget.dart' show MapMarker;
+import '../config/ride_catalog.dart';
 
-// FIX (Aug 12 2026 — "Invisible Vehicles" bug): these used to point at
-// 'assets/images/ride_*.png', which do not exist anywhere in this repo
-// — every single vehicle silently hit _DefaultMarker's errorBuilder and
-// rendered as a tiny plain white Icon instead of a real vehicle image.
-// Swapped to the actual bundled top-down UI assets (confirmed present
-// under assets/images/), one per vehicle type instead of sharing one
-// generic truck image between lorry and mini_truck.
-String rideAssetFor(String type) {
-  switch (type) {
-    case 'auto':
-      return 'assets/images/top_auto.png';
-    case 'bike':
-      return 'assets/images/top_bike.png';
-    case 'lorry':
-      return 'assets/images/top_lorry.png';
-    case 'mini_truck':
-      return 'assets/images/top_mini_truck.png';
-    case 'cab':
-    default:
-      return 'assets/images/top_cab.png';
-  }
-}
-
-IconData rideFallbackIcon(String type) {
-  switch (type) {
-    case 'auto':
-      return Icons.electric_rickshaw;
-    case 'bike':
-      return Icons.two_wheeler;
-    case 'lorry':
-    case 'mini_truck':
-      return Icons.local_shipping;
-    case 'cab':
-    default:
-      return Icons.local_taxi;
-  }
-}
 
 // 1. Road-Constrained Movement: Predefined Erode main roads
 const List<List<LatLng>> _erodeTrafficLoops = <List<LatLng>>[
@@ -193,7 +157,7 @@ double _bearingOnPath(List<LatLng> path, double progress, int direction) {
 // connected loopIndex instead of always bouncing back down the same
 // road — the closest safe approximation of a real road graph without
 // needing actual adjacency data for every Erode street.
-enum _VehicleMotionState { moving, resting }
+enum _VehicleMotionState { moving, resting, working }
 
 class _DummyVehicleState {
   _DummyVehicleState({
@@ -224,16 +188,19 @@ class _DummyVehicleState {
 
   void _pickMovingDuration() {
     // 8-20 ticks (~8-20s at the 1s global tick) of continuous movement
-    // before the next stop — varies per vehicle so a fleet never looks
-    // like it's stepping in lockstep.
     _stateTicksLeft = 8 + _random.nextInt(13);
   }
 
   void _pickRestingDuration() {
-    // 2-7 ticks (~2-7s) — short enough to read as "waiting at a light",
-    // not a breakdown.
-    motionState = _VehicleMotionState.resting;
-    _stateTicksLeft = 2 + _random.nextInt(6);
+    // Lifestyle: occasionally stop for a long time to work (parcel load/unload, drop passenger)
+    if (_random.nextDouble() < 0.25 && !isOutskirts) {
+      motionState = _VehicleMotionState.working;
+      _stateTicksLeft = 15 + _random.nextInt(20); // 15-35s working
+    } else {
+      // Short rest (traffic light / junction)
+      motionState = _VehicleMotionState.resting;
+      _stateTicksLeft = 2 + _random.nextInt(6);
+    }
   }
 
   List<LatLng> activePath() {
@@ -260,16 +227,12 @@ class _DummyVehicleState {
 
   void advance() {
     _stateTicksLeft--;
-    if (motionState == _VehicleMotionState.resting) {
-      // Idle: sits exactly where it stopped, no interpolation this
-      // tick — this IS the "stop-and-go" behavior, at zero extra cost
-      // (skipping the progress update is cheaper than doing it).
+    if (motionState == _VehicleMotionState.resting || motionState == _VehicleMotionState.working) {
+      // Idle: sits exactly where it stopped
       if (_stateTicksLeft <= 0) {
         motionState = _VehicleMotionState.moving;
         _pickMovingDuration();
         // Chance to "turn" onto a different connected road segment
-        // instead of always retracing the same one — only for city
-        // loops; outskirts lorries stay on their single ring road.
         if (!isOutskirts && _random.nextDouble() < 0.35) {
           loopIndex = _random.nextInt(_erodeTrafficLoops.length);
           direction = _random.nextBool() ? 1 : -1;
@@ -301,52 +264,80 @@ class _DummyVehicleState {
 }
 
 // 4. The 'Superman' Hero Avatars (State-Machine Logic)
-enum HeroState { moving, resting }
+enum HeroState { traveling, working, resting }
 
 class _HeroAvatarState {
-  _HeroAvatarState(this.id, this.position, int seed) : _random = Random(seed) {
+  _HeroAvatarState({
+    required this.id,
+    required this.loopIndex,
+    required this.progress,
+    required this.direction,
+    required this.speedStep,
+    int? seed,
+  }) : _random = Random(seed ?? id.hashCode) {
     _pickNewState();
   }
 
   final String id;
-  LatLng position;
-  LatLng? destination;
-  HeroState state = HeroState.resting;
-  int stateTicksLeft = 0;
+  int loopIndex;
+  double progress;
+  int direction;
+  final double speedStep;
   final Random _random;
 
+  HeroState state = HeroState.traveling;
+  int stateTicksLeft = 0;
+
   void _pickNewState() {
-    if (state == HeroState.moving) {
-      state = HeroState.resting;
-      // Rest for 5 to 15 seconds (assuming 1 tick = 1 second)
-      stateTicksLeft = 5 + _random.nextInt(11); 
+    final rand = _random.nextDouble();
+    if (state == HeroState.traveling) {
+      if (rand < 0.6) {
+        state = HeroState.working; // e.g., picking up/dropping off order
+        stateTicksLeft = 10 + _random.nextInt(15); // 10-25s
+      } else {
+        state = HeroState.resting; // e.g., tea break, waiting
+        stateTicksLeft = 20 + _random.nextInt(30); // 20-50s
+      }
     } else {
-      state = HeroState.moving;
-      // FIX (Aug 12 2026 — "Hyper-Speed" bug): longer move duration for
-      // a shorter distance = a much slower crawl per tick.
-      // Move for 18 to 40 seconds
-      stateTicksLeft = 18 + _random.nextInt(23);
-      // Pick a random nearby point (~0.5-1km, down from ~1-2km)
-      final dist = 0.003 + _random.nextDouble() * 0.006;
-      final angle = _random.nextDouble() * 2 * pi;
-      destination = LatLng(
-        position.latitude + dist * cos(angle),
-        position.longitude + dist * sin(angle),
-      );
+      state = HeroState.traveling;
+      stateTicksLeft = 25 + _random.nextInt(35); // 25-60s of driving
     }
+  }
+
+  List<LatLng> activePath() {
+    return _erodeTrafficLoops[loopIndex % _erodeTrafficLoops.length];
+  }
+
+  LatLng project() {
+    return _pointOnPath(activePath(), progress, 0);
   }
 
   void advance() {
     stateTicksLeft--;
     if (stateTicksLeft <= 0) {
       _pickNewState();
-    } else if (state == HeroState.moving && destination != null) {
-      // Interpolate towards destination smoothly
-      // Lerp by a factor inversely proportional to remaining ticks to reach exactly
-      position = _lerpLatLng(position, destination!, 1.0 / stateTicksLeft);
+      // Chance to turn at a junction when starting to travel
+      if (state == HeroState.traveling && _random.nextDouble() < 0.4) {
+        loopIndex = _random.nextInt(_erodeTrafficLoops.length);
+        direction = _random.nextBool() ? 1 : -1;
+        progress = direction == 1 ? 0.0 : 1.0;
+      }
+    }
+
+    if (state == HeroState.traveling) {
+      progress += direction * speedStep;
+      if (progress >= 1.0) {
+        progress = 1.0;
+        direction = -1;
+      } else if (progress <= 0.0) {
+        progress = 0.0;
+        direction = 1;
+      }
     }
   }
 }
+
+enum SimulationDensity { normal, busy, peak }
 
 class MapSimulationService extends ChangeNotifier {
   MapSimulationService._internal();
@@ -355,6 +346,9 @@ class MapSimulationService extends ChangeNotifier {
 
   bool _isActive = false;
   bool get isActive => _isActive;
+  
+  SimulationDensity _currentDensity = SimulationDensity.normal;
+  SimulationDensity get currentDensity => _currentDensity;
 
   Timer? _globalTickTimer;
   final List<_DummyVehicleState> _ambientVehicles = <_DummyVehicleState>[];
@@ -365,8 +359,12 @@ class MapSimulationService extends ChangeNotifier {
 
   /// Manual control ONLY — called by admin_map_simulation_screen.dart's
   /// toggle switch. Nothing else in the app may call this.
-  void start() {
-    if (_isActive) return;
+  void start({SimulationDensity density = SimulationDensity.normal}) {
+    if (_isActive && _currentDensity == density) return;
+    if (_isActive) {
+      _stopSimulation(); // Restart with new density
+    }
+    _currentDensity = density;
     _startSimulation();
   }
 
@@ -381,28 +379,72 @@ class MapSimulationService extends ChangeNotifier {
     _ambientVehicles.clear();
     _heroes.clear();
     
-    // Scale up Generation: 40 inner city, 10 outskirts
+    int bikeCount = 1;
+    int autoCount = 1;
+    int cabCount = 1;
+    int truckCount = 1;
+    int lorryCount = 1;
+    int heroCount = 0;
+
+    switch (_currentDensity) {
+      case SimulationDensity.normal:
+        bikeCount = 1;
+        autoCount = 1;
+        cabCount = 1;
+        truckCount = 1;
+        lorryCount = 1;
+        heroCount = 1;
+        break;
+      case SimulationDensity.busy:
+        bikeCount = 6;
+        autoCount = 6;
+        cabCount = 5;
+        truckCount = 5;
+        lorryCount = 3;
+        heroCount = 5;
+        break;
+      case SimulationDensity.peak:
+        bikeCount = 12;
+        autoCount = 12;
+        cabCount = 10;
+        truckCount = 8;
+        lorryCount = 8;
+        heroCount = 10;
+        break;
+    }
+
     final trafficMix = <String, int>{
-      'bike': 10,
-      'auto': 10,
-      'cab': 10,
-      'mini_truck': 10,
+      'bike': bikeCount,
+      'auto': autoCount,
+      'cab': cabCount,
+      'mini_truck': truckCount,
     };
 
     // 2. Vehicle Spacing & Crossing Paths
-    // Distribute vehicles randomly across different roads with different speeds
+    // We space out normal vehicles strictly, busy/peak get some random overlap.
     for (final entry in trafficMix.entries) {
       final random = Random(entry.key.hashCode ^ DateTime.now().millisecondsSinceEpoch);
+      int previousLoop = -1;
+      
       for (var index = 0; index < entry.value; index++) {
-        final loopIndex = random.nextInt(_erodeTrafficLoops.length);
-        final baseProgress = random.nextDouble();
+        int loopIndex;
+        if (_currentDensity == SimulationDensity.normal) {
+           // Force different loop for spacing
+           loopIndex = (index + entry.key.hashCode) % _erodeTrafficLoops.length;
+        } else {
+           loopIndex = random.nextInt(_erodeTrafficLoops.length);
+        }
         
-        // FIX (Aug 12 2026 — "Hyper-Speed" bug): the global tick is 1Hz
-        // with no inter-tick animation, so each tick jumps the marker
-        // straight to its new lat/lng — at the old 0.03-0.04 progress/
-        // tick, that jump was large enough on screen to read as
-        // "flying" rather than driving. Cut to roughly a third so each
-        // 1-second jump is small and reads as a slow crawl.
+        // Prevent immediate clustering on same loop in normal mode
+        if (_currentDensity == SimulationDensity.normal && loopIndex == previousLoop) {
+          loopIndex = (loopIndex + 1) % _erodeTrafficLoops.length;
+        }
+        previousLoop = loopIndex;
+
+        final baseProgress = _currentDensity == SimulationDensity.normal 
+            ? (index / (entry.value > 0 ? entry.value : 1)) 
+            : random.nextDouble();
+        
         final baseSpeed = entry.key == 'bike' ? 0.014 : 0.011;
         final speedJitter = (random.nextDouble() - 0.5) * 0.004;
         
@@ -421,39 +463,50 @@ class MapSimulationService extends ChangeNotifier {
 
     // 3. Outskirts Lorries (Spread out)
     final lorryRandom = Random('lorry'.hashCode);
-    for (var index = 0; index < 10; index++) {
-      final baseProgress = index / 10.0; // Distribute evenly
+    for (var index = 0; index < lorryCount; index++) {
+      final baseProgress = index / (lorryCount > 0 ? lorryCount : 1); // Distribute evenly
       final vehicle = _DummyVehicleState(
         id: 'outskirts_lorry_$index',
         vehicleType: 'lorry', 
         loopIndex: 0, // Only 1 ring road loop
         progress: baseProgress,
         direction: lorryRandom.nextBool() ? 1 : -1,
-        speedStep: 0.007, // Slower for lorries (see speed fix comment above)
+        speedStep: 0.007, 
         laneOffset: 0,
         isOutskirts: true,
       );
       _ambientVehicles.add(vehicle);
     }
 
-    // FIX (Aug 12 2026 — "Clustering" bug): sampling distance as
-    // `random * radius` biases points toward the CENTER (area grows
-    // with r², so equal steps in r pack far more samples near r=0) —
-    // that's why heroes looked bunched in one spot instead of spread
-    // across Erode. `sqrt(random) * radius` is the standard fix for a
-    // uniform-DENSITY (not uniform-radius) scatter across a disc. Also
-    // widened the radius slightly (~6.5km) so the spread reads clearly
-    // even when the map is zoomed out to show the wider district.
+    // 4. Hero Avatars (Road-Bound Lifestyle)
     final heroRandom = Random('hero'.hashCode ^ DateTime.now().millisecondsSinceEpoch);
-    const double heroRadiusDegrees = 0.058; // ~6.5km
-    for (var index = 0; index < 10; index++) {
-      final distance = sqrt(heroRandom.nextDouble()) * heroRadiusDegrees;
-      final angle = heroRandom.nextDouble() * 2 * pi;
-      final pos = LatLng(
-        11.3410 + distance * cos(angle),
-        77.7171 + distance * sin(angle),
-      );
-      _heroes.add(_HeroAvatarState('hero_$index', pos, heroRandom.nextInt(1000000)));
+    int previousHeroLoop = -1;
+    for (var index = 0; index < heroCount; index++) {
+      int loopIndex;
+      if (_currentDensity == SimulationDensity.normal) {
+         loopIndex = (index + 2) % _erodeTrafficLoops.length;
+      } else {
+         loopIndex = heroRandom.nextInt(_erodeTrafficLoops.length);
+      }
+      
+      // Prevent heroes from bunching up on the same road initially
+      if (_currentDensity == SimulationDensity.normal && loopIndex == previousHeroLoop) {
+        loopIndex = (loopIndex + 1) % _erodeTrafficLoops.length;
+      }
+      previousHeroLoop = loopIndex;
+
+      final baseProgress = _currentDensity == SimulationDensity.normal 
+          ? (index / (heroCount > 0 ? heroCount : 1)) 
+          : heroRandom.nextDouble();
+
+      _heroes.add(_HeroAvatarState(
+        id: 'hero_$index',
+        loopIndex: loopIndex,
+        progress: baseProgress,
+        direction: heroRandom.nextBool() ? 1 : -1,
+        speedStep: 0.015 + (heroRandom.nextDouble() - 0.5) * 0.005,
+        seed: heroRandom.nextInt(1000000),
+      ));
     }
 
     // Single global timer to optimize performance and prevent CPU drain
@@ -499,7 +552,7 @@ class MapSimulationService extends ChangeNotifier {
 
     for (final hero in _heroes) {
       markers.add(MapMarker(
-        point: hero.position,
+        point: hero.project(),
         color: Colors.redAccent,
         // UPDATED (Aug 12 2026 — back to the glowing .gif per Nizam's
         // new asset): the real jitter cause wasn't "gif vs png", it was

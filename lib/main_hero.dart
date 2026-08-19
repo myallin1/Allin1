@@ -26,6 +26,7 @@ import 'services/hero_foreground_service.dart';
 import 'services/hero_onboarding_cache.dart';
 import 'services/hero_ride_notification_service.dart';
 import 'services/hero_web_audio_service.dart';
+import 'services/ai_activation_service.dart';
 import 'services/localization_service.dart';
 import 'services/map_service.dart';
 import 'services/migration_gate_service.dart';
@@ -33,6 +34,7 @@ import 'services/theme_service.dart';
 import 'services/app_update_gate_service.dart';
 import 'widgets/branded_loading_screen.dart';
 import 'widgets/migration_notice_overlay.dart';
+import 'services/guru_overlay_service.dart';
 
 String? _rideIdFromPushData(Map<String, dynamic> data) {
   for (final key in const <String>[
@@ -679,6 +681,11 @@ class HeroApp extends StatelessWidget {
         // the same ThemeService as the customer app (5 selectable
         // themes), switchable from hero_settings_screen.dart.
         ChangeNotifierProvider(create: (_) => ThemeService()),
+        // REQUIRED as of Aug 19 2026: GlobalGuruFab now hides Chitti on
+        // the Hero app until the hero activates their own AI key, and
+        // it reads that state through this provider. Without it the FAB
+        // throws ProviderNotFoundException on first build.
+        ChangeNotifierProvider(create: (_) => AiActivationService()),
       ],
       child: Consumer<ThemeService>(
         builder: (context, themeService, _) => GestureDetector(
@@ -737,13 +744,42 @@ class HeroApp extends StatelessWidget {
               '/hero-home': (_) => const _HeroSetupGate(),
               '/hero-ride': (_) => const _HeroSetupGate(),
             },
+            // SKIPPED (Aug 19 2026 — deep-breadcrumb restore pass): the
+            // customer app got a RouteBreadcrumbObserver +
+            // '/food_shop_detail' style cold-start restore this session
+            // (see route_breadcrumb_observer.dart, main_customer.dart).
+            // Deliberately NOT mirrored here. Hero's three named routes
+            // above are all just gates into _HeroSetupGate — none of
+            // them identify a specific screen the way '/food_shop_detail'
+            // does, and the actual in-flow screens (ride
+            // accept/navigate/dropoff, dispatch, SOS) live several hops
+            // deeper inside hero_dashboard_shell.dart with no route
+            // names at all today. Wiring restore for THOSE would risk
+            // exactly the danger this pass was told to avoid — silently
+            // reopening a stale ride/tracking/dispatch/SOS screen after a
+            // real crash, which is actively dangerous for a
+            // safety-critical hero flow. A genuinely safe subset (e.g.
+            // wallet/earnings) isn't reachable via a named route today
+            // either, so there's nothing cheap to wire up without first
+            // restructuring hero's navigation — left for a dedicated,
+            // separately-reviewed pass rather than force-fitting it here.
+            // If this is revisited: reuse kBreadcrumbSafeRoutes/
+            // isRouteSafeToRestore as-is, but add an explicit hero-side
+            // substring exclusion list ('ride', 'tracking', 'dispatch',
+            // 'sos') before adding ANY hero route name to the shared
+            // safe-list, since that list is shared across apps.
             // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch"): Hero app had
             // no builder: before this — added purely to host MigrationGate,
             // same slot the customer app's GlobalGuruFab lives in. child
             // can briefly be null on the very first MaterialApp build, so
             // fall back to an empty box exactly like the customer app does.
-            builder: (context, child) =>
+            // Also hosts GlobalGuruFab for Hero Chitti Assistant.
+            builder: (context, child) => Stack(
+              children: [
                 MigrationGate(child: child ?? const SizedBox.shrink()),
+                const GlobalGuruFab(),
+              ],
+            ),
           ),
         ),
       ),

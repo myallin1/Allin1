@@ -95,6 +95,17 @@ class MigrationGateService extends ChangeNotifier {
   /// refresh', never as 'invalidate everything'.
   int get rewardsVersion => _rewardsVersion;
 
+  // NEW (Aug 19 2026 — Home Page Banner Offers). Exact same
+  // zero-extra-cost piggyback as rewardsVersion above: same doc, same
+  // already-open listener, bumped once by the admin's own "Publish"
+  // action in admin_home_banner_screen.dart. Kept as its own counter
+  // (not reusing rewardsVersion) so publishing a banner change never
+  // forces every customer to also refetch the unrelated Erode Offers
+  // list, and vice versa.
+  int _homeBannerVersion = 0;
+
+  int get homeBannerVersion => _homeBannerVersion;
+
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _sub;
   bool _started = false;
 
@@ -136,12 +147,26 @@ class MigrationGateService extends ChangeNotifier {
           debugPrint('[MigrationGateService] bad rewardsVersion, ignoring: $e');
         }
 
+        var nextBannerVersion = _homeBannerVersion;
+        try {
+          final v = data?['homeBannerVersion'];
+          if (v is int) {
+            nextBannerVersion = v;
+          } else if (v is num) {
+            nextBannerVersion = v.toInt();
+          }
+        } catch (e) {
+          debugPrint('[MigrationGateService] bad homeBannerVersion, ignoring: $e');
+        }
+
         final urlChanged = next != _migrationUrl;
         final versionChanged = nextVersion != _rewardsVersion;
-        if (!urlChanged && !versionChanged) return;
+        final bannerVersionChanged = nextBannerVersion != _homeBannerVersion;
+        if (!urlChanged && !versionChanged && !bannerVersionChanged) return;
 
         _migrationUrl = next;
         _rewardsVersion = nextVersion;
+        _homeBannerVersion = nextBannerVersion;
         notifyListeners();
       },
       onError: (Object e) {

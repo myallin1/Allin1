@@ -30,12 +30,18 @@ class HiveCache {
   static const kProductsList  = 'products_list';
   static const kBanners       = 'banners';
   static const kSellerOrders  = 'seller_orders';
+  // NEW (Aug 19 2026 — Home Page Banner Offers). Same version-gated
+  // cache-first pattern as kErodeOffers: a one-shot .get() behind a
+  // long TTL, refetched only when MigrationGateService.rewardsVersion
+  // moves. See dashboard_screen.dart's _HomeBannerOffersSection.
+  static const kHomeBannerOffers = 'home_banner_offers';
 
   static const ttlErodeOffers  = Duration(hours: 1);
   static const ttlSellersList  = Duration(minutes: 45);
   static const ttlProductsList = Duration(minutes: 45);
   static const ttlBanners      = Duration(hours: 2);
   static const ttlSellerOrders = Duration(hours: 1);
+  static const ttlHomeBannerOffers = Duration(hours: 1);
 
   static Future<Box> _box() async {
     if (Hive.isBoxOpen(_boxName)) return Hive.box(_boxName);

@@ -203,24 +203,34 @@ class HeroRideNotificationService {
     await _plugin.cancel(id: _notificationIdForRide(rideId));
   }
 
+  /// ⚠️ NO-OP SINCE Aug 19 2026 — kept only so call sites compile.
+  ///
+  /// ROOT CAUSE OF "our ringtone AND the phone alarm both ring"
+  /// (Nizam's report). Two independent sounds were being started for
+  /// one ride:
+  ///
+  ///   1. The notification channel plays our OWN ride_alert.mp3 through
+  ///      the ALARM audio stream (see `sound:` +
+  ///      `audioAttributesUsage: alarm` in initialize()). That alone
+  ///      already bypasses silent mode and DND and plays at alarm
+  ///      volume on the lock screen.
+  ///   2. THIS method additionally fired FlutterRingtonePlayer with
+  ///      `AndroidSounds.alarm` — the phone's OWN stock alarm tone,
+  ///      a completely separate audio source.
+  ///
+  /// showRideAssigned() had already stopped calling it, but
+  /// hero_home_screen's _playIncomingRideAlertSafe() still did on the
+  /// foreground push path — which is exactly the case a working hero
+  /// hits all day. So in the app, both rang; only in the background did
+  /// it sound right.
+  ///
+  /// Emptied rather than deleted so every existing call site keeps
+  /// compiling and there is one obvious place explaining why. Do NOT
+  /// reinstate a second player here: if the alert is not loud enough,
+  /// raise it on the CHANNEL (importance / audio attributes / the mp3's
+  /// own gain), never by starting a second sound.
   static Future<void> playWakeAlertRingtone({bool looping = true}) async {
-    if (kIsWeb) {
-      return;
-    }
-    try {
-      // 🚀 FIX: Switched from AndroidSounds.ringtone to AndroidSounds.alarm.
-      // This forces the sound through the ALARM stream (bypassing silent mode) 
-      // and plays at maximum alarm volume, ensuring the driver never misses a ride.
-      FlutterRingtonePlayer().play(
-        android: AndroidSounds.alarm, 
-        ios: IosSounds.alarm,
-        looping: looping,
-        volume: 1,
-        asAlarm: true,
-      );
-    } catch (e) {
-      debugPrint('[HeroRideNotificationService] Ringtone play failed: $e');
-    }
+    // Intentionally does nothing — see the doc comment above.
   }
 
   static Future<void> stopWakeAlertRingtone() async {

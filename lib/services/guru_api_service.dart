@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'analytics_service.dart';
+import '../config/app_variant.dart';
 
 class GuruApiService {
   GuruApiService({
@@ -232,12 +233,7 @@ class GuruApiService {
                 'messages': <Map<String, dynamic>>[
                   {
                     'role': 'system',
-                    'content': (languageLabel != null && languageLabel.trim().isNotEmpty)
-                        ? '$systemPrompt\nThe user has set their app language to '
-                            '${languageLabel.trim()}. You MUST communicate, ask '
-                            'questions, and provide suggestions strictly in '
-                            '${languageLabel.trim()}.'
-                        : systemPrompt,
+                    'content': _buildSystemPrompt(languageLabel),
                   },
                   ...history.where(
                     (entry) =>
@@ -447,7 +443,22 @@ class GuruApiService {
                         'most 3 options, and nothing else. As soon as the user '
                         'answers, immediately call the matching tool. Do not '
                         're-explain, do not confirm twice, do not summarise '
-                        'what you are about to do — just call the tool.',
+                        'what you are about to do — just call the tool.'
+                        // SAFETY GUARD (Aug 19 2026 — AI setup audit).
+                        // create_service_request PLACES A REAL ORDER that a
+                        // Hero is dispatched to fulfil. This agent block was
+                        // written for the customer app, but the same
+                        // GuruApiService now backs the Hero and Seller apps
+                        // through GlobalGuruFab — so without this, a hero
+                        // saying "I need 1kg onions" while working, or a
+                        // seller describing a customer's order out loud,
+                        // could have dispatched a real errand and put a
+                        // real charge on the wrong account.
+                        //
+                        // Appended rather than branching the whole agent
+                        // prompt: one targeted sentence, no change to the
+                        // customer path that is already live and working.
+                        '$_nonCustomerToolGuard',
                   },
                   {'role': 'user', 'content': userContent},
                 ],
@@ -731,6 +742,29 @@ class GuruApiService {
         return null;
       }
 
+      // HARD GATE (Aug 19 2026 — AI setup audit).
+      //
+      // The system prompt already tells the Hero/Seller/Admin agent not
+      // to call create_service_request. That instruction is necessary
+      // but NOT sufficient: a prompt is a strong suggestion to a model,
+      // not a constraint on it. Models do ignore instructions,
+      // especially when a user phrases something that sounds exactly
+      // like the tool's own description.
+      //
+      // This tool places a REAL order and dispatches a REAL hero, with
+      // a real charge attached. Anything with that blast radius gets
+      // enforced in code, where it cannot be talked around, not only in
+      // the prompt. Returning null here makes the call a no-op and the
+      // model simply replies in text instead.
+      if (functionName == 'create_service_request' &&
+          currentAppVariant != 'customer') {
+        debugPrint(
+          '[Chitti] Blocked create_service_request from '
+          '"$currentAppVariant" app — customer-only tool.',
+        );
+        return null;
+      }
+
       // check_and_update_app and analyze_screen_with_vision both take no
       // arguments, so Groq may return an empty/absent arguments string
       // for them — that's expected, not a parse failure, unlike the
@@ -840,5 +874,167 @@ class GuruApiService {
 
   void dispose() {
     _client.close();
+  }
+  
+  // ── PERSONA LAYERING (Aug 19 2026 — audit of the AI setup) ─────
+  //
+  // WHAT WAS WRONG BEFORE
+  //   The seller and hero personas were PREPENDED to `systemPrompt`,
+  //   which then still said, in far more words and far more detail,
+  //   "You help customers navigate the app... guide them on how to
+  //   place orders across Bike Taxi, Auto, Cab, Groceries...".
+  //
+  //   So the model received two contradictory identities in one
+  //   message, and the CUSTOMER one was longer, more concrete and
+  //   full of specifics. A five-line prefix saying "you are serving a
+  //   SELLER, not a customer" does not reliably beat sixty lines of
+  //   detailed customer instructions sitting after it. In practice a
+  //   seller asking "where is my order" could get walked through how
+  //   to BOOK one.
+  //
+  // WHAT CHANGED
+  //   The persona now goes LAST, as an explicit override. Two reasons:
+  //   recency — the final instruction carries the most weight — and
+  //   the override is stated outright rather than implied, so there is
+  //   nothing for the model to reconcile.
+  //
+  //   `systemPrompt` itself is untouched. It carries the app facts,
+  //   the service catalogue, the screenshot-troubleshooting rules and
+  //   the "never claim you actually placed a booking" guardrail, all of
+  //   which every persona still needs. Rewriting it into a shared
+  //   neutral base was the cleaner design and was deliberately NOT done
+  //   here: it is a live, load-bearing prompt driving tool calls in a
+  //   running app, and this fix does not require touching it.
+  String _buildSystemPrompt(String? languageLabel) {
+    var prompt = systemPrompt;
+
+    final persona = _personaOverrideFor(currentAppVariant);
+    if (persona.isNotEmpty) {
+      prompt = '$prompt\n\n'
+          '=== ROLE OVERRIDE — THIS SECTION WINS ===\n'
+          'Everything above describes the Allin1 system and how it '
+          'works. Keep all of those facts and all of those honesty '
+          'rules. But IGNORE any statement above about who you are '
+          'speaking to or what your job is. Your real role is below, '
+          'and it replaces it completely.\n\n'
+          '$persona';
+    }
+
+    if (languageLabel != null && languageLabel.trim().isNotEmpty) {
+      prompt = '$prompt\nThe user has set their app language to '
+          '${languageLabel.trim()}. You MUST communicate, ask '
+          'questions, and provide suggestions strictly in '
+          '${languageLabel.trim()}.';
+    }
+    
+    return prompt;
+  }
+
+  /// Empty on the customer app, so the live customer agent prompt is
+  /// byte-for-byte what it was before this audit. Non-empty everywhere
+  /// else, where create_service_request must never fire.
+  ///
+  /// This is the prompt-level half of the guard; the enforced half is
+  /// the hard gate in the tool-call parser, which is what actually
+  /// makes it safe.
+  static String get _nonCustomerToolGuard {
+    if (currentAppVariant == 'customer') return '';
+    return '\n\nIMPORTANT: you are running in the '
+        '${currentAppVariant.toUpperCase()} app. NEVER call '
+        'create_service_request here — that tool places a customer order '
+        'and dispatches a Hero, which is never correct from this app. '
+        'You may still call report_app_bug. For anything that would need '
+        'a customer order, explain that it must be placed from the '
+        'customer app.';
+  }
+
+  /// The four personas, per Nizam's plan. Each app variant gets ONE.
+  ///
+  /// Written as job descriptions rather than adjectives on purpose: a
+  /// model told "be supportive" produces generic warmth, while a model
+  /// told "you are their accountant, and you tell them the number even
+  /// when it is bad" produces something a hero can actually use.
+  String _personaOverrideFor(String variant) {
+    switch (variant) {
+      // ── HERO: manager + accountant + coach + ride tracker ────────
+      case 'hero':
+        return 'You are Chitti, and for a Hero you wear four hats at '
+            'once. Know which one you are wearing.\n'
+            '1. MANAGER — plan their day. Which hours pay best, when to '
+            'go online, when to move to a busier area, when to stop.\n'
+            '2. ACCOUNTANT — earnings, fuel, expenses, savings. Be '
+            'precise with numbers and NEVER invent one. If you do not '
+            'have the real figure, say so and tell them where in the '
+            'app to find it. A wrong earnings number is worse than no '
+            'number, because they will plan their week around it.\n'
+            '3. MOTIVATIONAL SPEAKER — short, real encouragement, '
+            'especially on a slow day. Never hollow cheerleading; tie '
+            'it to something concrete they did or can do next.\n'
+            '4. RIDE COMPANION — while a ride is running, stay with it. '
+            'Route, pickup, drop, customer handling, safety.\n'
+            'Speak in short energetic Tamil-English lines. This person '
+            'is working, often riding, often tired — every extra '
+            'sentence costs them attention they need on the road.';
+
+      // ── SELLER: manager + guide + order follow-up + accountant ───
+      case 'seller':
+        return 'You are Chitti, the shop owner\'s right hand. Four '
+            'jobs:\n'
+            '1. MANAGER — menu, stock, pricing, store profile, '
+            'availability. Practical decisions that grow the shop.\n'
+            '2. GUIDE — teach the Partner app. Many sellers are running '
+            'a shop AND learning software at the same time, so explain '
+            'in plain steps, never in feature names alone.\n'
+            '3. ORDER FOLLOW-UP — chase what is pending. Which orders '
+            'are unconfirmed, which are late, which customer is waiting '
+            'right now. Be the one who notices before the customer '
+            'complains.\n'
+            '4. ACCOUNTANT — usage-fee wallet, settlements, daily '
+            'takings. Same hard rule as the Hero: never invent a '
+            'figure. Point them to the real screen instead.\n'
+            'You are talking to a business owner. Be direct and '
+            'respectful of their time — they are usually mid-service '
+            'with a queue in front of them.';
+
+      // ── ADMIN: oversight, reporting upward ───────────────────────
+      // The admin app mainly uses GuruAdminApiService, which has its
+      // own tool-calling prompt. This covers the case where the shared
+      // overlay FAB is used inside the admin build, so the two can
+      // never disagree about what admin Chitti is for.
+      case 'admin':
+        return 'You are Chitti in oversight mode. You watch the whole '
+            'system — customers, heroes, sellers — and you report '
+            'upward to the CTO.\n'
+            'Lead with what is WRONG or ANOMALOUS, not with what is '
+            'fine: pending approvals, stuck orders, timed-out rides, '
+            'inactive sellers, unusual spikes. A report that opens with '
+            'good news buries the thing that needed acting on.\n'
+            'Be factual and unsentimental. No motivation, no '
+            'cheerleading — that is for the Hero and Seller apps. '
+            'Quantify where you can, and state plainly when a number is '
+            'unavailable rather than estimating. Flag anything that '
+            'looks like it needs a human decision.';
+
+      // ── CUSTOMER: the naughty helping friend ─────────────────────
+      // Deliberately the ONLY persona with licence to be playful. A
+      // seller mid-rush or a hero on a bike does not want banter; a
+      // customer browsing does, and it is what makes the app feel like
+      // a friend rather than a form.
+      case 'customer':
+      default:
+        return 'You are Chitti, the customer\'s slightly naughty, very '
+            'helpful friend from Erode — the friend who teases a little '
+            'while getting the job done properly.\n'
+            'Be playful, warm, a bit cheeky. Light Tamil-English banter '
+            'is welcome. Small jokes are welcome.\n'
+            'THE LINE YOU DO NOT CROSS: the naughtiness is in the '
+            'TONE, never in the FACTS. Fares, timings, order status, '
+            'availability and anything about their money stay exactly '
+            'accurate and plainly stated. Never joke about a delay, a '
+            'cancellation, a refund, an emergency or an SOS — when '
+            'something has gone wrong for them, drop the humour '
+            'entirely and just help. A friend knows when to stop '
+            'joking; that judgement is the whole persona.';
+    }
   }
 }

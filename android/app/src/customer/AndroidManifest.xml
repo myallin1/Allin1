@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Customer-flavor-only manifest fragment (Aug 19 2026 — WhatsApp shop
+     deep link / Android App Links). This is MERGED with
+     android/app/src/main/AndroidManifest.xml by the Gradle manifest
+     merger (standard Android flavor-source-set behaviour) — it does NOT
+     replace it. Since <activity name=".MainActivity"> already exists in
+     the main manifest, this fragment's <activity> element with the same
+     android:name merges INTO that one: the extra <intent-filter> below
+     is added alongside the existing MAIN/LAUNCHER and SEND intent-filters
+     (both untouched, defined in main), instead of duplicating or
+     replacing them. Deliberately scoped to the customer source set only
+     — hero/seller/admin manifests are untouched, so only the customer
+     APK/AAB declares this https://my-allin1.web.app App Link. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity android:name=".MainActivity">
+            <!-- android:autoVerify="true" tells Android to attempt Digital
+                 Asset Links verification against
+                 https://my-allin1.web.app/.well-known/assetlinks.json on
+                 install. Verification will not succeed until the real
+                 release-keystore SHA256 fingerprint replaces the
+                 placeholder in web/.well-known/assetlinks.json (manual
+                 step — see that file's comment). Until then, tapping a
+                 my-allin1.web.app/shop/... link still opens this app via
+                 Android's disambiguation/"Open with" flow, it just won't
+                 be silently auto-selected as the sole handler. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="my-allin1.web.app" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

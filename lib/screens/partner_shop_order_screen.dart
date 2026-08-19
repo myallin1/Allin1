@@ -15,6 +15,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'custom_food_order_screen.dart';
@@ -80,6 +81,14 @@ const List<PartnerShop> kPartnerShops = [
     logoText: 'TAJ',
     orderUrl: 'https://www.tajhotels.com',
     gradient: [Color(0xFF8A6D3B), Color(0xFF5C4626)],
+    // FIX (Nizam: "Hotels la konjam hotel embedded ah open aagala,
+    // veliya browser la open aaguthu") — this entry had no `embedded:
+    // true`, so it defaulted to false and routed through
+    // PartnerShopOrderScreen's external launchUrl() instead of the
+    // in-app DmartEmbeddedView/EmbeddedShopScreen every other partner
+    // shop already uses. Same ordinary https:// site as the rest, so
+    // there's no technical reason to special-case it.
+    embedded: true,
   ),
   PartnerShop(
     name: 'A2B',
@@ -96,6 +105,8 @@ const List<PartnerShop> kPartnerShops = [
     logoText: 'JAMEEN',
     orderUrl: 'https://www.zomato.com',
     gradient: [Color(0xFF6C63FF), Color(0xFF3D3494)],
+    // Same fix as Taj Hotel above — was missing `embedded: true`.
+    embedded: true,
   ),
 ];
 
@@ -126,6 +137,21 @@ class PartnerShopOrderScreen extends StatelessWidget {
     );
   }
 
+  // NEW (Aug 19 2026 — WhatsApp deep link share): 'pshop' route matches
+  // dashboard_screen.dart's _parseDeepLinkPath() and main_customer.dart's
+  // '/partner_shop_detail' onGenerateRoute case, which looks the shop up
+  // by name in the static kPartnerShops list — so shop.name must match
+  // exactly (Uri.encodeComponent handles spaces/special chars in transit).
+  void _shareShop() {
+    final deepLink =
+        'https://my-allin1.web.app/pshop/${Uri.encodeComponent(shop.name)}';
+    SharePlus.instance.share(
+      ShareParams(
+        text: 'Order from ${shop.name} on MyAllin1 Erode! 🍽️\n$deepLink',
+      ),
+    );
+  }
+
   void _goToDeliveryForm(BuildContext context) {
     Navigator.push(
       context,
@@ -144,6 +170,12 @@ class PartnerShopOrderScreen extends StatelessWidget {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         title: Text(shop.name, style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.ios_share_rounded, color: Colors.white),
+            onPressed: _shareShop,
+          ),
+        ],
       ),
       body: SafeArea(
         child: Padding(

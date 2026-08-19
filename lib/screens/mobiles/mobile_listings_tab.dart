@@ -21,6 +21,7 @@
 // ================================================================
 
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' show DocumentSnapshot;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -57,6 +58,17 @@ class _MobileListingsTabState extends State<MobileListingsTab>
   String _brandFilter = '';
   String _search = '';
 
+  // ── PAGINATION (Aug 19 2026, CTO audit) ────────────────────────
+  // The cursor for the next page, plus the two flags that stop us from
+  // firing overlapping requests. `_loadingMore` is what makes the
+  // scroll listener idempotent: it fires on every scroll frame near the
+  // bottom, so without this guard one flick would launch a dozen
+  // identical queries and pay for every one of them.
+  DocumentSnapshot<Map<String, dynamic>>? _cursor;
+  bool _hasMore = true;
+  bool _loadingMore = false;
+  final ScrollController _scrollCtrl = ScrollController();
+
   bool get _isUsed => widget.condition == MobileCondition.used;
 
   // Keep the fetched list alive across tab switches inside the
@@ -68,28 +80,104 @@ class _MobileListingsTabState extends State<MobileListingsTab>
   @override
   void initState() {
     super.initState();
+    _scrollCtrl.addListener(_onScroll);
     _load();
   }
 
+  @override
+  void dispose() {
+    _scrollCtrl
+      ..removeListener(_onScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  /// Prefetches the next page while the customer is still ~600px from
+  /// the bottom, so the grid keeps flowing and the loader is rarely
+  /// seen. All the "don't fire twice" logic lives in _loadMore.
+  void _onScroll() {
+    if (!_scrollCtrl.hasClients) return;
+    final pos = _scrollCtrl.position;
+    if (pos.pixels >= pos.maxScrollExtent - 600) {
+      _loadMore();
+    }
+  }
+
+  /// Full reload — also used by pull-to-refresh, which is why it resets
+  /// the cursor. Forgetting that reset would make a refresh append page
+  /// 2 onto a stale page 1 instead of starting over.
   Future<void> _load() async {
     if (mounted) setState(() {
       _loading = true;
       _error = null;
+      _cursor = null;
+      _hasMore = true;
     });
     try {
       await MobileCatalogService.instance.ensureLoaded();
-      final items = await _service.fetchListings(condition: widget.condition);
+      final page =
+          await _service.fetchListingsPage(condition: widget.condition);
       if (!mounted) return;
       setState(() {
-        _all = items;
+        _all = page.items;
+        _cursor = page.lastDoc;
+        _hasMore = page.hasMore;
         _loading = false;
       });
     } catch (e) {
+      // DIAGNOSTIC (Aug 19 2026, Nizam: "mobile page la onnume ila").
+      // This catch used to collapse EVERY failure into one friendly
+      // sentence, which is exactly why an empty Mobile Hub looked
+      // identical to "no seller has listed a phone yet" — and the real
+      // cause went unseen for days.
+      //
+      // The real cause was a MISSING COLLECTION-GROUP INDEX. Firestore
+      // auto-creates single-field indexes at COLLECTION scope only;
+      // fetchListings() runs collectionGroup('mobile_listings')
+      // .where('condition', ...), which needs a COLLECTION_GROUP-scoped
+      // index that must be declared explicitly. Without it every read
+      // throws FAILED_PRECONDITION before a single doc comes back.
+      // Now declared in firestore.indexes.json under fieldOverrides —
+      // deploy with `firebase deploy --only firestore:indexes`.
+      //
+      // Logging the raw error costs nothing in release (debugPrint is
+      // stripped) and turns the next occurrence into a 10-second fix.
+      debugPrint('❌ Mobile Hub load failed (${widget.condition}): $e');
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Could not load phones right now. Pull down to retry.';
+        _error = e.toString().contains('failed-precondition') ||
+                e.toString().contains('requires an index')
+            ? 'Phone listings are still being set up. Please try again shortly.'
+            : 'Could not load phones right now. Pull down to retry.';
       });
+    }
+  }
+
+  /// Appends the next page. Silent on failure by design: the customer
+  /// already has results on screen, and throwing a red error banner over
+  /// a working grid because page 4 timed out would be worse than simply
+  /// letting them retry by scrolling again.
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore || _loading || _cursor == null) return;
+    setState(() => _loadingMore = true);
+    try {
+      final page = await _service.fetchListingsPage(
+        condition: widget.condition,
+        startAfter: _cursor,
+      );
+      if (!mounted) return;
+      setState(() {
+        _all = [..._all, ...page.items];
+        _cursor = page.lastDoc ?? _cursor;
+        _hasMore = page.hasMore;
+        _loadingMore = false;
+      });
+    } catch (e) {
+      debugPrint('❌ Mobile Hub page load failed: $e');
+      if (!mounted) return;
+      // _hasMore stays true so a later scroll can retry.
+      setState(() => _loadingMore = false);
     }
   }
 
@@ -300,24 +388,70 @@ class _MobileListingsTabState extends State<MobileListingsTab>
       );
     }
 
+    // The grid and the "loading more" footer are separate slivers rather
+    // than a fake extra grid cell — a spinner squeezed into a 0.62
+    // aspect-ratio tile would be badly distorted, and it would also
+    // break the two-column rhythm on the last row.
     return RefreshIndicator(
       color: kMobPink,
       onRefresh: _load,
-      child: GridView.builder(
+      child: CustomScrollView(
+        controller: _scrollCtrl,
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: MediaQuery.of(context).size.width > 600 ? 3 : 2,
-          childAspectRatio: 0.62,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-        ),
-        itemCount: items.length,
-        itemBuilder: (context, i) => _MobileCard(
-          listing: items[i],
-          onTap: () => _openListing(items[i]),
-          onPlayVideo: () => _playVideo(items[i]),
-        ),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            sliver: SliverGrid(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount:
+                    MediaQuery.of(context).size.width > 600 ? 3 : 2,
+                childAspectRatio: 0.62,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, i) => _MobileCard(
+                  listing: items[i],
+                  onTap: () => _openListing(items[i]),
+                  onPlayVideo: () => _playVideo(items[i]),
+                ),
+                childCount: items.length,
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 16, 12, 24),
+              child: Center(
+                child: _loadingMore
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          color: kMobPink,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    // Only claim "that's everything" once the server has
+                    // actually said so AND the customer isn't filtering
+                    // — with a search active, the end of the loaded set
+                    // is not the end of the catalog.
+                    : (!_hasMore &&
+                            _search.trim().isEmpty &&
+                            _brandFilter.isEmpty &&
+                            items.length > 6)
+                        ? Text(
+                            "That's all the phones for now",
+                            style: GoogleFonts.outfit(
+                              color: kMobMuted,
+                              fontSize: 11.5,
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -429,6 +563,7 @@ class _MobileCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final discount = listing.discountPercent;
     final hasVideo = youtubeVideoId(listing.youtubeUrl) != null;
+    final emiPerMonth = listing.emiPerMonth;
 
     // PREMIUM SHOWCASE CARD (Aug 18 2026 — Founder's "Apple Store meets
     // CRED" brief). The photo sits on a near-white podium plate rather
@@ -526,6 +661,31 @@ class _MobileCard extends StatelessWidget {
                       ),
                   ],
                 ),
+                // EMI line — sits directly under the price so the two
+                // numbers are read together. Absent entirely on used
+                // phones and on anything cheap enough that no financier
+                // would write a plan (see MobileListing.isEmiEligible).
+                if (emiPerMonth != null) ...[
+                  const SizedBox(height: 5),
+                  Row(
+                    children: [
+                      const Icon(Icons.credit_card_rounded,
+                          color: kPremiumGreen, size: 11),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'EMI from ₹$emiPerMonth/mo',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: premiumBody(size: 10).copyWith(
+                            color: kPremiumGreen,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 6),
                 Row(
                   children: [

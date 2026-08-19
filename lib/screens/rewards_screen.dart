@@ -58,7 +58,7 @@ class _RewardsScreenState extends State<RewardsScreen>
   // recorded on the customer's own users/{uid} doc (never resets
   // daily, never re-askable after being answered once): a Paytm quiz
   // that auto-unlocks a real cashback coupon, and an AI general-
-  // knowledge quiz that unlocks a free 1-year Guru AI subscription
+  // knowledge quiz that unlocks a free 1-year Chitti AI subscription
   // (claimed via WhatsApp to our support number, then activated
   // manually on our side).
   bool _loadingRewards = true;
@@ -253,7 +253,7 @@ class _RewardsScreenState extends State<RewardsScreen>
   Widget _buildHeader() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [_paytmDarkBlue, _paytmBlue],
@@ -272,15 +272,15 @@ class _RewardsScreenState extends State<RewardsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Rewards',
-            style: GoogleFonts.outfit(
-              color: Colors.white,
-              fontSize: 30,
-              fontWeight: FontWeight.w900,
+            Text(
+              'Rewards',
+              style: GoogleFonts.outfit(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
+            const SizedBox(height: 4),
           Text(
             'Answer 2 quick one-time questions to unlock real rewards — no daily wait, no gimmicks.',
             style: GoogleFonts.outfit(
@@ -370,10 +370,10 @@ class _RewardsScreenState extends State<RewardsScreen>
         loading: _loadingRewards,
         claimed: _aiQuizClaimed,
         badgeLabel: 'AI QUIZ',
-        title: _aiQuizClaimed ? 'Guru AI subscription claimed!' : 'AI Quiz: Win 1-Year Guru AI',
+        title: _aiQuizClaimed ? 'Chitti AI subscription claimed!' : 'AI Quiz: Win 1-Year Chitti AI',
         subtitle: _aiQuizClaimed
             ? "We'll activate your subscription shortly after your WhatsApp message."
-            : 'Answer 1 simple AI general-knowledge question to unlock a free 1-year Guru AI subscription — one-time only.',
+            : 'Answer 1 simple AI general-knowledge question to unlock a free 1-year Chitti AI subscription — one-time only.',
         icon: Icons.psychology_alt_rounded,
         claimedIcon: Icons.verified_rounded,
         gradient: const [_aiPurple, _aiPurpleDark],
@@ -765,10 +765,10 @@ class _PaytmQuizDialogState extends State<_PaytmQuizDialog> {
 }
 
 // ================================================================
-// AI general-knowledge quiz -> 1-year Guru AI subscription. Correct
+// AI general-knowledge quiz -> 1-year Chitti AI subscription. Correct
 // answer doesn't auto-grant anything (unlike the Paytm quiz's instant
 // coupon) — it unlocks a "Claim via WhatsApp" button, since activating
-// a real Guru AI subscription needs a human on our side to add the
+// a real Chitti AI subscription needs a human on our side to add the
 // customer's API key manually (see guru_chat_screen.dart's FIX
 // comment). One WhatsApp claim, ever, per account.
 // ================================================================
@@ -794,7 +794,7 @@ class _AiQuizDialogState extends State<_AiQuizDialog> {
     try {
       final name = (user?.displayName?.trim().isNotEmpty ?? false) ? user!.displayName!.trim() : 'Customer';
       final message = Uri.encodeComponent(
-        'I claimed Guru AI subscription 🎉\nName: $name\nMobile: ${user?.phoneNumber ?? 'N/A'}\nEmail: ${user?.email ?? 'N/A'}',
+        'I claimed Chitti AI subscription 🎉\nName: $name\nMobile: ${user?.phoneNumber ?? 'N/A'}\nEmail: ${user?.email ?? 'N/A'}',
       );
       final uri = Uri.parse('https://wa.me/$kCallCenterNumberIntl?text=$message');
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -925,7 +925,7 @@ class _AiQuizDialogState extends State<_AiQuizDialog> {
         const SizedBox(height: 12),
         const Icon(Icons.workspace_premium_rounded, color: _aiPurple, size: 88),
         const SizedBox(height: 12),
-        Text('🎉 1-Year Guru AI Subscription! 🎉', textAlign: TextAlign.center, style: GoogleFonts.outfit(color: _rewardInk, fontSize: 19, height: 1.15, fontWeight: FontWeight.w900)),
+        Text('🎉 1-Year Chitti AI Subscription! 🎉', textAlign: TextAlign.center, style: GoogleFonts.outfit(color: _rewardInk, fontSize: 19, height: 1.15, fontWeight: FontWeight.w900)),
         const SizedBox(height: 8),
         Text(
           "Tap below to message us on WhatsApp — we'll activate your subscription shortly after.",

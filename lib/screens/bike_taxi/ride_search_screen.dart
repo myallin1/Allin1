@@ -19,6 +19,7 @@ import '../../services/city_service.dart';
 import '../../utils/otp_utils.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../../widgets/cancellation_reason_sheet.dart';
+import '../../widgets/chitti_processing_steps.dart';
 import 'ride_tracking_screen.dart';
 import '../../config/hero_service_access.dart';
 
@@ -75,6 +76,31 @@ class _RideSearchScreenState extends State<RideSearchScreen>
   int _pingSeconds = 15;
   Timer? _pingCountdown;
   Timer? _countTimer;
+  // ── CHITTI NARRATION (Aug 19 2026) ─────────────────────────────
+  // This screen is the ONE place in the booking flow with real latency
+  // worth narrating: 10-60 seconds of waiting for a hero to accept.
+  // Deliberately NOT wired into bike_booking_screen's _createRide(),
+  // which is optimistic by design — adding awaited steps there would
+  // have manufactured a wait that doesn't currently exist.
+  //
+  // Every step below is bound to actual work (see _startRideCreation).
+  // Step 3 is the long one and is the reason this exists at all: it
+  // stays 'running' for as long as heroes are genuinely being pinged,
+  // and resolves only when one accepts or the search times out.
+  static const int _kStepAnalyze = 0;
+  static const int _kStepFindHeroes = 1;
+  static const int _kStepCreateRide = 2;
+  static const int _kStepPing = 3;
+  static const int _kStepConfirm = 4;
+
+  final ChittiTaskRunner _chitti = ChittiTaskRunner(<String>[
+    'Analyzing your request',
+    'Finding heroes near you',
+    'Creating your ride',
+    'Pinging Erode heroes',
+    'Confirming your ride',
+  ]);
+
   StreamSubscription<DatabaseEvent>? _rtdbRequestSub;
   StreamSubscription<DatabaseEvent>? _heroLocationSubscription;
   StreamSubscription<DatabaseEvent>? _nearbyHeroesSub;
@@ -127,6 +153,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     _rtdbRequestSub?.cancel();
     _heroLocationSubscription?.cancel();
     _nearbyHeroesSub?.cancel();
+    _chitti.dispose();
     super.dispose();
   }
 
@@ -160,6 +187,10 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     // Fix: wait for a real authStateChanges() event before proceeding,
     // same pattern as bike_booking_screen.dart, with a short timeout so
     // a genuinely signed-out customer isn't stuck waiting forever.
+    // Step 0 covers the auth-readiness wait above — on a cold PWA load
+    // this is a genuine multi-second pause, so it is narrated rather
+    // than hidden.
+    _chitti.markRunning(_kStepAnalyze);
     var user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       try {
@@ -172,14 +203,24 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       }
     }
     if (user == null) {
+      _chitti.markFailed(_kStepAnalyze);
       if (mounted) Navigator.pop(context);
       return;
     }
+    _chitti.markDone(_kStepAnalyze);
+
     debugPrint('🔥 [RIDE CREATION] About to fetch nearby heroes...');
+    // _fetchNearbyHeroes swallows its own errors (it records them in
+    // _fetchNearbyHeroesError), so run() would always see success here.
+    // Marked manually so the step reflects the REAL outcome below,
+    // rather than reporting a tick over a failed hero lookup.
+    _chitti.markRunning(_kStepFindHeroes);
     await _fetchNearbyHeroes();
     debugPrint('🔥 [RIDE CREATION] Awaited _fetchNearbyHeroes. Moving to next step...');
     if (_heroesQueue.isEmpty) {
       debugPrint('[RideSearch] No nearby heroes found within 3km');
+      _chitti.markFailed(_kStepFindHeroes);
+      _chitti.failRemaining();
       if (mounted) {
         setState(() => _searchTimedOut = true);
         if (_fetchNearbyHeroesError != null) {
@@ -199,11 +240,24 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       }
       return;
     }
-    await _createRideInRTDB(user);
+    _chitti.markDone(_kStepFindHeroes);
+
+    // run() is correct here: _createRideInRTDB genuinely throws on
+    // failure, so the step's status follows the real future.
+    await _chitti.run(_kStepCreateRide, () => _createRideInRTDB(user!));
+
     _startCountTimer();
     _listenToNearbyCaptains();
     _listenForAcceptance();
     debugPrint('🔥 [DEBUG-TRACE] About to call _startSequentialPinging()...');
+
+    // THE LONG ONE. Left 'running' on purpose — it is resolved by
+    // _listenForAcceptance (a hero accepted) or _handleSearchTimeout
+    // (nobody did), NOT by this await returning. _startBroadcastPinging
+    // completes as soon as the pings are OUT; the customer's actual
+    // wait is for a human on a bike to tap Accept, which no future here
+    // can represent.
+    _chitti.markRunning(_kStepPing);
 
     // TASK 2 (Aug 8 2026): sequential per-hero pinging replaced with a
     // single 5km simultaneous broadcast — see _startBroadcastPinging.
@@ -825,6 +879,10 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         _countTimer?.cancel();
         _pingCountdown?.cancel();
         _radarCtrl.stop();
+        // A hero said yes — this is what step 3 was waiting for.
+        _chitti
+          ..markDone(_kStepPing)
+          ..markRunning(_kStepConfirm);
         _finalizeRideToFirestore(acceptedHeroId, data);
       }
     });
@@ -873,6 +931,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
 
       final finalRideId = docRef.id;
       debugPrint('[RideSearch] Ride finalized in Firestore: $finalRideId');
+      _chitti.markDone(_kStepConfirm);
 
       _foundCtrl.forward();
       if (mounted) {
@@ -910,6 +969,10 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     if (_captainFound || _cancelled || _searchTimedOut) return;
     _countTimer?.cancel();
     _radarCtrl.stop();
+    // Nobody accepted. Resolving step 3 here is what stops the list
+    // spinning forever — a step left 'running' after the search has
+    // visibly given up is worse than one honestly marked failed.
+    _chitti.failRemaining();
     if (_requestId.isNotEmpty) {
       await FirebaseDatabase.instance
           .ref('active_ride_requests/$_requestId')
@@ -1361,6 +1424,31 @@ class _RideSearchScreenState extends State<RideSearchScreen>
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 14),
+
+                  // ── CHITTI NARRATION ────────────────────────────
+                  // Only while the search is live. Once it has timed
+                  // out the VIP fallback below is the thing the
+                  // customer needs to act on, and a list of red failed
+                  // steps above it would just be noise on top of bad
+                  // news.
+                  //
+                  // ValueListenableBuilder scopes rebuilds to this box:
+                  // a step changing status must not rebuild the map,
+                  // the radar or the fare card around it.
+                  if (!_searchTimedOut) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: ValueListenableBuilder<List<ChittiStep>>(
+                        valueListenable: _chitti.steps,
+                        builder: (context, steps, _) => ChittiProcessingSteps(
+                          steps: steps,
+                          footnote: 'Chitti is on it — hang tight',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+
                   if (_searchTimedOut) ...[
                     // ── VIP Booking fallback ──
                     // No hero accepted after the sequential-ping queue was

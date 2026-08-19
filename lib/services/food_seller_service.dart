@@ -224,16 +224,30 @@ class FoodSellerService {
   }
 
   /// Update the status of an order and record the timestamp in the timeline.
+  /// Deducts the usage fee from the seller's wallet if the status is 'accepted'.
   Future<void> updateOrderStatus(
-      String orderId, String newStatus,) async {
+      String orderId, String newStatus, {String? sellerId}) async {
     try {
       final timelineField = 'statusTimeline.$newStatus';
-      await _ordersRef.doc(orderId).update({
+      final batch = FirebaseFirestore.instance.batch();
+      
+      final orderRef = _ordersRef.doc(orderId);
+      batch.update(orderRef, {
         'status': newStatus,
         timelineField: FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      DbUsageTracker.instance.recordWrite(1, 'seller_orders', 'order_status_update');
+
+      if (newStatus == 'accepted' && sellerId != null) {
+        final sellerRef = FirebaseFirestore.instance.collection('sellers').doc(sellerId);
+        // Fixed platform usage fee per order
+        batch.update(sellerRef, {
+          'walletBalance': FieldValue.increment(-5.0),
+        });
+      }
+
+      await batch.commit();
+      DbUsageTracker.instance.recordWrite(sellerId != null && newStatus == 'accepted' ? 2 : 1, 'seller_orders', 'order_status_update');
       debugPrint(
           '[FoodSellerService] Order $orderId status updated to: $newStatus',);
     } catch (e) {

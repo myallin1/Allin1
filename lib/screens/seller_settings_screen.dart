@@ -36,11 +36,11 @@ class SellerSettingsScreen extends StatefulWidget {
 }
 
 class _SellerSettingsScreenState extends State<SellerSettingsScreen> {
-  static const Color _bg = Color(0xFFFFFBFE);
+  static const Color _bg = Color(0xFFF7FAF8);
   static const Color _surface = Colors.white;
-  static const Color _pink = Color(0xFFFF4FA3);
-  static const Color _text = Color(0xFF3D1230);
-  static const Color _muted = Color(0xFF8F5A78);
+  static const Color _pink = Color(0xFFE0418F);
+  static const Color _text = Color(0xFF1A1A1A);
+  static const Color _muted = Color(0xFF6B7280);
 
   bool _orderNotificationsEnabled = true;
   bool _newOrderSoundEnabled = true;

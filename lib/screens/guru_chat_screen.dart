@@ -154,7 +154,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   // customer's explicit yes/no. Cleared once actioned or cancelled.
   Map<String, dynamic>? _pendingAgentAction;
 
-  // NEW (Guru AI upgrade, Task 2 — Vision): the screenshot the customer
+  // NEW (Chitti AI upgrade, Task 2 — Vision): the screenshot the customer
   // has picked but not yet sent — shown as a small removable preview
   // chip above the input bar, cleared once _sendMessage() ships it.
   Uint8List? _pendingImageBytes;
@@ -220,7 +220,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   Future<void> _sendMessage([String? presetText]) async {
     final input = (presetText ?? _inputController.text).trim();
     final pendingImage = _pendingImageBytes;
-    // NEW (Guru AI upgrade, Task 2 — Vision): a message can now be
+    // NEW (Chitti AI upgrade, Task 2 — Vision): a message can now be
     // image-only (customer attaches a screenshot with no typed text) —
     // only block sending when BOTH are empty.
     if ((input.isEmpty && pendingImage == null) || _isTyping) return;
@@ -684,7 +684,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     unawaited(_sendMessage(suggestion));
   }
 
-  // NEW (Guru AI upgrade, Task 2 — Vision): reuses file_picker (already
+  // NEW (Chitti AI upgrade, Task 2 — Vision): reuses file_picker (already
   // a project dependency — see grocery_order_screen.dart's DMart
   // cart-screenshot upload) instead of adding image_picker as a second,
   // redundant image-selection package for the same job.
@@ -726,7 +726,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     setState(() => _pendingImageBytes = null);
   }
 
-  // NEW (Guru AI upgrade, Task 2 — Vision, screenshot-upload fix): decode,
+  // NEW (Chitti AI upgrade, Task 2 — Vision, screenshot-upload fix): decode,
   // downscale to a max 800px longest edge, and re-encode as heavily
   // compressed JPEG (quality 70) — plenty for the AI to read UI
   // text/buttons, screenshots don't need full resolution. FIX (per
@@ -790,7 +790,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
       return;
     }
 
-    // NEW (Guru AI upgrade — "Claim My Free Voice Access"): voice is
+    // NEW (Chitti AI upgrade — "Claim My Free Voice Access"): voice is
     // still free for every activated customer, but the first tap now
     // shows a quick claim sheet instead of unlocking silently — a
     // deliberate small engagement moment, not a real paywall (see
@@ -1553,7 +1553,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
               setState(() => _autoSpeak = !_autoSpeak);
               if (!_autoSpeak) unawaited(_tts.stop());
             },
-            tooltip: _autoSpeak ? 'Mute Guru' : 'Unmute Guru',
+            tooltip: _autoSpeak ? 'Mute Chitti' : 'Unmute Chitti',
             icon: Icon(
               _autoSpeak ? Icons.volume_up_rounded : Icons.volume_off_rounded,
               color: muted,
@@ -1652,7 +1652,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // NEW (Guru AI upgrade, Task 2 — Vision): preview of the
+            // NEW (Chitti AI upgrade, Task 2 — Vision): preview of the
             // screenshot picked but not yet sent, with a quick remove.
             if (_pendingImageBytes != null)
               Padding(
@@ -1686,7 +1686,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // NEW (Guru AI upgrade, Task 2 — Vision): attachment
+                // NEW (Chitti AI upgrade, Task 2 — Vision): attachment
                 // button so the customer can send a screenshot of an
                 // app issue for Guru to troubleshoot.
                 IconButton(
@@ -1948,7 +1948,7 @@ class _SuperHeroActivationScreen extends StatelessWidget {
 // ================================================================
 // Pro paywall — shown when a Free-tier customer taps the mic.
 // ================================================================
-// NEW (Guru AI upgrade — "Claim My Free Voice Access"): replaced the old
+// NEW (Chitti AI upgrade — "Claim My Free Voice Access"): replaced the old
 // WhatsApp-upgrade paywall sheet with an honest, one-tap unlock. FIX
 // (deliberately NOT built as originally specced): the brief asked for a
 // struck-through "₹2000" reference price next to "FREE FOR YOU" — a
@@ -2275,7 +2275,7 @@ class _GuruMessageBubble extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // NEW (Guru AI upgrade, Task 2 — Vision): show the
+                // NEW (Chitti AI upgrade, Task 2 — Vision): show the
                 // screenshot the customer attached to this message.
                 if (message.imageBytes != null) ...[
                   ClipRRect(
@@ -2527,7 +2527,7 @@ class _GuruMessage {
 
   final String role;
   final String text;
-  // NEW (Guru AI upgrade, Task 2 — Vision): the screenshot the customer
+  // NEW (Chitti AI upgrade, Task 2 — Vision): the screenshot the customer
   // attached to THIS message, if any — kept only for local bubble
   // display, never re-sent on later turns (see GuruApiService.sendMessage,
   // which only attaches the image on the request it was picked for).

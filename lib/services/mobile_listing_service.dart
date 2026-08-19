@@ -144,11 +144,53 @@ class MobileListingService {
     required String condition,
     int limit = 120,
   }) async {
-    final snap = await _db
+    final page = await fetchListingsPage(condition: condition, limit: limit);
+    return page.items;
+  }
+
+  /// Default page size. Twenty is roughly two screens of the grid on a
+  /// phone — enough that the customer never sees the loader on a normal
+  /// scroll, small enough that opening the tab costs 20 reads, not 120.
+  static const int kPageSize = 20;
+
+  /// One page of listings plus the cursor needed to ask for the next.
+  ///
+  /// PAGINATION SHAPE (Aug 19 2026, CTO audit — "Data Scaling").
+  /// The audit framed the old single fetch as a performance risk; the
+  /// sharper problem was correctness. It capped at 120 documents with
+  /// no way to reach document 121, so once Erode's shops list past that
+  /// point, real stock would simply have been invisible — silently, with
+  /// no empty state and no error.
+  ///
+  /// Deliberately cursor-based (startAfterDocument), not offset-based:
+  /// Firestore bills an offset as if it read every skipped document, so
+  /// offset paging gets more expensive the further a customer scrolls.
+  /// A cursor costs the same on page 10 as on page 1.
+  ///
+  /// Still an equality filter with NO orderBy, so this needs no
+  /// composite index — Firestore falls back to ordering by document
+  /// name, which is stable and therefore a safe cursor. The trade-off:
+  /// "newest first" can only be applied WITHIN a page (see the sort
+  /// below), not across the whole result set. Accepted on purpose —
+  /// true global newest-first would require an orderBy('createdAt')
+  /// composite index on a collection group, and the audit's own
+  /// zero-breakage principle says not to add index requirements to a
+  /// live query without a deploy to match.
+  Future<MobileListingsPage> fetchListingsPage({
+    required String condition,
+    int limit = kPageSize,
+    DocumentSnapshot<Map<String, dynamic>>? startAfter,
+  }) async {
+    var query = _db
         .collectionGroup(kSubcollection)
         .where('condition', isEqualTo: condition)
-        .limit(limit)
-        .get();
+        .limit(limit);
+
+    if (startAfter != null) {
+      query = query.startAfterDocument(startAfter);
+    }
+
+    final snap = await query.get();
 
     DbUsageTracker.instance.recordRead(
       snap.docs.length,
@@ -161,8 +203,10 @@ class MobileListingService {
         .where((l) => l.inStock)
         .toList();
 
-    // In-stock first is already handled by the filter above; sort by
-    // newest so freshly added stock surfaces to the top.
+    // Newest first within this page. Note this runs AFTER the inStock
+    // filter, so a page can legitimately return fewer items than
+    // `limit` while more pages still exist — which is exactly why
+    // hasMore below is derived from the RAW doc count, not items.length.
     items.sort((a, b) {
       final at = a.createdAt;
       final bt = b.createdAt;
@@ -171,6 +215,32 @@ class MobileListingService {
       if (bt == null) return -1;
       return bt.compareTo(at);
     });
-    return items;
+
+    return MobileListingsPage(
+      items: items,
+      lastDoc: snap.docs.isEmpty ? null : snap.docs.last,
+      // A short page means Firestore had nothing more to give. Using the
+      // raw doc count (not the filtered list) prevents a page made
+      // entirely of out-of-stock phones from being read as "the end".
+      hasMore: snap.docs.length == limit,
+    );
   }
+}
+
+/// A page of browse results plus everything needed to request the next.
+class MobileListingsPage {
+  final List<MobileListing> items;
+
+  /// Cursor for the next call. Null when the page came back empty.
+  final DocumentSnapshot<Map<String, dynamic>>? lastDoc;
+
+  /// False once Firestore returns a short page — the caller should stop
+  /// asking rather than firing an endless tail of empty reads.
+  final bool hasMore;
+
+  const MobileListingsPage({
+    required this.items,
+    required this.lastDoc,
+    required this.hasMore,
+  });
 }

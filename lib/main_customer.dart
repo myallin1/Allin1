@@ -8,9 +8,17 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
+// hide Category (Aug 19 2026): flutter/foundation.dart exports its own
+// `Category` annotation class (dart:core Category-adjacent metadata
+// type), which collides with our own `Category` enum imported below
+// from category_gateway_service.dart — dart2js refused to compile with
+// "'Category' is imported from both ...". Hiding Flutter's unused
+// annotation type resolves the ambiguity without touching the app's
+// own Category enum or any of its ~dozens of call sites.
+import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,10 +43,14 @@ import 'screens/dashboard_screen.dart';
 import 'screens/guru_chat_screen.dart';
 import 'screens/guru_offer_screen.dart';
 import 'screens/hero_booking_screen.dart';
+import 'screens/partner_shop_order_screen.dart';
+import 'screens/seller_detail_screen.dart';
 import 'screens/settings_screen.dart';
+import 'services/category_gateway_service.dart' show Category;
 import 'services/affiliate_service.dart';
 import 'services/ai_activation_service.dart';
 import 'services/analytics_service.dart';
+import 'services/route_breadcrumb_observer.dart';
 // GUEST MODE (Aug 11 2026): for ensureGuestSession() in main().
 import 'services/auth_service.dart';
 import 'services/api_service.dart';
@@ -59,6 +71,7 @@ import 'services/share_intent_platform_stub.dart'
 import 'services/shared_location_inbox.dart';
 import 'services/soundbox_easter_egg_service.dart';
 import 'services/theme_service.dart';
+import 'services/map_simulation_service.dart';
 import 'widgets/migration_notice_overlay.dart';
 
 @pragma('vm:entry-point')
@@ -272,6 +285,29 @@ void main() async {
     },
     appRunner: () async {
       WidgetsFlutterBinding.ensureInitialized();
+
+      // DEEP LINKING (Aug 19 2026 — clean-URL PWA support): switches web
+      // routing from the default hash strategy (my-allin1.web.app/#/shop/x)
+      // to path-based URLs (my-allin1.web.app/shop/x) so a WhatsApp-shared
+      // shop link looks like a normal URL and Android App Links can match
+      // it by host+path. No-op on non-web platforms; guarded anyway since
+      // the underlying platform channel only exists on web.
+      if (kIsWeb) {
+        usePathUrlStrategy();
+      }
+
+      // MEMORY FOOTPRINT CAP (Aug 19 2026 — cold-start-after-kill
+      // mitigation, part C): Flutter's default image cache has no size
+      // ceiling other than a 1000-image count, so a long dashboard
+      // session with lots of scrolled-past listing photos can retain a
+      // large amount of decoded-bitmap memory, making this app a more
+      // likely OS memory-reclaim target while backgrounded. Capping it
+      // does not prevent the OS from killing the process, it only
+      // reduces how often this app is the one picked. 100MB is a
+      // generous cap for a listings-heavy app; well below anything that
+      // would cause visible re-decode thrashing during normal scrolling.
+      PaintingBinding.instance.imageCache.maximumSizeBytes = 100 << 20;
+
       // FIX (audit finding — notifications_screen.dart hardcoded
       // 'customer' fallback): explicit even though 'customer' is
       // already the default in app_variant.dart, so this entrypoint
@@ -590,12 +626,22 @@ Future<void> _warmMapStack() async {
     await ApiConfig.ensureEnvLoaded();
     debugPrint('[main_customer] Initializing MapService...');
     await MapService().initialize();
-    // REMOVED (Aug 12 2026 — customer-facing demo-vehicle removal):
-    // MapSimulationService.instance.initialize() used to start a
-    // Firestore-driven fake-vehicle simulation that could render on this
-    // app's live map. The simulation now lives ONLY in
-    // admin_map_simulation_screen.dart, started manually from there —
-    // this app no longer references MapSimulationService at all.
+    // RESTORED (Aug 19 2026 — Nizam's explicit request): Fake vehicles are
+    // back on the customer app to make the map look active, driven by the
+    // Admin Drawer's 3-mode selector (Normal/Busy/Peak/Off) in Firestore.
+    // They now use the same strict road-snapping logic (no more ghosts).
+    FirebaseFirestore.instance.collection('system_settings').doc('app_status').snapshots().listen((snapshot) {
+      final data = snapshot.data();
+      final mode = data?['simulation_mode'] as String? ?? 'off';
+      if (mode == 'off') {
+        MapSimulationService.instance.stop();
+      } else {
+        SimulationDensity density = SimulationDensity.normal;
+        if (mode == 'busy') density = SimulationDensity.busy;
+        if (mode == 'peak') density = SimulationDensity.peak;
+        MapSimulationService.instance.start(density: density);
+      }
+    });
     debugPrint(
       '[main_customer] MapService ready provider=${MapService().currentProvider.name} '
       'fallback=${MapService().isUsingFallback}',
@@ -714,8 +760,61 @@ class CustomerApp extends StatelessWidget {
             '/rider': (_) => const ComingSoonScreen(role: 'Rider'),
             '/seller': (_) => const ComingSoonScreen(role: 'Seller'),
           },
+          // NEW (Aug 19 2026 — deep-breadcrumb restore, food/restaurant
+          // browsing only): SellerDetailScreen normally takes a full
+          // seller Map fetched by the category list — too heavy to carry
+          // through PrefsCache (breadcrumb args must be JSON primitives,
+          // see route_breadcrumb_observer.dart). So '/food_shop_detail'
+          // is a NAMED route that carries only {sellerId, categoryName}
+          // and re-fetches the seller doc from Firestore before building
+          // the real screen. This is deliberately the ONLY detail screen
+          // wired this way in this pass — see kBreadcrumbSafeRoutes for
+          // exactly which flows this covers (restaurant/menu browsing,
+          // pre-checkout) and which it explicitly excludes (checkout,
+          // payment, order tracking).
+          onGenerateRoute: (settings) {
+            if (settings.name == '/food_shop_detail') {
+              final args = settings.arguments;
+              final map = args is Map ? args : const <String, dynamic>{};
+              final sellerId = map['sellerId'] as String?;
+              final categoryName = map['categoryName'] as String?;
+              if (sellerId == null || sellerId.isEmpty) return null;
+              final category = Category.values.firstWhere(
+                (c) => c.name == categoryName,
+                orElse: () => Category.food,
+              );
+              return MaterialPageRoute<void>(
+                settings: settings,
+                builder: (_) => _FoodShopDetailRestoreLoader(
+                  sellerId: sellerId,
+                  category: category,
+                ),
+              );
+            }
+            if (settings.name == '/partner_shop_detail') {
+              final args = settings.arguments;
+              final map = args is Map ? args : const <String, dynamic>{};
+              final shopName = map['shopName'] as String?;
+              PartnerShop? shop;
+              if (shopName != null) {
+                for (final s in kPartnerShops) {
+                  if (s.name == shopName) {
+                    shop = s;
+                    break;
+                  }
+                }
+              }
+              if (shop == null) return null;
+              return MaterialPageRoute<void>(
+                settings: settings,
+                builder: (_) => PartnerShopOrderScreen(shop: shop!),
+              );
+            }
+            return null;
+          },
           navigatorObservers: [
             AnalyticsService.instance.getObserver(),
+            RouteBreadcrumbObserver(),
           ],
           // NEW (CTO mandate — Quick Task Global AI Overlay): the launcher
           // FAB lives here so it appears above every screen with zero
@@ -793,6 +892,69 @@ class CustomerApp extends StatelessWidget {
 // whole boot sequence is now the HTML/CSS one in web/index.html, which
 // lives outside Flutter entirely and needs no widget here to manage it.
 // ================================================================
+// ================================================================
+// _FoodShopDetailRestoreLoader — Aug 19 2026
+//
+// Reconstructs SellerDetailScreen from just a seller id + category on
+// cold-start deep restore (see onGenerateRoute above and
+// route_breadcrumb_observer.dart). Refetches the seller doc directly
+// from Firestore's 'sellers' collection — same shape CategoryGatewayService
+// produces ('id': doc.id, ...doc.data()) — so SellerDetailScreen sees an
+// identical `seller` map to a normal category-browse navigation.
+//
+// Fails soft: if the doc is gone/unreachable (seller deactivated,
+// offline, etc.) this shows a small error screen with a way back to the
+// dashboard rather than crashing or looping — restoring a breadcrumb
+// must never be able to strand the customer.
+// ================================================================
+class _FoodShopDetailRestoreLoader extends StatelessWidget {
+  final String sellerId;
+  final Category category;
+
+  const _FoodShopDetailRestoreLoader({
+    required this.sellerId,
+    required this.category,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: FirebaseFirestore.instance
+          .collection('sellers')
+          .doc(sellerId)
+          .get(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final data = snapshot.data;
+        if (snapshot.hasError || data == null || !data.exists) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Restaurant')),
+            body: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('This shop is no longer available.'),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Go back'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        final seller = <String, dynamic>{'id': data.id, ...?data.data()};
+        return SellerDetailScreen(seller: seller, category: category);
+      },
+    );
+  }
+}
+
 class _IntroGate extends StatelessWidget {
   const _IntroGate();
 

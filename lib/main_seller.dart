@@ -19,6 +19,7 @@ import 'screens/seller_home_kitchen_menu_screen.dart';
 import 'screens/seller_onboarding_screen.dart';
 import 'screens/seller_screen.dart';
 import 'services/db_usage_tracker.dart';
+import 'services/ai_activation_service.dart';
 import 'services/localization_service.dart';
 import 'services/migration_gate_service.dart';
 import 'services/session_service.dart';
@@ -27,6 +28,7 @@ import 'services/seller_foreground_service.dart';
 import 'services/seller_alert_notification_service.dart';
 import 'widgets/branded_loading_screen.dart';
 import 'widgets/migration_notice_overlay.dart';
+import 'services/guru_overlay_service.dart';
 
 // FIX (Aug 10 2026 — Nizam's "video every launch is too slow / disturbs
 // repeat users" report, same pattern as main_customer.dart/main_hero.dart):
@@ -304,6 +306,10 @@ class SellerApp extends StatelessWidget {
         // change it from. Now shares the same ThemeService (5 selectable
         // themes), switchable from seller_settings_screen.dart.
         ChangeNotifierProvider(create: (_) => ThemeService()),
+        // REQUIRED as of Aug 19 2026 — see the identical note in
+        // main_hero.dart. GlobalGuruFab reads activation state from
+        // here to decide whether Chitti is visible at all.
+        ChangeNotifierProvider(create: (_) => AiActivationService()),
       ],
       child: Consumer<ThemeService>(
         builder: (context, themeService, _) => MaterialApp(
@@ -355,8 +361,13 @@ class SellerApp extends StatelessWidget {
       // builder: before this — added purely to host MigrationGate, same
       // pattern as the other 3 apps. child can briefly be null on the very
       // first MaterialApp build, so fall back to an empty box.
-      builder: (context, child) =>
+      // Also hosts GlobalGuruFab for Seller Chitti Assistant.
+      builder: (context, child) => Stack(
+        children: [
           MigrationGate(child: child ?? const SizedBox.shrink()),
+          const GlobalGuruFab(),
+        ],
+      ),
         ),
       ),
     );

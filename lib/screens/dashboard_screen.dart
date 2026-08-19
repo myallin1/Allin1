@@ -6,6 +6,7 @@
 
 import 'dart:async';
 
+import 'package:app_links/app_links.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:colorful_iconify_flutter/icons/fluent_emoji_flat.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -27,8 +28,18 @@ import '../services/city_service.dart';
 import '../services/hive_cache.dart';
 import '../services/local_sync_service.dart';
 import '../services/localization_service.dart';
+import '../services/chitti_overlay_service.dart';
+// Real embedded browser view — WebView on native, <iframe> on the PWA.
+// Named for DMart (its first use, in Grocery) but URL-generic; the
+// Internet/Broadband page now renders through the exact same widget so
+// the two pages genuinely look and behave identically.
+import '../widgets/dmart_embedded_view_web.dart'
+    if (dart.library.io) '../widgets/dmart_embedded_view_native.dart';
+import '../services/daily_quote_service.dart';
+import '../widgets/chitti_companion.dart';
 import '../services/location_service.dart';
 import '../services/prefs_cache.dart';
+import '../services/route_breadcrumb_observer.dart' show isRouteSafeToRestore;
 import '../services/pwa_cache_platform_stub.dart'
     if (dart.library.html) '../services/pwa_cache_platform_web.dart';
 import '../services/theme_service.dart';
@@ -38,7 +49,12 @@ import '../services/web_version_checker.dart';
 import '../utils/daily_boost_messages.dart';
 import '../widgets/auto_image_slider.dart';
 import '../widgets/auto_widget_slider.dart';
-import '../widgets/banner_ads_slider.dart';
+import '../widgets/ai_bot_avatar.dart';
+import '../widgets/cached_cloud_image.dart';
+import '../services/migration_gate_service.dart';
+import 'mobiles/listing_video_player.dart' show showPremiumVideoModal;
+import '../models/mobile_models.dart' show youtubeVideoId;
+
 import '../widgets/banner_slider.dart';
 import '../widgets/coach_mark_overlay.dart';
 import '../widgets/download_app_banner.dart';
@@ -116,14 +132,7 @@ void _syncDashboardPalette(ThemeService ts) {
 // Was a top-level `const` list -- turned into a getter (recomputed on
 // every access) so the 'color' entries pick up live kPink/kTeal/etc
 // values instead of freezing whatever they were at first app load.
-List<Map<String, Object>> get _bannerItems => [
-  {'title': 'BIKE TAXI', 'emoji': '🏍️', 'color': kTeal},
-  {'title': 'CAB', 'emoji': '🚗', 'color': kBlue},
-  {'title': 'AUTO', 'emoji': '🛺', 'color': kPurple},
-  {'title': 'GROCERIES', 'emoji': '🛒', 'color': kGreen},
-  {'title': 'FOOD', 'emoji': '🍔', 'color': kGold},
-  {'title': 'SERVICES', 'emoji': '🔧', 'color': kPink},
-];
+
 
 // ================================================================
 // DASHBOARD SCREEN — Main Entry
@@ -164,6 +173,74 @@ class _DashboardScreenState extends State<DashboardScreen>
   final Set<int> _visitedTabs = {0};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   final _user = FirebaseAuth.instance.currentUser;
+
+  // NAME FETCHING FIX (Aug 19 2026 — Nizam: "customer app la name
+  // fetching problem iruku"). ROOT CAUSE: the header and drawer both
+  // read `_user?.displayName` — a ONE-TIME snapshot of
+  // FirebaseAuth.instance.currentUser taken when this State object was
+  // constructed. Two separate ways that goes wrong:
+  //   1. Phone-OTP / guest-upgraded accounts often have an EMPTY Auth
+  //      displayName even though the customer's real name is correctly
+  //      sitting in Firestore users/{uid}.name (profile_screen.dart's
+  //      save flow already writes both places; login flows write only
+  //      Firestore) — so the header showed "User"/"Guest" for exactly
+  //      those customers.
+  //   2. Even when Auth's displayName IS eventually set (e.g. the
+  //      customer edits their name in Profile, which calls
+  //      updateDisplayName), this `_user` field is never re-read after
+  //      that — the dashboard is not rebuilt from scratch just because
+  //      Auth's cached user object changed underneath it, so the OLD
+  //      name kept showing until the next full app restart.
+  // FIX: cache-first (HiveCache.getCachedUserProfile, already
+  // populated by login/profile_screen.dart) then a background Firestore
+  // refresh, same pattern _loadProfileFromFirestore() in
+  // profile_screen.dart already uses. _buildAppBar()/_ProfileDrawer
+  // read this instead of the frozen `_user.displayName`.
+  String? _resolvedName;
+
+  Future<void> _loadResolvedName() async {
+    final user = _user;
+    if (user == null) return;
+    try {
+      final cached = await HiveCache.getCachedUserProfile();
+      final cachedName = (cached?['name'] as String?)?.trim();
+      if (cachedName != null && cachedName.isNotEmpty && mounted) {
+        setState(() => _resolvedName = cachedName);
+      }
+      // Always refresh in the background — cheap single .get(), and it
+      // is what keeps a just-edited name from going stale until the
+      // 30-minute cache TTL expires.
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final data = doc.data();
+      final freshName = (data?['name'] as String?)?.trim();
+      if (freshName != null && freshName.isNotEmpty) {
+        if (mounted && freshName != _resolvedName) {
+          setState(() => _resolvedName = freshName);
+        }
+        unawaited(HiveCache.cacheUserProfile({
+          'name': freshName,
+          'email': (data?['email'] as String?) ?? user.email ?? '',
+          'phone': (data?['phoneNumber'] as String?) ??
+              (data?['phone'] as String?) ??
+              user.phoneNumber ??
+              '',
+        }));
+      } else if (cachedName == null || cachedName.isEmpty) {
+        // Nothing in Firestore either — fall back to whatever Auth has,
+        // so a genuinely name-less guest still doesn't get stuck with
+        // "User" if a display name exists on the Auth object itself.
+        final authName = user.displayName?.trim();
+        if (authName != null && authName.isNotEmpty && mounted) {
+          setState(() => _resolvedName = authName);
+        }
+      }
+    } catch (e) {
+      debugPrint('[Dashboard] name fetch failed (non-fatal): $e');
+    }
+  }
 
   // FIX (Nizam's request): first-time-open "how to use this app" coach
   // mark tour — spotlights the real bottom-nav tabs on the real home
@@ -211,6 +288,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   // of whether an update actually existed.
   bool _updateAvailable = false;
   Timer? _pwaUpdatePollTimer;
+  // Deep linking (Aug 19 2026): subscription for app_links' uriLinkStream,
+  // native/non-web only. Null on web (never assigned).
+  StreamSubscription<Uri>? _deepLinkSub;
 
   Future<void> _claimPromo(String offerId) async {
     final t = context.read<LocalizationService>().t;
@@ -231,8 +311,23 @@ class _DashboardScreenState extends State<DashboardScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    unawaited(_restoreLastTab());
+    // Deep link (Aug 19 2026 — WhatsApp shop-share flow) takes priority
+    // over both tab restore and breadcrumb restore: if a customer opened
+    // the app via a shared /shop/<id> or /pshop/<name> link, that's an
+    // explicit intent and should win over "go back to where you left
+    // off". _handleInitialDeepLink() returns false when there's no
+    // matching path, in which case _restoreLastTab() (which itself
+    // chains into _restoreDeepBreadcrumb()) runs exactly as before.
+    unawaited(_handleInitialDeepLink().then((handled) {
+      if (!handled && mounted) {
+        unawaited(_restoreLastTab());
+      }
+    }));
+    if (!kIsWeb) {
+      unawaited(_initNativeDeepLinks());
+    }
     unawaited(_silentBackupIfNeeded());
+    unawaited(_loadResolvedName());
     unawaited(_detectCityInBackground());
     // Per Nizam's request: warm up GPS the moment the home page opens, so
     // by the time the customer taps Taxi/Food/Hero, LocationService already
@@ -248,6 +343,29 @@ class _DashboardScreenState extends State<DashboardScreen>
     // ambush someone mid-booking. See auth_prompt_service.dart.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) AuthPromptService.instance.scheduleDeferredPrompt(context);
+    });
+
+    // CHITTI COMPANION (Aug 19 2026). Mounted once, here, on the root
+    // overlay — from this point he outlives every screen the customer
+    // opens, keeping his position, his animation and his memory of the
+    // service in progress. See chitti_overlay_service.dart.
+    //
+    // Must be post-frame: the root Navigator's overlay does not exist
+    // yet during initState, and show() would silently no-op.
+    //
+    // Android-only; show() no-ops on the PWA, so there is deliberately
+    // no platform check at this call site.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ChittiOverlayService.instance.show(
+        context,
+        onTapChitti: () {
+          if (!mounted) return;
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const GuruChatScreen()),
+          );
+        },
+      );
     });
     // NEW (Aug 12 2026 — Nizam's "daily boost" request): one small,
     // non-blocking motivational SnackBar per app cold-boot, right under
@@ -390,6 +508,123 @@ class _DashboardScreenState extends State<DashboardScreen>
     } catch (e) {
       debugPrint('[Dashboard] last-tab restore failed: $e');
     }
+    // Deep-screen restore (Aug 19 2026): runs after the tab restore above
+    // has had a chance to settle. This is a pure mitigation for the
+    // "app reloads from scratch after the OS kills it" complaint — it
+    // cannot fix the underlying OS behavior, only make cold starts land
+    // closer to where the customer actually was. See
+    // route_breadcrumb_observer.dart for exactly which routes qualify
+    // and why coverage is currently limited to the app's named routes.
+    unawaited(_restoreDeepBreadcrumb());
+  }
+
+  // Deep link path parsing, shared by both the web (Uri.base) and native
+  // (app_links) entry points below. Recognizes exactly the two share
+  // formats produced by the Part 3 share buttons:
+  //   /shop/<sellerId>        -> '/food_shop_detail' (SellerDetailScreen)
+  //   /pshop/<shopName>       -> '/partner_shop_detail' (PartnerShopOrderScreen)
+  // Returns null if the path doesn't match either pattern.
+  ({String route, Map<String, dynamic> args})? _parseDeepLinkPath(String path) {
+    final segments = path.split('/').where((s) => s.isNotEmpty).toList();
+    if (segments.length < 2) return null;
+    if (segments[0] == 'shop') {
+      final sellerId = Uri.decodeComponent(segments[1]);
+      if (sellerId.isEmpty) return null;
+      return (
+        route: '/food_shop_detail',
+        args: {'sellerId': sellerId, 'categoryName': 'food'},
+      );
+    }
+    if (segments[0] == 'pshop') {
+      final shopName = Uri.decodeComponent(segments[1]);
+      if (shopName.isEmpty) return null;
+      return (route: '/partner_shop_detail', args: {'shopName': shopName});
+    }
+    return null;
+  }
+
+  Future<void> _pushDeepLink(String route, Map<String, dynamic> args) async {
+    await Future.delayed(Duration.zero);
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      try {
+        Navigator.of(context).pushNamed(route, arguments: args);
+      } catch (e) {
+        debugPrint('[Dashboard] deep link push failed: $e');
+      }
+    });
+  }
+
+  // Web cold start (Aug 19 2026): a WhatsApp-shared link opens the PWA at
+  // e.g. my-allin1.web.app/shop/<id> — Uri.base.path is that clean path
+  // thanks to usePathUrlStrategy() in main_customer.dart. Web-only; native
+  // gets the equivalent via _initNativeDeepLinks() below. Returns true if
+  // a deep link was found and a push was scheduled, so the caller can
+  // skip the normal last-tab restore.
+  Future<bool> _handleInitialDeepLink() async {
+    if (!kIsWeb) return false;
+    try {
+      final parsed = _parseDeepLinkPath(Uri.base.path);
+      if (parsed == null) return false;
+      unawaited(_pushDeepLink(parsed.route, parsed.args));
+      return true;
+    } catch (e) {
+      debugPrint('[Dashboard] initial web deep link parse failed: $e');
+      return false;
+    }
+  }
+
+  // Native Android App Links (Aug 19 2026): app_links' uriLinkStream
+  // delivers BOTH the cold-start link (as its first event, per the
+  // package's documented usage pattern) and any link received while the
+  // app is already running (warm start, e.g. tapping the WhatsApp link
+  // again with the app backgrounded). Non-web only — web's routing is
+  // handled entirely by _handleInitialDeepLink() above via the browser's
+  // own URL bar. Wrapped defensively: this must never block or crash app
+  // startup.
+  Future<void> _initNativeDeepLinks() async {
+    try {
+      final appLinks = AppLinks();
+      _deepLinkSub = appLinks.uriLinkStream.listen((uri) {
+        try {
+          final parsed = _parseDeepLinkPath(uri.path);
+          if (parsed != null) {
+            unawaited(_pushDeepLink(parsed.route, parsed.args));
+          }
+        } catch (e) {
+          debugPrint('[Dashboard] deep link handling failed: $e');
+        }
+      }, onError: (e) {
+        debugPrint('[Dashboard] uriLinkStream error: $e');
+      });
+    } catch (e) {
+      debugPrint('[Dashboard] native deep link init failed: $e');
+    }
+  }
+
+  Future<void> _restoreDeepBreadcrumb() async {
+    try {
+      final crumb = await PrefsCache.loadBreadcrumb();
+      if (crumb == null) return;
+      if (!isRouteSafeToRestore(crumb.route)) return;
+      // Wait one frame so the dashboard underneath is fully built —
+      // pushing immediately during initState's async gap can race the
+      // very first frame and has, historically, been a source of
+      // "black screen for a moment" bugs elsewhere in this app.
+      await Future.delayed(Duration.zero);
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        try {
+          Navigator.of(context).pushNamed(crumb.route, arguments: crumb.args);
+        } catch (e) {
+          debugPrint('[Dashboard] deep breadcrumb push failed: $e');
+        }
+      });
+    } catch (e) {
+      debugPrint('[Dashboard] deep breadcrumb restore failed: $e');
+    }
   }
 
   Future<void> _checkForNativeAppUpdate() async {
@@ -420,6 +655,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _pwaUpdatePollTimer?.cancel();
+    _deepLinkSub?.cancel();
     // GUEST MODE: kill the pending 30s timer — without this it would
     // fire against a disposed context if the customer leaves Home
     // within 30 seconds of opening the app.
@@ -697,7 +933,11 @@ class _DashboardScreenState extends State<DashboardScreen>
       child: Scaffold(
         key: _scaffoldKey,
         backgroundColor: kBg,
-        drawer: _ProfileDrawer(user: _user, onNavigate: _navigate),
+        drawer: _ProfileDrawer(
+          user: _user,
+          resolvedName: _resolvedName,
+          onNavigate: _navigate,
+        ),
         appBar: _buildAppBar(),
         body: Stack(
           children: [
@@ -730,7 +970,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   PreferredSizeWidget _buildAppBar() {
-    final name = _user?.displayName ?? 'User';
+    final name = _resolvedName ?? _user?.displayName ?? 'User';
     final firstName = name.split(' ').first;
 
     return AppBar(
@@ -738,6 +978,12 @@ class _DashboardScreenState extends State<DashboardScreen>
       elevation: 0,
       surfaceTintColor: Colors.transparent,
       titleSpacing: 0,
+      // Raised from the default 56 (Aug 19 2026): the title column went
+      // from two lines to three when the daily quote was added, and at
+      // 56 the third line overflows on smaller phones. Set explicitly
+      // rather than left to chance so the layout is not one font-scale
+      // setting away from a yellow-stripe overflow.
+      toolbarHeight: 66,
       leading: IconButton(
         // FIX (UI standardization, Aug 11 2026): every other screen's
         // leading nav icon (back button etc.) is size 20 — this hamburger
@@ -769,10 +1015,43 @@ class _DashboardScreenState extends State<DashboardScreen>
                   // .greetingKeyForNow()), matching how the Claude
                   // desktop app itself greets by time of day.
                   '${context.watch<LocalizationService>().t(LocalizationService.greetingKeyForNow())}, $firstName',
-                  style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w700, fontSize: 14),
+                  // 14 → 13 (Aug 19 2026, Nizam): the name steps back a
+                  // point so the quote below can step forward one, which
+                  // is what shifts the eye from "who am I" to "what's
+                  // today". Same total header height either way.
+                  style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w700, fontSize: 13),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+
+                // ── DAILY QUOTE ─────────────────────────────────
+                // Sits between the name and the city, exactly as asked.
+                // Costs nothing: compiled into the app, no Firestore
+                // read, no network, no state — see daily_quote_service
+                // .dart for why it isn't AI-generated or server-fed.
+                //
+                // One line only, ellipsised rather than wrapped: this
+                // is an AppBar title, and letting it wrap to two lines
+                // would push the city out of the fixed toolbar height.
+                Text(
+                  DailyQuoteService.instance.forCustomer(
+                    context.watch<LocalizationService>().languageCode,
+                  ),
+                  // Location is 9, so this is 10 — one point larger, per
+                  // Nizam. Italic and muted-but-warmer than the city so
+                  // it reads as an aside, not as data.
+                  style: GoogleFonts.outfit(
+                    color: kPink.withValues(alpha: 0.85),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    fontStyle: FontStyle.italic,
+                    height: 1.25,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 1),
+
                 GestureDetector(
                   onTap: _showCityPicker,
                   child: Row(
@@ -870,7 +1149,31 @@ class _DashboardScreenState extends State<DashboardScreen>
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    if (icon != null) Icon(icon, color: active ? kPink : kMuted, size: 24) else _A1BadgeIcon(active: active),
+                    // FIX (Nizam: the Chitti AI tab's Icons.smart_toy_rounded
+                    // read as an alarming/"panic" glyph to customers, not as
+                    // the friendly assistant it represents). Swapped for the
+                    // same static Chitti robot artwork used elsewhere in the
+                    // app (assets/ai/ai_robot.webp, see the floating bot in
+                    // this same file and guru_overlay_service.dart's
+                    // AiBotAvatar) — no animation needed for a small nav
+                    // icon slot, just a calm, on-brand image. Sized to match
+                    // the 24px Icon() slot it replaces so the row doesn't
+                    // shift. Only this one tab changes; every other nav icon
+                    // is untouched.
+                    if (icon == Icons.smart_toy_rounded)
+                      Opacity(
+                        opacity: active ? 1.0 : 0.55,
+                        child: Image.asset(
+                          'assets/ai/ai_robot.webp',
+                          width: 24,
+                          height: 24,
+                          cacheWidth: 72,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) =>
+                              Icon(icon, color: active ? kPink : kMuted, size: 24),
+                        ),
+                      )
+                    else if (icon != null) Icon(icon, color: active ? kPink : kMuted, size: 24) else _A1BadgeIcon(active: active),
                     const SizedBox(height: 3),
                     Text(label, style: TextStyle(
                         fontSize: 9.5,
@@ -962,24 +1265,43 @@ class _FloatingGuruBotState extends State<_FloatingGuruBot> {
         }),
         onTap: widget.onTap,
         child: Stack(clipBehavior: Clip.none, children: [
-          Container(
-            width: 60, height: 60,
-            decoration: BoxDecoration(
-              color: kBg, shape: BoxShape.circle,
-              border: Border.all(color: kPink.withValues(alpha: 0.35), width: 2),
-              boxShadow: [BoxShadow(
-                  color: kPink.withValues(alpha: 0.25),
-                  blurRadius: 16, spreadRadius: 2,),],
-            ),
-            child: Center(
-              child: Image.asset(
-                'assets/images/assistant.gif',
-                width: 46, height: 46,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Text('💬', style: TextStyle(fontSize: 28)),
+          // CHITTI (Aug 19 2026, Nizam: "antha bommaya thookitu namma
+          // new chitty robot oda head mattum anga animation ah
+          // vaikkaporom"). The static assistant.gif is gone; this is
+          // the live robot head, bobbing and glowing.
+          //
+          // A GIF was the wrong mechanism for this even ignoring the
+          // art change: Flutter re-decodes every GIF frame on the UI
+          // thread, so a permanently-visible animated GIF costs real
+          // frame budget on exactly the low-end phones this app targets.
+          // ChittiCompanion drives the same impression with transforms
+          // on a single controller and one decoded still.
+          //
+          // Falls back to the plain glowing circle wherever the
+          // companion isn't supported (PWA), so the web build keeps a
+          // working button rather than a hole.
+          if (ChittiCompanion.isSupported)
+            const ChittiCompanion(mood: ChittiMood.idle, size: 60)
+          else
+            Container(
+              width: 60, height: 60,
+              decoration: BoxDecoration(
+                color: kBg, shape: BoxShape.circle,
+                border: Border.all(color: kPink.withValues(alpha: 0.35), width: 2),
+                boxShadow: [BoxShadow(
+                    color: kPink.withValues(alpha: 0.25),
+                    blurRadius: 16, spreadRadius: 2,),],
+              ),
+              child: Center(
+                child: Image.asset(
+                  'assets/ai/ai_robot.webp',
+                  width: 46, height: 46,
+                  cacheWidth: 138,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Text('💬', style: TextStyle(fontSize: 28)),
+                ),
               ),
             ),
-          ),
           Positioned(top: -6, right: -4,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
@@ -1064,6 +1386,341 @@ class _FloatingGiftBoxState extends State<_FloatingGiftBox>
 }
 
 // ================================================================
+// HOME PAGE BANNER OFFERS  (Aug 19 2026 — Nizam's admin-created
+// "home page banner offer" request)
+// ================================================================
+// Cache-first, version-gated exactly like ErodeOffersSection's
+// _loadOffers() (see erode_offers_section.dart for the pattern this
+// copies): a one-shot .get() behind a long-lived Hive cache, refetched
+// only when MigrationGateService.homeBannerVersion moves (bumped once
+// by the admin's own "Publish" button in admin_home_banner_screen.dart).
+// A customer opening the app repeatedly on a quiet day costs zero
+// Firestore reads.
+//
+// Deliberately its own top-level widget (not folded into _HomeTab)
+// so it owns its own FutureBuilder / live-publish listener without
+// forcing the entire home tab to rebuild on every version bump.
+class _HomeBannerOffersSection extends StatefulWidget {
+  const _HomeBannerOffersSection();
+
+  @override
+  State<_HomeBannerOffersSection> createState() => _HomeBannerOffersSectionState();
+}
+
+class _HomeBannerOffersSectionState extends State<_HomeBannerOffersSection> {
+  static const String _versionCacheKey = 'home_banner_offers_version';
+
+  Future<List<_BannerOfferRecord>?>? _future;
+  int _lastAppliedVersion = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+    MigrationGateService.instance.addListener(_onGateChanged);
+  }
+
+  @override
+  void dispose() {
+    MigrationGateService.instance.removeListener(_onGateChanged);
+    super.dispose();
+  }
+
+  void _onGateChanged() {
+    final live = MigrationGateService.instance.homeBannerVersion;
+    if (live == _lastAppliedVersion || !mounted) return;
+    setState(() => _future = _load());
+  }
+
+  Future<List<_BannerOfferRecord>?> _load() async {
+    final liveVersion = MigrationGateService.instance.homeBannerVersion;
+    final cachedVersion = await HiveCache.get<int>(_versionCacheKey) ?? -1;
+    final versionChanged = liveVersion != cachedVersion;
+    _lastAppliedVersion = liveVersion;
+
+    final raw = await HiveCache.cachedFetch<List<dynamic>>(
+      HiveCache.kHomeBannerOffers,
+      () async {
+        final snap = await FirebaseFirestore.instance
+            .collection('home_banner_offers')
+            .where('isActive', isEqualTo: true)
+            .get();
+        return snap.docs.map((d) {
+          final data = Map<String, dynamic>.from(d.data());
+          final ts = data['createdAt'];
+          return <String, dynamic>{
+            '__id': d.id,
+            '__createdAtMs': ts is Timestamp ? ts.millisecondsSinceEpoch : 0,
+            ...data..remove('createdAt'),
+          };
+        }).toList();
+      },
+      ttl: HiveCache.ttlHomeBannerOffers,
+      forceRefresh: versionChanged,
+    );
+
+    if (versionChanged && raw != null) {
+      await HiveCache.put(_versionCacheKey, liveVersion, ttl: const Duration(days: 365));
+    }
+
+    if (raw == null) return null;
+
+    final records = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+      ..sort((a, b) => ((b['__createdAtMs'] as int?) ?? 0).compareTo((a['__createdAtMs'] as int?) ?? 0));
+
+    return records
+        .map((m) => _BannerOfferRecord(
+              id: (m['__id'] as String?) ?? '',
+              data: Map<String, dynamic>.from(m)
+                ..remove('__id')
+                ..remove('__createdAtMs'),
+            ))
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<_BannerOfferRecord>?>(
+      future: _future,
+      builder: (context, snapshot) {
+        final offers = snapshot.data ?? const <_BannerOfferRecord>[];
+        // No active banners -> render nothing at all, not even a gap.
+        if (snapshot.connectionState != ConnectionState.waiting && offers.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        if (offers.isEmpty) return const SizedBox.shrink();
+
+        final size = MediaQuery.of(context).size;
+        final height = size.width * 0.46;
+
+        return Padding(
+          padding: const EdgeInsets.only(top: 14),
+          child: SizedBox(
+            height: height,
+            child: PageView.builder(
+              itemCount: offers.length,
+              controller: PageController(viewportFraction: 0.94),
+              itemBuilder: (context, index) {
+                final offer = offers[index];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: _HomeBannerCard(offerId: offer.id, data: offer.data),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _BannerOfferRecord {
+  const _BannerOfferRecord({required this.id, required this.data});
+  final String id;
+  final Map<String, dynamic> data;
+}
+
+class _HomeBannerCard extends StatelessWidget {
+  final String offerId;
+  final Map<String, dynamic> data;
+
+  const _HomeBannerCard({required this.offerId, required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final shopName = (data['shopName'] as String?) ?? '';
+    final imageUrl = (data['imageUrl'] as String?) ?? '';
+    final videoId = youtubeVideoId(data['videoUrl'] as String?);
+
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => _HomeBannerDetailScreen(data: data),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // BoxFit.contain (per Nizam's explicit requirement — "whatever
+            // image size admin uploads must render clearly on screen"):
+            // an admin-uploaded banner of any aspect ratio is shown whole,
+            // never cropped. Neutral backing so letterbox bars read as a
+            // deliberate frame rather than a gap.
+            Container(
+              color: const Color(0xFFF3E7EF),
+              child: imageUrl.isNotEmpty
+                  ? CachedCloudImage(
+                      imageUrl,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+            if (videoId != null)
+              Positioned(
+                top: 10,
+                right: 10,
+                child: GestureDetector(
+                  onTap: () => showPremiumVideoModal(
+                    context,
+                    videoId: videoId,
+                    title: shopName.isNotEmpty ? shopName : 'Offer video',
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 16),
+                        SizedBox(width: 4),
+                        Text('WATCH', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Detail screen matching OfferDetailScreen's visual style exactly per
+// Nizam's "ithe same style" requirement (see erode_offers_section.dart):
+// full-size BoxFit.contain image, details below in a scrollable Column,
+// reduced font sizes. Built as a lightweight equivalent here rather than
+// reusing OfferDetailScreen directly because this collection carries a
+// `description` field that screen doesn't render.
+class _HomeBannerDetailScreen extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _HomeBannerDetailScreen({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final shopName = (data['shopName'] as String?) ?? 'Shop';
+    final description = (data['description'] as String?) ?? '';
+    final address = (data['address'] as String?) ?? '';
+    final phone = (data['phone'] as String?) ?? '';
+    final imageUrl = data['imageUrl'] as String?;
+
+    const Color ink = Color(0xFF121A3D);
+    const Color muted = Color(0xFF6B7280);
+    const Color pink = Color(0xFFFF4FA3);
+    const Color purple = Color(0xFFB21FFF);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFFFF6FA),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFFFF6FA),
+        elevation: 0,
+        iconTheme: const IconThemeData(color: ink),
+        title: Text('Offer Details', style: GoogleFonts.outfit(color: ink, fontWeight: FontWeight.w800)),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (imageUrl != null && imageUrl.isNotEmpty)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Container(
+                  width: double.infinity,
+                  constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.62),
+                  color: const Color(0xFFF3E7EF),
+                  child: CachedCloudImage(
+                    imageUrl,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+            if (imageUrl != null && imageUrl.isNotEmpty) const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(22),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [purple, pink]),
+                borderRadius: BorderRadius.circular(26),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(shopName, style: GoogleFonts.outfit(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w900)),
+                  if (description.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(description, style: GoogleFonts.outfit(color: Colors.white.withValues(alpha: 0.9), fontSize: 12.5, fontWeight: FontWeight.w600, height: 1.4)),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            if (address.isNotEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: pink.withValues(alpha: 0.15)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.location_on_rounded, color: pink, size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Address', style: GoogleFonts.outfit(color: muted, fontSize: 9, fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 3),
+                          Text(address, style: GoogleFonts.outfit(color: ink, fontSize: 11.5, fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 24),
+            if (phone.isNotEmpty)
+              GestureDetector(
+                onTap: () async {
+                  final uri = Uri(scheme: 'tel', path: phone);
+                  if (await canLaunchUrl(uri)) await launchUrl(uri);
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [Color(0xFF00C853), Color(0xFF00A843)]),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.call_rounded, color: Colors.white, size: 22),
+                      const SizedBox(height: 6),
+                      Text('Call Shop', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 10)),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ================================================================
 // HOME TAB (Redesigned with Mega Cards)
 // ================================================================
 class _HomeTab extends StatelessWidget {
@@ -1093,6 +1750,13 @@ class _HomeTab extends StatelessWidget {
         // the first thing on the home screen, and taps through to the full
         // data breakdown in EconomicVisionScreen.
         const EconomicVisionBanner(),
+        // NEW (Aug 19 2026 — Nizam's "home page banner offer" request).
+        // Own section, own Firestore collection (home_banner_offers),
+        // own cache key/version — see _HomeBannerOffersSection below.
+        // Renders nothing at all (not even a SizedBox gap) when there
+        // are no active banners, so a quiet day never leaves a hole on
+        // the home screen.
+        const _HomeBannerOffersSection(),
         const SizedBox(height: 14),
         _CategorySlidingBanner(onTileTap: onTileTap),
         const SizedBox(height: 20),
@@ -1301,18 +1965,69 @@ class _HomeTab extends StatelessWidget {
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: kPink.withValues(alpha: 0.05),
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.motor_scooter), SvgPicture.string(FluentEmojiFlat.bicycle)])),
-                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.package), SvgPicture.string(FluentEmojiFlat.open_mailbox_with_raised_flag)])),
-                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.auto_rickshaw), SvgPicture.string(FluentEmojiFlat.motor_scooter)])),
-                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(milliseconds: 3500), children: [Image.asset('assets/images/taxi_slides/yellow_car.png'), SvgPicture.string(FluentEmojiFlat.oncoming_taxi)])),
-                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.delivery_truck), SvgPicture.string(FluentEmojiFlat.sport_utility_vehicle)])),
+                  // ── REAL VEHICLE PHOTOS, NOT CARTOON EMOJI ──────
+                  // (Aug 19 2026, Nizam: "antha button kulla icons
+                  // yelleme cartoon look la iruku".)
+                  //
+                  // These were FluentEmojiFlat SVG emoji — flat cartoon
+                  // glyphs. Two problems with that: they clashed with
+                  // Food Delivery right below, which already uses real
+                  // photos, and they showed a customer a cartoon scooter
+                  // for a service where the very next screen shows the
+                  // actual vehicle photo. The button now previews what
+                  // the customer is about to pick.
+                  //
+                  // Sourced from the SAME assets the taxi vehicle
+                  // selection screen uses (ride_catalog.dart), so the
+                  // preview and the picker can never show different
+                  // vehicles for the same service.
+                  //
+                  // AutoImageSlider is Food's exact widget — identical
+                  // fade+slide, identical staggered durations, so the
+                  // two rows read as one system. fit: contain because
+                  // these are wide cut-out PNGs; cover would crop the
+                  // nose and tail off every vehicle (see the fit doc in
+                  // auto_image_slider.dart).
+                  // Order matches Nizam's spec: bike, auto, yellow car,
+                  // truck, lorry.
+                  //
+                  // EVERY path below points at a file that EXISTS today,
+                  // so no slot ever blinks empty. The top_*.png images
+                  // are NOT copied into taxi_slides/ — duplicating them
+                  // would ship the same bytes twice in the APK for no
+                  // gain. A folder is just a path; the slider does not
+                  // care which one an image lives in.
+                  //
+                  // The realistic photos Nizam is adding
+                  // (motorcycle.png, white_car.png) go in taxi_slides/
+                  // and get appended to the matching list below — one
+                  // word each, no restructuring.
+                  // EVERY vehicle the taxi picker offers now appears in
+                  // this row (Nizam: "namma taxi la iruka yella icons
+                  // um button la irukamari pannu"). ride_catalog.dart
+                  // lists seven — bike, auto, cab, parcel, mini truck,
+                  // lorry, SOS — and there are five slots, so each slot
+                  // owns one vehicle and cycles its variants: the new
+                  // photo-real render first, the flat catalog icon
+                  // second. Nothing is left out, and the slot still
+                  // means one thing.
+                  //
+                  // SOS is deliberately the only one NOT here: it is an
+                  // emergency action, not a vehicle to browse, and
+                  // putting a red alert badge in a decorative carousel
+                  // would both cheapen it and worry people.
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/taxi_slides/motorcycle.png', 'assets/images/top_bike.png'], width: 34, height: 34, fit: BoxFit.contain, duration: const Duration(seconds: 3))),
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/top_auto.png'], width: 34, height: 34, fit: BoxFit.contain, duration: const Duration(milliseconds: 3200))),
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/taxi_slides/yellow_car.png', 'assets/images/taxi_slides/white_car.png', 'assets/images/top_cab.png'], width: 34, height: 34, fit: BoxFit.contain, duration: const Duration(milliseconds: 2800))),
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/taxi_slides/parcel.png', 'assets/images/top_parcel.png'], width: 34, height: 34, fit: BoxFit.contain, duration: const Duration(milliseconds: 3500))),
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/top_mini_truck.png', 'assets/images/top_lorry.png'], width: 34, height: 34, fit: BoxFit.contain, duration: const Duration(milliseconds: 3100))),
                 ],
               ),
             ),
@@ -1371,18 +2086,18 @@ class _HomeTab extends StatelessWidget {
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: kPink.withValues(alpha: 0.05),
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide1.png', 'assets/images/food_slides/slide6.png'], width: 32, height: 32, duration: const Duration(seconds: 3))),
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide2.png', 'assets/images/food_slides/slide7.png'], width: 32, height: 32, duration: const Duration(milliseconds: 3200))),
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide3.png', 'assets/images/food_slides/slide8.jpg'], width: 32, height: 32, duration: const Duration(milliseconds: 2800))),
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide4.jpg', 'assets/images/food_slides/slide1.png'], width: 32, height: 32, duration: const Duration(milliseconds: 3500))),
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide5.jpg', 'assets/images/food_slides/slide2.png'], width: 32, height: 32, duration: const Duration(milliseconds: 3100))),
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide1.png', 'assets/images/food_slides/slide6.png'], width: 34, height: 34, duration: const Duration(seconds: 3))),
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide2.png', 'assets/images/food_slides/slide7.png'], width: 34, height: 34, duration: const Duration(milliseconds: 3200))),
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide3.png', 'assets/images/food_slides/slide8.jpg'], width: 34, height: 34, duration: const Duration(milliseconds: 2800))),
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide4.jpg', 'assets/images/food_slides/slide1.png'], width: 34, height: 34, duration: const Duration(milliseconds: 3500))),
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide5.jpg', 'assets/images/food_slides/slide2.png'], width: 34, height: 34, duration: const Duration(milliseconds: 3100))),
                 ],
               ),
             ),
@@ -1441,18 +2156,18 @@ class _HomeTab extends StatelessWidget {
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: kPink.withValues(alpha: 0.05),
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.leafy_green), SvgPicture.string(FluentEmojiFlat.broccoli)])),
-                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.red_apple), SvgPicture.string(FluentEmojiFlat.banana)])),
-                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.carrot), SvgPicture.string(FluentEmojiFlat.potato)])),
-                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.onion), SvgPicture.string(FluentEmojiFlat.garlic)])),
-                  ClipOval(child: AutoWidgetSlider(width: 32, height: 32, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.shopping_cart), SvgPicture.string(FluentEmojiFlat.shopping_bags)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.leafy_green), SvgPicture.string(FluentEmojiFlat.broccoli)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.red_apple), SvgPicture.string(FluentEmojiFlat.banana)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.carrot), SvgPicture.string(FluentEmojiFlat.potato)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.onion), SvgPicture.string(FluentEmojiFlat.garlic)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.shopping_cart), SvgPicture.string(FluentEmojiFlat.shopping_bags)])),
                 ],
               ),
             ),
@@ -1530,7 +2245,7 @@ class _HomeTab extends StatelessWidget {
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: kPink.withValues(alpha: 0.05),
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
                 border:
                     Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
@@ -1538,11 +2253,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.mobile_phone), SvgPicture.string(FluentEmojiFlat.laptop)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.battery), SvgPicture.string(FluentEmojiFlat.electric_plug)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.hammer_and_wrench), SvgPicture.string(FluentEmojiFlat.gear)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.shopping_bags), SvgPicture.string(FluentEmojiFlat.shopping_cart)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.label), SvgPicture.string(FluentEmojiFlat.receipt)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.mobile_phone), SvgPicture.string(FluentEmojiFlat.laptop)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.battery), SvgPicture.string(FluentEmojiFlat.electric_plug)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.hammer_and_wrench), SvgPicture.string(FluentEmojiFlat.gear)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.shopping_bags), SvgPicture.string(FluentEmojiFlat.shopping_cart)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.label), SvgPicture.string(FluentEmojiFlat.receipt)])),
                 ],
               ),
             ),
@@ -1599,18 +2314,18 @@ class _HomeTab extends StatelessWidget {
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: kPink.withValues(alpha: 0.05),
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.mobile_phone), SvgPicture.string(FluentEmojiFlat.battery)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.laptop), SvgPicture.string(FluentEmojiFlat.desktop_computer)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.desktop_computer), SvgPicture.string(FluentEmojiFlat.floppy_disk)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.video_camera), SvgPicture.string(FluentEmojiFlat.camera)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.television), SvgPicture.string(FluentEmojiFlat.radio)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.mobile_phone), SvgPicture.string(FluentEmojiFlat.battery)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.laptop), SvgPicture.string(FluentEmojiFlat.desktop_computer)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.desktop_computer), SvgPicture.string(FluentEmojiFlat.floppy_disk)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.video_camera), SvgPicture.string(FluentEmojiFlat.camera)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.television), SvgPicture.string(FluentEmojiFlat.radio)])),
                 ],
               ),
             ),
@@ -1668,18 +2383,18 @@ class _HomeTab extends StatelessWidget {
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: kPink.withValues(alpha: 0.05),
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.oncoming_taxi), SvgPicture.string(FluentEmojiFlat.sport_utility_vehicle)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.sweat_droplets), SvgPicture.string(FluentEmojiFlat.sponge)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.gear), SvgPicture.string(FluentEmojiFlat.nut_and_bolt)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.hammer_and_wrench), SvgPicture.string(FluentEmojiFlat.wrench)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.sport_utility_vehicle), SvgPicture.string(FluentEmojiFlat.oncoming_automobile)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.oncoming_taxi), SvgPicture.string(FluentEmojiFlat.sport_utility_vehicle)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.sweat_droplets), SvgPicture.string(FluentEmojiFlat.sponge)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.gear), SvgPicture.string(FluentEmojiFlat.nut_and_bolt)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.hammer_and_wrench), SvgPicture.string(FluentEmojiFlat.wrench)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.sport_utility_vehicle), SvgPicture.string(FluentEmojiFlat.oncoming_automobile)])),
                 ],
               ),
             ),
@@ -1737,18 +2452,18 @@ class _HomeTab extends StatelessWidget {
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: kPink.withValues(alpha: 0.05),
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.building_construction), SvgPicture.string(FluentEmojiFlat.house)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.brick), SvgPicture.string(FluentEmojiFlat.wood)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.construction_worker), SvgPicture.string(FluentEmojiFlat.man_construction_worker)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.triangular_ruler), SvgPicture.string(FluentEmojiFlat.straight_ruler)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.office_building), SvgPicture.string(FluentEmojiFlat.classical_building)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.building_construction), SvgPicture.string(FluentEmojiFlat.house)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.brick), SvgPicture.string(FluentEmojiFlat.wood)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.construction_worker), SvgPicture.string(FluentEmojiFlat.man_construction_worker)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.triangular_ruler), SvgPicture.string(FluentEmojiFlat.straight_ruler)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.office_building), SvgPicture.string(FluentEmojiFlat.classical_building)])),
                 ],
               ),
             ),
@@ -1806,18 +2521,49 @@ class _HomeTab extends StatelessWidget {
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: kPink.withValues(alpha: 0.05),
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.man_superhero), SvgPicture.string(FluentEmojiFlat.woman_superhero)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.high_voltage), SvgPicture.string(FluentEmojiFlat.collision)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.package), SvgPicture.string(FluentEmojiFlat.open_mailbox_with_raised_flag)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.shopping_bags), SvgPicture.string(FluentEmojiFlat.shopping_cart)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.man_running), SvgPicture.string(FluentEmojiFlat.woman_running)])),
+                  // ── HERO BOOKING ROW ────────────────────────────
+                  // The two 3D delivery-partner renders Nizam sent go
+                  // here (slots 1 and 5) — they ARE the Hero, so they
+                  // anchor the row at both ends.
+                  //
+                  // Slot 3 uses the same real parcel photo as the Taxi
+                  // row, so "parcel" looks identical wherever it
+                  // appears.
+                  //
+                  // Slots 2 and 4 (errand / shopping) are STILL cartoon
+                  // emoji, and that is a known gap, not an oversight:
+                  // there is no photo asset in the project for either
+                  // concept. Substituting an unrelated vehicle photo
+                  // just to avoid mixing styles would be worse — the
+                  // icon would stop meaning what it says. Two more
+                  // images finish this row; see the note handed to
+                  // Nizam with the filenames.
+                  // Slots 1 and 5 lead with an image that EXISTS today
+                  // (erode_delivery_hero.png, already in assets/images)
+                  // and list Nizam's two 3D renders after it. While
+                  // hero_slides/ is still empty those two frames are
+                  // skipped by errorBuilder and the existing hero photo
+                  // simply holds the slot — so the row looks finished
+                  // now and gets richer the moment the files land, with
+                  // no code change and no empty circles in between.
+                  // superman_hero.webp reused per Nizam, rather than
+                  // shipping another asset for the same idea. It is an
+                  // ANIMATED WebP (27 frames), so this slot has its own
+                  // motion on top of the slider's cross-fade — which is
+                  // why it earns the lead position. Remaining icons get
+                  // replaced next phase.
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/gifs/superman_hero.webp', 'assets/images/hero_slides/delivery_man_blue.png', 'assets/images/erode_delivery_hero.png'], width: 34, height: 34, fit: BoxFit.contain, duration: const Duration(seconds: 3))),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.high_voltage), SvgPicture.string(FluentEmojiFlat.collision)])),
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/top_parcel.png', 'assets/taxi/parcel.png'], width: 34, height: 34, fit: BoxFit.contain, duration: const Duration(milliseconds: 2800))),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.shopping_bags), SvgPicture.string(FluentEmojiFlat.shopping_cart)])),
+                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/hero_slides/delivery_man_green.png', 'assets/images/erode_delivery_hero.png', 'assets/gifs/superman_hero.webp'], width: 34, height: 34, fit: BoxFit.contain, duration: const Duration(milliseconds: 3100))),
                 ],
               ),
             ),
@@ -1879,18 +2625,18 @@ class _HomeTab extends StatelessWidget {
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: kPink.withValues(alpha: 0.05),
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.card_index), SvgPicture.string(FluentEmojiFlat.card_file_box)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.scroll), SvgPicture.string(FluentEmojiFlat.page_facing_up)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.framed_picture), SvgPicture.string(FluentEmojiFlat.artist_palette)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.label), SvgPicture.string(FluentEmojiFlat.bookmark)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.printer), SvgPicture.string(FluentEmojiFlat.camera)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.card_index), SvgPicture.string(FluentEmojiFlat.card_file_box)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.scroll), SvgPicture.string(FluentEmojiFlat.page_facing_up)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.framed_picture), SvgPicture.string(FluentEmojiFlat.artist_palette)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.label), SvgPicture.string(FluentEmojiFlat.bookmark)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.printer), SvgPicture.string(FluentEmojiFlat.camera)])),
                 ],
               ),
             ),
@@ -1958,18 +2704,18 @@ class _HomeTab extends StatelessWidget {
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: kPink.withValues(alpha: 0.05),
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.card_index), SvgPicture.string(FluentEmojiFlat.identification_card)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.scroll), SvgPicture.string(FluentEmojiFlat.rolled_up_newspaper)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.label), SvgPicture.string(FluentEmojiFlat.receipt)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.office_building), SvgPicture.string(FluentEmojiFlat.bank)])),
-                  ClipOval(child: AutoWidgetSlider(width: 30, height: 30, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.printer), SvgPicture.string(FluentEmojiFlat.fax_machine)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.card_index), SvgPicture.string(FluentEmojiFlat.identification_card)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.scroll), SvgPicture.string(FluentEmojiFlat.rolled_up_newspaper)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.label), SvgPicture.string(FluentEmojiFlat.receipt)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.office_building), SvgPicture.string(FluentEmojiFlat.bank)])),
+                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.printer), SvgPicture.string(FluentEmojiFlat.fax_machine)])),
                 ],
               ),
             ),
@@ -2015,7 +2761,7 @@ class _HomeTab extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
             decoration: BoxDecoration(
-              color: kPink.withValues(alpha: 0.05),
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
             ),
@@ -2141,13 +2887,8 @@ class _HomeTab extends StatelessWidget {
                 color: kPurple.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Center(
-                child: Image.asset(
-                  'assets/images/assistant.gif',
-                  width: 32, height: 32,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const Text('💬', style: TextStyle(fontSize: 22)),
-                ),
+              child: const Center(
+                child: AiBotAvatar(size: 32),
               ),
             ),
             const SizedBox(width: 12),
@@ -2197,13 +2938,23 @@ class _HomeTab extends StatelessWidget {
 // ================================================================
 class _ProfileDrawer extends StatelessWidget {
   final User? user;
+  // Same fix as the AppBar header (see _loadResolvedName() above) — a
+  // Firestore/HiveCache-resolved name, passed down from
+  // _DashboardScreenState so this drawer doesn't repeat the same "only
+  // ever reads the frozen Auth displayName" bug the phone number field
+  // right below it was already fixed for.
+  final String? resolvedName;
   final void Function(Widget) onNavigate;
-  const _ProfileDrawer({required this.user, required this.onNavigate});
+  const _ProfileDrawer({
+    required this.user,
+    required this.onNavigate,
+    this.resolvedName,
+  });
 
   @override
   Widget build(BuildContext context) {
     final t = context.watch<LocalizationService>().t;
-    final name  = user?.displayName ?? 'Guest';
+    final name  = resolvedName ?? user?.displayName ?? 'Guest';
     final phone = user?.phoneNumber ?? 'Phone not added';
 
     return Drawer(
@@ -2305,13 +3056,13 @@ class _ProfileDrawer extends StatelessWidget {
               _drawerItem(context, Icons.share_rounded,
                   'Share App via WhatsApp',
                   () => onNavigate(InviteFriendsScreen(
-                        displayName: user?.displayName,
+                        displayName: resolvedName ?? user?.displayName,
                       )),),
 
               _drawerItem(context, Icons.qr_code_2_rounded,
                   'My Invite QR',
                   () => onNavigate(InviteFriendsScreen(
-                        displayName: user?.displayName,
+                        displayName: resolvedName ?? user?.displayName,
                       )),),
 
               _drawerItem(context, Icons.support_agent_rounded,
@@ -2928,26 +3679,51 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
   bool _loading = true;
   bool _launched = false;
 
+  /// Bumped on every reload so the embedded view gets a fresh key.
+  int _reloadToken = 0;
+
+  static const String _kBroadbandUrl = 'https://www.erodefiber.net/';
+
+  // ── WHY THIS STILL FELT LIKE THE PHONE'S BROWSER ───────────────
+  // (Aug 19 2026, Nizam: "namma app internet page um same embedded
+  // look la maaranum" — like the DMart page in Grocery.)
+  //
+  // This screen already built a proper in-app shell: our AppBar, our
+  // colours, our reload button. But the page itself was loaded with
+  // `launchUrl(mode: LaunchMode.inAppWebView)`, and that is NOT an
+  // embedded WebView despite the name — on Android it opens a Chrome
+  // Custom Tab, which is a full browser surface that slides in OVER
+  // the whole app. So the nice Scaffold underneath was never actually
+  // visible: the customer saw Chrome's own toolbar, Chrome's own
+  // address bar, and had left the app in every way that matters.
+  //
+  // DmartEmbeddedView is a REAL embedded view — WebView on Android/iOS,
+  // an <iframe> platform view on the PWA — and it is already
+  // URL-generic (`required this.url`) despite the DMart-specific name,
+  // so Grocery's DMart page and this page now render through exactly
+  // the same mechanism and genuinely look the same.
+  //
+  // Kept the name rather than renaming the widget: DMart is live and
+  // working, and a cosmetic rename across three files is risk this
+  // change does not need to take at final-build stage.
   @override
   void initState() {
     super.initState();
-    _openInApp();
+    // The embedded view loads itself; there is no launch step to await
+    // any more. The brief _loading flash is kept so the AppBar doesn't
+    // pop in against an empty white frame on a slow connection.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() { _loading = false; _launched = true; });
+    });
   }
 
   Future<void> _openInApp() async {
-    setState(() { _loading = true; _launched = false; });
-    final uri = Uri.parse('https://www.erodefiber.net/');
-    try {
-      await launchUrl(uri, mode: LaunchMode.inAppWebView);
-      if (mounted) setState(() { _loading = false; _launched = true; });
-    } catch (_) {
-      try {
-        await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
-        if (mounted) setState(() { _loading = false; _launched = true; });
-      } catch (e) {
-        if (mounted) setState(() { _loading = false; _launched = false; });
-      }
-    }
+    // Reload: rebuild the embedded view from scratch by flipping back
+    // to the loading state. A key change on the child forces a fresh
+    // WebView/iframe rather than a same-page no-op.
+    setState(() { _loading = true; _launched = false; _reloadToken++; });
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (mounted) setState(() { _loading = false; _launched = true; });
   }
 
   @override
@@ -2998,37 +3774,30 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
                         color: Colors.white70, fontSize: 14,),),
               ],)
             : _launched
-                ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    const Text('🌐', style: TextStyle(fontSize: 56)),
-                    const SizedBox(height: 16),
-                    Text(t('erode_fiber_open_title'),
-                        style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontSize: 20, fontWeight: FontWeight.w800,),),
-                    const SizedBox(height: 8),
-                    Text(t('erode_fiber_open_subtitle'),
-                        style: GoogleFonts.outfit(
-                            color: Colors.white54, fontSize: 13,),),
-                    const SizedBox(height: 28),
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 32, vertical: 14,),
-                        decoration: BoxDecoration(
-                          color: kPink,
-                          borderRadius: BorderRadius.circular(14),
-                          boxShadow: [BoxShadow(
-                              color: kPink.withValues(alpha: 0.4),
-                              blurRadius: 12,),],
-                        ),
-                        child: Text(t('back_to_dashboard_label'),
-                            style: GoogleFonts.outfit(
-                                color: Colors.white, fontSize: 14,
-                                fontWeight: FontWeight.w700,),),
-                      ),
+                // THE ACTUAL PAGE, in our own Scaffold.
+                //
+                // This branch used to be a dead-end placeholder — a 🌐
+                // emoji, "Erode Fiber is open" and a "Back to
+                // Dashboard" button — because the real site had been
+                // handed to Chrome and was sitting on top of this
+                // screen. The customer never saw this widget at all;
+                // they saw a browser. Closing the browser revealed a
+                // page telling them something was open that no longer
+                // was.
+                //
+                // SizedBox.expand because the parent is a Center, which
+                // passes loose constraints — an unconstrained WebView
+                // would collapse to zero height and render blank.
+                //
+                // The ValueKey makes reload work: changing it forces a
+                // brand-new WebView/iframe instead of Flutter reusing
+                // the existing one and doing nothing.
+                ? SizedBox.expand(
+                    child: DmartEmbeddedView(
+                      key: ValueKey<int>(_reloadToken),
+                      url: _kBroadbandUrl,
                     ),
-                  ],)
+                  )
                 : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                     const Icon(Icons.wifi_off_rounded,
                         color: Colors.white38, size: 56,),
@@ -3072,9 +3841,35 @@ class _ScratchCardModal extends StatefulWidget {
   State<_ScratchCardModal> createState() => _ScratchCardModalState();
 }
 
-class _ScratchCardModalState extends State<_ScratchCardModal> {
+class _ScratchCardModalState extends State<_ScratchCardModal>
+    with SingleTickerProviderStateMixin {
   bool   _revealed = false;
   double _progress = 0;
+
+  late final AnimationController _revealCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 450),
+  );
+  late final Animation<double> _revealScale = CurvedAnimation(
+    parent: _revealCtrl,
+    curve: Curves.elasticOut,
+  );
+  late final Animation<double> _revealFade = CurvedAnimation(
+    parent: _revealCtrl,
+    curve: const Interval(0, 0.4, curve: Curves.easeOut),
+  );
+
+  @override
+  void dispose() {
+    _revealCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onRevealed() {
+    if (_revealed) return;
+    setState(() => _revealed = true);
+    _revealCtrl.forward(from: 0);
+  }
 
   Future<void> _callToClaim() async {
     final uri = Uri.parse('tel:+918681869091');
@@ -3093,11 +3888,16 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 32),
       decoration: BoxDecoration(
-        color: kNJDark,
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1A1A1A), Color(0xFF2C2C2C)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: kGold.withValues(alpha: 0.4), width: 1.5),
-        boxShadow: [BoxShadow(
-            color: kGold.withValues(alpha: 0.2), blurRadius: 30,),],
+        border: Border.all(color: kGold.withValues(alpha: 0.55), width: 1.5),
+        boxShadow: [
+          BoxShadow(color: kGold.withValues(alpha: 0.25), blurRadius: 30,),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 18, offset: const Offset(0, 10),),
+        ],
       ),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Padding(
@@ -3137,35 +3937,52 @@ class _ScratchCardModalState extends State<_ScratchCardModal> {
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Scratcher(
             brushSize: 40,
-            threshold: 45,
+            threshold: 30,
             color: const Color(0xFFD4AF37),
-            onThreshold: () => setState(() => _revealed = true),
+            onThreshold: _onRevealed,
             onChange: (v) => setState(() => _progress = v),
             child: Container(
               height: 180,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF1E0E3E), Color(0xFF2A1060)],
+                  colors: [Color(0xFF1A1A1A), Color(0xFF2C2C2C), Color(0xFF1A1A1A)],
                   begin: Alignment.topLeft, end: Alignment.bottomRight,
                 ),
+                border: Border.all(color: kGold.withValues(alpha: 0.3)),
               ),
               child: Center(
-                child: Column(mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                  const Text(emoji, style: TextStyle(fontSize: 52)),
-                  const SizedBox(height: 10),
-                  Text(title,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.outfit(
-                          color: kPink, fontSize: 22,
-                          fontWeight: FontWeight.w900,),),
-                  const SizedBox(height: 6),
-                  Text(subtitle,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.outfit(
-                          color: Colors.white70, fontSize: 13,),),
-                ],),
+                child: AnimatedBuilder(
+                  animation: _revealCtrl,
+                  builder: (context, child) => Transform.scale(
+                    scale: _revealed
+                        ? (0.85 + (_revealScale.value * 0.15))
+                        : 1,
+                    child: Opacity(
+                      opacity: _revealed ? _revealFade.value : 1,
+                      child: child,
+                    ),
+                  ),
+                  child: Column(mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                    Text(emoji, style: TextStyle(
+                        fontSize: 52,
+                        shadows: [Shadow(
+                            color: kGold.withValues(alpha: 0.6),
+                            blurRadius: 16,),],),),
+                    const SizedBox(height: 10),
+                    Text(title,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.outfit(
+                            color: kGold, fontSize: 22,
+                            fontWeight: FontWeight.w900,),),
+                    const SizedBox(height: 6),
+                    Text(subtitle,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.outfit(
+                            color: Colors.white70, fontSize: 13,),),
+                  ],),
+                ),
               ),
             ),
           ),

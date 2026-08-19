@@ -21,6 +21,7 @@ class SellerModel {
   final String role;
   final double pendingPayouts;
   final double totalSettled;
+  final double walletBalance;
 
   /// Which seller product line this account belongs to: 'hotel',
   /// 'grocery', or 'electronics'. Distinct from [category] on purpose —
@@ -57,6 +58,7 @@ class SellerModel {
     this.role = 'owner',
     this.pendingPayouts = 0.0,
     this.totalSettled = 0.0,
+    this.walletBalance = 0.0,
   });
 
   factory SellerModel.fromJson(Map<String, dynamic> json) {
@@ -87,6 +89,7 @@ class SellerModel {
       role: (json['role'] as String?) ?? 'owner',
       pendingPayouts: (json['pendingPayouts'] as num?)?.toDouble() ?? 0.0,
       totalSettled: (json['totalSettled'] as num?)?.toDouble() ?? 0.0,
+      walletBalance: (json['walletBalance'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
@@ -134,6 +137,7 @@ class SellerModel {
       'role': role,
       'pendingPayouts': pendingPayouts,
       'totalSettled': totalSettled,
+      'walletBalance': walletBalance,
     };
   }
 

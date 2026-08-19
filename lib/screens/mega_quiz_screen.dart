@@ -239,7 +239,7 @@ const List<_QuizQuestion> _quizQuestions = [
   ),
   _QuizQuestion(
     question: 'What is the app’s premium assistant called?',
-    options: ['Guru AI', 'Silent Bot', 'Metro AI', 'River AI'],
+    options: ['Chitti AI', 'Silent Bot', 'Metro AI', 'River AI'],
     answerIndex: 0,
   ),
   _QuizQuestion(

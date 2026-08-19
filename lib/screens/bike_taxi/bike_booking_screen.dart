@@ -35,6 +35,7 @@ import '../../services/recent_places_service.dart';
 import '../../widgets/cancellation_reason_sheet.dart';
 import '../../services/usage_tracking_service.dart';
 import '../../widgets/allin1_map_widget.dart';
+import '../../services/map_simulation_service.dart';
 import '../../widgets/server_busy_dialog.dart';
 import '../../widgets/vehicle_selection_bottom_sheet.dart';
 import '../payment_screen.dart';
@@ -187,202 +188,6 @@ const List<Map<String, dynamic>> _defaultSearchLocations =
   },
 ];
 
-LatLng _lerpLatLng(LatLng a, LatLng b, double t) {
-  return LatLng(
-    a.latitude + ((b.latitude - a.latitude) * t),
-    a.longitude + ((b.longitude - a.longitude) * t),
-  );
-}
-
-LatLng _offsetAlongSegment(
-    LatLng start, LatLng end, LatLng point, double laneOffset,) {
-  final dx = end.longitude - start.longitude;
-  final dy = end.latitude - start.latitude;
-  final length = sqrt((dx * dx) + (dy * dy));
-  if (length == 0) {
-    return point;
-  }
-  final perpLat = -dx / length;
-  final perpLng = dy / length;
-  return LatLng(
-    point.latitude + (perpLat * laneOffset),
-    point.longitude + (perpLng * laneOffset),
-  );
-}
-
-LatLng _pointOnPath(List<LatLng> path, double progress, double laneOffset) {
-  if (path.isEmpty) {
-    return const LatLng(11.3410, 77.7171);
-  }
-  if (path.length == 1) {
-    return path.first;
-  }
-  final clampedProgress = progress.clamp(0.0, 1.0);
-  final segmentCount = path.length - 1;
-  final scaled = clampedProgress * segmentCount;
-  final segmentIndex = scaled.floor().clamp(0, segmentCount - 1);
-  final nextIndex = (segmentIndex + 1).clamp(1, path.length - 1);
-  final localT = scaled - scaled.floorToDouble();
-  final point = _lerpLatLng(path[segmentIndex], path[nextIndex], localT);
-  return _offsetAlongSegment(
-      path[segmentIndex], path[nextIndex], point, laneOffset,);
-}
-
-double _bearingBetween(LatLng start, LatLng end) {
-  final lat1 = start.latitude * pi / 180;
-  final lat2 = end.latitude * pi / 180;
-  final dLng = (end.longitude - start.longitude) * pi / 180;
-  final y = sin(dLng) * cos(lat2);
-  final x = (cos(lat1) * sin(lat2)) - (sin(lat1) * cos(lat2) * cos(dLng));
-  return (atan2(y, x) * 180 / pi + 360) % 360;
-}
-
-double _bearingOnPath(List<LatLng> path, double progress, int direction) {
-  if (path.length < 2) {
-    return 0;
-  }
-  final clampedProgress = progress.clamp(0.0, 1.0);
-  final segmentCount = path.length - 1;
-  final scaled = clampedProgress * segmentCount;
-  final segmentIndex = scaled.floor().clamp(0, segmentCount - 1);
-  final nextIndex = (segmentIndex + 1).clamp(1, path.length - 1);
-  final start = path[segmentIndex];
-  final end = path[nextIndex];
-  return direction >= 0
-      ? _bearingBetween(start, end)
-      : _bearingBetween(end, start);
-}
-
-class _DummyVehicleState {
-  _DummyVehicleState({
-    required this.id,
-    required this.vehicleType,
-    required this.busy,
-    required this.loopIndex,
-    required this.progress,
-    required this.direction,
-    required this.speedStep,
-    required this.laneOffset,
-    this.isOutskirts = false,
-  });
-
-  final String id;
-  final String vehicleType;
-  final bool busy;
-  int loopIndex;
-  final double speedStep;
-  final double laneOffset;
-  final bool isOutskirts;
-  double progress;
-  int direction;
-  List<LatLng>? roadPath;
-  
-  bool isPaused = false;
-  int pauseRemainingMs = 0;
-
-  List<LatLng> activePath() {
-    final routedPath = roadPath;
-    if (routedPath != null && routedPath.length > 1) {
-      return routedPath;
-    }
-    return isOutskirts
-        ? _outskirtsTrafficLoops[loopIndex % _outskirtsTrafficLoops.length]
-        : _erodeTrafficLoops[loopIndex % _erodeTrafficLoops.length];
-  }
-
-  LatLng project() {
-    return _pointOnPath(
-      activePath(),
-      progress,
-      laneOffset,
-    );
-  }
-
-  double bearing() {
-    return _bearingOnPath(
-      activePath(),
-      progress,
-      direction,
-    );
-  }
-
-  void advance(Random random, int deltaMs) {
-    if (isPaused) {
-      pauseRemainingMs -= deltaMs;
-      if (pauseRemainingMs <= 0) {
-        isPaused = false;
-        direction = direction == 1 ? -1 : 1;
-        if (!isOutskirts && roadPath == null && random.nextDouble() < 0.35) {
-          loopIndex = random.nextInt(_erodeTrafficLoops.length);
-          direction = random.nextBool() ? 1 : -1;
-          progress = direction == 1 ? 0 : 1;
-        }
-      }
-      return;
-    }
-
-    // Adjust speedStep for 30 FPS. Original was meant for 2.5s timer.
-    final jitter = 0.65 + (random.nextDouble() * 0.7);
-    double adjustedSpeed = (speedStep / 75.0) * jitter;
-    
-    progress += direction * adjustedSpeed;
-    if (isOutskirts && roadPath == null) {
-      if (progress >= 1) progress -= 1;
-      if (progress < 0) progress += 1;
-    } else {
-      if (progress >= 1) {
-        progress = 1;
-        isPaused = true;
-        pauseRemainingMs = 2000 + random.nextInt(4000);
-      } else if (progress <= 0) {
-        progress = 0;
-        isPaused = true;
-        pauseRemainingMs = 2000 + random.nextInt(4000);
-      }
-    }
-  }
-}
-
-enum HeroState { moving, resting }
-
-class _HeroAvatarState {
-  _HeroAvatarState(this.id, this.position, int seed) : _random = Random(seed) {
-    _pickNewState();
-  }
-
-  final String id;
-  LatLng position;
-  LatLng? destination;
-  HeroState state = HeroState.resting;
-  int stateTicksLeftMs = 0;
-  final Random _random;
-
-  void _pickNewState() {
-    if (state == HeroState.moving) {
-      state = HeroState.resting;
-      stateTicksLeftMs = 5000 + _random.nextInt(11000); 
-    } else {
-      state = HeroState.moving;
-      stateTicksLeftMs = 18000 + _random.nextInt(23000);
-      final dist = 0.003 + _random.nextDouble() * 0.006;
-      final angle = _random.nextDouble() * 2 * pi;
-      destination = LatLng(
-        position.latitude + dist * cos(angle),
-        position.longitude + dist * sin(angle),
-      );
-    }
-  }
-
-  void advance(int deltaMs) {
-    stateTicksLeftMs -= deltaMs;
-    if (stateTicksLeftMs <= 0) {
-      _pickNewState();
-    } else if (state == HeroState.moving && destination != null) {
-      final fraction = deltaMs / stateTicksLeftMs.clamp(1, double.infinity);
-      position = _lerpLatLng(position, destination!, fraction.clamp(0.0, 1.0));
-    }
-  }
-}
 
 class BikeBookingScreen extends StatefulWidget {
   const BikeBookingScreen({
@@ -454,15 +259,12 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       ValueNotifier<List<MapMarker>>([]);
   List<Map<String, dynamic>> _onlineHeroSnapshots = [];
   StreamSubscription<DatabaseEvent>? _nearbyCaptainsSub;
-  Timer? _simulationTimer;
   final LocationService _locationService = LocationService();
   final MapService _mapService = MapService();
   List<LatLng> _routePoints = [];
   double? _routeDistanceKm;
   int? _routeEtaMinutes;
   int _routeRequestId = 0;
-  final List<_DummyVehicleState> _ambientVehicles = <_DummyVehicleState>[];
-  final List<_HeroAvatarState> _heroes = <_HeroAvatarState>[];
   final Map<int, List<LatLng>> _dummyRouteCache = <int, List<LatLng>>{};
   final Set<int> _dummyRouteRequests = <int>{};
 
@@ -516,6 +318,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     // spent a DB read on a value nothing actually uses for fare math
     // anymore (RideModel.calculateFare() ignores its `fares` param).
     _fares = RideModel.defaultFares;
+    MapSimulationService.instance.addListener(_onSimulationChanged);
     _listenToNearbyCaptains();
     // INSTANT-SEED (Aug 11 2026): was _initLocationTracking(), which
     // could keep the customer on a spinner for ~82s before the map
@@ -1131,12 +934,17 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     }
   }
 
+  void _onSimulationChanged() {
+    if (!mounted) return;
+    _dummyHeroMarkersNotifier.value = MapSimulationService.instance.simulatedMarkers;
+  }
+
   @override
   void dispose() {
+    MapSimulationService.instance.removeListener(_onSimulationChanged);
     WidgetsBinding.instance.removeObserver(this);
     _nearbyCaptainsSub?.cancel();
     _nearbyCaptainsAuthWaitSub?.cancel();
-    _simulationTimer?.cancel();
     _debounceTimer?.cancel();
     _searchMapIdleTimer?.cancel();
     _pickupController.dispose();
@@ -1660,89 +1468,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     }
   }
 
-  void _ensureDummyTrafficInitialized() {
-    if (_ambientVehicles.isNotEmpty || _heroes.isNotEmpty) {
-      return; // Already running
-    }
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final random = Random(now);
-
-    for (var i = 0; i < 7; i++) {
-      _ambientVehicles.add(_DummyVehicleState(
-        id: 'hero_bike_$i',
-        vehicleType: 'bike',
-        busy: true,
-        loopIndex: i % _erodeTrafficLoops.length,
-        progress: (i * 0.15) + _progressBiasForVehicleType('bike'),
-        direction: random.nextBool() ? 1 : -1,
-        speedStep: 0.005 + (random.nextDouble() * 0.003),
-        laneOffset: 0.00003,
-      ));
-    }
-    for (var i = 0; i < 6; i++) {
-      _ambientVehicles.add(_DummyVehicleState(
-        id: 'hero_auto_$i',
-        vehicleType: 'auto',
-        busy: true,
-        loopIndex: (i + 1) % _erodeTrafficLoops.length,
-        progress: (i * 0.15) + _progressBiasForVehicleType('auto'),
-        direction: random.nextBool() ? 1 : -1,
-        speedStep: 0.004 + (random.nextDouble() * 0.002),
-        laneOffset: 0.00004,
-      ));
-    }
-    for (var i = 0; i < 5; i++) {
-      _ambientVehicles.add(_DummyVehicleState(
-        id: 'hero_cab_$i',
-        vehicleType: 'cab',
-        busy: true,
-        loopIndex: (i + 2) % _erodeTrafficLoops.length,
-        progress: (i * 0.2) + _progressBiasForVehicleType('cab'),
-        direction: random.nextBool() ? 1 : -1,
-        speedStep: 0.006 + (random.nextDouble() * 0.003),
-        laneOffset: -0.00003,
-      ));
-    }
-    for (var i = 0; i < 5; i++) {
-      _ambientVehicles.add(_DummyVehicleState(
-        id: 'hero_parcel_$i',
-        vehicleType: 'parcel',
-        busy: true,
-        loopIndex: (i + 3) % _outskirtsTrafficLoops.length,
-        progress: (i * 0.2) + _progressBiasForVehicleType('parcel'),
-        direction: random.nextBool() ? 1 : -1,
-        speedStep: 0.005 + (random.nextDouble() * 0.002),
-        laneOffset: -0.00004,
-        isOutskirts: true,
-      ));
-    }
-    
-    // Add Superman heroes
-    const double heroRadiusDegrees = 0.058; // ~6.5km
-    for (var index = 0; index < 10; index++) {
-      final distance = sqrt(random.nextDouble()) * heroRadiusDegrees;
-      final angle = random.nextDouble() * 2 * pi;
-      final pos = LatLng(
-        11.3410 + distance * cos(angle),
-        77.7171 + distance * sin(angle),
-      );
-      _heroes.add(_HeroAvatarState('superman_hero_$index', pos, random.nextInt(1000000)));
-    }
-    
-    _simulationTimer?.cancel();
-    _simulationTimer = Timer.periodic(const Duration(milliseconds: 32), (_) {
-      if (!mounted) return;
-      for (final vehicle in _ambientVehicles) {
-        vehicle.advance(Random(
-          vehicle.id.hashCode ^ DateTime.now().millisecondsSinceEpoch,
-        ), 32);
-      }
-      for (final hero in _heroes) {
-        hero.advance(32);
-      }
-      _refreshHeroMarkers();
-    });
-  }
+  void _ensureDummyTrafficInitialized() {}
 
   Future<void> _hydrateDummyTrafficRoutes() async {
     // Deprecated: using pre-recorded multi-point loops now
@@ -1754,8 +1480,6 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     if (!mounted) {
       return;
     }
-
-    _ensureDummyTrafficInitialized();
 
     final liveNearbyMarkers = _onlineHeroSnapshots.where((hero) {
       final lat = hero['lat'] as double?;
@@ -1792,33 +1516,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       },
     ).toList();
 
-    final busyMarkers = _ambientVehicles
-        .map(
-          (vehicle) => MapMarker(
-            point: vehicle.project(),
-            color: _successGreen,
-            assetPath: _assetForVehicleType(vehicle.vehicleType),
-            icon: _fallbackIconForVehicleType(vehicle.vehicleType),
-            bearingDegrees: vehicle.bearing(),
-            label: 'Busy Hero',
-            size: 40,
-          ),
-        )
-        .toList();
-
-    for (final hero in _heroes) {
-      busyMarkers.add(MapMarker(
-        point: hero.position,
-        color: Colors.redAccent,
-        assetPath: 'assets/gifs/superman_hero.webp',
-        icon: Icons.person_pin,
-        size: 40,
-        circular: true,
-      ));
-    }
-
     _nearbyCaptainMarkersNotifier.value = liveNearbyMarkers;
-    _dummyHeroMarkersNotifier.value = busyMarkers;
+    // _dummyHeroMarkersNotifier managed by MapSimulationService
   }
 
   Future<void> _loadRoadRoute() async {

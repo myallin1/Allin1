@@ -16,6 +16,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../models/food_models.dart';
 import '../models/service_request_model.dart';
 import '../services/app_minimizer_service.dart';
+import '../widgets/native_update_button.dart';
 import '../services/db_usage_tracker.dart';
 import '../services/food_seller_service.dart';
 import '../services/hive_cache.dart';
@@ -32,19 +33,19 @@ import 'seller_settings_screen.dart';
 import 'seller_side_drawer.dart';
 import 'seller_vertical_picker_screen.dart';
 
-const Color _bg = Color(0xFF0A0A1A);
-const Color _surface = Color(0xFF0D0D18);
-const Color _card = Color(0xFF141420);
-const Color _card2 = Color(0xFF1A1A28);
+const Color _bg = Color(0xFFF7FAF8);
+const Color _surface = Color(0xFFFFFFFF);
+const Color _card = Color(0xFFFFFFFF);
+const Color _card2 = Color(0xFFF1F6F3);
 const Color _teal = Color(0xFF11998E);
 const Color _tealLight = Color(0xFF38EF7D);
-const Color _green = Color(0xFF3DBA6F);
-const Color _gold = Color(0xFFF5C542);
-const Color _red = Color(0xFFFF5252);
-const Color _orange = Color(0xFFFF8A00);
-const Color _text = Color(0xFFEEEEF5);
-const Color _muted = Color(0xFF7777A0);
-const Color _border = Color(0x267B6FE0);
+const Color _green = Color(0xFF2E9E63);
+const Color _gold = Color(0xFFC79200);
+const Color _red = Color(0xFFD64545);
+const Color _orange = Color(0xFFE07A00);
+const Color _text = Color(0xFF1A1A1A);
+const Color _muted = Color(0xFF6B7280);
+const Color _border = Color(0x1A11998E);
 
 class SellerDashboardScreen extends StatefulWidget {
   const SellerDashboardScreen({super.key});
@@ -386,7 +387,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
 
   Future<void> _acceptOrder(String orderId) async {
     try {
-      await _service.updateOrderStatus(orderId, 'accepted');
+      await _service.updateOrderStatus(orderId, 'accepted', sellerId: _seller?.id);
       await _service.updateOrderStatus(orderId, 'preparing');
     } catch (e) {
       if (mounted) {
@@ -435,7 +436,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
     if (_busyRequestIds.contains(request.requestId)) return;
     setState(() => _busyRequestIds.add(request.requestId));
     try {
-      await ServiceRequestService().advanceSellerStage(request.requestId, stage);
+      await ServiceRequestService().advanceSellerStage(request.requestId, stage, sellerId: _seller?.id);
       if (mounted && successMessage != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(successMessage), backgroundColor: _teal),
@@ -850,6 +851,17 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         backgroundColor: _surface,
         elevation: 0,
         actions: [
+          // NEW (Aug 19 2026): the Seller app had NO update path at all
+          // — not a button, not a check, nothing. A shop could run a
+          // months-old build indefinitely with no way to find out, and
+          // the seller build is the one most likely to be left running
+          // untouched on a counter for weeks.
+          //
+          // Renders nothing at all unless a newer GitHub release
+          // actually exists, so it costs the app bar no space on the
+          // normal day. Same widget as Admin — see
+          // native_update_button.dart.
+          const NativeUpdateButton(appVariant: 'seller'),
           if (_seller?.role != 'staff')
             IconButton(
               icon: const Icon(Icons.menu_book, color: _muted),

@@ -33,10 +33,23 @@ class SellerCard extends StatelessWidget {
         if (onTap != null) {
           onTap!();
         } else {
-          // Default navigation to SellerDetailScreen
+          // Default navigation to SellerDetailScreen. Named route +
+          // primitive arguments (Aug 19 2026) so RouteBreadcrumbObserver
+          // can persist/restore this on cold start — see
+          // main_customer.dart '/food_shop_detail' onGenerateRoute.
+          final sellerId = seller['id'] as String?;
           Navigator.push(
             context,
             MaterialPageRoute<void>(
+              settings: RouteSettings(
+                name: '/food_shop_detail',
+                arguments: sellerId == null
+                    ? null
+                    : <String, dynamic>{
+                        'sellerId': sellerId,
+                        'categoryName': category.name,
+                      },
+              ),
               builder: (_) => SellerDetailScreen(
                 seller: seller,
                 category: category,

@@ -180,6 +180,38 @@ class MobileListing {
     return (((m - price) / m) * 100).round();
   }
 
+  // ── EMI (Aug 19 2026, CTO audit item B) ──────────────────────
+  // "₹2,083/month" converts far better than "₹24,999" in an offline
+  // market where most new phones move on finance. This is a DISPLAY
+  // aid only — no lender is contacted, no eligibility is checked, and
+  // no application is created anywhere in this app.
+  //
+  // Modelled as plain no-cost EMI (price ÷ tenure) because that is the
+  // scheme actually advertised in Erode shop windows, and because a
+  // reducing-balance calculation would need a real interest rate per
+  // lender — a number that varies by shop, by phone, and by month, and
+  // that we do not have. Quoting an invented rate would put a wrong
+  // figure in front of a customer standing at a counter.
+  //
+  // Threshold exists so a ₹1,500 feature phone doesn't advertise a
+  // ₹125/month plan no financier would ever write.
+  static const double kEmiMinPrice = 8000;
+  static const int kEmiDefaultTenureMonths = 12;
+
+  /// True when this phone is worth showing an EMI line for: brand-new
+  /// stock above the threshold. Deliberately excludes used phones —
+  /// second-hand handsets are essentially never financed here, and
+  /// implying otherwise would be misleading.
+  bool get isEmiEligible => !isUsed && price >= kEmiMinPrice;
+
+  /// Rounded monthly figure for a plain no-cost EMI, or null when this
+  /// listing isn't EMI-eligible. Rounded UP so the number shown is
+  /// never lower than what the customer would actually be quoted.
+  int? get emiPerMonth {
+    if (!isEmiEligible) return null;
+    return (price / kEmiDefaultTenureMonths).ceil();
+  }
+
   factory MobileListing.fromJson(Map<String, dynamic> json, {String? docId}) {
     double toDouble(Object? v) => (v as num?)?.toDouble() ?? 0.0;
     DateTime? toDate(Object? v) {

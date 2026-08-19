@@ -209,9 +209,25 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
   // ── Navigate to Seller Detail ───────────────────────────────
   void _navigateToSellerDetail(Map<String, dynamic> seller) {
+    // Named + settings.arguments (Aug 19 2026 deep-breadcrumb work): lets
+    // RouteBreadcrumbObserver capture this as a restorable cold-start
+    // breadcrumb (see main_customer.dart's '/food_shop_detail'
+    // onGenerateRoute, which re-fetches the seller by id). Only the id
+    // and category name (both primitives) go in arguments — the
+    // breadcrumb observer refuses to persist anything else.
+    final sellerId = seller['id'] as String?;
     Navigator.push(
       context,
       MaterialPageRoute<void>(
+        settings: RouteSettings(
+          name: '/food_shop_detail',
+          arguments: sellerId == null
+              ? null
+              : <String, dynamic>{
+                  'sellerId': sellerId,
+                  'categoryName': widget.category.name,
+                },
+        ),
         builder: (_) => SellerDetailScreen(
           seller: seller,
           category: widget.category,

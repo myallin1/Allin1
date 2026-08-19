@@ -32,6 +32,7 @@ import '../../services/hero_ride_notification_service.dart';
 import '../../services/hero_usage_accumulator_service.dart';
 import '../../services/hero_wallet_service.dart';
 import '../../services/hero_web_audio_service.dart';
+import '../../services/daily_quote_service.dart';
 import '../../services/localization_service.dart';
 import '../../services/location_service.dart';
 import '../../services/service_request_service.dart';
@@ -45,9 +46,23 @@ import '../../widgets/economic_vision_banner.dart';
 import '../notifications_screen.dart';
 import 'hero_ride_screen.dart';
 import '../../config/hero_service_access.dart';
-import 'package:erode_superapp/services/app_update_gate_service.dart';
-import 'package:erode_superapp/services/pwa_cache_platform_stub.dart'
-    if (dart.library.html) 'package:erode_superapp/services/pwa_cache_platform_web.dart';
+// RELATIVE, not package: (Aug 19 2026).
+//
+// These were the ONLY three `package:erode_superapp/` imports in this
+// file — every other import here is relative — and they were also the
+// only three symbols the analyzer reported as undefined
+// (AppUpdateGateService, PwaCachePlatform). Both classes exist and both
+// paths are correct, so that was never a code error: mixing the two
+// import styles for the same package makes the analyzer resolve the
+// same library twice, and a stale .dart_tool/package_config.json is
+// then enough to break just the package: half while the relative half
+// keeps working.
+//
+// Restarting the analysis server clears it, but only until next time.
+// Matching the file's existing convention removes the failure mode.
+import '../../services/app_update_gate_service.dart';
+import '../../services/pwa_cache_platform_stub.dart'
+    if (dart.library.html) '../../services/pwa_cache_platform_web.dart';
 
 class HeroHomeScreen extends StatefulWidget {
   const HeroHomeScreen({
@@ -705,7 +720,15 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   @override
   void initState() {
     super.initState();
-    unawaited(_checkForAppUpdate());
+    // REMOVED (Aug 19 2026 — nag-on-open cleanup): this used to fire an
+    // "Update Available!" AlertDialog the moment the hero home screen
+    // opened, every session, whether or not the hero was mid-something.
+    // That's now handled by the non-intrusive _buildUpdateBanner(),
+    // which only shows inline while the hero is idle between jobs — see
+    // its comment above for why that's the safer moment. Left the
+    // _checkForAppUpdate()/_showUpdateDialog() methods themselves intact
+    // in case they're wanted again, just not auto-invoked on open.
+    // unawaited(_checkForAppUpdate());
     // NEW (Aug 12 2026 — Nizam's "daily boost" request): one small,
     // non-blocking earn/motivate SnackBar per app cold-boot, right
     // under the time-of-day greeting. See daily_boost_messages.dart —
@@ -1794,7 +1817,8 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'You just got a job — finish it first, then update from here.'),
+            'You just got a job — finish it first, then update from here.',
+          ),
         ),
       );
       return;
@@ -1812,8 +1836,10 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     }
 
     final url = AppUpdateGateService.instance.apkUrlFor('hero');
-    final ok = await launchUrl(Uri.parse(url),
-        mode: LaunchMode.externalApplication);
+    final ok = await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+    );
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not open the update link.')),
@@ -4506,14 +4532,47 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                   // ("Good afternoon, Nizam"). See LocalizationService
                   // .greetingKeyForNow().
                   '${context.watch<LocalizationService>().t(LocalizationService.greetingKeyForNow())}, $_captainName',
+                  // 15 → 14 → 12.5 (Aug 19 2026). Even at 14 the line
+                  // was still being clipped to "Good afternoon, …" on a
+                  // normal phone, so the hero never saw their own name.
+                  // The greeting prefix is what eats the width, and it
+                  // is not worth losing the name over — 12.5 fits both.
                   style: const TextStyle(
-                    fontSize: 15,
+                    fontSize: 12.5,
                     color: _text,
                     fontWeight: FontWeight.w700,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+
+                // ── DAILY QUOTE (HERO POOL) ─────────────────────
+                // Separate pool from the customer's, on purpose — see
+                // daily_quote_service.dart. A hero opens this screen
+                // about to go out and earn, so the lines are about
+                // earnings, safety and customer trust, never abstract
+                // self-belief.
+                //
+                // Rotates morning / afternoon / night on the same
+                // deterministic schedule as the customer app, so the
+                // two never drift apart.
+                Text(
+                  DailyQuoteService.instance.forHero(
+                    context.watch<LocalizationService>().languageCode,
+                  ),
+                  // Location line is 10, so this is 11 — one point up.
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: _njPink,
+                    fontWeight: FontWeight.w600,
+                    fontStyle: FontStyle.italic,
+                    height: 1.2,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 1),
+
                 const Text(
                   'hero allin1 · Erode',
                   style: TextStyle(fontSize: 10, color: _muted),
@@ -4618,81 +4677,31 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          // Logout button
-          GestureDetector(
-            onTap: _showLogoutDialog,
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0x14FF5252),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0x40FF5252)),
-                boxShadow: const <BoxShadow>[
-                  BoxShadow(
-                    color: Color(0x12FF4FA3),
-                    blurRadius: 12,
-                    offset: Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.power_settings_new,
-                color: _red,
-                size: 20,
-              ),
-            ),
-          ),
+          // LOGOUT MOVED TO SETTINGS (Aug 19 2026, Nizam).
+          //
+          // It sat here beside the notification bell and the
+          // ONLINE/OFFLINE pill, competing for the same row as the
+          // hero's name — which is why the name was being truncated to
+          // "Good afternoon, …". Logout is a once-a-day action; the
+          // name and the online state are looked at constantly. The
+          // rare action gives up the prime space.
+          //
+          // Also removes a real hazard: a red power button one thumb
+          // slip away from the bell, on a screen used while working.
+          // It now lives behind the drawer's Settings, where a
+          // deliberate trip is required — see _showLogoutDialog, still
+          // wired, just reached from there.
         ],
       ),
     );
   }
 
-  void _showLogoutDialog() {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: _surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: const Text(
-          'Logout',
-          style: TextStyle(color: _text, fontWeight: FontWeight.w700),
-        ),
-        content: const Text(
-          'Are you sure you want to go offline and logout?',
-          style: TextStyle(color: _muted),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: _muted)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              // Set offline first, then logout
-              await _syncOnlineStatus(false);
-              await FirebaseAuth.instance.signOut();
-              if (!context.mounted) {
-                return;
-              }
-              await Navigator.pushNamedAndRemoveUntil(
-                context,
-                '/',
-                (route) => false,
-              );
-            },
-            child: const Text(
-              'Logout',
-              style: TextStyle(color: _red, fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // _showLogoutDialog() REMOVED (Aug 19 2026). Its only caller was
+  // the header power button, which moved to Settings — and the
+  // HeroSideDrawer already had its own _logoutAndGoOffline() doing
+  // exactly the same two steps (go offline, then sign out). Leaving
+  // this here would have been an unused_element warning guarding a
+  // second, drifting copy of the logout sequence.
 
   // ── STATS ROW ─────────────────────────────────────────────────
   Widget _buildStatsRow() {
@@ -4852,8 +4861,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                     // the ride list even when rides were available.
                     // Rule: NEVER show a blocking loader once the stream is
                     // attached — use a compact top-bar spinner instead.
-                    snap.connectionState == ConnectionState.waiting &&
-                        !snap.hasData;
+
                     if (snap.hasError) {
                       // Auto-retry: reinitialise stream after 4s
                       Future.delayed(const Duration(seconds: 4), () {
@@ -5669,7 +5677,28 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               heroApp: true,
             ),
             const SizedBox(height: 28),
-            const Text('😴', style: TextStyle(fontSize: 64)),
+            // TECHNICAL OFFLINE INDICATOR (Aug 19 2026, Nizam —
+            // replaces a 😴 sleeping-face emoji).
+            //
+            // The emoji read as "you are lazy", which is the wrong
+            // thing to say to someone who has just finished a shift or
+            // is waiting to start one. A signal-off icon states the
+            // same fact — not receiving rides — as a system status
+            // rather than a comment on the hero.
+            Container(
+              width: 92,
+              height: 92,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _muted.withValues(alpha: 0.10),
+                border: Border.all(color: _muted.withValues(alpha: 0.28), width: 2),
+              ),
+              child: Icon(
+                Icons.wifi_tethering_off_rounded,
+                size: 44,
+                color: _muted,
+              ),
+            ),
             const SizedBox(height: 20),
             Text(
               "You're Offline",

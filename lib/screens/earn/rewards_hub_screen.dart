@@ -11,6 +11,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../models/mobile_models.dart' show youtubeVideoId;
+import '../mobiles/listing_video_player.dart'
+    show showPremiumVideoModal, VideoThumbnail;
+
 // ── Theme ─────────────────────────────────────────────────────
 const Color _bg = Color(0xFF0A0A12);
 const Color _surface = Color(0xFF12121E);
@@ -82,6 +86,13 @@ class _FunTask {
 
 class _LocalAd {
   final String id, emoji, shop, offer, category, phone, actionUrl;
+
+  /// Raw YouTube URL exactly as the admin pasted it, or '' when this ad
+  /// has no video. Never trusted directly — always resolved through
+  /// youtubeVideoId() before anything is rendered, so a malformed link
+  /// degrades to "no video" instead of a dead player.
+  final String videoUrl;
+
   final int? coinsReward;
   final Color color;
   const _LocalAd({
@@ -93,8 +104,12 @@ class _LocalAd {
     required this.phone,
     required this.actionUrl,
     required this.color,
+    this.videoUrl = '',
     this.coinsReward,
   });
+
+  /// Resolved 11-char YouTube id, or null when there's no playable video.
+  String? get videoId => youtubeVideoId(videoUrl);
 
   factory _LocalAd.fromFirestore(String docId, Map<String, dynamic> d) =>
       _LocalAd(
@@ -105,6 +120,7 @@ class _LocalAd {
         category: d['category'] as String? ?? 'General',
         phone: d['phone'] as String? ?? '',
         actionUrl: d['actionUrl'] as String? ?? '',
+        videoUrl: d['videoUrl'] as String? ?? '',
         coinsReward: (d['coinsReward'] as num?)?.toInt(),
         color: Color(d['color'] as int? ?? 0xFF6C63FF),
       );
@@ -1735,8 +1751,94 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
                         width: 1.5,
                       ),
                     ),
-                    child: Row(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
+                        // ── VIDEO AD BANNER ──────────────────────
+                        // Only built when the admin actually attached a
+                        // playable YouTube link. Everything below is a
+                        // static thumbnail (YouTube's free hqdefault
+                        // endpoint) — NO player, no WebView, is created
+                        // while the carousel is merely scrolling past.
+                        // The real player is spun up inside the modal
+                        // only after a deliberate tap, and torn down
+                        // when the sheet closes. That lazy discipline is
+                        // what keeps this affordable on the low-end
+                        // Android phones most of Erode is on.
+                        if (ad.videoId != null) ...[
+                          GestureDetector(
+                            // Swallows the tap so the parent card's
+                            // "open actionUrl in an external browser"
+                            // handler never fires here — tapping a video
+                            // must play the video, in-app.
+                            onTap: () => showPremiumVideoModal(
+                              context,
+                              videoId: ad.videoId!,
+                              title: ad.shop,
+                              subtitle: ad.offer,
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: AspectRatio(
+                                aspectRatio: 16 / 9,
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    VideoThumbnail(videoId: ad.videoId!),
+                                    // Scrim keeps the play badge legible
+                                    // over a bright video frame.
+                                    Container(
+                                      color: Colors.black
+                                          .withValues(alpha: 0.25),
+                                    ),
+                                    Center(
+                                      child: Container(
+                                        width: 52,
+                                        height: 52,
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFFFF0000),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.play_arrow_rounded,
+                                          color: Colors.white,
+                                          size: 32,
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      left: 10,
+                                      bottom: 10,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black
+                                              .withValues(alpha: 0.6),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          '▶ Watch & Earn',
+                                          style: GoogleFonts.outfit(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        Row(
+                          children: [
                         // Shop icon
                         Container(
                           width: 58,
@@ -1891,6 +1993,8 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
                               _buildTaskStatus(ad, docs[idx].id),
                             ],
                           ),
+                        ),
+                          ],
                         ),
                       ],
                     ),

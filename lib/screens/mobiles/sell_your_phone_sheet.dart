@@ -121,6 +121,18 @@ class _SellYourPhoneSheetState extends State<_SellYourPhoneSheet> {
       // customer's enquiry, so we carry on without the photo rather
       // than aborting the whole submission.
       String? photoUrl;
+
+      // AUDIT FIX (Aug 19 2026, CTO review — "Cloudinary best-effort
+      // upload risk"). Best-effort is still the right call: losing a
+      // customer's enquiry because an image host blipped would be far
+      // worse than losing the photo. What was wrong is that the failure
+      // was INVISIBLE. Admin saw an enquiry with no photo and had no way
+      // to tell "customer chose not to attach one" from "customer
+      // attached one and it vanished" — two situations needing opposite
+      // follow-up. Now the distinction is recorded on the request and
+      // the customer is told, so they can re-send the photo on WhatsApp
+      // instead of assuming the shop already has it.
+      var photoAttemptedButFailed = false;
       if (_photoBytes != null) {
         try {
           photoUrl = await CloudinaryUploadService().uploadImageBytes(
@@ -129,8 +141,18 @@ class _SellYourPhoneSheetState extends State<_SellYourPhoneSheet> {
             folder: 'sell_phone_enquiries',
             targetBytes: _kSellPhotoTargetBytes,
           );
-        } catch (_) {
+          // An upload that "succeeds" with an empty URL is the same
+          // failure as a thrown exception, and just as invisible.
+          // (uploadImageBytes returns a non-nullable String, so an
+          // empty string is the only shape this failure can take.)
+          if (photoUrl.trim().isEmpty) {
+            photoUrl = null;
+            photoAttemptedButFailed = true;
+          }
+        } catch (e) {
+          debugPrint('❌ Sell-phone photo upload failed: $e');
           photoUrl = null;
+          photoAttemptedButFailed = true;
         }
       }
 
@@ -149,13 +171,39 @@ class _SellYourPhoneSheetState extends State<_SellYourPhoneSheet> {
           if (_expectedPriceCtrl.text.trim().isNotEmpty)
             'expectedPrice': _expectedPriceCtrl.text.trim(),
           if (photoUrl != null) 'phonePhotoUrl': photoUrl,
+          if (photoAttemptedButFailed) 'photoUploadFailed': true,
           'issue': 'Sell old phone: ${_modelCtrl.text.trim()} ($_grade)'
               '${_expectedPriceCtrl.text.trim().isEmpty ? '' : ' — expects ₹${_expectedPriceCtrl.text.trim()}'}'
-              '${_notesCtrl.text.trim().isEmpty ? '' : '\n${_notesCtrl.text.trim()}'}',
+              '${_notesCtrl.text.trim().isEmpty ? '' : '\n${_notesCtrl.text.trim()}'}'
+              // Surfaced in the free-text issue line too, not just as a
+              // structured flag — the admin/hero screens render `issue`
+              // today, so this reaches a human without any admin-side
+              // change being required first.
+              '${photoAttemptedButFailed ? '\n⚠️ Customer attached a photo but the upload failed — please request it directly.' : ''}',
         },
       );
 
       if (!mounted) return;
+
+      // Told BEFORE this sheet pops, via the root messenger, so the
+      // notice survives the navigation instead of being disposed with
+      // the sheet. A customer who knows the photo didn't make it will
+      // send it on WhatsApp; a customer who doesn't know assumes the
+      // shop has already seen their cracked screen.
+      if (photoAttemptedButFailed) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Enquiry sent — but your photo could not be uploaded. '
+              'Our team will ask you for it.',
+            ),
+            backgroundColor: kMobRed,
+            duration: const Duration(seconds: 6),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+
       Navigator.pop(context);
       await Navigator.push(
         context,

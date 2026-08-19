@@ -43,6 +43,8 @@ import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../app_navigator.dart';
+// currentAppVariant — GlobalGuruFab gates Chitti's visibility on it.
+import '../config/app_variant.dart';
 import '../screens/bike_taxi/bike_booking_screen.dart';
 import '../screens/car_wash_screen.dart';
 import '../screens/food_hub_screen.dart';
@@ -345,7 +347,7 @@ class GuruOverlayService extends ChangeNotifier {
       messages.add(
         const GuruChatTurn(
           role: 'assistant',
-          text: 'Guru AI is temporarily unavailable. Please try again shortly.',
+          text: 'Chitti AI is temporarily unavailable. Please try again shortly.',
         ),
       );
     } finally {
@@ -702,8 +704,33 @@ class GuruOverlayService extends ChangeNotifier {
 class GlobalGuruFab extends StatelessWidget {
   const GlobalGuruFab({super.key});
 
+  /// Hero and Seller only see Chitti AFTER they activate their own AI
+  /// key in Settings (Aug 19 2026, Nizam). Customer and Admin are
+  /// unchanged — Chitti is visible there from first launch, as before.
+  ///
+  /// WHY THE TWO APPS DIFFER
+  /// A hero is riding and a seller is mid-service with a queue. A
+  /// floating robot parked over their working screen is an obstruction
+  /// until it can actually do something for them — and without a key it
+  /// cannot. The customer app is a browsing surface, so the same robot
+  /// reads as a feature there.
+  ///
+  /// Gated on the activation state, NOT on a separate "hide Chitti"
+  /// preference, so there is exactly one source of truth: if the AI can
+  /// answer, it appears; if it cannot, it stays out of the way. No way
+  /// for the two settings to disagree.
+  static bool _isGatedApp() =>
+      currentAppVariant == 'hero' || currentAppVariant == 'seller';
+
   @override
   Widget build(BuildContext context) {
+    if (_isGatedApp()) {
+      // watch(), so the FAB appears the moment the key is saved rather
+      // than only after the next app restart.
+      final activated = context.watch<AiActivationService>().isAiActivated;
+      if (!activated) return const SizedBox.shrink();
+    }
+
     return AnimatedBuilder(
       animation: GuruOverlayService.instance,
       builder: (context, _) {
@@ -717,20 +744,12 @@ class GlobalGuruFab extends StatelessWidget {
           right: 14,
           bottom: 90,
           child: SafeArea(
-            child: FloatingActionButton(
-              heroTag: 'guru_global_fab',
-              backgroundColor: const Color(0xFFB44CFF),
-              // FIX (per Nizam's request — "AI button single tap ku mic
-              // button connect pannividu"): single tap now opens the
-              // panel AND starts listening immediately, instead of
-              // opening a quiet text panel that needed a second tap on
-              // its own mic icon.
-              onPressed: () => GuruOverlayService.instance.show(autoStartMic: true),
-              // The floating AI button — the assistant's most visible
-              // face. Aug 17 2026: was Icons.auto_awesome (a generic
-              // sparkle); now the MyAllin1 robot. See AiBotAvatar for
-              // why the source GIF had to be re-encoded first.
-              child: const AiBotAvatar(size: 30),
+            child: GestureDetector(
+              onTap: () => GuruOverlayService.instance.show(autoStartMic: true),
+              child: const AiBotAvatar(
+                size: 64, // Increased size, no background box
+                fallbackColor: Color(0xFFB44CFF),
+              ),
             ),
           ),
         );
@@ -883,20 +902,9 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
             child: SafeArea(
               child: GestureDetector(
                 onTap: service.toggleMinimized,
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A26),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12),
-                    ],
-                  ),
-                  // Minimised/collapsed bubble (Aug 17 2026: robot).
-                  child: const AiBotAvatar(
-                    size: 26,
-                    fallbackColor: Color(0xFFB44CFF),
-                  ),
+                child: const AiBotAvatar(
+                  size: 64, // Increased size, no background box
+                  fallbackColor: Color(0xFFB44CFF),
                 ),
               ),
             ),
@@ -920,12 +928,40 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
               child: Container(
                 width: 320,
                 height: 420,
+                // HIGH-TECH POLISH (Aug 19 2026, Founder: "classy and
+                // high-tech"). Three changes, each doing one job:
+                //
+                //  - A diagonal gradient instead of a flat fill. A
+                //    single flat colour is what makes a panel read as a
+                //    dialog box; a soft top-left-to-bottom-right ramp
+                //    is most of what separates "Apple/CRED" from
+                //    "Material default" at zero cost.
+                //  - Radius 20 → 24. At 320px wide, 20 reads slightly
+                //    boxy next to the app's cards; 24 matches them.
+                //  - A coloured ambient shadow rather than plain black.
+                //    The panel now sits in its own faint violet light,
+                //    which is what makes it look like it's hovering
+                //    above the screen instead of pasted onto it.
                 decoration: BoxDecoration(
-                  color: const Color(0xFF15151F),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFF2A2A3B)),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF1B1B2A), Color(0xFF101018)],
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: const Color(0x1FFFFFFF)),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 24, offset: const Offset(0, 10)),
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      blurRadius: 30,
+                      offset: const Offset(0, 14),
+                    ),
+                    BoxShadow(
+                      color: const Color(0xFFB44CFF).withValues(alpha: 0.16),
+                      blurRadius: 34,
+                      spreadRadius: -10,
+                      offset: const Offset(0, 10),
+                    ),
                   ],
                 ),
                 child: Column(
@@ -945,17 +981,50 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
 
   Widget _buildHeader(GuruOverlayService service) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: const BoxDecoration(
-        gradient: LinearGradient(colors: [Color(0xFFB44CFF), Color(0xFFFF4FA3)]),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        gradient: LinearGradient(
+          // Three stops, not two: the mid violet stops the purple→pink
+          // ramp from passing through a muddy band in the middle, which
+          // is the usual reason a two-colour gradient looks cheap.
+          colors: [Color(0xFFB44CFF), Color(0xFF8A5CFF), Color(0xFFFF4FA3)],
+        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Row(
         children: [
-          // Chat panel header (Aug 17 2026: robot).
-          const AiBotAvatar(size: 20),
-          const SizedBox(width: 8),
-          Text('Guru', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
+          // Avatar sits in a soft glass disc so the robot's own dark
+          // pixels don't disappear into the violet behind it.
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              shape: BoxShape.circle,
+            ),
+            child: const AiBotAvatar(size: 20),
+          ),
+          const SizedBox(width: 9),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Chitti',
+                  style: GoogleFonts.outfit(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    letterSpacing: 0.2,
+                    height: 1.05,
+                  ),),
+              Text('your Allin1 buddy',
+                  style: GoogleFonts.outfit(
+                    color: Colors.white.withValues(alpha: 0.72),
+                    fontWeight: FontWeight.w500,
+                    fontSize: 9,
+                    height: 1.15,
+                  ),),
+            ],
+          ),
           const Spacer(),
           // NEW (CTO mandate — Text-to-Speech): overlay header mute
           // toggle, same intent as the full chat screen's speaker icon.
@@ -994,10 +1063,28 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(20),
-          child: Text(
-            'Ask me anything about Allin1 — I stay with you as you move around the app.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.outfit(color: Colors.white54, fontSize: 12.5),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Ask me anything',
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                'Book a ride, order food, track an order —\nI stay with you as you move around the app.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  color: Colors.white.withValues(alpha: 0.5),
+                  fontSize: 11.5,
+                  height: 1.45,
+                ),
+              ),
+            ],
           ),
         ),
       );
