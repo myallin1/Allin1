@@ -1928,24 +1928,34 @@ class _HomeTab extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
+                Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        SvgPicture.string(FluentEmojiFlat.taxi, width: 20, height: 20),
+                        _themedHeaderIcon(context, 'taxi', '3', SvgPicture.string(FluentEmojiFlat.taxi, width: 20, height: 20)),
                         const SizedBox(width: 6),
-                        Text(
-                          context.watch<LocalizationService>().t('taxi_mega_title'),
-                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(
+                                text: context.watch<LocalizationService>().t('taxi_mega_title'),
+                                style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w800),
+                              ),
+                              TextSpan(
+                                text: ' - ${context.watch<LocalizationService>().t('taxi_mega_subtitle')}',
+                                style: GoogleFonts.outfit(color: kMuted, fontSize: 11, fontWeight: FontWeight.w500),
+                              ),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
-                    Text(
-                      '  ${context.watch<LocalizationService>().t('taxi_mega_subtitle')}',
-                      style: TextStyle(color: kMuted, fontSize: 11),
-                    ),
                   ],
+                ),
                 ),
               ],
             ),
@@ -2023,11 +2033,11 @@ class _HomeTab extends StatelessWidget {
                   // emergency action, not a vehicle to browse, and
                   // putting a red alert badge in a decorative carousel
                   // would both cheapen it and worry people.
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/taxi_slides/motorcycle.png', 'assets/images/top_bike.png'], width: 34, height: 34, fit: BoxFit.contain, duration: const Duration(seconds: 3))),
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/top_auto.png'], width: 34, height: 34, fit: BoxFit.contain, duration: const Duration(milliseconds: 3200))),
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/taxi_slides/yellow_car.png', 'assets/images/taxi_slides/white_car.png', 'assets/images/top_cab.png'], width: 34, height: 34, fit: BoxFit.contain, duration: const Duration(milliseconds: 2800))),
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/taxi_slides/parcel.png', 'assets/images/top_parcel.png'], width: 34, height: 34, fit: BoxFit.contain, duration: const Duration(milliseconds: 3500))),
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/top_mini_truck.png', 'assets/images/top_lorry.png'], width: 34, height: 34, fit: BoxFit.contain, duration: const Duration(milliseconds: 3100))),
+                  _themedSlot(context, 'taxi', 1, const Duration(seconds: 3), ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/taxi_slides/motorcycle.png', 'assets/images/top_bike.png'], width: 44, height: 44, fit: BoxFit.contain, duration: const Duration(seconds: 3)))),
+                  _themedSlot(context, 'taxi', 2, const Duration(milliseconds: 3200), ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/top_auto.png'], width: 44, height: 44, fit: BoxFit.contain, duration: const Duration(milliseconds: 3200)))),
+                  _themedSlot(context, 'taxi', 3, const Duration(milliseconds: 2800), ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/taxi_slides/yellow_car.png', 'assets/images/taxi_slides/white_car.png', 'assets/images/top_cab.png'], width: 44, height: 44, fit: BoxFit.contain, duration: const Duration(milliseconds: 2800)))),
+                  _themedSlot(context, 'taxi', 4, const Duration(milliseconds: 3500), ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/taxi_slides/parcel.png', 'assets/images/top_parcel.png'], width: 44, height: 44, fit: BoxFit.contain, duration: const Duration(milliseconds: 3500)))),
+                  _themedSlot(context, 'taxi', 5, const Duration(milliseconds: 3100), ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/top_mini_truck.png', 'assets/images/top_lorry.png'], width: 44, height: 44, fit: BoxFit.contain, duration: const Duration(milliseconds: 3100)))),
                 ],
               ),
             ),
@@ -2035,6 +2045,50 @@ class _HomeTab extends StatelessWidget {
         ],
       ),
     );
+  }
+
+
+  // Small section-header icon (the one next to "Hero Booking" / "Taxi &
+  // Transportation" / "Food Delivery" titles) — swaps the flat FluentEmoji
+  // glyph for that category's own pink_icons render so the header matches
+  // the row of icons underneath instead of staying multicolor.
+  Widget _themedHeaderIcon(BuildContext context, String category, String slot, Widget defaultIcon) {
+    final iconTheme = context.watch<ThemeService>().iconThemeKey;
+    if (iconTheme == 'pink_white_3d') {
+      // No ClipOval here: these renders already have their background
+      // removed (transparent webp), so circle-cropping just chopped off
+      // parts of the subject for no reason. Contain lets the full
+      // transparent cutout float on the card instead.
+      return Image.asset(
+        'assets/images/pink_icons/${category}_${slot}_a.webp',
+        width: 22,
+        height: 22,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => defaultIcon,
+      );
+    }
+    return defaultIcon;
+  }
+
+  Widget _themedSlot(BuildContext context, String category, int slot, Duration duration, Widget defaultSlot) {
+    final iconTheme = context.watch<ThemeService>().iconThemeKey;
+    if (iconTheme == 'pink_white_3d') {
+      // No ClipOval: these are already background-removed transparent
+      // cutouts (bg-removed at asset-prep time), so a circular clip just
+      // chops off part of the subject for no reason — contain shows the
+      // whole render floating on the card instead.
+      return AutoImageSlider(
+        imagePaths: [
+          'assets/images/pink_icons/${category}_${slot}_a.webp',
+          'assets/images/pink_icons/${category}_${slot}_b.webp',
+        ],
+        width: 44,
+        height: 44,
+        fit: BoxFit.contain,
+        duration: duration,
+      );
+    }
+    return defaultSlot;
   }
 
   // ── FOOD MEGA CARD ────────────────────────────────────────────────
@@ -2052,24 +2106,34 @@ class _HomeTab extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
+                Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        SvgPicture.string(FluentEmojiFlat.hamburger, width: 20, height: 20),
+                        _themedHeaderIcon(context, 'food', '5', SvgPicture.string(FluentEmojiFlat.hamburger, width: 20, height: 20)),
                         const SizedBox(width: 6),
-                        Text(
-                          context.watch<LocalizationService>().t('food_delivery_title'),
-                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(
+                                text: context.watch<LocalizationService>().t('food_delivery_title'),
+                                style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w800),
+                              ),
+                              TextSpan(
+                                text: ' - ${context.watch<LocalizationService>().t('food_mega_subtitle')}',
+                                style: GoogleFonts.outfit(color: kMuted, fontSize: 11, fontWeight: FontWeight.w500),
+                              ),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
-                    Text(
-                      '  ${context.watch<LocalizationService>().t('food_mega_subtitle')}',
-                      style: TextStyle(color: kMuted, fontSize: 11),
-                    ),
                   ],
+                ),
                 ),
               ],
             ),
@@ -2093,11 +2157,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide1.png', 'assets/images/food_slides/slide6.png'], width: 34, height: 34, duration: const Duration(seconds: 3))),
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide2.png', 'assets/images/food_slides/slide7.png'], width: 34, height: 34, duration: const Duration(milliseconds: 3200))),
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide3.png', 'assets/images/food_slides/slide8.jpg'], width: 34, height: 34, duration: const Duration(milliseconds: 2800))),
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide4.jpg', 'assets/images/food_slides/slide1.png'], width: 34, height: 34, duration: const Duration(milliseconds: 3500))),
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide5.jpg', 'assets/images/food_slides/slide2.png'], width: 34, height: 34, duration: const Duration(milliseconds: 3100))),
+                  _themedSlot(context, 'food', 1, const Duration(seconds: 3), ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide1.png', 'assets/images/food_slides/slide6.png'], width: 34, height: 34, duration: const Duration(seconds: 3)))),
+                  _themedSlot(context, 'food', 2, const Duration(milliseconds: 3200), ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide2.png', 'assets/images/food_slides/slide7.png'], width: 34, height: 34, duration: const Duration(milliseconds: 3200)))),
+                  _themedSlot(context, 'food', 3, const Duration(milliseconds: 2800), ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide3.png', 'assets/images/food_slides/slide8.jpg'], width: 34, height: 34, duration: const Duration(milliseconds: 2800)))),
+                  _themedSlot(context, 'food', 4, const Duration(milliseconds: 3500), ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide4.jpg', 'assets/images/food_slides/slide1.png'], width: 34, height: 34, duration: const Duration(milliseconds: 3500)))),
+                  _themedSlot(context, 'food', 5, const Duration(milliseconds: 3100), ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/food_slides/slide5.jpg', 'assets/images/food_slides/slide2.png'], width: 34, height: 34, duration: const Duration(milliseconds: 3100)))),
                 ],
               ),
             ),
@@ -2281,24 +2345,34 @@ class _HomeTab extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
+                Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        SvgPicture.string(FluentEmojiFlat.mobile_phone, width: 20, height: 20),
+                        _themedHeaderIcon(context, 'electronics', '2', SvgPicture.string(FluentEmojiFlat.mobile_phone, width: 20, height: 20)),
                         const SizedBox(width: 6),
-                        Text(
-                          context.watch<LocalizationService>().t('electronics_mega_title'),
-                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(
+                                text: context.watch<LocalizationService>().t('electronics_mega_title'),
+                                style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w800),
+                              ),
+                              TextSpan(
+                                text: ' - ${context.watch<LocalizationService>().t('electronics_mega_subtitle')}',
+                                style: GoogleFonts.outfit(color: kMuted, fontSize: 11, fontWeight: FontWeight.w500),
+                              ),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
-                    Text(
-                      '  ${context.watch<LocalizationService>().t('electronics_mega_subtitle')}',
-                      style: TextStyle(color: kMuted, fontSize: 11),
-                    ),
                   ],
+                ),
                 ),
               ],
             ),
@@ -2321,11 +2395,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.mobile_phone), SvgPicture.string(FluentEmojiFlat.battery)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.laptop), SvgPicture.string(FluentEmojiFlat.desktop_computer)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.desktop_computer), SvgPicture.string(FluentEmojiFlat.floppy_disk)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.video_camera), SvgPicture.string(FluentEmojiFlat.camera)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.television), SvgPicture.string(FluentEmojiFlat.radio)])),
+                  _themedSlot(context, 'electronics', 1, const Duration(seconds: 3), ClipOval(child: AutoWidgetSlider(width: 44, height: 44, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.mobile_phone), SvgPicture.string(FluentEmojiFlat.battery)]))),
+                  _themedSlot(context, 'electronics', 2, const Duration(milliseconds: 3200), ClipOval(child: AutoWidgetSlider(width: 44, height: 44, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.laptop), SvgPicture.string(FluentEmojiFlat.desktop_computer)]))),
+                  _themedSlot(context, 'electronics', 3, const Duration(milliseconds: 2800), ClipOval(child: AutoWidgetSlider(width: 44, height: 44, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.desktop_computer), SvgPicture.string(FluentEmojiFlat.floppy_disk)]))),
+                  _themedSlot(context, 'electronics', 4, const Duration(milliseconds: 3500), ClipOval(child: AutoWidgetSlider(width: 44, height: 44, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.video_camera), SvgPicture.string(FluentEmojiFlat.camera)]))),
+                  _themedSlot(context, 'electronics', 5, const Duration(milliseconds: 3100), ClipOval(child: AutoWidgetSlider(width: 44, height: 44, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.television), SvgPicture.string(FluentEmojiFlat.radio)]))),
                 ],
               ),
             ),
@@ -2488,24 +2562,34 @@ class _HomeTab extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
+                Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        SvgPicture.string(FluentEmojiFlat.man_superhero, width: 20, height: 20),
+                        _themedHeaderIcon(context, 'hero', '1', SvgPicture.string(FluentEmojiFlat.man_superhero, width: 20, height: 20)),
                         const SizedBox(width: 6),
-                        Text(
-                          context.watch<LocalizationService>().t('hero_booking_mega_title'),
-                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(
+                                text: context.watch<LocalizationService>().t('hero_booking_mega_title'),
+                                style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w800),
+                              ),
+                              TextSpan(
+                                text: ' - ${context.watch<LocalizationService>().t('hero_booking_mega_subtitle')}',
+                                style: GoogleFonts.outfit(color: kMuted, fontSize: 11, fontWeight: FontWeight.w500),
+                              ),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
-                    Text(
-                      '  ${context.watch<LocalizationService>().t('hero_booking_mega_subtitle')}',
-                      style: TextStyle(color: kMuted, fontSize: 11),
-                    ),
                   ],
+                ),
                 ),
               ],
             ),
@@ -2559,11 +2643,11 @@ class _HomeTab extends StatelessWidget {
                   // motion on top of the slider's cross-fade — which is
                   // why it earns the lead position. Remaining icons get
                   // replaced next phase.
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/gifs/superman_hero.webp', 'assets/images/hero_slides/delivery_man_blue.png', 'assets/images/erode_delivery_hero.png'], width: 34, height: 34, fit: BoxFit.contain, duration: const Duration(seconds: 3))),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.high_voltage), SvgPicture.string(FluentEmojiFlat.collision)])),
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/top_parcel.png', 'assets/taxi/parcel.png'], width: 34, height: 34, fit: BoxFit.contain, duration: const Duration(milliseconds: 2800))),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.shopping_bags), SvgPicture.string(FluentEmojiFlat.shopping_cart)])),
-                  ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/hero_slides/delivery_man_green.png', 'assets/images/erode_delivery_hero.png', 'assets/gifs/superman_hero.webp'], width: 34, height: 34, fit: BoxFit.contain, duration: const Duration(milliseconds: 3100))),
+                  _themedSlot(context, 'hero', 1, const Duration(seconds: 3), ClipOval(child: AutoImageSlider(imagePaths: const ['assets/gifs/superman_hero.webp', 'assets/images/hero_slides/delivery_man_blue.png', 'assets/images/erode_delivery_hero.png'], width: 44, height: 44, fit: BoxFit.contain, duration: const Duration(seconds: 3)))),
+                  _themedSlot(context, 'hero', 4, const Duration(milliseconds: 3200), ClipOval(child: AutoWidgetSlider(width: 44, height: 44, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.high_voltage), SvgPicture.string(FluentEmojiFlat.collision)]))),
+                  _themedSlot(context, 'hero', 2, const Duration(milliseconds: 2800), ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/top_parcel.png', 'assets/taxi/parcel.png'], width: 44, height: 44, fit: BoxFit.contain, duration: const Duration(milliseconds: 2800)))),
+                  _themedSlot(context, 'hero', 5, const Duration(milliseconds: 3500), ClipOval(child: AutoWidgetSlider(width: 44, height: 44, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.shopping_bags), SvgPicture.string(FluentEmojiFlat.shopping_cart)]))),
+                  _themedSlot(context, 'hero', 3, const Duration(milliseconds: 3100), ClipOval(child: AutoImageSlider(imagePaths: const ['assets/images/hero_slides/delivery_man_green.png', 'assets/images/erode_delivery_hero.png', 'assets/gifs/superman_hero.webp'], width: 44, height: 44, fit: BoxFit.contain, duration: const Duration(milliseconds: 3100)))),
                 ],
               ),
             ),
@@ -3888,32 +3972,54 @@ class _ScratchCardModalState extends State<_ScratchCardModal>
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 32),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1A1A1A), Color(0xFF2C2C2C)],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: kGold.withValues(alpha: 0.55), width: 1.5),
+        borderRadius: BorderRadius.circular(30),
         boxShadow: [
-          BoxShadow(color: kGold.withValues(alpha: 0.25), blurRadius: 30,),
-          BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 18, offset: const Offset(0, 10),),
+          BoxShadow(color: kPink.withValues(alpha: 0.22), blurRadius: 36, spreadRadius: -4,),
+          BoxShadow(color: kPinkDark.withValues(alpha: 0.10), blurRadius: 20, offset: const Offset(0, 12),),
         ],
       ),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
+      // Rose-gold gradient "hairline" border — a flat solid border reads
+      // cheap on a premium card; a thin gradient ring around a plain
+      // white/pink inner panel is what actually sells "premium".
+      child: Container(
+        padding: const EdgeInsets.all(1.6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(30),
+          gradient: LinearGradient(
+            colors: [kPink, const Color(0xFFFFE3F2), kPinkDark, const Color(0xFFFFE3F2), kPink],
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+          ),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28.5),
+            gradient: LinearGradient(
+              colors: [kBg, kPinkBg],
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+            ),
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
           child: Row(children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: kGold.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: kGold.withValues(alpha: 0.5)),
+                gradient: LinearGradient(
+                  colors: [kPink.withValues(alpha: 0.16), kPinkDark.withValues(alpha: 0.10)],
+                  begin: Alignment.centerLeft, end: Alignment.centerRight,
+                ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: kPink.withValues(alpha: 0.4)),
               ),
-              child: Text(t('daily_scratch_badge'),
-                  style: GoogleFonts.outfit(
-                      color: kGold, fontSize: 10, fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,),),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.auto_awesome_rounded, color: kPinkDark, size: 11),
+                const SizedBox(width: 4),
+                Text(t('daily_scratch_badge'),
+                    style: GoogleFonts.outfit(
+                        color: kPinkDark, fontSize: 10, fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,),),
+              ],),
             ),
             const Spacer(),
             GestureDetector(
@@ -3921,35 +4027,35 @@ class _ScratchCardModalState extends State<_ScratchCardModal>
               child: Container(
                 width: 32, height: 32,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.08),
+                  color: kPink.withValues(alpha: 0.08),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.close_rounded,
-                    color: Colors.white54, size: 18,),
+                child: Icon(Icons.close_rounded,
+                    color: kMuted, size: 18,),
               ),
             ),
           ],),
         ),
         Text(t('scratch_reveal_hint'),
-            style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13),),
+            style: GoogleFonts.outfit(color: kMuted, fontSize: 13),),
         const SizedBox(height: 16),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Scratcher(
             brushSize: 40,
             threshold: 30,
-            color: const Color(0xFFD4AF37),
+            color: const Color(0xFFFFB6D9),
             onThreshold: _onRevealed,
             onChange: (v) => setState(() => _progress = v),
             child: Container(
               height: 180,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1A1A1A), Color(0xFF2C2C2C), Color(0xFF1A1A1A)],
+                gradient: LinearGradient(
+                  colors: [kBg, kPinkBg, kBg],
                   begin: Alignment.topLeft, end: Alignment.bottomRight,
                 ),
-                border: Border.all(color: kGold.withValues(alpha: 0.3)),
+                border: Border.all(color: kPink.withValues(alpha: 0.25)),
               ),
               child: Center(
                 child: AnimatedBuilder(
@@ -3968,19 +4074,19 @@ class _ScratchCardModalState extends State<_ScratchCardModal>
                     Text(emoji, style: TextStyle(
                         fontSize: 52,
                         shadows: [Shadow(
-                            color: kGold.withValues(alpha: 0.6),
+                            color: kPink.withValues(alpha: 0.45),
                             blurRadius: 16,),],),),
                     const SizedBox(height: 10),
                     Text(title,
                         textAlign: TextAlign.center,
                         style: GoogleFonts.outfit(
-                            color: kGold, fontSize: 22,
+                            color: kPinkDark, fontSize: 22,
                             fontWeight: FontWeight.w900,),),
                     const SizedBox(height: 6),
                     Text(subtitle,
                         textAlign: TextAlign.center,
                         style: GoogleFonts.outfit(
-                            color: Colors.white70, fontSize: 13,),),
+                            color: kMuted, fontSize: 13,),),
                   ],),
                 ),
               ),
@@ -3994,9 +4100,9 @@ class _ScratchCardModalState extends State<_ScratchCardModal>
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: _progress / 100,
-              backgroundColor: Colors.white12,
+              backgroundColor: kPink.withValues(alpha: 0.10),
               valueColor: AlwaysStoppedAnimation<Color>(
-                  _revealed ? kGreen : kGold,),
+                  _revealed ? kGreen : kPink,),
               minHeight: 4,
             ),
           ),
@@ -4004,7 +4110,7 @@ class _ScratchCardModalState extends State<_ScratchCardModal>
         const SizedBox(height: 6),
         Text(_revealed ? t('scratch_revealed_label') : t('scratch_keep_going_label'),
             style: GoogleFonts.outfit(
-                color: _revealed ? kGreen : Colors.white38,
+                color: _revealed ? kGreen : kMuted,
                 fontSize: 11, fontWeight: FontWeight.w600,),),
         const SizedBox(height: 16),
         if (_revealed)
@@ -4017,23 +4123,33 @@ class _ScratchCardModalState extends State<_ScratchCardModal>
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 15),
                   decoration: BoxDecoration(
-                    color: kGold,
-                    borderRadius: BorderRadius.circular(14),
+                    gradient: LinearGradient(
+                      colors: [kPink, kPinkDark],
+                      begin: Alignment.centerLeft, end: Alignment.centerRight,
+                    ),
+                    borderRadius: BorderRadius.circular(30),
                     boxShadow: [BoxShadow(
-                        color: kGold.withValues(alpha: 0.4),
-                        blurRadius: 10,),],
+                        color: kPink.withValues(alpha: 0.35),
+                        blurRadius: 14, offset: const Offset(0, 6),),],
                   ),
-                  child: Center(child: Text(t('call_to_claim_label'),
-                      style: GoogleFonts.outfit(
-                          color: Colors.black,
-                          fontSize: 15, fontWeight: FontWeight.w800,),),),
+                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    const Icon(Icons.call_rounded, color: Colors.white, size: 16),
+                    const SizedBox(width: 8),
+                    Text(t('call_to_claim_label'),
+                        style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 15, fontWeight: FontWeight.w800,
+                            letterSpacing: 0.2,),),
+                  ],),
                 ),
               ),
             ),
           )
         else
           const SizedBox(height: 20),
-      ],),
+          ],),
+        ),
+      ),
     );
   }
 }

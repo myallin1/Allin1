@@ -251,6 +251,17 @@ function Build-And-Deploy {
         Write-Host "  No web\manifests\manifest_$Target.json found - using the shared manifest.json." -ForegroundColor Yellow
     }
 
+    # ================================================================
+    # OVERWRITE DEFAULT ICONS FOR FLAVORS (Fixes Hero/Seller/Admin PWA icons)
+    # ================================================================
+    # index.html has hardcoded `<link rel="apple-touch-icon" href="icons/Icon-192.png">`.
+    # Without this step, all flavors get the customer app icon when installed as PWA!
+    $iconSource = "web\icons\$Target"
+    if (Test-Path $iconSource) {
+        Copy-Item -Path "$iconSource\*" -Destination 'build\web\icons\' -Force -Recurse
+        Write-Host "  Applied $Target's own icons for PWA and favicon." -ForegroundColor DarkCyan
+    }
+
     # These three are the ones that have actually gone missing before.
     # assets\.env matters most: flutter_dotenv fetches it over HTTP at
     # runtime, and without it the Ola Maps key reads as empty and place

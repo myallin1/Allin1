@@ -20,14 +20,18 @@ class CheckoutScreen extends StatefulWidget {
 }
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
-  // ── Theme Constants ──────────────────────────────────────
-  static const Color _bgColor = Color(0xFF0D0D0D);
-  static const Color _cardColor = Color(0xFF1A1A1A);
+  // ── Theme Constants (Aug 20 2026 — Global Food Theme Overhaul) ──
+  // Recolored from the old dark theme to the brand's pure white +
+  // hot pink. This screen is currently dead code (route registered,
+  // never pushed — see the audit note in the file header) but stays
+  // brand-consistent if ever re-wired.
+  static const Color _bgColor = Color(0xFFFFFFFF);
+  static const Color _cardColor = Color(0xFFF8F8FF);
   static const Color _accentOrange = Color(0xFFFF6B35);
   static const Color _accentGold = Color(0xFFFFBB00);
-  static const Color _textPrimary = Color(0xFFFFFFFF);
-  static const Color _textSecondary = Color(0xFF9E9E9E);
-  static const Color _dividerColor = Color(0xFF2C2C2C);
+  static const Color _textPrimary = Color(0xFF1A1A2E);
+  static const Color _textSecondary = Color(0xFF9999BB);
+  static const Color _dividerColor = Color(0xFFEEEEF5);
   static const Color _successGreen = Color(0xFF4CAF50);
 
   // ── Dummy Order Data ─────────────────────────────────────
@@ -342,7 +346,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         leading: IconButton(
           icon: const Icon(
             Icons.arrow_back_ios_new_rounded,
-            color: Colors.white,
+            color: _textPrimary,
             size: 20,
           ),
           onPressed: () => Navigator.of(context).pop(),
@@ -352,7 +356,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         title: const Text(
           'Checkout',
           style: TextStyle(
-            color: Colors.white,
+            color: _textPrimary,
             fontSize: 18,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.3,
@@ -754,13 +758,14 @@ class _PaymentSheet extends StatefulWidget {
 }
 
 class _PaymentSheetState extends State<_PaymentSheet> {
-  static const Color _bgColor = Color(0xFF141414);
-  static const Color _cardColor = Color(0xFF1E1E1E);
+  // Recolored to the brand white + pink palette (Aug 20 2026).
+  static const Color _bgColor = Color(0xFFFFFFFF);
+  static const Color _cardColor = Color(0xFFF8F8FF);
   static const Color _accentOrange = Color(0xFFFF6B35);
   static const Color _accentGold = Color(0xFFFFBB00);
-  static const Color _textPrimary = Color(0xFFFFFFFF);
-  static const Color _textSecondary = Color(0xFF9E9E9E);
-  static const Color _dividerColor = Color(0xFF2A2A2A);
+  static const Color _textPrimary = Color(0xFF1A1A2E);
+  static const Color _textSecondary = Color(0xFF9999BB);
+  static const Color _dividerColor = Color(0xFFEEEEF5);
 
   String? _selectedMethod;
   bool _cardExpanded = false;
@@ -1009,7 +1014,7 @@ class _PaymentSheetState extends State<_PaymentSheet> {
               isSelected ? _accentOrange.withValues(alpha: 0.12) : _cardColor,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isSelected ? _accentOrange : const Color(0xFF2A2A2A),
+            color: isSelected ? _accentOrange : _dividerColor,
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -1046,7 +1051,7 @@ class _PaymentSheetState extends State<_PaymentSheet> {
               isSelected ? _accentOrange.withValues(alpha: 0.08) : _cardColor,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isSelected ? _accentOrange : const Color(0xFF2A2A2A),
+            color: isSelected ? _accentOrange : _dividerColor,
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -1155,15 +1160,15 @@ class _PaymentSheetState extends State<_PaymentSheet> {
       obscureText: obscure,
       maxLength: maxLength,
       style: const TextStyle(
-        color: Colors.white,
+        color: _textPrimary,
         fontSize: 14,
       ),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: Color(0xFF555555), fontSize: 13),
-        prefixIcon: Icon(icon, color: const Color(0xFF555555), size: 18),
+        hintStyle: const TextStyle(color: _textSecondary, fontSize: 13),
+        prefixIcon: Icon(icon, color: _textSecondary, size: 18),
         filled: true,
-        fillColor: const Color(0xFF0D0D0D),
+        fillColor: _cardColor,
         counterText: '',
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
@@ -1171,11 +1176,11 @@ class _PaymentSheetState extends State<_PaymentSheet> {
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+          borderSide: const BorderSide(color: _dividerColor),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+          borderSide: const BorderSide(color: _dividerColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -1210,7 +1215,7 @@ class _PaymentSheetState extends State<_PaymentSheet> {
               isSelected ? _accentOrange.withValues(alpha: 0.08) : _cardColor,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isSelected ? _accentOrange : const Color(0xFF2A2A2A),
+            color: isSelected ? _accentOrange : _dividerColor,
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -1265,13 +1270,13 @@ class _PaymentSheetState extends State<_PaymentSheet> {
   Widget _miniCardBadge(String text) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: const Color(0xFF2A2A2A),
+          color: const Color(0xFFFF4FA3),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Text(
           text,
           style: const TextStyle(
-            color: Colors.white70,
+            color: Colors.white,
             fontSize: 9,
             fontWeight: FontWeight.bold,
           ),

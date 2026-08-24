@@ -15,6 +15,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/ai_activation_service.dart';
+import '../services/app_palette.dart' show kPink;
 import '../services/localization_service.dart';
 import '../services/map_service.dart';
 import '../services/theme_service.dart';
@@ -308,9 +309,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       title.toUpperCase(),
       style: GoogleFonts.outfit(
         color: kMuted,
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 1.2,
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 1.1,
       ),
     );
   }
@@ -387,6 +388,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (themeService != null) ...[
             _buildDivider(),
             _buildThemeTile(themeService, t),
+            _buildDivider(),
+            _buildIconThemeTile(themeService, t),
           ],
         ],
       ),
@@ -415,7 +418,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   t('theme_title'),
                   style: GoogleFonts.outfit(
                     color: kText,
-                    fontSize: 13.5,
+                    fontSize: 15.5,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -423,7 +426,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   t('theme_subtitle'),
                   style: GoogleFonts.outfit(
                     color: kMuted,
-                    fontSize: 11,
+                    fontSize: 12.5,
                   ),
                 ),
               ],
@@ -461,6 +464,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   return;
                 }
                 themeService.setTheme(value);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIconThemeTile(ThemeService themeService, String Function(String) t) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: kPink.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.star_outline_rounded, color: kPink, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Icon Theme',
+                  style: GoogleFonts.outfit(
+                    color: kText,
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  'Change home icons',
+                  style: GoogleFonts.outfit(
+                    color: kMuted,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: themeService.iconThemeKey,
+              dropdownColor: kCard,
+              style: GoogleFonts.outfit(color: kText, fontSize: 13),
+              items: const [
+                DropdownMenuItem(
+                  value: 'pink_white_3d',
+                  child: Text('Pink & White 3D'),
+                ),
+                DropdownMenuItem(
+                  value: 'multicolor',
+                  child: Text('Multicolor'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value == null) {
+                  return;
+                }
+                themeService.setIconTheme(value);
               },
             ),
           ),
@@ -936,7 +1003,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title,
                   style: GoogleFonts.outfit(
                     color: kText,
-                    fontSize: 13.5,
+                    fontSize: 15.5,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -944,7 +1011,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle,
                   style: GoogleFonts.outfit(
                     color: kMuted,
-                    fontSize: 11,
+                    fontSize: 12.5,
                   ),
                 ),
               ],
@@ -996,7 +1063,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       title,
                       style: GoogleFonts.outfit(
                         color: titleColor ?? kText,
-                        fontSize: 13.5,
+                        fontSize: 15.5,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -1004,7 +1071,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       subtitle,
                       style: GoogleFonts.outfit(
                         color: kMuted,
-                        fontSize: 11,
+                        fontSize: 12.5,
                       ),
                     ),
                   ],

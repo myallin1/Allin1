@@ -9,6 +9,12 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../services/category_gateway_service.dart';
 
+// ── Brand palette (Aug 20 2026 — Global Food Theme Overhaul) ───────
+// Text was near-white for the old dark category scaffold; the scaffold
+// is now pure white, so switch to the dark brand text/muted tones.
+const Color _kText = Color(0xFF1A1A2E);
+const Color _kMuted = Color(0xFF9999BB);
+
 class EmptyState extends StatelessWidget {
   final Category category;
 
@@ -37,7 +43,7 @@ class EmptyState extends StatelessWidget {
               style: GoogleFonts.outfit(
                 fontSize: 24,
                 fontWeight: FontWeight.w800,
-                color: const Color(0xFFEEEEF5),
+                color: _kText,
               ),
             ),
             const SizedBox(height: 12),
@@ -45,7 +51,7 @@ class EmptyState extends StatelessWidget {
               config.emptyMessage,
               style: GoogleFonts.outfit(
                 fontSize: 16,
-                color: const Color(0xFFEEEEF5).withValues(alpha: 0.7),
+                color: _kMuted,
               ),
               textAlign: TextAlign.center,
             ),
@@ -54,7 +60,7 @@ class EmptyState extends StatelessWidget {
               config.emptySubmessage,
               style: GoogleFonts.outfit(
                 fontSize: 14,
-                color: const Color(0xFFEEEEF5).withValues(alpha: 0.54),
+                color: _kMuted,
               ),
               textAlign: TextAlign.center,
             ),

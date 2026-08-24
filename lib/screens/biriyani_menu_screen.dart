@@ -11,13 +11,18 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
-// ── Theme tokens (dark) ─────────────────────────────────────────
-const Color _bBg = Color(0xFF0C0A14);
-const Color _bSurface = Color(0xFF15121F);
+// ── Theme tokens (Aug 20 2026 — Global Food Theme Overhaul) ─────
+// Recolored from the old dark navy palette to the brand's pure
+// white + hot pink. This screen is currently UNREACHABLE dead code
+// (never navigated to) but stays brand-consistent if ever re-wired.
+const Color _bBg = Color(0xFFFFFFFF);
+const Color _bSurface = Color(0xFFF8F8FF);
 const Color _bPink = Color(0xFFFF4FA3);
 const Color _bGold = Color(0xFFFFBB33);
 const Color _bOrange = Color(0xFFFF8A00);
 const Color _bGreen = Color(0xFF00E5A0);
+const Color _bText = Color(0xFF1A1A2E);
+const Color _bMuted = Color(0xFF9999BB);
 
 // ── Contact ──────────────────────────────────────────────────────
 const String _bPhone = '+918681869091';
@@ -172,7 +177,7 @@ class _BiriyaniMenuScreenState extends State<BiriyaniMenuScreen>
               background: DecoratedBox(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Color(0xFF1A0A2E), Color(0xFF0C0A14)],
+                    colors: [Color(0xFFFF4FA3), Color(0xFFBE2A7A)],
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                   ),
@@ -256,7 +261,7 @@ class _BiriyaniMenuScreenState extends State<BiriyaniMenuScreen>
                         decoration: BoxDecoration(
                           color: active
                               ? item.accent
-                              : Colors.white.withValues(alpha: 0.18),
+                              : _bPink.withValues(alpha: 0.25),
                           borderRadius: BorderRadius.circular(99),
                         ),
                       ),
@@ -524,7 +529,7 @@ class _BiriyaniInfoPanel extends StatelessWidget {
                   Text(
                     item.name,
                     style: GoogleFonts.outfit(
-                      color: Colors.white,
+                      color: _bText,
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
                     ),
@@ -533,7 +538,7 @@ class _BiriyaniInfoPanel extends StatelessWidget {
                   Text(
                     item.tagline,
                     style: GoogleFonts.outfit(
-                      color: Colors.white54,
+                      color: _bMuted,
                       fontSize: 12,
                     ),
                   ),
@@ -666,7 +671,7 @@ class _WhyChooseStrip extends StatelessWidget {
                     e.$2,
                     textAlign: TextAlign.center,
                     style: GoogleFonts.outfit(
-                      color: Colors.white70,
+                      color: _bMuted,
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                     ),

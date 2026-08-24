@@ -303,6 +303,57 @@ service cloud.firestore {
     }
 
     // ==============================================================
+    // CUSTOM HOTEL ORDERS COLLECTION (Aug 20 2026 audit fix CRITICAL-1)
+    // ==============================================================
+    // FIX (root cause of "custom hotel checkout always fails"): the
+    // CTO-mandated custom_hotel_orders collection (written by
+    // CustomHotelService.placeOrder / linkServiceRequest in
+    // lib/services/custom_hotel_service.dart) had NO rules block, so
+    // every write fell through to the file's catch-all `if false`
+    // deny — the customer's "Place Order" tap died with
+    // permission-denied BEFORE the service_requests dispatch doc was
+    // ever created, so neither seller, admin, nor hero ever saw the
+    // order. Every other order collection has a block; this one was
+    // missed because it was added in the same change that introduced
+    // the checkout pipeline.
+    //
+    // The order doc carries BOTH owner keys at top level: customerId
+    // (who placed it) and sellerId (whose hotel it is) — see
+    // placeOrder()'s payload. So ownership is checked structurally on
+    // both axes:
+    //   - create:  only a REAL (non-guest) customer can place, and the
+    //              payload's customerId must be their own uid (mirrors
+    //              the service_requests create gate — guests may browse
+    //              but never spend).
+    //   - read:    the ordering customer, the owning seller, or admin.
+    //   - update:  the customer may ONLY attach the serviceRequestId
+    //              (linkServiceRequest's merge) — a hasOnly() pin
+    //              exactly like service_requests Clause 6, so a
+    //              customer can't silently edit prices/amounts on
+    //              their own receipt; the owning seller or admin may
+    //              update (e.g. future kitchen status marks).
+    //   - delete:  admin only.
+    // ==============================================================
+    match /custom_hotel_orders/{orderId} {
+      allow create: if isRealUser()
+        && request.resource.data.customerId == request.auth.uid
+        || isAdminAny();
+
+      allow read: if isAdminAny()
+        || (isAuth() && resource.data.customerId == request.auth.uid)
+        || (isAuth() && resource.data.sellerId == request.auth.uid);
+
+      allow update: if isAdminAny()
+        || (isAuth() && resource.data.sellerId == request.auth.uid)
+        || (isAuth()
+            && resource.data.customerId == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['serviceRequestId', 'updatedAt']));
+
+      allow delete: if isAdminAny();
+    }
+
+    // ==============================================================
     // SELLERS COLLECTION
     // ==============================================================
     // Customers:   read only

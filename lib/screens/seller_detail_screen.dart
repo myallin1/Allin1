@@ -17,6 +17,7 @@ import '../services/cart_service.dart';
 import '../services/category_gateway_service.dart';
 import '../services/service_request_service.dart';
 import '../widgets/product_card.dart';
+import 'custom_hotel_view_screen.dart';
 import 'food_checkout_screen.dart';
 import 'service_request_tracking_screen.dart';
 
@@ -27,6 +28,21 @@ import 'service_request_tracking_screen.dart';
 /// custom_food_order, no separate admin dispatch or tracking screen
 /// needed to build.
 const String kCatalogFoodOrderRequestType = 'catalog_food_order';
+
+// ── Brand palette (Aug 20 2026 — Global Food Theme Overhaul) ───────
+// This screen was the last DARK-themed screen in the customer food
+// flow (0xFF0A0A12 scaffold etc.) — recolored to the same premium
+// 'Pure White + Vibrant Hot Pink' brand as custom_food_order_screen.
+const Color _kPink = Color(0xFFFF4FA3);
+const Color _kPinkDark = Color(0xFFBE2A7A);
+const Color _kBg = Color(0xFFFFFFFF);
+const Color _kSurface = Color(0xFFF8F8FF);
+const Color _kCard2 = Color(0xFFF0F0FA);
+const Color _kText = Color(0xFF1A1A2E);
+const Color _kMuted = Color(0xFF9999BB);
+const Color _kBorder = Color(0xFFEEEEF5);
+const Color _kGreen = Color(0xFF00C853);
+const Color _kRed = Color(0xFFFF5252);
 
 class SellerDetailScreen extends StatefulWidget {
   final Map<String, dynamic> seller;
@@ -56,6 +72,15 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
   final CartService _cart = CartService();
   int _cartItemCount = 0;
 
+  // FIX (Aug 20 2026 — audit Task 4, custom-food routing): whether this
+  // seller also maintains a Custom-Hotel menu (custom_hotels/{sellerId}
+  // with visible items). When true, the seller's custom food renders
+  // HERE — inside their own shop menu — and ONLY here; the duplicated
+  // global "Custom Hotels" grids were removed from food_hub_screen.dart
+  // and custom_food_order_screen.dart.
+  bool _hasCustomMenu = false;
+  String _customHotelName = '';
+
   @override
   void initState() {
     super.initState();
@@ -84,6 +109,36 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
       final products = await CategoryGatewayService()
           .loadSellerProducts(sellerId, widget.category);
 
+      // FIX (Aug 20 2026 — audit Task 4): detect whether this seller
+      // also runs a Custom-Hotel menu, so it can render INSIDE this
+      // shop page (and nowhere else). One-time read, not a listener;
+      // deliberately best-effort — a failure here must never break the
+      // main menu load below.
+      try {
+        final hotelSnap = await FirebaseFirestore.instance
+            .collection('custom_hotels')
+            .doc(sellerId)
+            .get();
+        if (hotelSnap.exists) {
+          final visibleItems = await FirebaseFirestore.instance
+              .collection('custom_hotels')
+              .doc(sellerId)
+              .collection('items')
+              .where('isVisible', isEqualTo: true)
+              .limit(1)
+              .get();
+          if (visibleItems.docs.isNotEmpty && mounted) {
+            setState(() {
+              _hasCustomMenu = true;
+              _customHotelName =
+                  (hotelSnap.data()?['hotelName'] as String?)?.trim() ?? '';
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint('[SellerDetailScreen] custom-menu probe skipped: $e');
+      }
+
       if (mounted) {
         setState(() {
           _products = products;
@@ -106,7 +161,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
     final isOpen = _isOpen();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A12),
+      backgroundColor: _kBg,
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           return [
@@ -115,11 +170,11 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
         },
         body: _isLoading
             ? const Center(
-                child: CircularProgressIndicator(color: Color(0xFFFFBB00)),
+                child: CircularProgressIndicator(color: _kPink),
               )
             : _error != null
                 ? _buildErrorState()
-                : _products.isEmpty
+                : _products.isEmpty && !_hasCustomMenu
                     ? _buildEmptyState()
                     : _buildProductList(),
       ),
@@ -200,7 +255,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
                     style: GoogleFonts.outfit(
                       fontSize: 24,
                       fontWeight: FontWeight.w800,
-                      color: const Color(0xFFEEEEF5),
+                      color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -212,7 +267,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
                         rating.toStringAsFixed(1),
                         style: GoogleFonts.outfit(
                           fontSize: 14,
-                          color: const Color(0xFFEEEEF5),
+                          color: Colors.white,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -270,12 +325,24 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
   // ── Product List ────────────────────────────────────────────
   Widget _buildProductList() {
     final productsByCategory = _groupProductsByCategory();
+    final hasCustomMenu = _hasCustomMenu;
+    // FIX (Aug 20 2026 — audit Task 4): the custom-menu card occupies
+    // the first list slot when this seller runs a Custom-Hotel menu.
+    final headerCount = hasCustomMenu ? 1 : 0;
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: productsByCategory.length,
+      itemCount: productsByCategory.length + headerCount,
       itemBuilder: (context, i) {
-        final category = productsByCategory.keys.elementAt(i);
+        if (hasCustomMenu && i == 0) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 20),
+            child: _buildCustomMenuCard(),
+          );
+        }
+
+        final listIndex = i - headerCount;
+        final category = productsByCategory.keys.elementAt(listIndex);
         final products = productsByCategory[category]!;
 
         return Column(
@@ -289,7 +356,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
                 style: GoogleFonts.outfit(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: const Color(0xFFEEEEF5),
+                  color: _kText,
                 ),
               ),
             ),
@@ -315,6 +382,85 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
           ],
         );
       },
+    );
+  }
+
+  // ── Custom Menu Card (Aug 20 2026 — audit Task 4) ───────────
+  // The seller's custom food renders ONLY here — inside their own shop
+  // menu — and nowhere else. The global "Custom Hotels" grids were
+  // removed from food_hub_screen.dart / custom_food_order_screen.dart
+  // so a seller's dishes can never appear in two places. Tapping opens
+  // CustomHotelViewScreen (the same screen the removed grids pushed),
+  // so the existing custom_hotel_order checkout pipeline is untouched.
+  Widget _buildCustomMenuCard() {
+    final sellerId = widget.seller['id'] as String? ?? '';
+    final title = _customHotelName.isNotEmpty ? _customHotelName : widget.seller['shopName'] as String? ?? 'This shop';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CustomHotelViewScreen(
+              hotelId: sellerId,
+              hotelName: title,
+            ),
+          ),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [_kPink, _kPinkDark],
+            ),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 26),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.outfit(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Custom Menu · Tap to view live menu & order',
+                      style: GoogleFonts.outfit(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right_rounded, color: Colors.white, size: 26),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -387,32 +533,32 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A2A),
+        backgroundColor: _kBg,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
         title: const Text(
           '🛒 Clear Cart?',
           style: TextStyle(
-            color: Color(0xFFEEEEF5),
+            color: _kText,
             fontWeight: FontWeight.w700,
           ),
         ),
         content: Text(
           'Your cart has items from another shop. Clear existing cart to add items from $sellerName?',
-          style: const TextStyle(color: Color(0xFF7777A0)),
+          style: const TextStyle(color: _kMuted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text(
               'Cancel',
-              style: TextStyle(color: Color(0xFF7777A0)),
+              style: TextStyle(color: _kMuted),
             ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF5252),
+              backgroundColor: _kRed,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -436,10 +582,10 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
   Widget _buildCartButton() {
     return FloatingActionButton.extended(
       onPressed: _showCartBottomSheet,
-      backgroundColor: const Color(0xFFFFBB00),
+      backgroundColor: _kPink,
       icon: Stack(
         children: [
-          const Icon(Icons.shopping_cart, color: Colors.black),
+          const Icon(Icons.shopping_cart, color: Colors.white),
           if (_cartItemCount > 0)
             Positioned(
               right: 0,
@@ -447,7 +593,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
               child: Container(
                 padding: const EdgeInsets.all(4),
                 decoration: const BoxDecoration(
-                  color: Color(0xFFFF5252),
+                  color: _kRed,
                   shape: BoxShape.circle,
                 ),
                 child: Text(
@@ -465,7 +611,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
       label: Text(
         '₹${_cart.subtotal.toStringAsFixed(0)}',
         style: const TextStyle(
-          color: Colors.black,
+          color: Colors.white,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -476,7 +622,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
   void _showCartBottomSheet() {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF12121E),
+      backgroundColor: _kBg,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -499,7 +645,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
               'Failed to load products',
               style: GoogleFonts.outfit(
                 fontSize: 16,
-                color: const Color(0xFFEEEEF5),
+                color: _kText,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -526,7 +672,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
                 style: GoogleFonts.outfit(
                   fontSize: 11.5,
                   height: 1.4,
-                  color: const Color(0xFF9A9AB8),
+                  color: _kMuted,
                 ),
               ),
             ],
@@ -555,7 +701,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
               'No products available',
               style: GoogleFonts.outfit(
                 fontSize: 16,
-                color: const Color(0xFFEEEEF5),
+                color: _kText,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -581,31 +727,36 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
 
   // ── Category Config ─────────────────────────────────────────
   _CategoryConfig _getCategoryConfig() {
+    // Aug 20 2026 (Global Food Theme Overhaul): these were dark navy/
+    // near-black per-category banners that clashed with the new pure
+    // white scaffold. Kept the per-category identity via the palette's
+    // theme-independent accent colors (see app_palette.dart), all on a
+    // light theme — food stays brand hot pink.
     switch (widget.category) {
       case Category.food:
         return const _CategoryConfig(
           emoji: '🍔',
-          bgColor: Color(0xFF1E0E0E),
+          bgColor: Color(0xFFFF4FA3),
         );
       case Category.grocery:
         return const _CategoryConfig(
           emoji: '🛒',
-          bgColor: Color(0xFF0A1E0E),
+          bgColor: Color(0xFF00BFA5),
         );
       case Category.tech:
         return const _CategoryConfig(
           emoji: '📱',
-          bgColor: Color(0xFF10102A),
+          bgColor: Color(0xFF7B6FE0),
         );
       case Category.pharmacy:
         return const _CategoryConfig(
           emoji: '💊',
-          bgColor: Color(0xFF1E1008),
+          bgColor: Color(0xFF00C853),
         );
       default:
         return const _CategoryConfig(
           emoji: '🏪',
-          bgColor: Color(0xFF1A1A2A),
+          bgColor: Color(0xFFFF4FA3),
         );
     }
   }
@@ -872,7 +1023,7 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFFEEEEF5),
+                      color: _kText,
                     ),
                   ),
                   const Spacer(),
@@ -894,7 +1045,7 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
                     ? const Center(
                         child: Text(
                           'Your cart is empty',
-                          style: TextStyle(color: Color(0xFF7777A0)),
+                          style: TextStyle(color: _kMuted),
                         ),
                       )
                     : ListView.builder(
@@ -913,7 +1064,7 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
 
               // Checkout Button
               if (items.isNotEmpty) ...[
-                const Divider(color: Color(0xFF7777A0)),
+                const Divider(color: _kBorder),
                 const SizedBox(height: 16),
                 Row(
                   children: [
@@ -921,7 +1072,7 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
                       'Total:',
                       style: TextStyle(
                         fontSize: 16,
-                        color: Color(0xFFEEEEF5),
+                        color: _kText,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -930,7 +1081,7 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
                       '₹${cart.subtotal.toStringAsFixed(2)}',
                       style: GoogleFonts.outfit(
                         fontSize: 20,
-                        color: const Color(0xFFFFBB00),
+                        color: _kPink,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -943,9 +1094,9 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
                   child: ElevatedButton(
                     onPressed: _isPlacingOrder ? null : _checkout,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFFBB00),
+                      backgroundColor: _kPink,
                       disabledBackgroundColor:
-                          const Color(0xFFFFBB00).withValues(alpha: 0.4),
+                          _kPink.withValues(alpha: 0.4),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -955,12 +1106,12 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
                             width: 22,
                             height: 22,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2.5, color: Colors.black,),
+                                strokeWidth: 2.5, color: Colors.white,),
                           )
                         : const Text(
                             'Proceed to Checkout',
                             style: TextStyle(
-                              color: Colors.black,
+                              color: Colors.white,
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
                             ),
@@ -1000,7 +1151,7 @@ class _CartItemTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A2A),
+        color: _kSurface,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -1012,7 +1163,7 @@ class _CartItemTile extends StatelessWidget {
                 Text(
                   item.name,
                   style: const TextStyle(
-                    color: Color(0xFFEEEEF5),
+                    color: _kText,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1020,7 +1171,7 @@ class _CartItemTile extends StatelessWidget {
                 Text(
                   '₹${item.price.toStringAsFixed(0)}',
                   style: const TextStyle(
-                    color: Color(0xFFFFBB00),
+                    color: _kPink,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1033,26 +1184,26 @@ class _CartItemTile extends StatelessWidget {
               IconButton(
                 onPressed: () => onUpdateQty(item.quantity - 1),
                 icon: const Icon(Icons.remove_circle_outline, size: 20),
-                color: const Color(0xFF7777A0),
+                color: _kMuted,
               ),
               Text(
                 '${item.quantity}',
                 style: const TextStyle(
-                  color: Color(0xFFEEEEF5),
+                  color: _kText,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               IconButton(
                 onPressed: () => onUpdateQty(item.quantity + 1),
                 icon: const Icon(Icons.add_circle_outline, size: 20),
-                color: const Color(0xFF7777A0),
+                color: _kMuted,
               ),
             ],
           ),
           IconButton(
             onPressed: onRemove,
             icon: const Icon(Icons.delete_outline, size: 20),
-            color: const Color(0xFFFF5252),
+            color: _kRed,
           ),
         ],
       ),

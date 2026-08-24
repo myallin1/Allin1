@@ -73,16 +73,6 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     `;
 
-    const renderCorePoint = (p) => `
-      <div style="display: flex; gap: 16px; margin-bottom: 20px;">
-        <div style="background: rgba(255, 79, 163, 0.08); width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0;">✨</div>
-        <div>
-          <div style="color: #BE2A7A; font-size: 16px; font-weight: 800; margin-bottom: 6px;">${p.title}</div>
-          <div style="color: #201A22; font-size: 14px; line-height: 1.5;">${p.desc}</div>
-        </div>
-      </div>
-    `;
-
     const renderSolutionRow = (r) => `
       <div style="display: flex; gap: 14px; margin-bottom: 16px; align-items: center;">
         <div style="background: rgba(255, 255, 255, 0.2); width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; color: #fff;">💎</div>
@@ -113,16 +103,9 @@ document.addEventListener('DOMContentLoaded', () => {
         <div style="height: 1px; background: #FFEAF3; margin: 16px 0;"></div>
         <div style="color: #201A22; font-size: 14px; font-weight: 700; margin-bottom: 12px;">5 ஆண்டுகளில் (சந்தை வளர்ச்சியுடன்)</div>
         ${data.fiveYearBuildUp.map(renderYearRow).join('')}
-        <div style="background: rgba(255, 79, 163, 0.1); border-radius: 12px; padding: 14px; display: flex; align-items: center; gap: 12px; margin-top: 12px;">
-          <div style="color: #BE2A7A; font-size: 20px; font-weight: 900;">∑</div>
-          <div style="color: #BE2A7A; font-size: 16px; font-weight: 900;">${data.fiveYearTotal}</div>
+        <div style="background: rgba(255, 79, 163, 0.1); border-radius: 12px; padding: 14px; text-align: center; margin-top: 12px;">
+          <div style="color: #BE2A7A; font-size: 16px; font-weight: 900; line-height: 1.5;">நாம் முயற்சி செய்தால் மக்களிடமே சுமார் ∑ ${data.fiveYearTotal}</div>
         </div>
-      </div>
-
-      <!-- MyAllin1 Promises -->
-      <div style="color: #201A22; font-size: 18px; font-weight: 800; margin-bottom: 12px;">🚀 MyAllin1 உறுதிமொழிகள்</div>
-      <div style="background: #FFFFFF; border-radius: 18px; border: 1.5px solid #FFEAF3; padding: 16px; box-shadow: 0 8px 20px rgba(255, 79, 163, 0.07); margin-bottom: 24px;">
-        ${data.myAllin1CorePoints.map(renderCorePoint).join('')}
       </div>
 
       <!-- Solution Card -->

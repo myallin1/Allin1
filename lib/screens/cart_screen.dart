@@ -15,16 +15,20 @@ import '../providers/cart_provider.dart';
 import '../services/auth_prompt_service.dart';
 import '../services/auth_service.dart';
 
-const Color kSurface = Color(0xFF0D0D18);
-const Color kCard = Color(0xFF141420);
-const Color kCard2 = Color(0xFF1A1A28);
+// ── Theme tokens (Aug 20 2026 — Global Food Theme Overhaul) ─────
+// Recolored from the old dark palette to the brand's pure white +
+// hot pink. This screen is currently UNREACHABLE dead code (see the
+// header comment on CartScreen) but stays brand-consistent.
+const Color kSurface = Color(0xFFF8F8FF);
+const Color kCard = Color(0xFFFFFFFF);
+const Color kCard2 = Color(0xFFF0F0FA);
 const Color kPurple = Color(0xFF7B6FE0);
 const Color kGreen = Color(0xFF3DBA6F);
 const Color kGold = Color(0xFFF5C542);
 const Color kRed = Color(0xFFE05555);
-const Color kText = Color(0xFFEEEEF5);
-const Color kMuted = Color(0xFF7777A0);
-const Color kBorder = Color(0x267B6FE0);
+const Color kText = Color(0xFF1A1A2E);
+const Color kMuted = Color(0xFF9999BB);
+const Color kBorder = Color(0x26FF4FA3);
 
 class CartScreen extends StatefulWidget {
   // ================================================================

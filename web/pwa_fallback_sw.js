@@ -181,66 +181,90 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   // ================================================================
-  // PURE CACHE-FIRST for the big immutable bundles ("Extreme Bandwidth
-  // Caching" — zero-budget escape hatch, Aug 12 2026)
+  // ALWAYS NETWORK-FIRST: /version.json
   // ================================================================
-  // FIX (Aug 11 2026 — Nizam: "app open pannuna 5 to 8 sec white display
-  // va ninnu than open aguthu"): originally fixed with stale-while-
-  // revalidate — serve the cached copy immediately, but still fire a
-  // background fetch every single launch to refresh it for next time.
-  // That solved the white-screen delay, but it means a RETURNING
-  // customer's device still downloads the full ~5.9 MB main.dart.js
-  // (plus fonts/canvaskit) on every single app open, just silently in
-  // the background — real Hosting bandwidth spent for zero visible
-  // benefit on a Spark plan with a hard monthly cap.
+  // FIX (Aug 20 2026 — Zero-bandwidth repeat-open architecture):
+  // version.json is the ONLY file that MUST bypass cache every time.
+  // It is tiny (~200 bytes) and is the "is there an update?" sentinel.
+  // The JS version check in index.html's <head> fetches it once on
+  // every boot with a cache-buster; if the version matches what's
+  // stored in localStorage, every other file is served from cache
+  // (zero bandwidth). If it differs, the JS purges all caches and
+  // reloads once to pick up the fresh deploy.
   //
-  // UPGRADED (Aug 12 2026 — CTO mandate, "Extreme Bandwidth Caching":
-  // "Ensure the PWA Service Worker is aggressively caching... so that
-  // returning users consume absolutely 0 bytes of Firebase Hosting
-  // bandwidth"): now pure cache-first — if a cached copy exists, serve
-  // it and NEVER touch the network for it, full stop. Only a true cache
-  // miss (first-ever visit under this CACHE_VERSION) reaches the
-  // network.
+  // Everything else — including index.html and flutter_bootstrap.js —
+  // is now cache-first (see the isAppShell branch below). This means
+  // returning customers pay ZERO hosting bandwidth between deploys.
+  if (url.pathname === '/version.json' || url.pathname.includes('/version.json')) {
+    // Always go to network; never respond from cache.
+    // Don't even opportunistically cache it — the cache-buster query
+    // string means every version.json fetch has a unique URL anyway.
+    return; // fall through to browser default (network fetch)
+  }
+
+  // ================================================================
+  // PURE CACHE-FIRST: app shell + heavy bundles
+  // ("Zero-Bandwidth Repeat-Open" architecture — Aug 20 2026)
+  // ================================================================
+  // FIX (Aug 12 2026 — CTO mandate): main.dart.js, fonts, canvaskit
+  // were already cache-first. But index.html, flutter_bootstrap.js,
+  // and flutter.js were still in the network-first default branch —
+  // meaning they hit Firebase Hosting on EVERY app open, eating
+  // bandwidth even when nothing changed.
   //
-  // This is safe against ever serving stale JS forever (the exact bug
-  // this file's network-first design originally existed to prevent) for
-  // a reason that did NOT exist when stale-while-revalidate was chosen:
-  // CACHE_VERSION is now stamped "<flavor>-<timestamp>" by
-  // deploy_web.ps1 on every single deploy (see the CACHE_VERSION
-  // comment above), so a real redeploy always gets a brand-new, empty
-  // cache — there is nothing to cache-first-serve stale bytes FROM.
-  // Every redeploy still forces exactly one fresh download per file,
-  // same as before; only the "N background refreshes between deploys"
-  // cost is what's being eliminated here.
+  // FIX (Aug 20 2026 — Nizam: "ovvoru time pwa open pannumbothu
+  // hosting la irunthu download pannuchuna namma hosting bandwith
+  // theenthurum"): Extend the cache-first guard to ALL same-origin
+  // app-shell files. The update detection now works through a JS check
+  // in index.html's <head> that fetches ONLY /version.json (tiny,
+  // ~200 bytes) with a cache-buster. If version matches -> 100% cache.
+  // If version differs -> purge all caches + reload once. So:
+  //   - No update between deploys  -> ZERO hosting bytes for the shell
+  //   - Update deployed            -> ONE fresh download (same as before)
   //
-  // Deliberately scoped to the heavy, content-addressed bundles only.
-  // index.html and version.json stay network-first below (see the fetch
-  // handler's default branch), so web_version_checker.dart's update
-  // DETECTION is completely unaffected by this change.
-  const isHeavyBundle =
+  // CACHE_VERSION is stamped per-flavor per-deploy by deploy_web.ps1,
+  // so a new deploy always starts with an empty cache on activate().
+  // There is nothing stale to serve; stale-forever can only happen when
+  // the same cache name persists across deploys, which it no longer does.
+  const isAppShell =
+    url.pathname === '/' ||
+    url.pathname === '/index.html' ||
+    url.pathname.endsWith('/flutter_bootstrap.js') ||
+    url.pathname.endsWith('/flutter.js') ||
     url.pathname.endsWith('/main.dart.js') ||
+    url.pathname.endsWith('/manifest.json') ||
+    url.pathname.endsWith('/favicon.png') ||
     url.pathname.endsWith('.otf') ||
     url.pathname.endsWith('.ttf') ||
     url.pathname.includes('/canvaskit/');
 
-  if (isHeavyBundle) {
+  if (isAppShell) {
     event.respondWith(
       caches.match(req).then((cached) => {
         if (cached) {
-          // Cache hit — the whole point of this branch. Zero bytes over
-          // the network for this file on this launch.
+          // Cache hit — zero bytes over the network for this launch.
           return cached;
         }
-        // Cache miss — first time this exact file has been requested
-        // under the current CACHE_VERSION (fresh install, or the first
-        // launch right after a redeploy). Fetch once and cache it so
-        // every subsequent launch until the next deploy is a pure hit.
+        // Cache miss — fresh install or first launch after a redeploy
+        // (deploy_web.ps1 stamped a new CACHE_VERSION, activate()
+        // deleted the old one, so we're starting clean). Fetch once
+        // and populate the cache for every subsequent launch.
         return fetch(req).then((res) => {
           if (res && res.status === 200) {
             const clone = res.clone();
             caches.open(CACHE_VERSION).then((cache) => cache.put(req, clone));
           }
           return res;
+        }).catch(() => {
+          // Offline and not yet cached (should be rare — precache in
+          // install() covers the critical shell files). For navigation
+          // requests fall back to the root shell so the app opens at all.
+          if (req.mode === 'navigate') {
+            return caches.match('/').then((shell) =>
+              shell || new Response('', { status: 504, statusText: 'Offline' })
+            );
+          }
+          return new Response('', { status: 504, statusText: 'Offline' });
         });
       })
     );

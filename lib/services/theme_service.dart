@@ -581,6 +581,12 @@ class ThemeService extends ChangeNotifier {
 
   String get themeKey => _themeKey;
 
+  static const String _iconPrefsKey = 'customer_icon_theme_key';
+  
+  // User requested 'pink_white_3d' to be the default icon theme
+  String _iconThemeKey = 'pink_white_3d';
+  String get iconThemeKey => _iconThemeKey;
+
   String get themeLabel {
     switch (_themeKey) {
       case 'dark_purple':
@@ -627,6 +633,18 @@ class ThemeService extends ChangeNotifier {
     await prefs.setString(_prefsKey, _themeKey);
   }
 
+  Future<void> setIconTheme(String iconThemeKey) async {
+    if (iconThemeKey == _iconThemeKey) {
+      return;
+    }
+
+    _iconThemeKey = iconThemeKey;
+    notifyListeners();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_iconPrefsKey, _iconThemeKey);
+  }
+
   Future<void> _loadTheme() async {
     final prefs = await SharedPreferences.getInstance();
     final savedTheme = prefs.getString(_prefsKey);
@@ -644,10 +662,16 @@ class ThemeService extends ChangeNotifier {
     };
 
     if (resolved == _themeKey) {
-      return;
+      // Don't return early; we still need to load icon theme
+    } else {
+      _themeKey = resolved;
+    }
+    
+    final savedIconTheme = prefs.getString(_iconPrefsKey);
+    if (savedIconTheme != null) {
+      _iconThemeKey = savedIconTheme;
     }
 
-    _themeKey = resolved;
     notifyListeners();
   }
 }

@@ -16,7 +16,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 // annotation type resolves the ambiguity without touching the app's
 // own Category enum or any of its ~dozens of call sites.
 import 'package:flutter/foundation.dart' hide Category;
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Category;
 import 'package:flutter/services.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:hive_flutter/hive_flutter.dart';

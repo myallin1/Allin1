@@ -1,7 +1,7 @@
 ﻿name: erode_superapp
 description: Erode All-in-One Super App - Multi-vendor Commerce MVP by NJ TECH
 publish_to: 'none'
-version: 1.0.9+239
+version: 1.0.9+252
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -254,6 +254,11 @@ flutter:
     # yellow_car.png already lived in it — the Taxi row's yellow car
     # would have silently failed to load in a release build.
     - assets/images/taxi_slides/
+    # Pink icon theme (Aug 24 2026) — ThemeService.iconThemeKey ==
+    # 'pink_white_3d' vehicle icons, referenced from dashboard_screen.dart.
+    # Same non-recursion trap as taxi_slides/ above, so this needs its
+    # own explicit line.
+    - assets/images/pink_icons/
     # Hero Booking mega-card photo slider (Aug 19 2026) — the 3D
     # delivery-partner renders.
     - assets/images/hero_slides/

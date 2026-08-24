@@ -11,6 +11,15 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:erode_superapp/services/cloudinary_upload_service.dart';
 import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
+// ── Brand palette (Aug 20 2026 — Global Food Theme Overhaul) ───────
+// Recolored from the old dark card (0xFF1A1A2A) to match the seller
+// shop menu's new 'Pure White + Vibrant Hot Pink' theme.
+const Color _kPink = Color(0xFFFF4FA3);
+const Color _kSurface = Color(0xFFF8F8FF);
+const Color _kCard2 = Color(0xFFF0F0FA);
+const Color _kText = Color(0xFF1A1A2E);
+const Color _kMuted = Color(0xFF9999BB);
+
 class ProductCard extends StatelessWidget {
   final Map<String, dynamic> product;
   final VoidCallback onAddToCart;
@@ -78,10 +87,10 @@ class ProductCard extends StatelessWidget {
       onTap: onAddToCart,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A2A),
+          color: _kSurface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: const Color(0xFFFFBB00).withValues(alpha: 0.2),
+            color: _kPink.withValues(alpha: 0.25),
           ),
         ),
         child: Column(
@@ -92,7 +101,7 @@ class ProductCard extends StatelessWidget {
               child: Container(
                 width: double.infinity,
                 decoration: const BoxDecoration(
-                  color: Color(0xFF12121E),
+                  color: _kCard2,
                   borderRadius: BorderRadius.vertical(
                     top: Radius.circular(14),
                   ),
@@ -126,7 +135,7 @@ class ProductCard extends StatelessWidget {
                     style: GoogleFonts.outfit(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: const Color(0xFFEEEEF5),
+                      color: _kText,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -139,7 +148,7 @@ class ProductCard extends StatelessWidget {
                       unit,
                       style: GoogleFonts.outfit(
                         fontSize: 10,
-                        color: const Color(0xFF7777A0),
+                        color: _kMuted,
                       ),
                     ),
                   const SizedBox(height: 6),
@@ -162,7 +171,7 @@ class ProductCard extends StatelessWidget {
                                 '₹${offerPrice!.toStringAsFixed(0)}',
                                 style: GoogleFonts.outfit(
                                   fontSize: 14,
-                                  color: const Color(0xFFFFBB00),
+                                  color: _kPink,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -173,7 +182,7 @@ class ProductCard extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                   style: GoogleFonts.outfit(
                                     fontSize: 11,
-                                    color: Colors.white38,
+                                    color: _kMuted,
                                     decoration: TextDecoration.lineThrough,
                                   ),
                                 ),
@@ -186,20 +195,20 @@ class ProductCard extends StatelessWidget {
                           '₹${price.toStringAsFixed(0)}',
                           style: GoogleFonts.outfit(
                             fontSize: 14,
-                            color: const Color(0xFFFFBB00),
+                            color: _kPink,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
                       Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFFBB00),
+                          color: _kPink,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Icon(
                           Icons.add,
                           size: 14,
-                          color: Colors.black,
+                          color: Colors.white,
                         ),
                       ),
                     ],

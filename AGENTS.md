@@ -255,6 +255,27 @@ have to re-derive them from source:
   clears them), so it just works the same way approving a fresh
   submission does.
 
+- **`custom_hotel_orders` now has a `firestore.rules` block (Aug 20
+  2026)** — it previously had NONE, so every write silently hit the
+  catch-all `if false` deny and the custom-hotel checkout died with
+  permission-denied before `createServiceRequest` was ever called.
+  Contract: create = `isRealUser()` with matching `customerId` (or
+  admin); read = ordering customer / owning seller (`sellerId`) / admin;
+  update = customer may ONLY merge `serviceRequestId`+`updatedAt` via a
+  `hasOnly()` pin (linkServiceRequest), seller/admin may update; delete
+  = admin only. If `CustomHotelService` ever writes new fields on
+  create/update, re-check this block.
+
+- **Custom-food menus render ONLY inside the seller's own shop page
+  (Aug 20 2026)** — the duplicated global "Custom Hotels" grids in
+  `food_hub_screen.dart` and `custom_food_order_screen.dart` were
+  removed. A seller's `custom_hotels/{sellerId}/items` are now surfaced
+  exclusively through `seller_detail_screen.dart`'s "Custom Menu" card
+  (which opens `CustomHotelViewScreen` for that one seller). If you add
+  a new customer-facing entry to `custom_hotels` data, it must go
+  through the seller's own menu — do NOT reintroduce a global
+  custom-hotel grid.
+
 ## 11. Closeout & Verification Protocol
 
 1. Run `flutter analyze` and ensure ZERO errors.

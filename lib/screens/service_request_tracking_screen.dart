@@ -17,6 +17,7 @@ import '../models/service_request_model.dart';
 import '../services/service_request_service.dart';
 import '../utils/service_request_labels.dart';
 import '../widgets/delivery_challan_card.dart';
+import '../widgets/estimate_approval_card.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
 const Color _kBg = Color(0xFFFFFFFF);
@@ -130,6 +131,22 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 DeliveryChallanCard(request: requestModel),
+                // FIX (Aug 20 2026 audit HIGH-3 — estimate deadlock):
+                // the hero's "Start" action is gated on
+                // estimateApprovedByCustomer == true (see
+                // _ServiceRequestStatusCard in hero_home_screen.dart),
+                // but the ONLY customer approve/negotiate UI lived in
+                // hero_booking_tracking_screen.dart — so food/grocery
+                // orders tracking here deadlocked at 'hero_assigned'
+                // forever. Show the shared EstimateApprovalCard whenever
+                // an unapproved estimate is outstanding.
+                if (requestModel.status == 'hero_assigned' &&
+                    requestModel.estimatedAmount != null &&
+                    requestModel.estimateApprovedByCustomer != true)
+                  EstimateApprovalCard(
+                    requestId: requestModel.requestId,
+                    amount: requestModel.estimatedAmount!.toDouble(),
+                  ),
                 if (isAdminReview)
                   Container(
                     width: double.infinity,

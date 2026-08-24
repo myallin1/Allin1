@@ -319,7 +319,9 @@ class HeroRideNotificationService {
         priority: Priority.max,
         category: AndroidNotificationCategory.call,
         visibility: NotificationVisibility.public,
-        fullScreenIntent: true,
+        // FIX (Aug 20 2026): fullScreenIntent caused the phone to lock/freeze
+        // on the notification screen and disturb the user. Changed to false.
+        fullScreenIntent: false,
         ongoing: showDetails,
         autoCancel: !showDetails,
         // FIX (Nizam's "notification icon namma pink theme ku maathu"):

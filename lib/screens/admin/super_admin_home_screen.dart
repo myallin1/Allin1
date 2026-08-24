@@ -16,6 +16,7 @@ import '../../services/pwa_cache_platform_stub.dart'
     if (dart.library.html) '../../services/pwa_cache_platform_web.dart';
 import '../../services/service_requests_listener.dart';
 import '../../services/web_version_checker.dart';
+import '../../services/map_simulation_service.dart';
 import '../../widgets/download_app_banner.dart';
 import 'admin_ai_settings_screen.dart';
 import 'admin_cloudinary_dashboard_screen.dart';
@@ -1177,6 +1178,60 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                   ),
                 );
               },
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.layers_rounded, color: Color(0xFFB21FFF), size: 20),
+                      SizedBox(width: 12),
+                      Text('Map View Filters', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Local simulation controls for demo purposes',
+                      style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.public_rounded, color: Color(0xFF4CAF50), size: 16),
+                    ),
+                    title: const Text('Live Map Simulation', style: TextStyle(color: _text, fontSize: 13, fontWeight: FontWeight.w600)),
+                    subtitle: Text('Default traffic mode', style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11)),
+                    onTap: () {
+                      MapSimulationService.instance.start(density: SimulationDensity.normal);
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Simulation Started: Normal'), backgroundColor: Color(0xFF4CAF50)));
+                    },
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF9800).withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.two_wheeler_rounded, color: Color(0xFFFF9800), size: 16),
+                    ),
+                    title: const Text('4 Bikes & 3 Parcels', style: TextStyle(color: _text, fontSize: 13, fontWeight: FontWeight.w600)),
+                    subtitle: Text('Custom filter mode', style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11)),
+                    onTap: () {
+                      MapSimulationService.instance.start(density: SimulationDensity.custom4B3P);
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Simulation Started: Custom'), backgroundColor: Color(0xFFFF9800)));
+                    },
+                  ),
+                  const Divider(color: Color(0xFF262636), height: 32),
+                ],
+              ),
             ),
             ListTile(
               leading: const Icon(Icons.logout_rounded, color: Color(0xFFFF5252)),

@@ -73,6 +73,8 @@ class DownloadAppBanner extends StatelessWidget {
                       t('drawer_download_app_subtitle'),
                       style: const TextStyle(color: Colors.white70, fontSize: 10),
                     ),
+                    const SizedBox(height: 4),
+                    const _FlashingWarningText(text: 'Turbo apps not in playstore'),
                   ],
                 ),
               ),
@@ -137,6 +139,49 @@ class DownloadAppBanner extends StatelessWidget {
             child: Text(t('close_label'), style: const TextStyle(color: Colors.white38)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FlashingWarningText extends StatefulWidget {
+  final String text;
+  const _FlashingWarningText({required this.text});
+
+  @override
+  State<_FlashingWarningText> createState() => _FlashingWarningTextState();
+}
+
+class _FlashingWarningTextState extends State<_FlashingWarningText> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    // 600ms blink duration
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 600))
+      ..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _controller,
+      child: Text(
+        widget.text,
+        style: GoogleFonts.outfit(
+          // Use an amber color that pops nicely against the purple background
+          color: const Color(0xFFFFD700),
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.2,
+        ),
       ),
     );
   }

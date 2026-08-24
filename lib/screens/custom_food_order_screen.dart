@@ -30,10 +30,8 @@ import '../services/service_request_service.dart';
 import '../utils/service_request_labels.dart';
 import '../widgets/quick_order_line_items.dart';
 import '../services/auth_service.dart';
-import '../services/custom_hotel_service.dart';
 import '../widgets/server_busy_dialog.dart';
 import 'category_screen.dart';
-import 'custom_hotel_view_screen.dart';
 import 'food_order_status_screen.dart';
 import 'location_picker_screen.dart';
 import 'partner_shop_order_screen.dart';
@@ -506,8 +504,6 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
           const SizedBox(height: 4),
           Text('Tap to view live menu or order online', style: GoogleFonts.outfit(color: kMuted, fontSize: 12)),
           const SizedBox(height: 14),
-          const _CustomHotelsSection(),
-          const SizedBox(height: 14),
           GridView.count(
             key: const Key('food_hub_partner_shops_grid'),
             crossAxisCount: 2,
@@ -953,53 +949,6 @@ class _SidebarIcon extends StatelessWidget {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<FoodSubCategory>('category', category));
     properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
-  }
-}
-
-class _CustomHotelsSection extends StatelessWidget {
-  const _CustomHotelsSection();
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: CustomHotelService().openHotelsStream(),
-      builder: (context, snap) {
-        final docs = snap.data?.docs ?? const [];
-        if (docs.isEmpty) return const SizedBox.shrink();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 14,
-              mainAxisSpacing: 14,
-              childAspectRatio: 1.35,
-              children: docs.map((doc) {
-                final data = doc.data();
-                final name = (data['hotelName'] as String?)?.trim();
-                return _HubTile(
-                  label: (name == null || name.isEmpty) ? 'Custom Hotel' : name,
-                  subtitle: 'Tap to view live menu',
-                  icon: Icons.storefront_rounded,
-                  gradient: const [Color(0xFF11998E), Color(0xFF38EF7D)],
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => CustomHotelViewScreen(
-                        hotelId: doc.id,
-                        hotelName: (name == null || name.isEmpty) ? 'Custom Hotel' : name,
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
-        );
-      },
-    );
   }
 }
 

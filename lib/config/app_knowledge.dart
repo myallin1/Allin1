@@ -5,7 +5,7 @@
 // Editing this by hand will work until the next deploy and
 // then be silently overwritten. Change the GENERATOR instead.
 //
-// Generated: 2026-08-19T11:54:17.832648Z
+// Generated: 2026-08-21T15:49:51.234568Z
 // ignore_for_file: lines_longer_than_80_chars
 
 /// Machine-generated description of this app, injected into
@@ -14,8 +14,8 @@
 class AppKnowledge {
   AppKnowledge._();
 
-  static const String version = '1.0.9+239';
-  static const String generatedAt = '2026-08-19T11:54:17.832648Z';
+  static const String version = '1.0.9+252';
+  static const String generatedAt = '2026-08-21T15:49:51.234568Z';
 
   /// Firestore collections this codebase actually reads/writes.
   static const List<String> firestoreCollections = <String>[

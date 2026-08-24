@@ -10,6 +10,14 @@ import 'package:google_fonts/google_fonts.dart';
 import '../screens/seller_detail_screen.dart';
 import '../services/category_gateway_service.dart';
 
+// ── Brand palette (Aug 20 2026 — Global Food Theme Overhaul) ───────
+// Shop cards were dark (0xFF1A1A2A) — recolored for the white/pink
+// category screen; food accent switched from red to hot pink.
+const Color _kPink = Color(0xFFFF4FA3);
+const Color _kSurface = Color(0xFFF8F8FF);
+const Color _kText = Color(0xFF1A1A2E);
+const Color _kMuted = Color(0xFF9999BB);
+
 class SellerCard extends StatelessWidget {
   final Map<String, dynamic> seller;
   final Category category;
@@ -62,7 +70,7 @@ class SellerCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A2A),
+          color: _kSurface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: config.primaryColor.withValues(alpha: 0.3),
@@ -109,7 +117,7 @@ class SellerCard extends StatelessWidget {
                           style: GoogleFonts.outfit(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
-                            color: const Color(0xFFEEEEF5),
+                            color: _kText,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -130,7 +138,7 @@ class SellerCard extends StatelessWidget {
                         _getRating(),
                         style: GoogleFonts.outfit(
                           fontSize: 12,
-                          color: const Color(0xFFEEEEF5),
+                          color: _kText,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -139,7 +147,7 @@ class SellerCard extends StatelessWidget {
                         '•',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Color(0xFF7777A0),
+                          color: _kMuted,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -148,7 +156,7 @@ class SellerCard extends StatelessWidget {
                           metadata,
                           style: GoogleFonts.outfit(
                             fontSize: 11,
-                            color: const Color(0xFF7777A0),
+                            color: _kMuted,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -164,7 +172,7 @@ class SellerCard extends StatelessWidget {
             const Icon(
               Icons.arrow_forward_ios,
               size: 14,
-              color: Color(0xFF7777A0),
+              color: _kMuted,
             ),
           ],
         ),
@@ -177,7 +185,7 @@ class SellerCard extends StatelessWidget {
     switch (category) {
       case Category.food:
         return const _SellerCardConfig(
-          primaryColor: Color(0xFFFF5252),
+          primaryColor: Color(0xFFFF4FA3),
         );
       case Category.grocery:
         return const _SellerCardConfig(

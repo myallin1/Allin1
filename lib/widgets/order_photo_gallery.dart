@@ -50,11 +50,11 @@ class OrderPhotoGallery extends StatelessWidget {
         if (label != null) ...[
           Row(
             children: [
-              const Icon(Icons.photo_library_outlined, size: 15, color: Color(0xFF7777A0)),
+              const Icon(Icons.photo_library_outlined, size: 15, color: Color(0xFF9999BB)),
               const SizedBox(width: 5),
               Text(
                 label!,
-                style: const TextStyle(color: Color(0xFF7777A0), fontSize: 12, fontWeight: FontWeight.w700),
+                style: const TextStyle(color: Color(0xFF9999BB), fontSize: 12, fontWeight: FontWeight.w700),
               ),
             ],
           ),
@@ -97,8 +97,8 @@ class OrderPhotoGallery extends StatelessWidget {
                   errorWidget: Container(
                     width: thumbnailSize,
                     height: thumbnailSize,
-                    color: const Color(0xFF1A1A2E),
-                    child: const Icon(Icons.broken_image_outlined, color: Color(0xFF7777A0), size: 20),
+                    color: const Color(0xFFF0F0FA),
+                    child: const Icon(Icons.broken_image_outlined, color: Color(0xFF9999BB), size: 20),
                   ),
                 ),
               ),

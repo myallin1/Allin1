@@ -18,10 +18,11 @@ import 'package:latlong2/latlong.dart';
 
 import '../widgets/allin1_map_widget.dart' show MapMarker;
 import '../config/ride_catalog.dart';
+import 'osm_provider.dart';
 
 
 // 1. Road-Constrained Movement: Predefined Erode main roads
-const List<List<LatLng>> _erodeTrafficLoops = <List<LatLng>>[
+List<List<LatLng>> _erodeTrafficLoops = <List<LatLng>>[
   // Perundurai Road
   <LatLng>[
     LatLng(11.3195, 77.6830),
@@ -57,7 +58,7 @@ const List<List<LatLng>> _erodeTrafficLoops = <List<LatLng>>[
 ];
 
 // 3. Outskirts Lorries (Spread out) on Ring Road
-const List<List<LatLng>> _outskirtsTrafficLoops = <List<LatLng>>[
+List<List<LatLng>> _outskirtsTrafficLoops = <List<LatLng>>[
   <LatLng>[
     LatLng(11.2900, 77.7000),
     LatLng(11.3000, 77.7300),
@@ -232,11 +233,12 @@ class _DummyVehicleState {
       if (_stateTicksLeft <= 0) {
         motionState = _VehicleMotionState.moving;
         _pickMovingDuration();
-        // Chance to "turn" onto a different connected road segment
-        if (!isOutskirts && _random.nextDouble() < 0.35) {
+        // Teleport to a new road segment simulating a brand new trip
+        // Only if it was resting because it reached the end of the road
+        if (!isOutskirts && (progress >= 1.0 || progress <= 0.0)) {
           loopIndex = _random.nextInt(_erodeTrafficLoops.length);
           direction = _random.nextBool() ? 1 : -1;
-          progress = direction == 1 ? 0 : 1;
+          progress = direction == 1 ? 0.0 : 1.0;
         }
       }
       return;
@@ -246,18 +248,21 @@ class _DummyVehicleState {
     if (_stateTicksLeft <= 0) {
       _pickRestingDuration();
     }
+    
     if (isOutskirts) {
       // Loop seamlessly for ring roads
       if (progress >= 1) progress -= 1;
       if (progress < 0) progress += 1;
     } else {
-      // Bounce back and forth for city roads
-      if (progress >= 1) {
-        progress = 1;
-        direction = -1;
-      } else if (progress <= 0) {
-        progress = 0;
-        direction = 1;
+      // End of road -> complete trip and start new one
+      if (progress >= 1.0) {
+        progress = 1.0;
+        motionState = _VehicleMotionState.working;
+        _stateTicksLeft = 8 + _random.nextInt(15);
+      } else if (progress <= 0.0) {
+        progress = 0.0;
+        motionState = _VehicleMotionState.working;
+        _stateTicksLeft = 8 + _random.nextInt(15);
       }
     }
   }
@@ -316,8 +321,8 @@ class _HeroAvatarState {
     stateTicksLeft--;
     if (stateTicksLeft <= 0) {
       _pickNewState();
-      // Chance to turn at a junction when starting to travel
-      if (state == HeroState.traveling && _random.nextDouble() < 0.4) {
+      // Start new trip somewhere else if it reached the end
+      if (state == HeroState.traveling && (progress >= 1.0 || progress <= 0.0)) {
         loopIndex = _random.nextInt(_erodeTrafficLoops.length);
         direction = _random.nextBool() ? 1 : -1;
         progress = direction == 1 ? 0.0 : 1.0;
@@ -328,16 +333,18 @@ class _HeroAvatarState {
       progress += direction * speedStep;
       if (progress >= 1.0) {
         progress = 1.0;
-        direction = -1;
+        state = HeroState.working;
+        stateTicksLeft = 10 + _random.nextInt(20);
       } else if (progress <= 0.0) {
         progress = 0.0;
-        direction = 1;
+        state = HeroState.working;
+        stateTicksLeft = 10 + _random.nextInt(20);
       }
     }
   }
 }
 
-enum SimulationDensity { normal, busy, peak }
+enum SimulationDensity { normal, busy, peak, custom4B3P }
 
 class MapSimulationService extends ChangeNotifier {
   MapSimulationService._internal();
@@ -357,14 +364,53 @@ class MapSimulationService extends ChangeNotifier {
   List<MapMarker> _simulatedMarkers = [];
   List<MapMarker> get simulatedMarkers => _simulatedMarkers;
 
+  bool _isEnriched = false;
+
+  Future<void> _enrichLoopsWithRoads() async {
+    final provider = OSMProvider();
+    
+    Future<List<LatLng>> enrichLoop(List<LatLng> loop) async {
+      List<LatLng> enriched = [];
+      for (int i = 0; i < loop.length - 1; i++) {
+        final route = await provider.getRoute(loop[i], loop[i+1]);
+        if (route != null && route.points.isNotEmpty) {
+          enriched.addAll(route.points);
+        } else {
+          enriched.add(loop[i]);
+          enriched.add(loop[i+1]);
+        }
+      }
+      return enriched.isEmpty ? loop : enriched;
+    }
+
+    final newErode = <List<LatLng>>[];
+    for (final loop in _erodeTrafficLoops) {
+      newErode.add(await enrichLoop(loop));
+    }
+    _erodeTrafficLoops = newErode;
+
+    final newOutskirts = <List<LatLng>>[];
+    for (final loop in _outskirtsTrafficLoops) {
+      newOutskirts.add(await enrichLoop(loop));
+    }
+    _outskirtsTrafficLoops = newOutskirts;
+
+    _isEnriched = true;
+  }
+
   /// Manual control ONLY — called by admin_map_simulation_screen.dart's
   /// toggle switch. Nothing else in the app may call this.
-  void start({SimulationDensity density = SimulationDensity.normal}) {
+  Future<void> start({SimulationDensity density = SimulationDensity.normal}) async {
     if (_isActive && _currentDensity == density) return;
     if (_isActive) {
       _stopSimulation(); // Restart with new density
     }
     _currentDensity = density;
+    
+    if (!_isEnriched) {
+      await _enrichLoopsWithRoads();
+    }
+    
     _startSimulation();
   }
 
@@ -385,6 +431,8 @@ class MapSimulationService extends ChangeNotifier {
     int truckCount = 1;
     int lorryCount = 1;
     int heroCount = 0;
+
+    int parcelCount = 0;
 
     switch (_currentDensity) {
       case SimulationDensity.normal:
@@ -411,6 +459,15 @@ class MapSimulationService extends ChangeNotifier {
         lorryCount = 8;
         heroCount = 10;
         break;
+      case SimulationDensity.custom4B3P:
+        bikeCount = 4;
+        autoCount = 0;
+        cabCount = 0;
+        truckCount = 0;
+        lorryCount = 0;
+        heroCount = 0;
+        parcelCount = 3;
+        break;
     }
 
     final trafficMix = <String, int>{
@@ -418,6 +475,7 @@ class MapSimulationService extends ChangeNotifier {
       'auto': autoCount,
       'cab': cabCount,
       'mini_truck': truckCount,
+      'parcel': parcelCount,
     };
 
     // 2. Vehicle Spacing & Crossing Paths

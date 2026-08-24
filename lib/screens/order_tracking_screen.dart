@@ -9,13 +9,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-const _kBg     = Color(0xFF0C0A14);
-const _kCard   = Color(0xFF1C1929);
+// ── Theme tokens (Aug 20 2026 — Global Food Theme Overhaul) ─────
+// Recolored from the old dark navy palette to the brand's pure
+// white + hot pink. This screen is currently unreachable dead code
+// (see its header), but stays brand-consistent if ever re-wired.
+const _kBg     = Color(0xFFFFFFFF);
+const _kCard   = Color(0xFFF8F8FF);
 const _kPink   = Color(0xFFFF4FA3);
 const _kPinkD  = Color(0xFFBE2A7A);
-const _kText   = Color(0xFFFFFFFF);
-const _kMuted  = Color(0xFF7A7890);
-const _kBorder = Color(0xFF2E2845);
+const _kText   = Color(0xFF1A1A2E);
+const _kMuted  = Color(0xFF9999BB);
+const _kBorder = Color(0xFFEEEEF5);
 
 class CartItem {
   final String name;
@@ -223,14 +227,19 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
               Text(
                 assigned ? 'Hero Assigned! 🎉' : 'Order Confirmed ✅',
                 style: GoogleFonts.outfit(
-                    color: _kText, fontSize: 16, fontWeight: FontWeight.w800,),
+                    color: assigned ? Colors.white : _kText,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,),
               ),
               const SizedBox(height: 3),
               Text(
                 assigned
                     ? '${heroName ?? 'Your Hero'} is on the way!'
                     : 'Waiting for a Parcel Hero to accept…',
-                style: GoogleFonts.outfit(color: _kMuted, fontSize: 12),
+                style: GoogleFonts.outfit(
+                    color: assigned ? Colors.white.withValues(alpha: 0.85) : _kMuted,
+                    fontSize: 12,
+                ),
               ),
             ],),
           ),

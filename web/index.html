@@ -65,6 +65,164 @@
       });
     })();
   </script>
+
+  <!-- ================================================================
+       PWA BOOT-TIME VERSION CHECK — MUST STAY IN <head>, AFTER THE
+       REPEAT-VISIT LATCH ABOVE
+       ================================================================
+       FIX (Aug 20 2026 — Nizam: "ovvoru time pwa open pannumbothu
+       hosting la irunthu download pannuchuna namma hosting bandwith
+       theenthurum"):
+
+       WHAT THIS DOES:
+       On every app open (repeat visit only — first visit is a fresh
+       download anyway), this block fires BEFORE Flutter boots:
+
+         1. Fetch /version.json with a cache-buster (~200 bytes, no-cache).
+            This is the ONLY file that ever touches Firebase Hosting on a
+            repeat open. Everything else (index.html, flutter_bootstrap.js,
+            main.dart.js, fonts, canvaskit) is now served 100% from the
+            Service Worker cache — see pwa_fallback_sw.js's isAppShell guard.
+
+         2. If the fetched version matches what was stored in localStorage
+            on the previous open — NO update, NO network traffic, flutter
+            boots straight from cache. Total Firebase Hosting bytes: ~200.
+
+         3. If the fetched version is DIFFERENT — a new deploy happened.
+            Show "Updating app..." on the splash screen, purge all SW
+            caches, then do ONE window.location.reload(). That reload fetches
+            the fresh build (the SW cache was just cleared, so it's a real
+            network fetch). After that reload the version is stored and
+            subsequent opens are back to pure cache.
+
+       WHY ONLY version.json AND NOT index.html:
+       The previous design (network-first for index.html) was correct as
+       an update-detection mechanism, but it cost a full index.html
+       (~67KB) download on every single open. version.json is ~200 bytes
+       and contains exactly the same information needed to decide whether
+       a reload is warranted. This replaces that network hit with a ~330x
+       smaller one, while achieving the exact same result.
+
+       NOTE: This block runs on EVERY open (first-visit OR repeat) but
+       the cache-purge + reload branch only fires when the version actually
+       changes. First-visit: version stored, no reload. Repeat-visit same
+       version: no reload. Repeat-visit new version: update splash + reload.
+  ================================================================ -->
+  <script>
+    (function () {
+      var A1_VERSION_KEY = 'allin1_web_build_version';
+      var A1_UPDATING_KEY = 'allin1_web_updating';
+
+      // ── Helper: update the splash status text if the element exists ──
+      function setSplashStatus(msg) {
+        try {
+          var el = document.querySelector('.splash-status');
+          if (el) el.textContent = msg;
+        } catch (e) {}
+      }
+
+      // ── If we just did an update-reload, clear the flag and done ──
+      // (This open IS the fresh load after a cache purge.)
+      try {
+        if (sessionStorage.getItem(A1_UPDATING_KEY) === '1') {
+          sessionStorage.removeItem(A1_UPDATING_KEY);
+          // Store the version we're now running (fetched on the previous
+          // open, stored before the reload) so the next open compares correctly.
+          // Nothing else to do — SW install() will repopulate the cache as
+          // files are fetched by Flutter bootstrap.
+          return;
+        }
+      } catch (e) {}
+
+      // ── Fetch version.json in the background (non-blocking) ──
+      // We kick this off immediately in <head> so the HTTP round-trip
+      // overlaps with HTML parsing. By the time Flutter finishes booting
+      // (hundreds of ms later), the result is almost always ready.
+      var isLocalhost =
+        location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      if (isLocalhost) return; // dev builds: skip entirely
+
+      try {
+        var storedVersion = localStorage.getItem(A1_VERSION_KEY);
+
+        fetch('/version.json?t=' + Date.now(), {
+          cache: 'no-store',
+          headers: { 'cache-control': 'no-cache' }
+        })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (body) {
+            if (!body) return;
+            var build   = (body['build_number'] || '').toString();
+            var version = (body['version']       || '').toString();
+            if (!build && !version) return;
+            var current = version + '+' + build;
+
+            // Store for future opens (even first visit — baseline).
+            try { localStorage.setItem(A1_VERSION_KEY, current); } catch (e) {}
+
+            if (!storedVersion) {
+              // First-ever visit or localStorage was cleared. Treat as
+              // up-to-date; no reload needed.
+              return;
+            }
+
+            if (current === storedVersion) {
+              // Same version — 100% cache, nothing to do.
+              return;
+            }
+
+            // ── NEW VERSION DETECTED ─────────────────────────────────
+            // Show update message on splash immediately.
+            setSplashStatus('⬆️ Updating Allin1...');
+            try { document.documentElement.classList.add('a1-updating'); } catch(e) {}
+
+            // Prevent the existing flutter-first-frame listener from
+            // hiding the splash before the reload happens.
+            window.__a1Updating = true;
+
+            // Purge all SW caches so the reload fetches fresh files.
+            var purge = (typeof caches !== 'undefined' && caches.keys)
+              ? caches.keys().then(function (keys) {
+                  return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+                })
+              : Promise.resolve();
+
+            // Also unregister/re-register the SW so it installs fresh.
+            var swPurge = ('serviceWorker' in navigator)
+              ? navigator.serviceWorker.getRegistrations().then(function (regs) {
+                  return Promise.all(regs
+                    .filter(function (r) {
+                      var u = (r.active || r.waiting || r.installing || {}).scriptURL || '';
+                      // Keep firebase-messaging-sw.js — it handles push, not caching.
+                      return !u.endsWith('/firebase-messaging-sw.js');
+                    })
+                    .map(function (r) { return r.unregister(); })
+                  );
+                })
+              : Promise.resolve();
+
+            Promise.all([purge, swPurge]).then(function () {
+              // Mark so the NEXT boot (the one after reload) knows it
+              // is the fresh load and skips the version-check block.
+              try { sessionStorage.setItem(A1_UPDATING_KEY, '1'); } catch (e) {}
+              // Brief pause so the user sees the "Updating..." message.
+              setTimeout(function () { window.location.reload(); }, 800);
+            }).catch(function () {
+              // Cache purge failed (shouldn't happen, but be safe).
+              try { sessionStorage.setItem(A1_UPDATING_KEY, '1'); } catch (e) {}
+              setTimeout(function () { window.location.reload(); }, 800);
+            });
+          })
+          .catch(function () {
+            // Offline or version.json unreachable — serve from cache as-is.
+            // Do NOT set updating flag or reload; just open normally.
+          });
+      } catch (e) {
+        // localStorage / fetch not available (private mode, etc.) — proceed normally.
+      }
+    })();
+  </script>
+
   <!--
     ================================================================
     Allin1 Super App - நம்ம ஊரு ஆப்
@@ -1229,6 +1387,15 @@
         window.__a1FirstFrame = true;
         clearInterval(statusInterval);
 
+        // FIX (Aug 20 2026 — version-update flow): if an update was
+        // detected in <head>'s version-check block, window.__a1Updating
+        // is true and a page reload is already queued. Keep the splash
+        // visible (it's showing "Updating Allin1...") so the user sees
+        // the update message rather than a flash of the old app UI.
+        if (window.__a1Updating) {
+          return; // reload will happen in ~800ms; leave splash in place
+        }
+
         // HARDENED (Aug 11 2026): on a REPEAT visit tear the splash down
         // synchronously — no fade, no 400ms transition, no extra frame.
         // The splash exists on repeat boots only to cover main.dart.js
@@ -1349,10 +1516,58 @@
 
   <!-- ── PWA Auto-Update: Force fresh code on new deploy ──────────── -->
   <script>
-    // ── WebGL context loss recovery: force repaint on resume ──
+    // ── WebGL context loss recovery & Secure Task Switcher ──
+    // FIX (Aug 20 2026 — Nizam: "pwa lock panni reopen pannuna loading
+    // nu athe page laye nikkuthu no response"):
+    //
+    // ROOT CAUSE: when the device was unlocked (visible), the old code
+    // waited 450ms then added .hidden (opacity:0 + visibility:hidden)
+    // and only set display:none after ANOTHER 400ms transition. On slow
+    // phones this 850ms total window races against the CanvasKit resize
+    // events and can leave the splash permanently blocking the UI if
+    // the display:none setTimeout is dropped by the browser's timer
+    // throttling (which Chrome throttles on page-visibility-change for
+    // pages that are being "hidden" even briefly).
+    //
+    // FIX: use instant-hide (display:none !important) instead of the
+    // slow fade chain on resume. The splash was only up for a fraction
+    // of a second anyway (just to cover the WebGL black-flash), so
+    // a graceful fade-out here adds nothing but risk. The resize events
+    // still run first to restore CanvasKit, THEN the splash is nuked.
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
+      const splash = document.querySelector('.splash-screen');
+      if (document.visibilityState === 'hidden') {
+        // Show splash screen instantly when backgrounded.
+        // 1. Acts as a privacy screen in the OS task switcher.
+        // 2. Hides the CanvasKit WebGL context loss freeze/black screen.
+        if (splash) {
+          splash.classList.remove('hidden', 'resolving', 'instant-hide');
+          splash.classList.add('visible');
+          splash.style.display = 'flex';
+          splash.style.opacity = '1';
+        }
+      } else if (document.visibilityState === 'visible') {
+        // Fire resize events to force CanvasKit to repaint its WebGL context.
         window.dispatchEvent(new Event('resize'));
+        setTimeout(() => window.dispatchEvent(new Event('resize')), 80);
+        setTimeout(() => window.dispatchEvent(new Event('resize')), 200);
+
+        // Only hide the splash if Flutter has already done its initial cold boot.
+        // If we're still in the initial load, the flutter-first-frame listener
+        // will take care of hiding it — we must not interfere.
+        if (window.__a1FirstFrame === true) {
+          // Short pause (200ms) to let the CanvasKit repaint finish before
+          // revealing the canvas. Then instant-hide — no slow fade — so
+          // the splash cannot get stuck in a half-hidden state under timer
+          // throttling.
+          setTimeout(() => {
+            if (splash && window.__a1FirstFrame === true) {
+              splash.classList.add('instant-hide');
+              splash.style.display = 'none';
+              splash.style.opacity = '';
+            }
+          }, 200);
+        }
       }
     });
 

@@ -12,6 +12,11 @@ import '../widgets/empty_state.dart';
 import '../widgets/seller_card.dart';
 import 'seller_detail_screen.dart';
 
+// ── Brand palette (Aug 20 2026 — Global Food Theme Overhaul) ───────
+// This category-list screen was still dark (0xFF0A0A12 scaffold) —
+// recolored to the premium 'Pure White + Vibrant Hot Pink' brand.
+const Color _kBg = Color(0xFFFFFFFF);
+
 class CategoryScreen extends StatefulWidget {
   final Category category;
   final List<Map<String, dynamic>> sellers;
@@ -51,8 +56,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
           title: 'Food Delivery',
           subtitle: 'Hot meals from local restaurants',
           emoji: '🍔',
-          primaryColor: Color(0xFFFF5252),
-          bgColor: Color(0xFF1E0E0E),
+          primaryColor: Color(0xFFFF4FA3),
+          bgColor: Color(0xFFFF4FA3),
           emptyMessage: 'No restaurants in your area yet!',
           emptySubmessage: "We're bringing Food Delivery to Erode soon!",
         );
@@ -62,7 +67,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
           subtitle: 'Daily essentials delivered',
           emoji: '🛒',
           primaryColor: Color(0xFF00C853),
-          bgColor: Color(0xFF0A1E0E),
+          bgColor: Color(0xFF00BFA5),
           emptyMessage: 'No grocery stores nearby!',
           emptySubmessage: 'Fresh Groceries coming to your area soon!',
         );
@@ -72,7 +77,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
           subtitle: 'NJ TECH gadgets & accessories',
           emoji: '📱',
           primaryColor: Color(0xFF6C63FF),
-          bgColor: Color(0xFF10102A),
+          bgColor: Color(0xFF7B6FE0),
           emptyMessage: 'Tech Store is under construction!',
           emptySubmessage: 'Browse NJ TECH products coming soon!',
         );
@@ -82,7 +87,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
           subtitle: 'Medicines & healthcare products',
           emoji: '💊',
           primaryColor: Color(0xFFFF6B35),
-          bgColor: Color(0xFF1E1008),
+          bgColor: Color(0xFF00C853),
           emptyMessage: 'Pharmacy services unavailable!',
           emptySubmessage: 'Medicine delivery coming to Erode soon!',
         );
@@ -92,7 +97,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
           subtitle: 'Fast rides in Erode',
           emoji: '🏍️',
           primaryColor: Color(0xFFFFBB00),
-          bgColor: Color(0xFF1E1A08),
+          bgColor: Color(0xFFFFBB00),
           emptyMessage: 'No bike taxi captains available!',
           emptySubmessage: 'More captains joining soon!',
         );
@@ -102,7 +107,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
           subtitle: 'Comfortable rides for groups',
           emoji: '🚗',
           primaryColor: Color(0xFF00BCD4),
-          bgColor: Color(0xFF081A1E),
+          bgColor: Color(0xFF00BCD4),
           emptyMessage: 'Car Taxi not available yet!',
           emptySubmessage: 'Book comfortable car rides soon!',
         );
@@ -151,12 +156,12 @@ class _CategoryScreenState extends State<CategoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A12),
+      backgroundColor: _kBg,
       appBar: _buildAppBar(),
       body: RefreshIndicator(
         onRefresh: _handleRefresh,
         color: _config.primaryColor,
-        backgroundColor: _config.bgColor,
+        backgroundColor: _kBg,
         child: _sellers.isEmpty
             ? EmptyState(category: widget.category)
             : ListView.builder(
@@ -181,7 +186,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
       backgroundColor: _config.bgColor,
       elevation: 0,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Color(0xFFEEEEF5)),
+        icon: const Icon(Icons.arrow_back, color: Colors.white),
         onPressed: () => Navigator.pop(context),
       ),
       title: Column(
@@ -192,7 +197,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
             style: GoogleFonts.outfit(
               fontSize: 18,
               fontWeight: FontWeight.w800,
-              color: const Color(0xFFEEEEF5),
+              color: Colors.white,
             ),
           ),
           Text(
