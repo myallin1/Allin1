@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:provider/provider.dart';
 
 import '../config/food_categories.dart';
 import '../models/service_request_model.dart';
@@ -27,6 +28,8 @@ import '../services/food_seller_service.dart';
 import '../services/location_service.dart';
 import '../services/map_service.dart';
 import '../services/service_request_service.dart';
+import '../services/theme_service.dart';
+import '../widgets/cached_cloud_image.dart';
 import '../utils/service_request_labels.dart';
 import '../widgets/quick_order_line_items.dart';
 import '../services/auth_service.dart';
@@ -871,6 +874,29 @@ const Map<String, Color> _kSidebarAccent = {
   'multi_cuisine': Color(0xFF7B6FE0),
 };
 
+// Maps each sub-category to its closest match in the Home dashboard's
+// Food Delivery pink icon set (food_1..food_5: thali, paratha+curry,
+// biryani, dosa+chutney, burger+drink) — swapped in when the customer
+// has the Pink & White 3D icon theme on. multi_cuisine has no clean
+// single-dish match and keeps its emoji/SVG.
+const Map<String, int> _kSidebarPinkSlot = {
+  'home_made': 1,
+  'parotta': 2,
+  'biriyani': 3,
+  'south_indian': 4,
+  'fast_food': 5,
+};
+
+// Photo Realistic theme — same CachedCloudImage disk-cache mechanism as
+// dashboard_screen.dart's kSlotPhotoUrl.
+const Map<String, String> _kSidebarPhotoUrl = {
+  'home_made': 'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=200&q=80',
+  'parotta': 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=200&q=80',
+  'biriyani': 'https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=200&q=80',
+  'south_indian': 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=200&q=80',
+  'fast_food': 'https://images.unsplash.com/photo-1550547660-d9450f859349?w=200&q=80',
+};
+
 class _SidebarIcon extends StatelessWidget {
   final FoodSubCategory category;
   final VoidCallback onTap;
@@ -922,8 +948,31 @@ class _SidebarIcon extends StatelessWidget {
                 ],
               ),
               child: Center(
-                child: svg ??
-                    Text(category.emoji, style: const TextStyle(fontSize: 24)),
+                child: Builder(builder: (context) {
+                  final iconTheme = context.watch<ThemeService>().iconThemeKey;
+                  final photoUrl = _kSidebarPhotoUrl[category.key];
+                  if (iconTheme == 'photo_realistic' && photoUrl != null) {
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: CachedCloudImage(
+                        photoUrl,
+                        width: 30, height: 30, fit: BoxFit.cover,
+                        cacheWidth: 120,
+                        errorWidget: svg ?? Text(category.emoji, style: const TextStyle(fontSize: 24)),
+                      ),
+                    );
+                  }
+                  final pinkSlot = _kSidebarPinkSlot[category.key];
+                  final isPink = pinkSlot != null && iconTheme == 'pink_white_3d';
+                  if (isPink) {
+                    return Image.asset(
+                      'assets/images/pink_icons/food_${pinkSlot}_a.webp',
+                      width: 30, height: 30, fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => svg ?? Text(category.emoji, style: const TextStyle(fontSize: 24)),
+                    );
+                  }
+                  return svg ?? Text(category.emoji, style: const TextStyle(fontSize: 24));
+                }),
               ),
             ),
             const SizedBox(height: 6),

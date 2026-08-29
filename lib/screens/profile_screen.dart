@@ -210,7 +210,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         title: Text(
           'Profile',
-          style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w600),
+          style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: kText),
         ),
         actions: [
           if (!_isEditing)

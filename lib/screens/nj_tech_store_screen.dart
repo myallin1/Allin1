@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 // GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
@@ -21,7 +22,9 @@ import '../services/auth_prompt_service.dart';
 import '../services/auth_service.dart';
 import '../services/service_request_cache_service.dart';
 import '../services/service_request_service.dart';
+import '../services/theme_service.dart';
 import '../utils/service_request_labels.dart';
+import '../widgets/cached_cloud_image.dart';
 import '../widgets/location_capture_field.dart';
 import 'service_request_tracking_screen.dart';
 
@@ -80,6 +83,59 @@ class _ServiceCategory {
     required this.color,
     this.emoji,
   });
+}
+
+// Maps a category id to its slot in the Home dashboard's Electronic
+// Services pink icon set (electronics_1..electronics_5: Mobile, Laptop,
+// PC, CCTV, TV) — same 5 categories, same order, so this is a direct
+// match. Categories without one (gadgets, etc.) keep their existing
+// SvgPicture/Icon.
+const Map<String, int> _kElectronicsPinkSlot = {
+  'mobile': 1,
+  'laptop': 2,
+  'pc': 3,
+  'cctv': 4,
+  'hometheatre': 5,
+};
+
+// Photo Realistic theme's per-category photo — covers all 9 categories
+// (unlike _kElectronicsPinkSlot above, which only has 5 3D renders
+// today) since a real photo needs no bespoke asset production. Same
+// CachedCloudImage disk-cache mechanism as dashboard_screen.dart.
+const Map<String, String> _kElectronicsPhotoUrl = {
+  'mobile': 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=200&q=80',
+  'laptop': 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=200&q=80',
+  'pc': 'https://images.unsplash.com/photo-1587831990711-23ca6441447b?w=200&q=80',
+  'cctv': 'https://images.unsplash.com/photo-1557324232-b8917d3c3dcb?w=200&q=80',
+  'hometheatre': 'https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?w=200&q=80',
+  'tv': 'https://images.unsplash.com/photo-1593784991095-a205069470b6?w=200&q=80',
+  'gadgets': 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=200&q=80',
+  'ac_service': 'https://images.unsplash.com/photo-1631545805339-4dc94c8c8b83?w=200&q=80',
+  'fridge_service': 'https://images.unsplash.com/photo-1571175443880-49e1d25b2bc5?w=200&q=80',
+};
+
+Widget _themedCategoryIcon(BuildContext context, _ServiceCategory cat, double size, Widget fallback) {
+  final iconTheme = context.watch<ThemeService>().iconThemeKey;
+  final photoUrl = _kElectronicsPhotoUrl[cat.id];
+  if (iconTheme == 'photo_realistic' && photoUrl != null) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size * 0.22),
+      child: CachedCloudImage(
+        photoUrl,
+        width: size, height: size, fit: BoxFit.cover,
+        cacheWidth: (size * 4).round(),
+        errorWidget: fallback,
+      ),
+    );
+  }
+  final pinkSlot = _kElectronicsPinkSlot[cat.id];
+  final isPink = pinkSlot != null && iconTheme == 'pink_white_3d';
+  if (!isPink) return fallback;
+  return Image.asset(
+    'assets/images/pink_icons/electronics_${pinkSlot}_a.webp',
+    width: size, height: size, fit: BoxFit.contain,
+    errorBuilder: (_, __, ___) => fallback,
+  );
 }
 
 const _categories = [
@@ -698,7 +754,7 @@ class _CategoryTileState extends State<_CategoryTile>
                   // uses) show that single static icon instead of the
                   // old monochrome 3-icon cycling animation. Categories
                   // without one keep the original animation unchanged.
-                  child: cat.emoji != null
+                  child: _themedCategoryIcon(context, cat, 32, cat.emoji != null
                       ? SvgPicture.string(cat.emoji!, width: 32, height: 32)
                       : AnimatedSwitcher(
                           duration: const Duration(milliseconds: 500),
@@ -713,6 +769,7 @@ class _CategoryTileState extends State<_CategoryTile>
                             size: 32, color: cat.color,
                           ),
                         ),
+                  ),
                 ),
               ),
             ),
@@ -920,9 +977,9 @@ class _CategoryModalState extends State<_CategoryModal> {
                       color: Colors.white.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: cat.emoji != null
+                    child: _themedCategoryIcon(context, cat, 28, cat.emoji != null
                         ? SvgPicture.string(cat.emoji!, width: 28, height: 28)
-                        : Icon(cat.icon, color: Colors.white, size: 28),
+                        : Icon(cat.icon, color: Colors.white, size: 28)),
                   ),
                   const SizedBox(width: 14),
                   Expanded(child: Column(
@@ -1017,9 +1074,9 @@ class _CategoryModalState extends State<_CategoryModal> {
                             color: cat.color.withValues(alpha: 0.25),),
                       ),
                       child: Row(children: [
-                        cat.emoji != null
+                        _themedCategoryIcon(context, cat, 18, cat.emoji != null
                             ? SvgPicture.string(cat.emoji!, width: 18, height: 18)
-                            : Icon(cat.icon, color: cat.color, size: 18),
+                            : Icon(cat.icon, color: cat.color, size: 18)),
                         const SizedBox(width: 8),
                         Text('Service: ${cat.title}',
                             style: GoogleFonts.outfit(

@@ -304,51 +304,31 @@ class _ChittiCompanionState extends State<ChittiCompanion>
 
   Widget _buildRobot() {
     final s = widget.size;
+    // CHANGED (Aug 25 2026 — "full body + dancing" request): the
+    // earlier HEAD CROP (Nizam's original "robot oda head mattum" ask)
+    // is gone — the badge now shows the same full, unclipped,
+    // continuously-animated ai_robot.webp AiBotAvatar shows on PWA, so
+    // the companion and the web FAB read as the same character instead
+    // of two different-looking Chittis. Dropped the circular
+    // ClipOval/background fill for the same reason: a full-body sprite
+    // centered in a small solid circle read cramped in review — the rim
+    // light alone (kept, via the glow BoxShadow already applied one
+    // level up in _buildBody()) is enough to keep him reading as "lit
+    // from within" without a hard circular crop.
     return SizedBox(
       width: s,
       height: s,
-      child: ClipOval(
-        child: Container(
-          color: const Color(0xFF0A0A12),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // HEAD CROP (Nizam: "robot oda head mattum"). The source
-              // art is a full-body robot, so it's scaled up and pushed
-              // down inside a circular clip — the visible result is the
-              // head filling the badge. Alignment, not a new asset.
-              OverflowBox(
-                maxWidth: s * 1.9,
-                maxHeight: s * 1.9,
-                child: Transform.translate(
-                  offset: Offset(0, s * 0.34),
-                  child: Image.asset(
-                    'assets/ai/ai_robot.webp',
-                    // Decoded once at roughly twice the display size —
-                    // enough for a crisp result on 3x screens without
-                    // holding a 329 KB full-resolution bitmap in memory.
-                    cacheWidth: (s * 2.4).round(),
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Center(
-                      child: Icon(Icons.smart_toy_rounded,
-                          color: Color(0xFF6C63FF), size: 30),
-                    ),
-                  ),
-                ),
-              ),
-              // Rim light, so he reads as lit from within rather than
-              // pasted onto the background.
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: _glowColor.withValues(alpha: 0.55),
-                    width: 1.6,
-                  ),
-                ),
-              ),
-            ],
-          ),
+      child: Image.asset(
+        'assets/ai/ai_robot.webp',
+        // Decoded once at roughly twice the display size — enough for
+        // a crisp result on 3x screens without holding a 329 KB
+        // full-resolution bitmap in memory.
+        cacheWidth: (s * 2.4).round(),
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => Icon(
+          Icons.smart_toy_rounded,
+          color: _glowColor,
+          size: s * 0.7,
         ),
       ),
     );

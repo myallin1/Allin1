@@ -38,7 +38,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -48,13 +47,26 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:url_launcher/url_launcher.dart';
 
 // GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
-import '../services/auth_prompt_service.dart';
 import '../services/ai_activation_service.dart';
+import '../services/chitti_chat_history_service.dart';
+import '../services/chitti/chitti_action_executor.dart';
+import '../services/chitti/chitti_conversation_controller.dart';
+import 'mobiles/listing_video_player.dart';
+import '../services/chitti/chitti_backup_service.dart';
+import '../services/chitti/chitti_buddy.dart';
+import '../services/chitti/chitti_chat_intents.dart';
+import '../services/chitti/chitti_video_service.dart';
+import '../services/chitti/chitti_local_answer_service.dart';
+import '../services/chitti/chitti_local_intent_engine.dart';
+import '../services/chitti/chitti_screen_tracker.dart';
+import '../services/chitti/chitti_voice_service.dart';
+import '../services/chitti/chitti_tool_registry.dart';
 import '../services/gemini_api_service.dart';
 import '../services/grocery_ai_notes_service.dart';
 import '../services/guru_api_service.dart';
 import '../services/guru_suggestion_parser.dart';
 import '../services/localization_service.dart';
+import '../widgets/chitti_history_sheet.dart';
 import '../widgets/ai_loading_dialog.dart';
 // NEW (CTO mandate — AI Autonomous App Updating): reuses the exact same
 // web-only cache-clear-and-cache-busted-reload path dashboard_screen.dart's
@@ -66,22 +78,7 @@ import '../services/pwa_cache_platform_stub.dart'
 import '../services/voice_booking_intent_service.dart';
 import '../services/web_version_checker.dart';
 import '../widgets/server_busy_dialog.dart' show kCallCenterNumberIntl;
-import 'bike_taxi/bike_booking_screen.dart';
-import 'car_wash_screen.dart';
-import 'food_hub_screen.dart';
-import 'grocery_order_screen.dart';
-import 'hero_booking_screen.dart';
-import 'nj_tech_service_screen.dart';
-import 'play_zone_screen.dart';
-import 'printing_service_screen.dart';
-import 'profile_screen.dart';
-import 'rewards_screen.dart';
-import 'ride_history_screen.dart';
-import 'settings_screen.dart';
-import 'sos_screen.dart';
 import '../services/theme_context_extensions.dart';
-import '../services/auth_service.dart';
-import '../services/service_request_service.dart';
 
 // ---- FIX (CTO mandate — Batch 1 Theme Retrofit): this used to be a
 // fixed "Dark, glowing Super Hero palette" of top-level const Colors —
@@ -123,7 +120,7 @@ class GuruChatScreen extends StatefulWidget {
   State<GuruChatScreen> createState() => _GuruChatScreenState();
 }
 
-class _GuruChatScreenState extends State<GuruChatScreen> {
+class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObserver {
   final GuruApiService _api = GuruApiService();
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -144,6 +141,36 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   // sent a fallback chat message) for this listening session.
   bool _voiceResultHandled = false;
 
+  // NEW (Aug 25 2026 — "recognize my FULL sentence, not just the first
+  // segment"). See the long comment on _startVoiceSegment() for why
+  // this exists: the Android recognizer ends a session on its OWN
+  // endpoint detector well before speech_to_text's pauseFor timer would
+  // ever fire, so a single .listen() call structurally cannot capture a
+  // full sentence with any natural pause in it. This buffers text
+  // across multiple auto-restarted segments so the customer experiences
+  // one continuous listen, exactly like Google's own Voice Typing.
+  String _accumulatedVoiceText = '';
+  Timer? _voiceSilenceTimer;
+  // True only while WE (not the plugin) intend to keep the mic session
+  // going — checked before auto-restarting a segment so a manual stop
+  // (tapping the mic again) or dispose() can never race a restart back
+  // on.
+  bool _voiceSessionActive = false;
+  // NEW (Aug 28 2026 — hands-free conversation). The loop's state
+  // machine lives in ChittiConversationController, which has no Flutter
+  // in it and is unit-tested; this widget only drives the mic and the
+  // TTS engine on its instructions.
+  final ChittiConversationController _conversation =
+      ChittiConversationController();
+  // Kept so a resumed listening turn uses the same recogniser
+  // locale the session started with.
+  String? _conversationLocaleId;
+  // The recogniser's other candidate transcriptions for the current
+  // segment, and how many segments this session produced — see
+  // _handleVoiceUtterance for what they are for.
+  List<String> _voiceAlternates = const <String>[];
+  int _voiceSegmentCount = 0;
+
   // NEW (CTO mandate — Text-to-Speech): auto-speak toggle, on by
   // default per the mandate ("it should automatically speak"); the
   // header speaker icon flips this.
@@ -160,11 +187,114 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   Uint8List? _pendingImageBytes;
   bool _pickingImage = false;
 
+  // NEW (Aug 25 2026 — "customer's chat gets deleted on app switch" fix).
+  // See chitti_chat_history_service.dart for the full root-cause writeup.
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _offerToResumeSavedChat());
+  }
+
+  /// Fires on foreground<->background transitions (NOT just app close) —
+  /// this is the one hook that reliably runs BEFORE Android has a chance
+  /// to kill the process, which dispose() cannot guarantee since a
+  /// killed process never runs it.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      _persistChatHistory();
+      // Backgrounding is the right moment: the customer is done, the
+      // device is least busy, and the chat we just persisted is the
+      // freshest thing worth carrying to a new phone. Silent and at
+      // most once a day — see maybeAutoBackup.
+      unawaited(ChittiBackupService.instance.maybeAutoBackup());
+    }
+  }
+
+  void _persistChatHistory() {
+    if (_messages.isEmpty) return;
+    unawaited(ChittiChatHistoryService.saveChat(
+      _messages
+          .map((m) => <String, dynamic>{
+                'role': m.role,
+                'text': m.text,
+                'suggestions': m.suggestions,
+                if (m.videoId != null) 'videoId': m.videoId,
+              })
+          .toList(),
+    ));
+  }
+
+  /// Checked once, right after this screen's first frame. Only prompts
+  /// when there's a real saved conversation AND the customer hasn't
+  /// already started typing/sending in THIS fresh session (covers the
+  /// case where GuruChatScreen is kept alive in a background tab via
+  /// KeepAliveTab — see dashboard_screen.dart — so this never interrupts
+  /// an already-visible, already-in-progress chat).
+  Future<void> _offerToResumeSavedChat() async {
+    if (!mounted || _messages.isNotEmpty) return;
+    final hasSaved = await ChittiChatHistoryService.hasSavedChat();
+    if (!hasSaved || !mounted || _messages.isNotEmpty) return;
+
+    final resume = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Continue your chat?'),
+        content: const Text(
+          "You have a chat with Chitti AI from before you left the app. "
+          "Would you like to continue it, or start a new one?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Start New'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+
+    if (resume == true) {
+      final saved = await ChittiChatHistoryService.loadSavedChat();
+      if (!mounted || saved.isEmpty) return;
+      setState(() {
+        _messages.addAll(saved.map((m) => _GuruMessage(
+              role: m['role'] as String? ?? 'assistant',
+              text: m['text'] as String? ?? '',
+              suggestions: (m['suggestions'] as List?)?.cast<String>() ?? const [],
+              videoId: m['videoId'] as String?,
+            )));
+      });
+      _scrollToBottom();
+    } else {
+      // Either explicit "Start New" or the dialog was dismissed — either
+      // way, don't leave a stale conversation waiting to re-prompt next
+      // time the customer opens Chitti.
+      unawaited(ChittiChatHistoryService.clear());
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _persistChatHistory();
     _api.dispose();
     _inputController.dispose();
     _scrollController.dispose();
+    // FIX (Aug 25 2026 — segment chaining): must flip this off BEFORE
+    // stopping the mic, or a segment's onResult racing the teardown
+    // could still see _voiceSessionActive true and fire
+    // _startVoiceSegment() on a disposed screen.
+    _voiceSessionActive = false;
+    _voiceSilenceTimer?.cancel();
     if (_isListening) {
       unawaited(_speech.stop());
     }
@@ -195,12 +325,32 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
 
   Future<void> _ensureTtsReady(String locale) async {
     try {
-      await _tts.setLanguage(locale);
-      await _tts.setSpeechRate(0.48);
-      await _tts.setPitch(1.0);
+      // Language, voice, rate and pitch are all applied together by
+      // ChittiVoiceService — they have to be, because on Android a
+      // language switch silently drops the selected voice, and on web
+      // the engine can reset between utterances.
+      await ChittiVoiceService.apply(_tts, locale);
       _ttsReady = true;
     } catch (e) {
       debugPrint('[GuruChatScreen] TTS setup failed: $e');
+    }
+  }
+
+  // REMOVED (Aug 28 2026): _applyChittiMaleVoice() lived here AND in
+  // the other Chitti surface, and both copies searched voice names for
+  // the substring "male" — which Google's Android/Chrome voices never
+  // contain, so both always fell through to pitching the same female
+  // voice down. Voice selection and tone now live in
+  // ChittiVoiceService, where the device voice tables, the saved
+  // override and the tone profiles are one implementation.
+
+  /// The active language code, or English when the provider is not
+  /// reachable — a quip in the wrong language is worse than none.
+  String _languageCodeOrEnglish() {
+    try {
+      return context.read<LocalizationService>().languageCode;
+    } catch (_) {
+      return 'en';
     }
   }
 
@@ -211,6 +361,30 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
       await _ensureTtsReady(locale);
       if (!_ttsReady) return;
       await _tts.stop();
+      // The controller needs to know WHAT is being said (for the echo
+      // guard) and WHEN it finishes (to reopen the mic). Without
+      // awaitSpeakCompletion the speak() future returns the moment
+      // playback starts, and the mic would reopen over Chitti's own
+      // voice — the exact loop the echo guard exists to prevent.
+      if (_conversation.isActive) {
+        _conversation.markSpeaking(text);
+        // See guru_overlay_service.dart's twin for the full reasoning:
+        // on web the TTS completion callback can simply never fire, and
+        // an un-timed await there freezes the conversation loop with no
+        // error to show for it.
+        await _tts.awaitSpeakCompletion(true);
+        try {
+          await _tts.speak(text).timeout(const Duration(seconds: 20));
+        } on TimeoutException {
+          debugPrint('[GuruChatScreen] TTS completion never fired — '
+              'continuing the conversation anyway.');
+          await _tts.stop();
+        }
+        if (_conversation.afterSpeaking() == ChittiConversationStep.listen) {
+          unawaited(_resumeConversationListening());
+        }
+        return;
+      }
       await _tts.speak(text);
     } catch (e) {
       debugPrint('[GuruChatScreen] TTS speak failed: $e');
@@ -311,6 +485,106 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     // nothing (e.g. the text is an unrelated troubleshooting question),
     // this falls through exactly as before to the existing
     // screenshot-troubleshooting reply further down, image bytes intact.
+    // TIER 1 — the on-device intent engine (Aug 28 2026).
+    //
+    // This replaces the old pre-router, which only understood BOOKING
+    // ("book a bike", "auto to Chamunda Spares") and sent everything
+    // else to Groq. ChittiLocalIntentEngine covers navigation to all 56
+    // sections, every read, cancellations, language switches and the
+    // hero/seller toggles too — matched against the same registries the
+    // cloud path uses, scored, and acted on only above its confidence
+    // threshold.
+    //
+    // Why this matters beyond speed: it is the answer to "api key limit
+    // theenthurum". Everything resolved here costs zero tokens, works
+    // with no network, and returns in under a millisecond. Anything it
+    // is not sure about falls through to Groq exactly as before — a
+    // miss costs latency, never correctness.
+    if (pendingImage == null && input.isNotEmpty) {
+      final local = ChittiLocalIntentEngine.resolve(input);
+      if (local != null) {
+        debugPrint(
+          '[Chitti] local intent "${local.action}" via "${local.matched}" '
+          '(${local.confidence.toStringAsFixed(2)}) — no API call.',
+        );
+        final acted =
+            await _dispatchAgentAction(local.args, source: 'local_engine');
+        if (acted) {
+          if (mounted) setState(() => _isTyping = false);
+          return;
+        }
+      }
+    }
+
+    // TIER 1.5 — answer from the app's own registries (Aug 28 2026).
+    //
+    // Runs after the intent engine (doing beats explaining) but BEFORE
+    // the model, and only when there is no key to reach anyway. With a
+    // key, the model handles questions better and gets first refusal.
+    //
+    // Without one, this is the difference between "what is this page?"
+    // getting a real answer and getting "Chitti AI is having a short
+    // network pause" — which was never true: the answer was in
+    // kChittiSections the whole time.
+    // TALK turns are handled whether or not a key exists: a chip Chitti
+    // itself offered must always work, and sending "Ask something else"
+    // to a language model is a waste of a call either way.
+    // Loads once per app run; every later call is a no-op. Needed here
+    // so the model path can attach a clip too.
+    unawaited(ChittiVideoService.ensureLoaded());
+
+    if (pendingImage == null && input.isNotEmpty) {
+      final talk = ChittiChatIntents.handle(
+        input,
+        languageCode: _languageCodeOrEnglish(),
+      );
+      if (talk != null) {
+        if (!mounted) return;
+        setState(() {
+          _messages.add(
+            _GuruMessage(
+              role: 'assistant',
+              text: talk.text,
+              suggestions: talk.suggestions,
+              videoId: talk.videoId,
+            ),
+          );
+          _isTyping = false;
+        });
+        _scrollToBottom();
+        unawaited(_speak(talk.text));
+        return;
+      }
+    }
+
+    if (pendingImage == null && input.isNotEmpty && apiKey.trim().isEmpty) {
+      // answerWithScreen, not answer: it is allowed to read the live
+      // semantics tree first, which is what lets the reply name the
+      // field they still have to fill instead of describing the page
+      // back to someone already looking at it.
+      final local = await ChittiLocalAnswerService.answerWithScreen(
+        input,
+        languageCode: _languageCodeOrEnglish(),
+      );
+      if (local != null) {
+        if (!mounted) return;
+        setState(() {
+          _messages.add(
+            _GuruMessage(
+              role: 'assistant',
+              text: local.text,
+              suggestions: local.suggestions,
+              videoId: local.videoId,
+            ),
+          );
+          _isTyping = false;
+        });
+        _scrollToBottom();
+        unawaited(_speak(local.text));
+        return;
+      }
+    }
+
     if (input.isNotEmpty) {
       final acted = await _tryAgentActionFromText(input, apiKey, imageBytes: pendingImage);
       if (acted) {
@@ -341,7 +615,26 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     final parsed = GuruSuggestionParser.parse(rawReply);
 
     setState(() {
-      _messages.add(_GuruMessage(role: 'assistant', text: parsed.text, suggestions: parsed.suggestions));
+      // A reply with no chips is a dead end, and the screenshot Nizam
+      // sent was three of them in a row. When the model (or the no-key
+      // path) returns none, fall back to the variant's opening chips so
+      // there is always a way forward.
+      final replySuggestions = parsed.suggestions.isNotEmpty
+          ? parsed.suggestions
+          : ChittiChatIntents.fallback(
+              text: parsed.text,
+              languageCode: _languageCodeOrEnglish(),
+            ).suggestions;
+      // FIX (re-audit): a published clip belongs under a model reply
+      // just as much as under a local one. Looking it up only on the
+      // no-key path meant the video feature disappeared the moment a
+      // customer was activated.
+      _messages.add(_GuruMessage(
+        role: 'assistant',
+        text: parsed.text,
+        suggestions: replySuggestions,
+        videoId: ChittiVideoService.findFor(input)?.videoId,
+      ),);
       _isTyping = false;
     });
     _scrollToBottom();
@@ -352,264 +645,97 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   // a previously-confirmed tool call. Mirrors the same switch
   // _tryAgentActionFromText used to run immediately, just deferred
   // until the customer said yes.
+  // REWRITTEN (Aug 27 2026): this switch was one of the two places
+  // every Chitti tool had to be implemented, and the overlay's copy had
+  // already fallen behind it — the overlay could book a ride but not
+  // place an order. Everything shared now runs through
+  // ChittiActionExecutor, and this method keeps only what is specific
+  // to this screen: rendering into _GuruMessage + setState, speaking,
+  // scrolling, and pushing on this screen's own Navigator.
+  //
+  // check_and_update_app and analyze_screen_with_vision stay local —
+  // the update flow needs this screen's PWA/native branch mid-flight,
+  // and vision needs the attached image bytes that only exist here.
   Future<void> _executePendingAction(Map<String, dynamic> args) async {
-    switch (args['action'] as String?) {
-      case 'book_transport':
-        _actOnBookingAction(args);
-        break;
-      case 'navigate_to_section':
-        _actOnNavigateAction(args);
-        break;
-      case 'check_and_update_app':
-        await _actOnUpdateAction();
-        break;
-      case 'add_to_grocery_cart':
-        _actOnGroceryAction(args);
-        break;
-      case 'create_service_request':
-        await _actOnCreateServiceRequest(args);
-        break;
-      case 'report_app_bug':
-        await _actOnReportBug(args);
-        break;
-    }
-  }
+    final action = args['action'] as String?;
 
-  // NEW (Aug 11 2026 — Nizam's "AI Bug Reporting").
-  //
-  // Writes to `app_bug_reports`. Attaches device/app context the customer
-  // could never be expected to provide (platform, app version, the screen
-  // they were on, their uid) — that context is usually the difference
-  // between a reproducible report and "it didn't work".
-  //
-  // Guarded against duplicate filing within one chat session: an agent
-  // that re-files the same bug each time the customer re-describes it
-  // would flood the admin queue with noise and make real reports harder
-  // to spot.
-  bool _bugReportFiledThisSession = false;
-
-  Future<void> _actOnReportBug(Map<String, dynamic> args) async {
-    final summary = (args['summary'] as String?)?.trim() ?? '';
-    final details = (args['details'] as String?)?.trim() ?? '';
-    if (summary.isEmpty && details.isEmpty) return;
-
-    // GUEST MODE (Aug 11 2026): app_bug_reports is now isRealUser()-gated
-    // too — a report filed under an anonymous uid gives admin nobody to
-    // follow up with, and the collection would otherwise be a free,
-    // unlimited write target. Asked here rather than silently failing so
-    // the customer knows their report actually went somewhere.
-    if (!await requireRealAuth(
-      context,
-      reason: 'Sign in so our team can follow up on what you found',
-    )) {
-      if (!mounted) return;
-      setState(() {
-        _messages.add(const _GuruMessage(
-          role: 'assistant',
-          text: 'Noted. Sign in whenever you like and I’ll pass this to the team.',
-        ),);
-      });
+    if (action == 'check_and_update_app') {
+      await _actOnUpdateAction();
       return;
     }
     if (!mounted) return;
 
-    if (_bugReportFiledThisSession) {
-      if (!mounted) return;
-      setState(() {
-        _messages.add(const _GuruMessage(
-          role: 'assistant',
-          text: "I've already sent a report for this session — the team has "
-              'it. If this is a different problem, tell me and I\'ll add it.',
-        ),);
-      });
-      return;
-    }
-
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      String appVersion = 'unknown';
-      try {
-        final info = await PackageInfo.fromPlatform();
-        appVersion = '${info.version}+${info.buildNumber}';
-      } catch (_) {/* version is a nice-to-have, never block the report */}
-
-      await FirebaseFirestore.instance.collection('app_bug_reports').add({
-        'summary': summary.isEmpty ? details : summary,
-        'details': details,
-        'screen': (args['screen'] as String?)?.trim() ?? '',
-        'severity': (args['severity'] as String?)?.trim() ?? 'medium',
-        'source': 'ai_agent',
-        'app': 'customer',
-        'platform': kIsWeb ? 'web' : defaultTargetPlatform.name,
-        'appVersion': appVersion,
-        'reportedBy': user?.uid ?? '',
-        'reporterName': user?.displayName ?? '',
-        'status': 'open',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      _bugReportFiledThisSession = true;
-
-      if (!mounted) return;
-      setState(() {
-        _messages.add(const _GuruMessage(
-          role: 'assistant',
-          text: "Reported — I've sent this to the team with your app details "
-              'attached. Thanks for flagging it.',
-        ),);
-      });
-    } catch (e) {
-      debugPrint('[GuruChat] report_app_bug failed: $e');
-      if (!mounted) return;
-      setState(() {
-        _messages.add(const _GuruMessage(
-          role: 'assistant',
-          text: "I couldn't send the report just now. Please try again in a "
-              'moment.',
-        ),);
-      });
-    }
-  }
-
-  static String _requestTypeLabel(String? type) => switch (type) {
-        'custom_food_order' => 'food order',
-        'grocery_order' => 'grocery order',
-        'hero_booking' => 'hero booking',
-        _ => 'order',
-      };
-
-  // NEW (Aug 11 2026 — Nizam: the agent must PLACE orders end-to-end).
-  //
-  // Runs the SAME ServiceRequestService.createServiceRequest() path that
-  // hero_booking_screen / grocery_order_screen / custom_food_order_screen
-  // already use — deliberately not a parallel implementation, so the
-  // hero broadcast, admin alerting, usage-fee flush and every rule that
-  // depends on that document shape all behave identically whether the
-  // order came from a form or from the agent.
-  //
-  // Only reached AFTER the customer has explicitly confirmed the
-  // preview in _confirmationTextFor — the agent never places an order
-  // off its own judgement.
-  Future<void> _actOnCreateServiceRequest(Map<String, dynamic> args) async {
-    // GUEST MODE (Aug 11 2026 — this one is a genuine behaviour change,
-    // not just an added guard). The `currentUser == null` check below
-    // used to be the real gate, but every guest is now signed in
-    // ANONYMOUSLY, so that check silently started passing. Without
-    // requireRealAuth() here, the AI agent would happily file orders
-    // under an anonymous uid that carries no phone number — nobody could
-    // ring the customer back, and firestore.rules' isRealUser() would
-    // reject the write anyway, leaving the agent to apologise for a
-    // failure it could have prevented. The null check is kept below as a
-    // safety net only.
-    if (!await requireRealAuth(
-      context,
-      reason: 'Sign in and I’ll place this order for you right away',
-    )) {
-      if (!mounted) return;
-      setState(() {
-        _messages.add(const _GuruMessage(
-          role: 'assistant',
-          text: 'No problem — sign in whenever you’re ready and I’ll place it for you.',
-        ),);
-      });
-      return;
-    }
+    final result = await ChittiActionExecutor.execute(args, context: context);
     if (!mounted) return;
 
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      if (!mounted) return;
-      setState(() {
-        _messages.add(const _GuruMessage(
-          role: 'assistant',
-          text: 'Please sign in first — I need an account to place the order under.',
-        ),);
-      });
-      return;
-    }
-
-    final requestType = (args['request_type'] as String?)?.trim();
-    final items = (args['items'] as String?)?.trim() ?? '';
-    if (requestType == null || requestType.isEmpty || items.isEmpty) {
-      if (!mounted) return;
-      setState(() {
-        _messages.add(const _GuruMessage(
-          role: 'assistant',
-          text: "I didn't catch what to order. Tell me the item and I'll place it.",
-        ),);
-      });
-      return;
-    }
-
-    try {
-      // Signature is resolveCustomerPhone(User) — it takes the User
-      // object itself (it needs the Auth phoneNumber as a fallback), not
-      // a uid string.
-      final phone = await AuthService().resolveCustomerPhone(user);
-      final details = <String, dynamic>{
-        'items': items,
-        'placedByAi': true,
-        if ((args['vendor'] as String?)?.trim().isNotEmpty ?? false)
-          'hotelName': (args['vendor'] as String).trim(),
-        if ((args['address'] as String?)?.trim().isNotEmpty ?? false)
-          'dropAddress': (args['address'] as String).trim(),
-        if ((args['note'] as String?)?.trim().isNotEmpty ?? false)
-          'note': (args['note'] as String).trim(),
-      };
-
-      await ServiceRequestService().createServiceRequest(
-        requestType: requestType,
-        customerId: user.uid,
-        customerName: user.displayName?.trim().isNotEmpty ?? false
-            ? user.displayName!.trim()
-            : 'Customer',
-        customerPhone: phone,
-        details: details,
+    if (result.text.isNotEmpty) {
+      // A light line AFTER the work, sometimes, and never on a serious
+      // topic — see chitti_buddy.dart for why the gate is pessimistic.
+      final quip = ChittiBuddy.quipAfterAction(
+        languageCode: _languageCodeOrEnglish(),
+        saying: result.text,
       );
-
-      if (!mounted) return;
+      final text = quip == null ? result.text : '${result.text} $quip';
       setState(() {
-        _messages.add(_GuruMessage(
-          role: 'assistant',
-          text: 'Done — your ${_requestTypeLabel(requestType)} is placed and '
-              'sent to nearby Heroes. You can track it under Booking Status.',
-        ),);
+        _messages.add(
+          _GuruMessage(
+            role: 'assistant',
+            text: text,
+            suggestions: result.suggestions,
+            videoId: result.videoId,
+          ),
+        );
       });
-    } catch (e) {
-      debugPrint('[GuruChat] create_service_request failed: $e');
-      if (!mounted) return;
-      setState(() {
-        _messages.add(_GuruMessage(
-          role: 'assistant',
-          text: "I couldn't place that order just now ($e). Please try again, "
-              'or use the normal booking screen.',
-        ),);
-      });
+      _scrollToBottom();
+      // Speak the override when the tool supplied one. Only Thanglish
+      // needs it today: the reader sees Latin, but a ta-IN engine can
+      // only pronounce the Tamil source — see
+      // tamil_transliteration.dart.
+      unawaited(_speak(result.spokenTextOverride ?? text));
     }
-  }
 
-  // NEW (CTO mandate — Dual-Mode Grocery Cart, Mode 2): notes the item
-  // via GroceryAiNotesService — NOT a Firestore write, NOT a
-  // navigation. The existing GroceryOrderScreen picks this up next
-  // time it opens and pre-fills its own, completely unmodified
-  // `_listCtrl` text field, exactly as if the customer had typed it.
-  void _actOnGroceryAction(Map<String, dynamic> args) {
-    final item = (args['item'] as String?)?.trim() ?? '';
-    if (item.isEmpty) return;
-    final quantity = (args['quantity'] as String?)?.trim();
-    GroceryAiNotesService.instance.addItem(item, quantity: quantity);
+    // A tool that resolved into another tool still needing a yes
+    // (repeat_last_order → create_service_request). Reuses the same
+    // confirmation path rather than a second bespoke prompt.
+    final pending = result.pendingConfirmAction;
+    if (pending != null) {
+      _pendingAgentAction = pending;
+      final confirmText = _confirmationTextFor(pending);
+      setState(() {
+        _messages.add(
+          _GuruMessage(
+            role: 'assistant',
+            text: confirmText,
+            suggestions: const ['Yes, proceed', 'No, cancel'],
+          ),
+        );
+      });
+      _scrollToBottom();
+      unawaited(_speak(confirmText));
+      return;
+    }
 
-    if (!mounted) return;
-    final label = (quantity != null && quantity.isNotEmpty) ? '$quantity $item' : item;
-    setState(() {
-      _messages.add(
-        _GuruMessage(
-          role: 'assistant',
-          text: 'Added "$label" to your grocery list — open Grocery Order to review and submit.',
+    final open = result.openScreen;
+    if (open != null && mounted) {
+      // Named, so the observer records where Chitti just took them.
+      // Unnamed, Chitti would open Food Genie and then not know the
+      // customer was on Food Genie — see chitti_screen_tracker.dart.
+      unawaited(
+        Navigator.of(context).push(
+          ChittiNav.routeForBuilder<void>(open, result.openScreenLabel),
         ),
       );
-    });
-    _scrollToBottom();
+    }
   }
+
+  // REMOVED (Aug 27 2026): _actOnBookingAction, _actOnNavigateAction,
+  // _actOnGroceryAction, _actOnCreateServiceRequest, _actOnReportBug,
+  // _actOnCheckWalletBalance, _actOnCheckOrderStatus, _requestTypeLabel,
+  // _screenForSection, _sectionLabel and _voiceServiceFromKey all moved
+  // into ChittiActionExecutor / the chitti registries. Every one of them
+  // had a near-identical twin in guru_overlay_service.dart, and the two
+  // sets had already drifted apart — that drift is what made the
+  // floating bubble unable to place orders.
 
   // NEW (CTO mandate — Multi-Agent Orchestration & Handoff Architecture,
   // "The Magic"): the actual handoff. Groq (orchestrator) already
@@ -780,14 +906,49 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
       _messages.clear();
       _inputController.clear();
     });
+    // Archive, do NOT clear (Aug 28 2026 — Nizam: "chat ah pakka
+    // history oru button"). This used to call clear(), which deleted
+    // the conversation outright — so the app whose whole premise is
+    // that Chitti remembers you threw that away every time anyone
+    // tapped New chat.
+    unawaited(ChittiChatHistoryService.archiveCurrentAndStartNew());
+  }
+
+  /// Opens the past-chats sheet and, if one is picked, makes it live.
+  Future<void> _openHistory() async {
+    final picked = await showChittiHistorySheet(context);
+    if (!mounted || picked == null || picked.isEmpty) return;
+    setState(() {
+      _messages
+        ..clear()
+        ..addAll(picked.map((m) => _GuruMessage(
+              role: m['role'] as String? ?? 'assistant',
+              text: m['text'] as String? ?? '',
+              suggestions:
+                  (m['suggestions'] as List?)?.cast<String>() ?? const [],
+              videoId: m['videoId'] as String?,
+            )));
+    });
+    _scrollToBottom();
   }
 
   // -- Voice-to-Order (Pro) ------------------------------------------------
 
   Future<void> _onMicTapped() async {
     final activation = context.read<AiActivationService>();
+    // CHANGED (Aug 28 2026): this used to `return` outright when no API
+    // key was activated, so the mic did nothing at all. That is now
+    // wrong — since Tier 1, most of what people say by voice
+    // ("cancel my order", "wallet balance evlo", "open my orders")
+    // resolves entirely on device with no key involved. Typed input
+    // already worked without one; the mic being the only gated surface
+    // was an inconsistency, not a policy.
+    //
+    // Anything the local engine cannot handle still needs the model and
+    // will say so through the normal reply path, which is the honest
+    // place for that message.
     if (!activation.isAiActivated) {
-      return;
+      debugPrint('[GuruChatScreen] no API key — voice runs on Tier 1 only.');
     }
 
     // NEW (Chitti AI upgrade — "Claim My Free Voice Access"): voice is
@@ -798,29 +959,60 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     // once tapped). isProUnlocked returns true immediately for anyone
     // who's already claimed it (or been admin-granted real Pro), so
     // this only ever shows once per device.
+    // CHANGED (Aug 28 2026): this claim sheet used to block the mic
+    // outright until tapped through. Voice now runs on the same
+    // on-device engine as typing — gating one input method and not the
+    // other was an inconsistency, not a policy. The sheet is still
+    // shown once (it is a deliberate engagement moment, per its own
+    // note below), but declining it no longer costs the customer the
+    // microphone.
     if (!activation.isProUnlocked) {
-      final claimed = await _showVoiceClaimSheet();
-      if (claimed != true || !mounted) {
-        return;
-      }
+      // AWAITED, not fire-and-forget (fixed in the Aug 28 re-audit).
+      // Unawaited, the mic started listening BEHIND the modal sheet the
+      // customer was still reading — recording while they had not even
+      // seen the screen yet. The result is ignored on purpose: that is
+      // what makes this an engagement moment rather than a gate.
+      await _showVoiceClaimSheet();
+      if (!mounted) return;
     }
+    if (!mounted) return;
 
+    // Manual stop — the customer's own "I'm done" signal, so process
+    // whatever was accumulated across segments so far rather than
+    // discarding it.
+    //
+    // In a hands-free session a second tap means "end the whole
+    // conversation", not "finish this one sentence" — otherwise the
+    // loop would immediately reopen the mic and the tap would look
+    // broken.
     if (_isListening) {
-      await _speech.stop();
-      if (mounted) setState(() => _isListening = false);
+      if (_conversation.isActive) {
+        _conversation.stop();
+        unawaited(_tts.stop());
+      }
+      _finishVoiceInput();
       return;
     }
 
     if (!_speechReady) {
       _speechReady = await _speech.initialize(
+        // FIX (Aug 25 2026 — segment chaining): 'notListening'/'done'
+        // now fires BETWEEN segments constantly — that's the whole
+        // point of auto-restarting, not a real stop. Only reflect it in
+        // the UI once we've genuinely finished (_voiceSessionActive
+        // false), otherwise the mic icon would flicker off every few
+        // seconds even while still actively capturing speech.
         onStatus: (status) {
-          if (status == 'notListening' || status == 'done') {
+          if ((status == 'notListening' || status == 'done') &&
+              !_voiceSessionActive) {
             if (mounted) setState(() => _isListening = false);
           }
         },
         onError: (error) {
           debugPrint('[GuruChatScreen] speech error: $error');
-          if (mounted) setState(() => _isListening = false);
+          // A real error ends the whole chained session — fail safe
+          // rather than retrying indefinitely into a broken mic state.
+          _finishVoiceInput();
         },
       );
     }
@@ -846,173 +1038,364 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     // hardcode a guessed string like 'ta-IN' — casing/separator varies
     // by OEM) and use it whenever the customer's in-app language
     // (Settings → Language) is Tamil or Tanglish.
+    // REWRITTEN (Aug 28 2026 — Tanglish voice accuracy).
+    //
+    // Two things were wrong here. First, 'ta' and 'tg' were treated
+    // identically and both forced a Tamil recogniser — but 'tg' is
+    // TANGLISH, and a customer who picked it has explicitly told us
+    // they mix English in ("Bike book pannu", "Wallet balance evlo").
+    // A Tamil-constrained model mangles exactly those English words.
+    //
+    // Second, the previous attempt at a fix set the FALLBACK to 'en-IN'
+    // while leaving the loop above it picking the first `ta*` locale.
+    // On any device that enumerates its locales — nearly all of them —
+    // the loop wins and the fallback never runs, so it changed almost
+    // nothing in practice; and on the rare device where it DID fire, it
+    // put pure-Tamil speakers onto an English recogniser, which is the
+    // bug the comment above was written about.
+    //
+    // The correct shape is a SPLIT, not a flip: 'ta' keeps Tamil, 'tg'
+    // gets Indian English, everyone else keeps the device default. That
+    // decision now lives in ChittiVoiceService.speechLocaleFor(), so
+    // both Chitti surfaces share it. Device locale ids are still looked
+    // up rather than hardcoded — the exact string varies by OEM.
     final languageCode = context.read<LocalizationService>().languageCode;
     String? localeId;
-    if (languageCode == 'ta' || languageCode == 'tg') {
-      try {
-        final locales = await _speech.locales();
-        for (final locale in locales) {
-          if (locale.localeId.toLowerCase().startsWith('ta')) {
-            localeId = locale.localeId;
-            break;
-          }
-        }
-      } catch (e) {
-        debugPrint('[GuruChatScreen] Could not resolve Tamil locale: $e');
-      }
-      // FIX (per Nizam's explicit ask for a 'ta-IN' fallback): if the
-      // device's own locale list came back empty/failed to enumerate
-      // (rare, but seen on some OEM builds with a stripped-down speech
-      // service), don't silently fall through to the system default —
-      // try the standard Android/iOS Tamil locale ID directly as a
-      // last resort before giving up on the locale hint entirely.
-      localeId ??= 'ta-IN';
+    try {
+      final locales = await _speech.locales();
+      localeId = ChittiVoiceService.speechLocaleFor(
+        languageCode,
+        locales.map((l) => l.localeId).toList(growable: false),
+      );
+    } catch (e) {
+      debugPrint('[GuruChatScreen] Could not resolve speech locale: $e');
+      localeId =
+          ChittiVoiceService.speechLocaleFor(languageCode, const <String>[]);
     }
+
+    // Tapping the mic opens a CONVERSATION, not a single utterance —
+    // Chitti keeps listening between its own replies until the job is
+    // done, the customer says stop, or (in auto-stop mode) the room
+    // goes quiet. See ChittiConversationController.
+    _conversation
+      ..mode = await ChittiConversationPrefs.load()
+      ..start();
+    _conversationLocaleId = localeId;
 
     setState(() {
       _isListening = true;
       _voiceResultHandled = false;
+      _accumulatedVoiceText = '';
+      _voiceAlternates = const <String>[];
+      _voiceSegmentCount = 0;
     });
+    _voiceSessionActive = true;
+    unawaited(_startVoiceSegment(localeId));
+  }
+
+  // FIX (Aug 25 2026 — "Chitti only recognizes ~3.5s, not my full
+  // sentence, unlike Google Voice Typing"). ROOT CAUSE, verified against
+  // the installed speech_to_text 7.3.0 package source: pauseFor's OWN
+  // silence-tracking is implemented correctly (it resets on every real
+  // speech event, partial or final — see _notifyResults in that
+  // package). The actual limit is one level BELOW this plugin: the
+  // native Android speech recognizer has its own built-in endpoint
+  // detector that decides "the user stopped talking" and ends the
+  // recognition session on its own — often well before our pauseFor
+  // duration is ever reached. No pauseFor/listenFor number can fix
+  // that, because the OS is the one ending the session, not our timer.
+  // Google's own Voice Typing doesn't hit this because it's a
+  // first-party component with access to deeper platform APIs this
+  // plugin doesn't expose.
+  //
+  // FIX: when the OS ends a segment early, immediately start another
+  // one and stitch the text together — the customer experiences one
+  // continuous listen, and OUR OWN _voiceSilenceTimer (reset on every
+  // segment's final result) is what actually decides when they're
+  // genuinely done, not the OS's shorter per-segment endpointer.
+  Future<void> _startVoiceSegment(String? localeId) async {
+    if (!mounted || !_voiceSessionActive) return;
     unawaited(
       _speech.listen(
         onResult: (result) {
-          _inputController.text = result.recognizedWords;
-          _inputController.selection = TextSelection.collapsed(
-            offset: _inputController.text.length,
-          );
+          if (!_voiceSessionActive) return;
           final words = result.recognizedWords.trim();
-          // FIX (CTO mandate — AI Voice Misfire): guards against a
-          // "final" result the plugin returns after only a word or two
-          // (a real speech_to_text behavior on some Android devices when
-          // background noise briefly interrupts listening) getting
-          // actioned as if the customer had actually finished their
-          // sentence. Single common words like "hi"/"ok" are allowed
-          // through (>=1 word), but requires at least 2 characters so a
-          // stray single-letter noise blip never fires an action.
-          final looksLikeRealUtterance = words.length >= 2;
-          if (result.finalResult &&
-              looksLikeRealUtterance &&
-              !_voiceResultHandled) {
-            _voiceResultHandled = true;
-            setState(() => _isListening = false);
-            unawaited(_handleVoiceUtterance(words));
+          // Live preview of the CURRENT segment appended after whatever
+          // was already accumulated, so the customer sees continuous
+          // text building up, matching the Google Voice Typing
+          // comparison — not just silence until the final chunk lands.
+          final preview = _accumulatedVoiceText.isEmpty
+              ? words
+              : '$_accumulatedVoiceText $words';
+          _inputController.text = preview;
+          _inputController.selection = TextSelection.collapsed(offset: preview.length);
+
+          if (!result.finalResult) return;
+
+          // ECHO GUARD / BARGE-IN (Aug 28 2026). While Chitti is
+          // speaking the mic stays open so the customer can cut in —
+          // which also means the mic hears the TTS. Anything that comes
+          // back overlapping what Chitti is saying is discarded;
+          // anything genuinely different stops Chitti mid-sentence and
+          // is treated as the next turn.
+          if (_conversation.isSpeaking) {
+            if (_conversation.isSelfEcho(words)) return;
+            unawaited(_tts.stop());
+            _conversation.markSpokenDone();
+          }
+          if (words.isNotEmpty) {
+            _accumulatedVoiceText =
+                _accumulatedVoiceText.isEmpty ? words : '$_accumulatedVoiceText $words';
+            _voiceSegmentCount++;
+            // Keep the recogniser's OTHER candidates for this segment.
+            // They are thrown away today, and they are the cheapest
+            // accuracy win available: the recogniser ranks by acoustic
+            // likelihood and has no idea "wallet balance evlo" is a far
+            // more probable sentence in this app than whatever else
+            // sounded similar. Only kept for a single-segment utterance
+            // — stitching alternates across several segments multiplies
+            // out into nonsense, and short commands (which is what these
+            // almost always are) arrive in one segment anyway.
+            _voiceAlternates = result.alternates
+                .map((a) => a.recognizedWords.trim())
+                .where((w) => w.isNotEmpty)
+                .toList(growable: false);
+          }
+          // This segment ended (the OS's own endpointer, not genuine
+          // "customer is done") — reset OUR silence timer and open the
+          // next segment immediately so the mic never actually stops
+          // from the customer's perspective.
+          _resetVoiceSilenceTimer(localeId);
+          if (_voiceSessionActive) {
+            unawaited(_startVoiceSegment(localeId));
           }
         },
         localeId: localeId,
-        // FIX (same report): partial (interim) results were left on
-        // the plugin's default. Independently of the locale, streaming
-        // partial hypotheses being repeatedly re-guessed is a second,
-        // separate source of the "word word word" stutter pattern.
-        // Only firing onResult once, on the final transcript, removes
-        // that whole accumulating-hypothesis path outright.
+        // Unchanged from the original fix: partial results stay off on
+        // the PUBLIC API surface (avoids the "word word word" stutter
+        // this was fixed for before) — the live preview above is built
+        // from final-per-segment results only, not raw partials.
         listenOptions: stt.SpeechListenOptions(
           partialResults: false,
           cancelOnError: true,
+          // Stated explicitly (it is already the default) because it is
+          // load-bearing and easy to flip by accident: false means the
+          // NETWORKED Google recogniser — the same engine Gboard's mic
+          // uses. Setting it true would drop us to the on-device model,
+          // which is genuinely worse at Tanglish.
+          onDevice: false,
         ),
-        // FIX (CTO QA — "mic stops and sends after one or two words";
-        // CTO mandate — AI Voice Misfire "acts before customer finishes
-        // speaking"): widened again, 5s -> 8s. 3s was already found too
-        // aggressive once; 5s can still read as "done talking" during a
-        // longer natural pause (recalling an address, street name,
-        // item name mid-sentence) — that premature pauseFor cutoff is
-        // the most likely real cause of "acts before I finish talking"
-        // for a customer speaking slowly or in a second language.
-        // listenFor unchanged — still gives 30s of total room before
-        // the plugin gives up regardless of pauses.
-        listenFor: const Duration(seconds: 30),
-        pauseFor: const Duration(seconds: 8),
+        // Short PER-SEGMENT caps on purpose — we WANT the OS to hand
+        // control back to us quickly so we can restart and keep the
+        // overall session going; _voiceSilenceTimer below is what
+        // actually enforces the customer-facing silence threshold now.
+        listenFor: const Duration(seconds: 12),
+        pauseFor: const Duration(seconds: 6),
       ),
     );
   }
 
-  // Execute the action, don't just describe it: parse the transcribed
-  // utterance for a service + destination and, when recognized, push the
-  // real booking screen with everything pre-filled — falling back to a
-  // normal AI chat reply only when no service keyword is understood at
-  // all. See voice_booking_intent_service.dart for the parsing rules.
-  Future<void> _handleVoiceUtterance(String utterance) async {
-    final intent = _voiceIntent.parse(utterance);
-    if (intent == null) {
-      // Nothing service-shaped in there — treat it as a normal question.
-      unawaited(_sendMessage('🎙 $utterance'));
-      return;
-    }
-    unawaited(_navigateForBookingIntent(intent));
+  /// The REAL customer-facing "are they actually done" timer — reset on
+  /// every segment's final result, fires only when no new segment has
+  /// produced anything for 3.5s straight, which (unlike a single
+  /// native session) genuinely spans across the OS's own early cutoffs.
+  void _resetVoiceSilenceTimer(String? localeId) {
+    _voiceSilenceTimer?.cancel();
+    _voiceSilenceTimer = Timer(const Duration(milliseconds: 3500), () {
+      if (!mounted || !_voiceSessionActive) return;
+      _finishVoiceInput();
+    });
   }
 
-  // NEW (CTO mandate — Autonomous Agent, Option 3 with the mandatory
-  // human-in-the-loop safety net): shared navigate-and-prefill action,
-  // extracted so BOTH the local regex-based voice parser above AND the
-  // Groq function-calling text-intent path below (_tryAgentActionFromText)
-  // drive the exact same "programmatic navigation" behavior. Critically,
-  // this method NEVER calls a ride-creation/dispatch API itself — it
-  // only pushes BikeBookingScreen with fields pre-filled. The actual
-  // booking still requires the customer to review and tap Confirm on
-  // that screen, completely unchanged — that's the safety net, and it
-  // costs nothing extra to guarantee because it's simply reusing the
-  // existing screen rather than bypassing it.
-  Future<void> _navigateForBookingIntent(VoiceBookingIntent intent) async {
-    if (intent.service == VoiceService.sos) {
-      _showVoiceToast('Opening SOS...');
-      unawaited(
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const SosScreen()),
-        ),
-      );
+  /// Guards against a stray extra segment firing after we've already
+  /// finished (mirrors the old _voiceResultHandled guard, now scoped to
+  /// the whole chained session instead of one .listen() call).
+  /// Reopens the mic for the next turn of a hands-free conversation.
+  ///
+  /// A fresh capture, not a resumed one: the accumulators and the
+  /// one-shot _voiceResultHandled guard all have to be cleared or the
+  /// second turn would be discarded as a duplicate of the first.
+  Future<void> _resumeConversationListening() async {
+    if (!mounted || !_conversation.isActive) return;
+    setState(() {
+      _isListening = true;
+      _voiceResultHandled = false;
+      _accumulatedVoiceText = '';
+      _voiceAlternates = const <String>[];
+      _voiceSegmentCount = 0;
+    });
+    _voiceSessionActive = true;
+    await _startVoiceSegment(_conversationLocaleId);
+  }
+
+  /// Ends a hands-free session and puts the mic UI back to idle.
+  void _endConversation() {
+    _conversation.stop();
+    _voiceSessionActive = false;
+    _voiceSilenceTimer?.cancel();
+    unawaited(_speech.stop());
+    if (mounted && _isListening) setState(() => _isListening = false);
+  }
+
+  void _finishVoiceInput() {
+    if (_voiceResultHandled) return;
+    _voiceResultHandled = true;
+    _voiceSessionActive = false;
+    _voiceSilenceTimer?.cancel();
+    unawaited(_speech.stop());
+    if (mounted) setState(() => _isListening = false);
+
+    final text = _accumulatedVoiceText.trim();
+    final alternates = _voiceSegmentCount == 1
+        ? _voiceAlternates
+        : const <String>[];
+    _accumulatedVoiceText = '';
+    _voiceAlternates = const <String>[];
+    // In a hands-free session even an EMPTY turn matters — two silent
+    // turns in a row is one of the ways auto-stop mode ends, so the
+    // controller has to see it. Outside a session, the original
+    // noise-blip guard applies unchanged.
+    if (_conversation.isActive) {
+      unawaited(_handleVoiceUtterance(text, alternates: alternates));
+      return;
+    }
+    if (text.length >= 2) {
+      unawaited(_handleVoiceUtterance(text, alternates: alternates));
+    }
+  }
+
+  // REWRITTEN (Aug 28 2026 — Tanglish voice accuracy + Tier 1 for voice).
+  //
+  // Two problems with the old version. It used _voiceIntent.parse(),
+  // which only understands BOOKING — so none of the 56 sections, none
+  // of the reads, no cancel and no language switch were reachable by
+  // voice at all, only by typing. And it judged the recogniser's first
+  // guess alone, discarding the alternates.
+  //
+  // Now every candidate transcription is tested against the full intent
+  // engine and the best confident match wins. Per Nizam's decision, a
+  // confident match runs immediately; anything else is left in the
+  // input box for the customer to read, fix and send — which is the
+  // real advantage Gboard's mic has, and it costs us nothing to match.
+  Future<void> _handleVoiceUtterance(
+    String utterance, {
+    List<String> alternates = const <String>[],
+  }) async {
+    // Recogniser order, best first, with no duplicates.
+    final candidates = <String>[
+      utterance,
+      ...alternates.where((a) => a != utterance),
+    ];
+
+    final intent = ChittiLocalIntentEngine.resolveBest(
+      candidates,
+      // Someone who tapped the mic and spoke is commanding, not asking
+      // — the question guard is for typed text, where a genuine
+      // question is far more likely.
+      fromVoice: true,
+    );
+
+    // A stop word ends the session before anything else is considered —
+    // "stop" must work even mid-question, especially mid-question.
+    if (_conversation.isActive && _conversation.isStopRequest(utterance)) {
+      _endConversation();
+      if (!mounted) return;
+      setState(() {
+        _messages.add(
+          const _GuruMessage(role: 'assistant', text: 'Okay boss, stopping.'),
+        );
+      });
+      _scrollToBottom();
       return;
     }
 
-    if (intent.destinationQuery == null) {
-      // Heard/typed a service ("book an auto") but no destination at
-      // all — still take the customer straight to that service's
-      // booking screen rather than making them repeat themselves.
-      _showVoiceToast('Opening ${intent.displayName} booking...');
-      unawaited(
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => BikeBookingScreen(initialCategory: intent.categoryKey),
-          ),
-        ),
+    if (intent != null) {
+      debugPrint(
+        '[Chitti] voice intent "${intent.action}" via "${intent.matched}" '
+        '(${intent.confidence.toStringAsFixed(2)}) from '
+        '${candidates.length} candidate(s).',
       );
+      _inputController.clear();
+      await _dispatchAgentAction(intent.args, source: 'local_engine_voice');
+      _continueConversation(utterance, resolvedAnIntent: true);
       return;
     }
 
-    _showVoiceToast('Finding "${intent.destinationQuery}"...');
-    final resolved = await _voiceIntent.resolve(intent);
+    // Nothing matched. In a hands-free session the transcript is sent
+    // to the model rather than parked in the input box — the customer
+    // is not looking at the screen, so "fix it first" is not an option
+    // they can act on. Outside a session, the editable path below
+    // stands.
+    if (_conversation.isActive) {
+      if (utterance.trim().length >= 2) {
+        await _sendMessage(utterance);
+      }
+      _continueConversation(utterance, resolvedAnIntent: false);
+      return;
+    }
+
+    // Not confident. Leave the transcript in the input box rather than
+    // sending it — a wrong transcript sent automatically wastes an API
+    // call AND gives the customer an answer to a question they never
+    // asked, with no way to see what went wrong.
     if (!mounted) return;
-
-    if (resolved.destination == null) {
-      // Recognized the service but couldn't geocode the spoken place —
-      // don't silently fail; open the booking screen with the category
-      // already selected so the customer only has to type/search the
-      // destination once, and say plainly why.
-      _showVoiceToast(
-        'Couldn\'t find "${intent.destinationQuery}" — opening ${intent.displayName} so you can search it.',
-      );
-      unawaited(
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => BikeBookingScreen(initialCategory: intent.categoryKey),
-          ),
+    _inputController.text = utterance;
+    _inputController.selection =
+        TextSelection.collapsed(offset: utterance.length);
+    setState(() {
+      _messages.add(
+        _GuruMessage(
+          role: 'assistant',
+          text: 'I heard: "$utterance" — send it, or fix it first.',
+          suggestions: const ['Send it', 'Try again'],
         ),
       );
-      return;
-    }
-
-    _showVoiceToast(
-      'Opening ${intent.displayName} to ${resolved.destination!['name'] ?? intent.destinationQuery}...',
-    );
-    unawaited(
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => BikeBookingScreen(
-            initialCategory: intent.categoryKey,
-            initialDropLocation: resolved.destination,
-          ),
-        ),
-      ),
-    );
+    });
+    _scrollToBottom();
   }
+
+  /// Asks the controller what to do after a turn, and does it.
+  ///
+  /// The "speak" step needs no action here: _speak() already reopens
+  /// the mic when it finishes, which is the only correct moment — doing
+  /// it from here would race the TTS and reopen the mic over Chitti's
+  /// own voice. This exists to cover the turns where Chitti says
+  /// nothing at all (a silent navigation, an empty result), which would
+  /// otherwise leave a hands-free session hanging with the mic shut.
+  void _continueConversation(
+    String utterance, {
+    required bool resolvedAnIntent,
+  }) {
+    if (!_conversation.isActive) return;
+
+    final step = _conversation.onUserSaid(
+      utterance,
+      resolvedAnIntent: resolvedAnIntent,
+      // A pending confirmation means Chitti asked something and is
+      // waiting — the session must not end underneath that.
+      awaitingReply: _pendingAgentAction != null,
+    );
+
+    switch (step) {
+      case ChittiConversationStep.stop:
+        _endConversation();
+      case ChittiConversationStep.listen:
+        unawaited(_resumeConversationListening());
+      case ChittiConversationStep.speak:
+        // If Chitti is (or is about to be) speaking, _speak() owns the
+        // handoff back to listening. If it never speaks, nothing else
+        // would reopen the mic, so do it here.
+        if (!_conversation.isSpeaking) {
+          unawaited(_resumeConversationListening());
+        }
+    }
+  }
+
+  // REMOVED (Aug 28 2026): _navigateForBookingIntent() was the
+  // voice path's own booking-only navigation. Voice now goes through
+  // ChittiLocalIntentEngine and the shared dispatcher like everything
+  // else, so booking is handled by ChittiActionExecutor with no second
+  // copy of the prefill logic.
 
   // NEW (CTO mandate — Admin AI Co-Pilot Foundation, Option 1: Analytics
   // Logging): fire-and-forget structured event log of WHAT customers ask
@@ -1026,6 +1409,22 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   // Firestore hiccup (or being offline) can never block or break the
   // existing chat/booking flow — this is purely additive, analytics-only,
   // and does not alter any existing function's behavior or signature.
+  // ONE WRITE PER ACTIVITY (Aug 28 2026 — Nizam's WhatsApp model:
+  // "customer ovvoru interaction um 2 place ah record agum ... one time
+  // nadantha activity ah ... summa adikadi database disturb
+  // pannakudathu").
+  //
+  // This used to fire TWICE per action: `intent_requested` the moment
+  // Chitti decided, then `intent_resolved` when it finished — two
+  // documents for one thing that happened. A thousand customers using
+  // Chitti twenty times a day is 40,000 writes against a 20,000/day
+  // free quota, and it fired even for the purely on-device Tier 1
+  // actions, so the cheapest path in the app was the one paying the
+  // database bill.
+  //
+  // An activity is now recorded ONCE, on completion. That is the record
+  // admin needs for history and demand analytics, and the same event
+  // the customer's own copy is built from.
   Future<void> _logGuruAnalyticsEvent({
     required String eventType,
     String? action,
@@ -1079,24 +1478,32 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
       debugPrint('[GuruChatScreen] extractAgentAction failed: $e');
     }
     if (args == null) return false;
-    // FIX (compiler error — "argument type Map<String, dynamic>? can't
-    // be assigned to Map<String, dynamic>"): `args` is a mutable local,
-    // so the `args == null` check above doesn't stay promoted to
-    // non-null once it's captured inside the setState() closure below —
-    // Dart can't prove the variable is still non-null by the time the
-    // closure actually runs. Copying it into a new `final` local carries
-    // the non-null type through the closure with no such ambiguity.
+    return _dispatchAgentAction(args, source: 'groq', imageBytes: imageBytes);
+  }
+
+  /// Runs one resolved tool call, wherever it came from.
+  ///
+  /// NEW (Aug 28 2026 — Tier 1 local intent engine). This used to be
+  /// the tail of _tryAgentActionFromText, reachable only after a Groq
+  /// round trip. Splitting it out is what lets the on-device engine
+  /// feed the SAME confirmation gate, the same executor and the same
+  /// analytics — so a locally-resolved action behaves identically to a
+  /// model-resolved one, and there is no second code path to keep in
+  /// sync. [source] is logged so the local engine's real-world hit rate
+  /// is measurable instead of guessed at.
+  Future<bool> _dispatchAgentAction(
+    Map<String, dynamic> args, {
+    required String source,
+    Uint8List? imageBytes,
+  }) async {
     final resolvedArgs = args;
     final action = resolvedArgs['action'] as String?;
-    if (action != 'book_transport' &&
-        action != 'navigate_to_section' &&
-        action != 'check_and_update_app' &&
-        action != 'add_to_grocery_cart' &&
-        action != 'analyze_screen_with_vision' &&
-        // Aug 11 2026: without this the new order-placement tool would be
-        // silently rejected here and never reach _executePendingAction.
-        action != 'create_service_request' &&
-        action != 'report_app_bug') {
+    // REPLACED (Aug 27 2026): a hand-maintained allow-list that had to
+    // be extended for every new tool, in this file AND again in
+    // guru_overlay_service.dart. The registry is now the one place that
+    // decides what is real and what this app variant may run.
+    if (!ChittiToolRegistry.isKnownAction(action) ||
+        !ChittiToolRegistry.isAllowedFor(action)) {
       return false;
     }
 
@@ -1112,9 +1519,13 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     if (action == 'analyze_screen_with_vision') {
       if (imageBytes == null) return false;
       if (!mounted) return true;
-      unawaited(_logGuruAnalyticsEvent(eventType: 'intent_requested', action: action, args: resolvedArgs));
       await _actOnVisionHandoffAction(imageBytes);
-      unawaited(_logGuruAnalyticsEvent(eventType: 'intent_resolved', action: action, args: resolvedArgs, resolved: true));
+      unawaited(_logGuruAnalyticsEvent(
+        eventType: 'intent_resolved',
+        action: action,
+        args: <String, dynamic>{...resolvedArgs, 'source': source},
+        resolved: true,
+      ));
       return true;
     }
 
@@ -1133,26 +1544,17 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     // fallback for any FUTURE tool that DOES need Scenario-A gating —
     // it's simply unreached by today's 4 actions, not deleted, so a
     // later write-type tool has a gate ready to opt into.
-    if (action == 'navigate_to_section' ||
-        action == 'book_transport' ||
-        action == 'check_and_update_app' ||
-        action == 'add_to_grocery_cart' ||
-        // Aug 11 2026: filing a bug report costs nothing and reverses
-        // nothing, so gating it behind a Yes/No adds friction to the one
-        // moment the customer is ALREADY frustrated. Auto-execute; the
-        // reply confirms it was sent. (create_service_request stays
-        // gated below — that one commits real money.)
-        action == 'report_app_bug') {
+    // Confirm-or-not is now a property of the tool itself
+    // (ChittiTool.requiresConfirmation) rather than a list of names
+    // repeated here and in the overlay. Per Nizam: confirm ONLY for
+    // money and cancellations — everything else, including bug reports
+    // and every read, runs immediately.
+    if (!ChittiToolRegistry.requiresConfirmation(action)) {
       if (!mounted) return true;
-      unawaited(_logGuruAnalyticsEvent(
-        eventType: 'intent_requested',
-        action: action,
-        args: resolvedArgs,
-      ));
       unawaited(_logGuruAnalyticsEvent(
         eventType: 'intent_resolved',
         action: action,
-        args: resolvedArgs,
+        args: <String, dynamic>{...resolvedArgs, 'source': source},
         resolved: true,
       ));
       await _executePendingAction(resolvedArgs);
@@ -1166,11 +1568,6 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     // top of _sendMessage).
     if (!mounted) return true;
     _pendingAgentAction = resolvedArgs;
-    unawaited(_logGuruAnalyticsEvent(
-      eventType: 'intent_requested',
-      action: action,
-      args: resolvedArgs,
-    ));
     setState(() {
       _messages.add(
         _GuruMessage(
@@ -1188,40 +1585,34 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
   // NEW (CTO mandate — Co-work Style Confirmation): plain-language
   // preview of what's about to happen, shown before any tool actually
   // runs.
+  // REWRITTEN (Aug 27 2026): only reached for tools the registry marks
+  // requiresConfirmation — money and cancellations. Every other action
+  // now executes immediately, so the old per-action previews for
+  // navigation, grocery notes and update checks were dead text.
+  //
+  // The wording names exactly what is about to happen, because this is
+  // the last checkpoint before a real charge or an irreversible cancel.
   String _confirmationTextFor(Map<String, dynamic> args) {
     switch (args['action'] as String?) {
-      case 'book_transport':
-        final service = _voiceServiceFromKey(args['service'] as String?);
-        final dest = (args['destination'] as String?)?.trim();
-        final serviceName = service != null
-            ? VoiceBookingIntent(service: service).displayName
-            : 'ride';
-        return dest != null && dest.isNotEmpty
-            ? "I'm ready to book a $serviceName to $dest — should I proceed?"
-            : "I'm ready to open $serviceName booking for you — should I proceed?";
-      case 'navigate_to_section':
-        final section = args['section'] as String?;
-        return "I'm ready to open ${_sectionLabel(section)} for you — should I proceed?";
-      case 'check_and_update_app':
-        return "I'm ready to check for an app update — should I proceed?";
-      case 'add_to_grocery_cart':
-        final item = (args['item'] as String?)?.trim() ?? 'that item';
-        final quantity = (args['quantity'] as String?)?.trim();
-        final label = (quantity != null && quantity.isNotEmpty) ? '$quantity $item' : item;
-        return "I'll add \"$label\" to your grocery list — should I proceed?";
-      // NEW (Aug 11 2026): this one PLACES a real order and dispatches it
-      // to Heroes, so the confirmation names exactly what will be ordered
-      // and from where — this is the last checkpoint before money and a
-      // real hero's time are committed.
       case 'create_service_request':
         final items = (args['items'] as String?)?.trim() ?? 'your request';
         final vendor = (args['vendor'] as String?)?.trim();
-        final label = _requestTypeLabel(args['request_type'] as String?);
+        final label = ChittiActionExecutor.requestTypeLabel(
+          args['request_type'] as String?,
+        );
         return vendor != null && vendor.isNotEmpty
-            ? "I'll place a $label for \"$items\" from $vendor and send it to "
+            ? 'I\'ll place a $label for "$items" from $vendor and send it to '
                 'nearby Heroes — should I proceed?'
-            : "I'll place a $label for \"$items\" and send it to nearby "
+            : 'I\'ll place a $label for "$items" and send it to nearby '
                 'Heroes — should I proceed?';
+      case 'cancel_order':
+        return 'I\'ll cancel your current order — this cannot be undone. '
+            'Should I go ahead?';
+      case 'book_transport':
+        final dest = (args['destination'] as String?)?.trim();
+        return dest != null && dest.isNotEmpty
+            ? 'Shall I set up that booking to $dest again?'
+            : 'Shall I set up that booking again?';
       default:
         return 'Should I proceed?';
     }
@@ -1307,156 +1698,6 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
     return true;
   }
 
-  bool _actOnBookingAction(Map<String, dynamic> args) {
-    final service = _voiceServiceFromKey(args['service'] as String?);
-    if (service == null) return false;
-
-    final destinationRaw = (args['destination'] as String?)?.trim();
-    final intent = VoiceBookingIntent(
-      service: service,
-      destinationQuery: (destinationRaw != null && destinationRaw.isNotEmpty) ? destinationRaw : null,
-    );
-
-    if (!mounted) return true;
-    setState(() {
-      _messages.add(
-        _GuruMessage(
-          role: 'assistant',
-          text: intent.service == VoiceService.sos
-              ? "I've opened SOS for you — please confirm there so we can get you help right away."
-              : "I've got it! Setting up your ${intent.displayName} booking now — review the details and press Confirm to book your Hero.",
-        ),
-      );
-    });
-    _scrollToBottom();
-    unawaited(_navigateForBookingIntent(intent));
-    return true;
-  }
-
-  // NEW (CTO mandate — "Dynamic PWA Guided Tour"): maps the section key
-  // Groq extracted to a real screen and pushes it directly, exactly
-  // the same Navigator.push pattern _navigateForBookingIntent already
-  // uses for booking screens — no dashboard tab-index plumbing needed
-  // (DashboardScreen's bottom-nav tabs are private State, unreachable
-  // from a screen pushed on top of it; every non-tab section in this
-  // codebase is already a plain pushed route, so this is consistent
-  // with the existing architecture, not a special case).
-  bool _actOnNavigateAction(Map<String, dynamic> args) {
-    final section = args['section'] as String?;
-    final target = _screenForSection(section);
-    if (target == null) return false;
-
-    if (!mounted) return true;
-    setState(() {
-      _messages.add(
-        _GuruMessage(role: 'assistant', text: "Sure! Opening ${_sectionLabel(section!)} for you now."),
-      );
-    });
-    _scrollToBottom();
-    unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => target)));
-    return true;
-  }
-
-  Widget? _screenForSection(String? section) {
-    switch (section) {
-      case 'food':
-        return const FoodHubScreen();
-      case 'grocery':
-        return const GroceryOrderScreen();
-      case 'electronics':
-        return const NjTechServiceScreen();
-      case 'rewards':
-        return const RewardsScreen();
-      case 'game_zone':
-        return const PlayZoneScreen();
-      case 'safety':
-        return const SosScreen();
-      case 'settings':
-        return const SettingsScreen();
-      case 'car_wash':
-        return const CarWashScreen();
-      case 'printing':
-        return const PrintingServiceScreen();
-      case 'hero_needs':
-        return const HeroBookingScreen();
-      case 'profile':
-        return const ProfileScreen();
-      case 'ride_history':
-        return const RideHistoryScreen();
-      default:
-        return null;
-    }
-  }
-
-  // FIX (compiler error — "String? can't be assigned to String"):
-  // widened to accept null since _confirmationTextFor above only has a
-  // nullable `section` to hand it (the args map doesn't guarantee the
-  // key exists) — the switch's own default case already reads fine as
-  // "that section" for a null input.
-  String _sectionLabel(String? section) {
-    switch (section) {
-      case 'food':
-        return 'Food Genie';
-      case 'grocery':
-        return 'Grocery';
-      case 'electronics':
-        return 'Electronics service';
-      case 'rewards':
-        return 'Rewards';
-      case 'game_zone':
-        return 'Game Zone';
-      case 'safety':
-        return 'Safety';
-      case 'settings':
-        return 'Settings';
-      case 'car_wash':
-        return 'Car Wash';
-      case 'printing':
-        return 'Printing';
-      case 'hero_needs':
-        return 'Hero Booking';
-      case 'profile':
-        return 'your Profile';
-      case 'ride_history':
-        return 'Ride History';
-      default:
-        return 'that section';
-    }
-  }
-
-  VoiceService? _voiceServiceFromKey(String? key) {
-    switch (key) {
-      case 'bike':
-        return VoiceService.bike;
-      case 'auto':
-        return VoiceService.auto;
-      case 'cab':
-        return VoiceService.cab;
-      case 'parcel':
-        return VoiceService.parcel;
-      case 'mini_truck':
-        return VoiceService.miniTruck;
-      case 'lorry':
-        return VoiceService.lorry;
-      case 'sos':
-        return VoiceService.sos;
-      default:
-        return null;
-    }
-  }
-
-  void _showVoiceToast(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: context.colors.elevatedSurface,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
   Future<bool?> _showVoiceClaimSheet() {
     return showModalBottomSheet<bool>(
       context: context,
@@ -1479,15 +1720,29 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
 
     return Scaffold(
       backgroundColor: bg,
-      body: !activation.isAiActivated
-          ? const _SuperHeroActivationScreen()
-          : SafeArea(
+      // CHANGED (Aug 28 2026 — Nizam: "offline Chitti setting la
+      // kaaturan but avana use pannapona call admin nu varuthu").
+      //
+      // This used to replace the ENTIRE chat with the "contact Admin
+      // Support" screen whenever no API key was provisioned. That made
+      // sense when Chitti could do nothing without a key. Since Tier 1
+      // it is simply false: 20 of the 25 tools — all navigation, every
+      // balance and status read, cancel, repeat, language — resolve on
+      // device with no key and no network call at all. Blocking the
+      // whole screen hid a working assistant behind a phone number.
+      //
+      // The activation flow is NOT deleted (Nizam: "feature remove
+      // pannama"). _SuperHeroActivationScreen is still routed, now from
+      // the banner below, so anyone who wants the full model-backed
+      // Chitti can still reach it in one tap.
+      body: SafeArea(
               child: Stack(
                 children: [
                   const _GlowBackdrop(),
                   Column(
                     children: [
                       _buildAppBar(context, activation),
+                      if (!activation.isAiActivated) _buildOfflineBanner(),
                       Expanded(
                         child: _messages.isEmpty
                             ? _buildWelcomeState()
@@ -1559,10 +1814,70 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
               color: muted,
             ),
           ),
+          // Sits next to New chat on purpose: New chat is what files a
+          // conversation away, so this is where someone looks for it.
+          IconButton(
+            onPressed: _openHistory,
+            tooltip: 'Past chats',
+            icon: Icon(Icons.history_rounded, color: muted),
+          ),
           IconButton(
             onPressed: _startNewChat,
             tooltip: 'New chat',
             icon: Icon(Icons.add_comment_outlined, color: muted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Shown when no API key is provisioned.
+  ///
+  /// Deliberately a slim banner and not a wall: everything Tier 1
+  /// handles works right now, and the honest message is "most of this
+  /// works, here is how to unlock the rest" — not "call an admin before
+  /// you may use the app".
+  Widget _buildOfflineBanner() {
+    final accent = context.colors.accent;
+    final muted = context.colors.mutedText;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 4, 14, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.offline_bolt_rounded, size: 18, color: accent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Running on-device. Bookings, balances and navigation all '
+              'work. Unlock full AI chat for the rest.',
+              style: GoogleFonts.outfit(
+                fontSize: 11.5,
+                height: 1.35,
+                color: muted,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const _SuperHeroActivationScreen(),
+              ),
+            ),
+            child: Text(
+              'Unlock',
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: accent,
+              ),
+            ),
           ),
         ],
       ),
@@ -1751,6 +2066,16 @@ class _GuruChatScreenState extends State<GuruChatScreen> {
               ),
             ),
               ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Chitti can make mistakes — double-check anything important.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(
+                color: muted,
+                fontSize: 10.5,
+                height: 1.2,
+              ),
             ),
           ],
         ),
@@ -2318,6 +2643,23 @@ class _GuruMessageBubble extends StatelessWidget {
                 // NEW (CTO mandate — Suggestion Chips): clickable quick
                 // replies parsed out of the model's [SUGGESTIONS: ...]
                 // tag, rendered right below the message they belong to.
+                // NEW (Aug 28 2026): a video Chitti referenced, shown
+                // the same way Rewards shows one — a stretched
+                // thumbnail with a play badge, opening the shared modal
+                // player on tap.
+                //
+                // A THUMBNAIL, not an inline iframe, and that is
+                // deliberate. The player is a platform view; under
+                // CanvasKit (this app's web renderer) every platform
+                // view splits the compositing scene, and putting one
+                // inside a scrolling chat list would do that on every
+                // frame of every scroll. The Rewards page already made
+                // this call for the same reason — see the lazy-player
+                // note in rewards_hub_screen.dart.
+                if (message.videoId != null) ...[
+                  const SizedBox(height: 10),
+                  _ChittiVideoCard(videoId: message.videoId!),
+                ],
                 if (message.suggestions.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   Wrap(
@@ -2517,12 +2859,71 @@ class _GlowOrb extends StatelessWidget {
   }
 }
 
+/// A video Chitti referenced, as a tappable card in the chat.
+///
+/// Styled from `context.colors` rather than hard-coded values so it
+/// follows the app's theme and the pink/white switch automatically.
+class _ChittiVideoCard extends StatelessWidget {
+  const _ChittiVideoCard({required this.videoId});
+
+  final String videoId;
+
+  @override
+  Widget build(BuildContext context) {
+    final border = context.colors.border;
+    return GestureDetector(
+      onTap: () => showPremiumVideoModal(
+        context,
+        videoId: videoId,
+        title: 'Chitti suggests',
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: border),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // The free hqdefault endpoint — no API key, one image,
+                // cached by the browser/OS. Same source Rewards uses.
+                VideoThumbnail(videoId: videoId),
+                Container(color: Colors.black.withValues(alpha: 0.25)),
+                Center(
+                  child: Container(
+                    width: 46,
+                    height: 46,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFF0000),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 30,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _GuruMessage {
   const _GuruMessage({
     required this.role,
     required this.text,
     this.imageBytes,
     this.suggestions = const [],
+    this.videoId,
   });
 
   final String role;
@@ -2536,5 +2937,10 @@ class _GuruMessage {
   // of an assistant reply's [SUGGESTIONS: ...] tag (see
   // guru_suggestion_parser.dart). Always empty for user messages.
   final List<String> suggestions;
+
+  /// A YouTube video referenced by this reply, shown as a tappable
+  /// card. Tapping opens the SAME modal player the Rewards page uses —
+  /// one player, one set of playback bugs, one place to fix them.
+  final String? videoId;
 }
 

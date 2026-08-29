@@ -305,6 +305,17 @@ class _AdminSellerApprovalScreenState extends State<AdminSellerApprovalScreen> {
       await FirebaseFirestore.instance.collection('sellers').doc(sellerId).set(
         {
           'status': 'active',
+          // FIX (Issue 1 — "seller adds menu but customer can't see it"):
+          // seller_onboarding_screen.dart writes isOpen:false at
+          // registration (a brand-new seller shouldn't appear "open"
+          // before they're even approved). This dialog explicitly tells
+          // the admin the seller "will immediately become visible to
+          // customers" on approval, but without this the seller stayed
+          // isOpen:false — invisible to any discovery path that checks
+          // isOpen (e.g. FoodSellerService.listenToActiveSellers) — until
+          // the seller separately found and tapped the "Shop is Open"
+          // toggle on their own dashboard, which most never knew existed.
+          'isOpen': true,
           'approvedAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         },

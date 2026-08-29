@@ -88,27 +88,51 @@ class VoiceBookingIntent {
 }
 
 class VoiceBookingIntentService {
+  // FIX (Aug 25 2026 — Pre-Router Loophole audit finding): this used to
+  // be a plain `lower.contains(entry.key)` substring check, which was
+  // tolerable when only deliberate voice commands reached it but became
+  // a real false-positive risk once typed chat started hitting the same
+  // parser too — "automatic payment failed" contains "auto", "I want to
+  // open car wash" contains "car", "cancel my auto booking" contains
+  // "auto". Every keyword below is now wrapped in `\b...\b` so it only
+  // matches a whole word/phrase, never a substring buried inside a
+  // longer one. Compiled once as RegExp (not built per-parse-call) for
+  // the same reason the rest of this file stays regex-based instead of
+  // reaching for an LLM: this runs on every keystroke-adjacent message,
+  // so it needs to stay cheap.
+  static RegExp _word(String phrase) => RegExp(
+        '\\b${phrase.replaceAll(' ', r'\s+')}\\b',
+        caseSensitive: false,
+      );
+
   // Longer/more-specific phrases first so "mini truck" wins over a bare
   // "truck" or "auto" false-positive inside another word.
-  static const List<MapEntry<String, VoiceService>> _servicePatterns = [
-    MapEntry('mini truck', VoiceService.miniTruck),
-    MapEntry('minitruck', VoiceService.miniTruck),
-    MapEntry('mini-truck', VoiceService.miniTruck),
-    MapEntry('lorry', VoiceService.lorry),
-    MapEntry('truck', VoiceService.miniTruck),
-    MapEntry('parcel', VoiceService.parcel),
-    MapEntry('courier', VoiceService.parcel),
-    MapEntry('package', VoiceService.parcel),
-    MapEntry('emergency', VoiceService.sos),
-    MapEntry('sos', VoiceService.sos),
-    MapEntry('help me', VoiceService.sos),
-    MapEntry('cab', VoiceService.cab),
-    MapEntry('car', VoiceService.cab),
-    MapEntry('taxi', VoiceService.cab),
-    MapEntry('auto', VoiceService.auto),
-    MapEntry('rickshaw', VoiceService.auto),
-    MapEntry('bike', VoiceService.bike),
-    MapEntry('two wheeler', VoiceService.bike),
+  static final List<MapEntry<RegExp, VoiceService>> _servicePatterns = [
+    MapEntry(_word('mini truck'), VoiceService.miniTruck),
+    MapEntry(_word('minitruck'), VoiceService.miniTruck),
+    MapEntry(_word('mini-truck'), VoiceService.miniTruck),
+    MapEntry(_word('lorry'), VoiceService.lorry),
+    MapEntry(_word('truck'), VoiceService.miniTruck),
+    MapEntry(_word('parcel'), VoiceService.parcel),
+    MapEntry(_word('courier'), VoiceService.parcel),
+    MapEntry(_word('package'), VoiceService.parcel),
+    MapEntry(_word('emergency'), VoiceService.sos),
+    MapEntry(_word('sos'), VoiceService.sos),
+    MapEntry(_word('help me'), VoiceService.sos),
+    // "bike taxi" is this app's own name for the two-wheeler service, so it
+    // must be checked before the generic "taxi"/"cab" patterns below —
+    // otherwise "bike taxi book pannu" would match "taxi" first and book a
+    // cab instead of a bike.
+    MapEntry(_word('bike taxi'), VoiceService.bike),
+    MapEntry(_word('biketaxi'), VoiceService.bike),
+    MapEntry(_word('bike-taxi'), VoiceService.bike),
+    MapEntry(_word('two wheeler'), VoiceService.bike),
+    MapEntry(_word('bike'), VoiceService.bike),
+    MapEntry(_word('cab'), VoiceService.cab),
+    MapEntry(_word('car'), VoiceService.cab),
+    MapEntry(_word('taxi'), VoiceService.cab),
+    MapEntry(_word('auto'), VoiceService.auto),
+    MapEntry(_word('rickshaw'), VoiceService.auto),
   ];
 
   // Matches "... to <destination>", "... at <destination>",
@@ -120,17 +144,52 @@ class VoiceBookingIntentService {
     caseSensitive: false,
   );
 
+  // NEW (Aug 25 2026 — Super Chitti Phase 1, Step 3: Text Pre-Router).
+  // A spoken utterance is always a command by construction (the
+  // customer tapped the mic specifically to book something), so
+  // parse()'s keyword match alone was safe for voice. Typed chat text
+  // is not — a genuine question like "is auto available right now?" or
+  // "what is the cab fare policy" also contains a service keyword but
+  // must NOT silently trigger book_transport (which auto-navigates
+  // with no confirmation, per the Autonomous Interaction Rule elsewhere
+  // in this codebase). This is the guard the text pre-router checks
+  // before trusting parse()'s result — deliberately conservative
+  // (English + common Tamil/Tanglish question markers only): letting an
+  // ambiguous message fall through to Groq costs a little latency,
+  // wrongly auto-navigating a customer away from a question costs
+  // their trust.
+  static final RegExp _questionMarkers = RegExp(
+    r'\?|\b(is|are|does|do|can|could|should|why|what|when|where|which|'
+    r'how|yepdi|epdi|yenna|enna|yean|ஏன்|என்ன|எப்படி)\b',
+    caseSensitive: false,
+  );
+
+  bool looksLikeQuestion(String text) => _questionMarkers.hasMatch(text);
+
   /// Step 1 (pure, synchronous, no network): figure out which service
   /// the customer meant and what destination text (if any) they said.
   /// Returns null if no known service keyword was found at all — the
   /// caller should fall back to a normal AI chat reply in that case.
+  // FIX (Aug 25 2026 — Pre-Router Loophole, follow-up): word-boundary
+  // matching alone does NOT save "I want to open car wash" — "car" is a
+  // genuine standalone word there, not a substring of another word, and
+  // this app has an actual Car Wash section (see book_transport's
+  // sibling navigate_to_section tool, 'car_wash'). Scrubbing this one
+  // known collision out before pattern-matching is cheaper and more
+  // precise than trying to generalize word-boundary matching into
+  // solving same-word-different-meaning ambiguity, which it fundamentally
+  // can't. Add further phrases here only when a real collision like this
+  // one is found — this is a targeted patch, not a general mechanism.
+  static final RegExp _carWashCollision = RegExp(r'\bcar\s*wash\b', caseSensitive: false);
+
   VoiceBookingIntent? parse(String utterance) {
     final lower = utterance.toLowerCase().trim();
     if (lower.isEmpty) return null;
+    final scrubbed = lower.replaceAll(_carWashCollision, 'car_wash_service');
 
     VoiceService? matched;
     for (final entry in _servicePatterns) {
-      if (lower.contains(entry.key)) {
+      if (entry.key.hasMatch(scrubbed)) {
         matched = entry.value;
         break;
       }

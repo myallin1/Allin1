@@ -31,6 +31,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../config/hero_service_access.dart';
+import '../../config/hero_skill_catalog.dart';
 
 const Color _surface = Color(0xFF141420);
 const Color _text = Color(0xFFEEEEF5);
@@ -67,6 +68,20 @@ class _HeroServiceAccessSheet extends StatefulWidget {
 
 class _HeroServiceAccessSheetState extends State<_HeroServiceAccessSheet> {
   late Map<String, bool> _allowed;
+
+  /// A hero's TRADES (electrician, plumber, ...), editable here for the
+  /// same reason the service toggles are: this is the one screen admin
+  /// already opens to control what work a hero receives.
+  ///
+  /// NEW (Aug 29 2026 — closes a real gap found on re-audit). Skill
+  /// heroes could only ever get their trade set once, at registration —
+  /// there was no way for admin to add a second trade to an existing
+  /// electrician, or correct a wrong one, without editing Firestore by
+  /// hand. A `Set`, matching [kHeroSkillsField]'s list shape, so a hero
+  /// can hold more than one trade (see hero_skill_catalog.dart's header
+  /// on why the field is plural).
+  late Set<String> _skills;
+
   bool _saving = false;
   String? _error;
 
@@ -77,6 +92,7 @@ class _HeroServiceAccessSheetState extends State<_HeroServiceAccessSheet> {
       for (final key in HeroServiceKeys.all)
         key: isServiceAllowed(widget.heroData, key),
     };
+    _skills = heroSkillsOf(widget.heroData).toSet();
   }
 
   Future<void> _save() async {
@@ -100,6 +116,11 @@ class _HeroServiceAccessSheetState extends State<_HeroServiceAccessSheet> {
           .set({
         kHeroServiceAccessField: access,
         'serviceAccessUpdatedAt': FieldValue.serverTimestamp(),
+        // Written even when empty (a vehicle hero, or a trade being
+        // removed) so the field always reflects the checkbox state
+        // rather than only ever growing. merge:true leaves every other
+        // field on the doc untouched.
+        kHeroSkillsField: _skills.toList(growable: false),
       }, SetOptions(merge: true));
 
       if (!mounted) return;
@@ -176,6 +197,71 @@ class _HeroServiceAccessSheetState extends State<_HeroServiceAccessSheet> {
                     color: _muted, fontSize: 12, height: 1.45),
               ),
               const SizedBox(height: 16),
+
+              // ── TRADES (Aug 29 2026) ────────────────────────────
+              Text(
+                'Trades',
+                style: GoogleFonts.outfit(
+                  color: _text,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'What this hero is qualified for. A hero can hold more '
+                'than one — add a second trade instead of registering '
+                'them again.',
+                style: GoogleFonts.outfit(
+                    color: _muted, fontSize: 11.5, height: 1.35),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: kHeroSkills.map((skill) {
+                  final selected = _skills.contains(skill.key);
+                  return FilterChip(
+                    selected: selected,
+                    onSelected: _saving
+                        ? null
+                        : (v) => setState(() {
+                              if (v) {
+                                _skills.add(skill.key);
+                              } else {
+                                _skills.remove(skill.key);
+                              }
+                            }),
+                    label: Text(skill.title),
+                    labelStyle: GoogleFonts.outfit(
+                      color: selected ? Colors.white : _text,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    avatar: Icon(
+                      skill.icon,
+                      size: 16,
+                      color: selected ? Colors.white : skill.color,
+                    ),
+                    backgroundColor: Colors.white.withValues(alpha: 0.03),
+                    selectedColor: skill.color,
+                    checkmarkColor: Colors.white,
+                    side: BorderSide(
+                      color: selected ? skill.color : _border,
+                    ),
+                  );
+                }).toList(growable: false),
+              ),
+              if (_skills.isEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'No trade selected — this hero receives no skilled-service '
+                  'jobs regardless of the Electronics service switch below.',
+                  style: GoogleFonts.outfit(
+                      color: _muted, fontSize: 11, height: 1.35),
+                ),
+              ],
+              const SizedBox(height: 18),
 
               for (final key in HeroServiceKeys.all) ...[
                 Container(

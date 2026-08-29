@@ -161,6 +161,14 @@ class ServiceRequestModel {
   /// immediately at creation, exactly as before.
   final String? sellerStage;
 
+  /// When [sellerStage] last changed (server timestamp, written by
+  /// advanceSellerStage()). Used by the seller dashboard's delivery-
+  /// handoff timeout: once [sellerStage] is 'delivery_requested', the
+  /// elapsed time since this timestamp is what decides whether to still
+  /// show "Notifying delivery partners nearby…" or switch to a
+  /// "Retry Finding Delivery Partner" action.
+  final DateTime? sellerStageAt;
+
   /// Everything from Firestore's `details` map, untouched — so fields
   /// specific to one requestType (deliveryAddress, taskDescription,
   /// sellerName, etc.) are never lost even though this model doesn't
@@ -188,6 +196,7 @@ class ServiceRequestModel {
     this.paymentStatus,
     this.estimateApprovedByCustomer,
     this.sellerStage,
+    this.sellerStageAt,
     this.createdAt,
     this.updatedAt,
   });
@@ -274,6 +283,7 @@ class ServiceRequestModel {
       paymentStatus: map['paymentStatus'] as String?,
       estimateApprovedByCustomer: map['estimateApprovedByCustomer'] as bool?,
       sellerStage: map['sellerStage'] as String?,
+      sellerStageAt: parseFlexibleTimestamp(map['sellerStageAt']),
       createdAt: parseFlexibleTimestamp(map['createdAt']),
       updatedAt: parseFlexibleTimestamp(map['updatedAt']),
     );
@@ -320,6 +330,7 @@ class ServiceRequestModel {
       // the correct action button instead of flashing "Accept Order" on
       // an order that is already cooking.
       if (sellerStage != null) 'sellerStage': sellerStage,
+      if (sellerStageAt != null) 'sellerStageAt': sellerStageAt!.toIso8601String(),
       'details': {
         ...rawDetails,
         if (items.isNotEmpty) 'items': items.map((i) => i.toJson()).toList(),
@@ -352,6 +363,7 @@ class ServiceRequestModel {
       paymentStatus: paymentStatus,
       estimateApprovedByCustomer: estimateApprovedByCustomer,
       sellerStage: sellerStage,
+      sellerStageAt: sellerStageAt,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

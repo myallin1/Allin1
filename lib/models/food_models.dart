@@ -23,6 +23,14 @@ class SellerModel {
   final double totalSettled;
   final double walletBalance;
 
+  /// Lifetime sum of every ₹5 platform usage fee ever debited from this
+  /// seller (seller-earnings audit, Phase 2 — Earnings screen). Written
+  /// alongside walletBalance's own -5.0 decrement, inside the same
+  /// Firestore Transaction, by ServiceRequestService.advanceSellerStage()
+  /// — see that method's fee-debit branch. Purely additive/informational;
+  /// nothing else in the app derives a decision from this value.
+  final double totalFeesDeducted;
+
   /// Which seller product line this account belongs to: 'hotel',
   /// 'grocery', or 'electronics'. Distinct from [category] on purpose —
   /// [category] has been hardcoded to 'food' for every seller since this
@@ -59,6 +67,7 @@ class SellerModel {
     this.pendingPayouts = 0.0,
     this.totalSettled = 0.0,
     this.walletBalance = 0.0,
+    this.totalFeesDeducted = 0.0,
   });
 
   factory SellerModel.fromJson(Map<String, dynamic> json) {
@@ -90,6 +99,7 @@ class SellerModel {
       pendingPayouts: (json['pendingPayouts'] as num?)?.toDouble() ?? 0.0,
       totalSettled: (json['totalSettled'] as num?)?.toDouble() ?? 0.0,
       walletBalance: (json['walletBalance'] as num?)?.toDouble() ?? 0.0,
+      totalFeesDeducted: (json['totalFeesDeducted'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
@@ -138,6 +148,7 @@ class SellerModel {
       'pendingPayouts': pendingPayouts,
       'totalSettled': totalSettled,
       'walletBalance': walletBalance,
+      'totalFeesDeducted': totalFeesDeducted,
     };
   }
 
@@ -183,6 +194,8 @@ class SellerModel {
     String? role,
     double? pendingPayouts,
     double? totalSettled,
+    double? totalFeesDeducted,
+    double? walletBalance,
   }) {
     return SellerModel(
       id: id ?? this.id,
@@ -207,6 +220,18 @@ class SellerModel {
       role: role ?? this.role,
       pendingPayouts: pendingPayouts ?? this.pendingPayouts,
       totalSettled: totalSettled ?? this.totalSettled,
+      totalFeesDeducted: totalFeesDeducted ?? this.totalFeesDeducted,
+      // FIX (Task 2 — Earnings screen data reliability): pre-existing
+      // bug, unrelated to this feature but directly affects it —
+      // walletBalance was missing from this return entirely, so it fell
+      // back to the constructor's `= 0.0` default on EVERY copyWith()
+      // call. seller_dashboard_screen.dart's online/offline toggle calls
+      // `_seller!.copyWith(isOpen: newStatus)` on every tap, which was
+      // silently zeroing the in-memory wallet balance shown on screen
+      // (never written to Firestore, but visibly wrong until the next
+      // full profile reload) — exactly the kind of stale/wrong financial
+      // number this whole audit exists to eliminate.
+      walletBalance: walletBalance ?? this.walletBalance,
     );
   }
 }
@@ -373,210 +398,11 @@ class ItemVariant {
   }
 }
 
-class OrderItem {
-  final String itemId;
-  final String name;
-  final int quantity;
-  final double unitPrice;
-  final double totalPrice;
-  final String? variantName;
-  final String? note;
-
-  OrderItem({
-    required this.itemId,
-    required this.name,
-    required this.quantity,
-    required this.unitPrice,
-    required this.totalPrice,
-    this.variantName,
-    this.note,
-  });
-
-  factory OrderItem.fromJson(Map<String, dynamic> json) {
-    return OrderItem(
-      itemId: json['itemId'] as String,
-      name: json['name'] as String,
-      quantity: (json['quantity'] as num).toInt(),
-      unitPrice: (json['unitPrice'] as num).toDouble(),
-      totalPrice: (json['totalPrice'] as num).toDouble(),
-      variantName: json['variantName'] as String?,
-      note: json['note'] as String?,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'itemId': itemId,
-      'name': name,
-      'quantity': quantity,
-      'unitPrice': unitPrice,
-      'totalPrice': totalPrice,
-      'variantName': variantName,
-      'note': note,
-    };
-  }
-}
-
-class FoodOrderModel {
-  final String orderId;
-  final String sellerId;
-  final String customerId;
-  final String? customerName;
-  final String? customerPhone;
-  final String? deliveryAddress;
-  final double? deliveryLatitude;
-  final double? deliveryLongitude;
-  final List<OrderItem> items;
-  final double subtotal;
-  final double deliveryFee;
-  final double platformFee;
-  final double totalAmount;
-  final String? couponCode;
-  final double? discountAmount;
-  final String paymentMethod;
-  final String paymentStatus;
-  final String status;
-  final Map<String, DateTime?> statusTimeline;
-  final String? note;
-  final int? estimatedPrepTimeMin;
-  final DateTime createdAt;
-  final DateTime? updatedAt;
-
-  FoodOrderModel({
-    required this.orderId,
-    required this.sellerId,
-    required this.customerId,
-    required this.items,
-    required this.subtotal,
-    required this.totalAmount,
-    required this.createdAt,
-    this.customerName,
-    this.customerPhone,
-    this.deliveryAddress,
-    this.deliveryLatitude,
-    this.deliveryLongitude,
-    this.deliveryFee = 0,
-    this.platformFee = 0,
-    this.couponCode,
-    this.discountAmount,
-    this.paymentMethod = 'cash',
-    this.paymentStatus = 'pending',
-    this.status = 'placed',
-    this.note,
-    this.estimatedPrepTimeMin,
-    this.updatedAt,
-    Map<String, DateTime?>? statusTimeline,
-  }) : statusTimeline = statusTimeline ?? _defaultTimeline();
-
-  static Map<String, DateTime?> _defaultTimeline() {
-    final now = DateTime.now();
-    return {
-      'placed': now,
-      'accepted': null,
-      'preparing': null,
-      'ready': null,
-      'pickedUp': null,
-      'delivered': null,
-      'cancelled': null,
-    };
-  }
-
-  factory FoodOrderModel.fromJson(Map<String, dynamic> json) {
-    final rawTimeline = json['statusTimeline'] as Map<String, dynamic>?;
-    final parsedTimeline = <String, DateTime?>{};
-    if (rawTimeline != null) {
-      for (final entry in rawTimeline.entries) {
-        parsedTimeline[entry.key] = entry.value != null
-            ? (entry.value as Timestamp).toDate()
-            : null;
-      }
-    }
-
-    return FoodOrderModel(
-      orderId: json['orderId'] as String,
-      sellerId: json['sellerId'] as String,
-      customerId: json['customerId'] as String,
-      items: (json['items'] as List<dynamic>)
-          .map((e) => OrderItem.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      subtotal: (json['subtotal'] as num).toDouble(),
-      totalAmount: (json['totalAmount'] as num).toDouble(),
-      createdAt: (json['createdAt'] as Timestamp).toDate(),
-      customerName: json['customerName'] as String?,
-      customerPhone: json['customerPhone'] as String?,
-      deliveryAddress: json['deliveryAddress'] as String?,
-      deliveryLatitude: (json['deliveryLatitude'] as num?)?.toDouble(),
-      deliveryLongitude: (json['deliveryLongitude'] as num?)?.toDouble(),
-      deliveryFee: (json['deliveryFee'] as num?)?.toDouble() ?? 0,
-      platformFee: (json['platformFee'] as num?)?.toDouble() ?? 0,
-      couponCode: json['couponCode'] as String?,
-      discountAmount: (json['discountAmount'] as num?)?.toDouble(),
-      paymentMethod: json['paymentMethod'] as String? ?? 'cash',
-      paymentStatus: json['paymentStatus'] as String? ?? 'pending',
-      status: json['status'] as String? ?? 'placed',
-      statusTimeline: parsedTimeline,
-      note: json['note'] as String?,
-      estimatedPrepTimeMin: (json['estimatedPrepTimeMin'] as num?)?.toInt(),
-      updatedAt: json['updatedAt'] != null
-          ? (json['updatedAt'] as Timestamp).toDate()
-          : null,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    final rawTimeline = <String, dynamic>{};
-    for (final entry in statusTimeline.entries) {
-      rawTimeline[entry.key] =
-          entry.value != null ? Timestamp.fromDate(entry.value!) : null;
-    }
-
-    return {
-      'orderId': orderId,
-      'sellerId': sellerId,
-      'customerId': customerId,
-      'items': items.map((e) => e.toJson()).toList(),
-      'subtotal': subtotal,
-      'deliveryFee': deliveryFee,
-      'platformFee': platformFee,
-      'totalAmount': totalAmount,
-      'customerName': customerName,
-      'customerPhone': customerPhone,
-      'deliveryAddress': deliveryAddress,
-      'deliveryLatitude': deliveryLatitude,
-      'deliveryLongitude': deliveryLongitude,
-      'couponCode': couponCode,
-      'discountAmount': discountAmount,
-      'paymentMethod': paymentMethod,
-      'paymentStatus': paymentStatus,
-      'status': status,
-      'statusTimeline': rawTimeline,
-      'note': note,
-      'estimatedPrepTimeMin': estimatedPrepTimeMin,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
-    };
-  }
-
-  bool get isActive => status != 'delivered' && status != 'cancelled';
-
-  String get statusDisplay {
-    switch (status) {
-      case 'placed':
-        return 'Order Placed';
-      case 'accepted':
-        return 'Order Accepted';
-      case 'preparing':
-        return 'Preparing';
-      case 'ready':
-        return 'Ready for Pickup';
-      case 'pickedUp':
-        return 'Picked Up';
-      case 'delivered':
-        return 'Delivered';
-      case 'cancelled':
-        return 'Cancelled';
-      default:
-        return status;
-    }
-  }
-}
+// NOTE (Issue 4 cleanup — dead FoodSellerService/food_orders pipeline):
+// OrderItem and FoodOrderModel (the `food_orders` collection's shape)
+// were removed here. Nothing writes to `food_orders` — every order the
+// seller/customer apps actually create goes through
+// ServiceRequestService.createServiceRequest() into `service_requests`
+// (requestType catalog_food_order / custom_hotel_order), read via
+// ServiceRequestModel. See seller_dashboard_screen.dart's
+// _buildCatalogOrderCard / _buildCustomHotelOrderCard.

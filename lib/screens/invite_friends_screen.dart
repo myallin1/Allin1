@@ -163,7 +163,7 @@ class _InviteFriendsScreenState extends State<InviteFriendsScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: _text),
         title: Text('Invite Friends',
-            style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800)),
+            style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: _text)),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _pink))

@@ -28,6 +28,9 @@ import '../services/city_service.dart';
 import '../services/hive_cache.dart';
 import '../services/local_sync_service.dart';
 import '../services/localization_service.dart';
+import '../services/chitti/chitti_screen_tracker.dart';
+import '../services/chitti_nudge_service.dart';
+import '../services/chitti_order_memory_service.dart';
 import '../services/chitti_overlay_service.dart';
 // Real embedded browser view — WebView on native, <iframe> on the PWA.
 // Named for DMart (its first use, in Grocery) but URL-generic; the
@@ -71,6 +74,7 @@ import 'hero_booking_screen.dart';
 import 'mobiles/mobile_hub_screen.dart';
 import 'my_orders_screen.dart';
 import 'nj_tech_service_screen.dart';
+import 'skilled_services_screen.dart';
 import 'nj_tech_store_screen.dart';
 import 'play_zone_screen.dart';
 import 'printing_service_screen.dart';
@@ -307,6 +311,40 @@ class _DashboardScreenState extends State<DashboardScreen>
     });
   }
 
+  // NEW (Aug 25 2026 — "Priority 2: Proactive Nudges"). See
+  // ChittiNudgeService for the shared anti-spam gate every proactive
+  // Chitti message must pass through, and chitti_order_memory_service.dart
+  // for what "recorded" means (a rolling Hive history the completion
+  // screens already write to). Deliberately a loose heuristic — "there
+  // IS an order on record, and it's been at least 18h" — not real
+  // pattern detection; a more precise "same weekday/time" model is a
+  // reasonable follow-up once there's usage data to tune it against.
+  Future<void> _maybeNudgeReorderUsual() async {
+    final entry = ChittiOrderMemoryService.mostRecentEntry();
+    if (entry == null) return;
+    final atMs = entry['at'] as int?;
+    if (atMs == null) return;
+    final since = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(atMs));
+    // Too soon after the order itself (they just did it — nothing to
+    // suggest) and too long ago (past a couple of weeks, the "usual"
+    // framing stops being accurate) are both skipped.
+    if (since < const Duration(hours: 18) || since > const Duration(days: 14)) {
+      return;
+    }
+
+    final allowed = await ChittiNudgeService.instance.tryFire(
+      'reorder_usual',
+      perTypeCooldown: const Duration(hours: 24),
+    );
+    if (!allowed) return;
+
+    final service = entry['service'] as String? ?? 'that';
+    final summary = entry['summary'] as String? ?? 'your last order';
+    unawaited(ChittiOverlayService.instance.showNudge(
+      'Should I get your usual $service — $summary?',
+    ));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -367,6 +405,19 @@ class _DashboardScreenState extends State<DashboardScreen>
         },
       );
     });
+
+    // NEW (Aug 25 2026 — "Priority 2: Proactive Nudges", reorder-usual
+    // trigger). Deliberately a loose heuristic, not real pattern
+    // detection: "there IS an order on record, and it's been at least
+    // 18h since it happened" — good enough for a v1 nudge, and every
+    // rule about not spamming it lives in ChittiNudgeService, not here.
+    // 5s delay: after the companion mount (post-frame) and clear of the
+    // 3s daily-boost SnackBar above, so nothing stacks on cold boot.
+    unawaited(Future<void>.delayed(const Duration(seconds: 5), () {
+      if (!mounted) return;
+      unawaited(_maybeNudgeReorderUsual());
+    }));
+
     // NEW (Aug 12 2026 — Nizam's "daily boost" request): one small,
     // non-blocking motivational SnackBar per app cold-boot, right under
     // the time-of-day greeting. 3s delay clears the coach-mark tour /
@@ -379,7 +430,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         showDailyBoostSnackBar(context, randomCustomerBoostMessage());
       });
     });
-    // Auto-show the daily Paytm Soundbox scratch card once per calendar day
+    // Auto-show the Paytm Soundbox scratch card once ever per customer
     // — but only AFTER the first-open coach mark tour (if any) has been
     // shown/dismissed, so the two overlays never fight for the screen.
     // Runs after first frame so a bottom sheet/overlay can be shown safely.
@@ -425,8 +476,8 @@ class _DashboardScreenState extends State<DashboardScreen>
           ],
           onFinish: () async {
             if (!mounted) return;
-            // _alreadyScratchedToday() is async because HiveCache.get() is.
-            if (!await _alreadyScratchedToday()) {
+            // _hasSeenScratchCardEver() is async because HiveCache.get() is.
+            if (!await _hasSeenScratchCardEver()) {
               if (!mounted) return;
               _showScratchCardModal();
             }
@@ -435,11 +486,11 @@ class _DashboardScreenState extends State<DashboardScreen>
         return;
       }
 
-      // _alreadyScratchedToday() is async because HiveCache.get() is.
+      // _hasSeenScratchCardEver() is async because HiveCache.get() is.
       // It previously read the Future without awaiting and cast it to
       // String?, which threw a TypeError before this branch could run —
       // so the scratch card never appeared at all.
-      if (!await _alreadyScratchedToday()) {
+      if (!await _hasSeenScratchCardEver()) {
         if (!mounted) return;
         _showScratchCardModal();
       }
@@ -663,27 +714,17 @@ class _DashboardScreenState extends State<DashboardScreen>
     super.dispose();
   }
 
-  // ── Daily scratch gate (local, calendar-day) ─────────────────
-  String _todayKey() {
-    final n = DateTime.now();
-    return '${n.year}-${n.month.toString().padLeft(2, '0')}-'
-        '${n.day.toString().padLeft(2, '0')}';
-  }
+  // ── One-time-ever scratch gate ────────────────────────────────
+  // CHANGED (Nizam: "customer ku oru time mattum than scratchcard
+  // kidaikanum, athukapram kaatave kudathu") — this used to re-arm every
+  // calendar day (see _todayKey() below, now unused for this gate); a
+  // customer now sees the scratch card at most ONCE ever, on any device/
+  // reinstall-persistent local storage. Duration(days: 3650) stands in
+  // for "forever" since HiveCache.put() requires a concrete ttl.
+  static const Duration _foreverTtl = Duration(days: 3650);
 
-  /// TTL for cache keys that must survive a whole calendar day.
-  ///
-  /// HiveCache.put() defaults to a 30-MINUTE ttl. Every daily gate in this
-  /// file (scratch card, coins backup) and in checkout_screen.dart (daily
-  /// coin-redemption cap) relied on that default, which means that once
-  /// the missing-await bug below is fixed those gates would silently reset
-  /// every 30 minutes. These keys must therefore always be written with an
-  /// explicit ttl. Day-rollover correctness comes from comparing the
-  /// stored value against _todayKey(); this ttl only guarantees the entry
-  /// outlives the day it was written for.
-  static const Duration _dailyKeyTtl = Duration(hours: 24);
-
-  Future<bool> _alreadyScratchedToday() async =>
-      (await HiveCache.get<String>('last_scratch_date')) == _todayKey();
+  Future<bool> _hasSeenScratchCardEver() async =>
+      (await HiveCache.get<bool>('scratch_card_seen_once')) ?? false;
 
   /// Multi-city (Plan 3): resolves the customer's real current city via
   /// GPS + reverse-geocoding, entirely in the background. Loads the
@@ -831,8 +872,12 @@ class _DashboardScreenState extends State<DashboardScreen>
     PrefsCache.saveLastTab(i);
   }
 
-  void _navigate(Widget screen) => Navigator.push<void>(
-    context, MaterialPageRoute<void>(builder: (_) => screen),);
+  // UPDATED (Aug 28 2026 — screen awareness): pushes through ChittiNav
+  // so the route carries a human label. That is what lets Chitti answer
+  // "what is this page?" about wherever the CUSTOMER navigated, not
+  // just where Chitti sent them. Behaviour is otherwise identical to
+  // the Navigator.push it replaces.
+  void _navigate(Widget screen) => ChittiNav.push<void>(context, screen);
 
   Future<void> _launchBroadband() async {
     _navigate(const NjTechBroadbandWebView());
@@ -849,12 +894,10 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   void _showScratchCardModal() {
-    // Mark today as used so the card auto-shows at most once per calendar day,
-    // whether or not the customer fully scratches it.
-    // Explicit ttl is REQUIRED — HiveCache.put() defaults to 30 minutes,
-    // which would let the card re-appear ~48x/day. See _dailyKeyTtl.
+    // Mark as seen forever so the card auto-shows at most ONCE per
+    // customer, ever — whether or not they fully scratch it.
     unawaited(
-      HiveCache.put('last_scratch_date', _todayKey(), ttl: _dailyKeyTtl),
+      HiveCache.put('scratch_card_seen_once', true, ttl: _foreverTtl),
     );
     showModalBottomSheet<void>(
       context: context,
@@ -874,6 +917,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       case 'carwash':     _navigate(const CarWashScreen()); break;
       case 'puncture':    _callPuncture(); break;
       case 'construction':_navigate(const ConstructionScreen()); break;
+      case 'homeservices': _navigate(const SkilledServicesScreen()); break;
       case 'custom':      _navigate(const HeroBookingScreen(initialCategory: 'custom_order')); break;
       case 'mobile':      _navigate(const NjTechServiceScreen()); break;
       case 'spares':      _navigate(const NjTechServiceScreen()); break;
@@ -1720,6 +1764,106 @@ class _HomeBannerDetailScreen extends StatelessWidget {
   }
 }
 
+// NEW (Nizam: "sila customer image paathe easy-a understand pannikuvanga
+// andhandha section kulla povanga") — a 3rd icon theme, 'photo_realistic',
+// for customers who recognize a real photo faster than a 3D render or flat
+// glyph. One representative network photo per category, fetched through
+// CachedCloudImage — same widget eseva_service_screen.dart already uses —
+// so it downloads once and is served from disk cache on every later open
+// (including offline). Deliberately ONE photo per category, not five: the
+// mega-card row's 5 mini-icons stay whatever the OTHER active setting is
+// (pink 3D or flat multicolor) — retrofitting 5 distinct real photos per
+// category is a separate, much bigger asset job than this pass. Only the
+// header icon and the top carousel's single icon switch to a photo.
+// Top-level (not a class member) so both _HomeTab's _themedHeaderIcon and
+// _CategorySlidingBannerState's carousel icon can share one source of truth.
+const Map<String, String> kCategoryPhotoUrl = {
+  'taxi': 'https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=200&q=80',
+  'food': 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=200&q=80',
+  'grocery': 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&q=80',
+  'mobile': 'https://images.unsplash.com/photo-1580910051074-3eb694886505?w=200&q=80',
+  'electronics': 'https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=200&q=80',
+  'carwash': 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?w=200&q=80',
+  'construction': 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=200&q=80',
+  'printing': 'https://images.unsplash.com/photo-1598327105666-5b89351cb315?w=200&q=80',
+  'eseva': 'https://images.unsplash.com/photo-1580519542036-c47de6196ba5?w=200&q=80',
+  'hero': 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=200&q=80',
+  'other_services': 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=200&q=80',
+  'broadband': 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=200&q=80',
+};
+
+// NEW (Nizam: "buttons mela 2d icon than therithu... mainpage yella option
+// identify pandrathuku illa") — kCategoryPhotoUrl above only covers the
+// ONE header photo per mega card; the actual 5 tappable buttons underneath
+// (what a customer taps to pick bike vs auto vs cab, laptop vs PC vs CCTV,
+// etc.) still showed the flat multicolor glyph even in Photo Realistic
+// theme, which defeats the whole "recognize by photo, not icon" point.
+// Key format: '<category>_<slot 1-5>'. Same CachedCloudImage/disk-cache
+// mechanism as the header photo — one network fetch per photo, then
+// served from cache on every later open including offline.
+const Map<String, String> kSlotPhotoUrl = {
+  // Taxi & Transportation: bike, auto, cab, parcel, mini truck/lorry
+  'taxi_1': 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=200&q=80',
+  'taxi_2': 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=200&q=80',
+  'taxi_3': 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=200&q=80',
+  'taxi_4': 'https://images.unsplash.com/photo-1595246140625-573b715d11dc?w=200&q=80',
+  'taxi_5': 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=200&q=80',
+  // Food Delivery: 5 dish/cuisine shots
+  'food_1': 'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=200&q=80',
+  'food_2': 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=200&q=80',
+  'food_3': 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=200&q=80',
+  'food_4': 'https://images.unsplash.com/photo-1601924582970-9238bcb495d9?w=200&q=80',
+  'food_5': 'https://images.unsplash.com/photo-1550547660-d9450f859349?w=200&q=80',
+  // Grocery: veggies, fruits, dairy/eggs, spices, packaged snacks
+  'grocery_1': 'https://images.unsplash.com/photo-1518843875459-f738682238a6?w=200&q=80',
+  'grocery_2': 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=200&q=80',
+  'grocery_3': 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=200&q=80',
+  'grocery_4': 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=200&q=80',
+  'grocery_5': 'https://images.unsplash.com/photo-1553546895-531931aa1aa8?w=200&q=80',
+  // Mobiles: phone+battery, repair tools, sim/network, phone shop shelf, phone in hand
+  'mobile_1': 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=200&q=80',
+  'mobile_2': 'https://images.unsplash.com/photo-1580522154071-c6ca47a859ec?w=200&q=80',
+  'mobile_3': 'https://images.unsplash.com/photo-1556656793-08538906a9f8?w=200&q=80',
+  'mobile_4': 'https://images.unsplash.com/photo-1573148195900-7845dcb9b127?w=200&q=80',
+  'mobile_5': 'https://images.unsplash.com/photo-1601784551446-20c9e07cdbdb?w=200&q=80',
+  // Electronics: laptop, PC/desktop, CCTV camera, TV, home theatre speaker
+  'electronics_1': 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=200&q=80',
+  'electronics_2': 'https://images.unsplash.com/photo-1587831990711-23ca6441447b?w=200&q=80',
+  'electronics_3': 'https://images.unsplash.com/photo-1557324232-b8917d3c3dcb?w=200&q=80',
+  'electronics_4': 'https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?w=200&q=80',
+  'electronics_5': 'https://images.unsplash.com/photo-1545454675-3531b543be5d?w=200&q=80',
+  // Car Service: exterior wash foam, interior cleaning, engine/repair tools, spares, tow/pickup
+  'carwash_1': 'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=200&q=80',
+  'carwash_2': 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=200&q=80',
+  'carwash_3': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?w=200&q=80',
+  'carwash_4': 'https://images.unsplash.com/photo-1486006920555-c77dcf18193c?w=200&q=80',
+  'carwash_5': 'https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98?w=200&q=80',
+  // Construction: bricks/cement, scaffolding/building, hardhat worker, excavator, mixer truck
+  'construction_1': 'https://images.unsplash.com/photo-1541976590-713941681591?w=200&q=80',
+  'construction_2': 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=200&q=80',
+  'construction_3': 'https://images.unsplash.com/photo-1516937941344-00b4e0337589?w=200&q=80',
+  'construction_4': 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=200&q=80',
+  'construction_5': 'https://images.unsplash.com/photo-1578844251758-2f71da64c96f?w=200&q=80',
+  // Designing & Printing: business cards, flex banner, notebook/bill book, ad/megaphone, design on screen
+  'printing_1': 'https://images.unsplash.com/photo-1589998059171-988d887df646?w=200&q=80',
+  'printing_2': 'https://images.unsplash.com/photo-1541746972996-4e0b0f43e02a?w=200&q=80',
+  'printing_3': 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=200&q=80',
+  'printing_4': 'https://images.unsplash.com/photo-1533750349088-cd871a92f312?w=200&q=80',
+  'printing_5': 'https://images.unsplash.com/photo-1561070791-2526d30994b5?w=200&q=80',
+  // E-Seva: ID card, voter/certificate, fingerprint/aadhaar, documents, laptop e-service
+  'eseva_1': 'https://images.unsplash.com/photo-1580519542036-c47de6196ba5?w=200&q=80',
+  'eseva_2': 'https://images.unsplash.com/photo-1580128637411-70dfaf5ba591?w=200&q=80',
+  'eseva_3': 'https://images.unsplash.com/photo-1614064548237-096d5814680f?w=200&q=80',
+  'eseva_4': 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=200&q=80',
+  'eseva_5': 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=200&q=80',
+  // Book a Hero: helper/handyman, SOS/emergency, parcel delivery, shopping bags errand, bike delivery
+  'hero_1': 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=200&q=80',
+  'hero_2': 'https://images.unsplash.com/photo-1584036561566-baf8f5f1b144?w=200&q=80',
+  'hero_3': 'https://images.unsplash.com/photo-1595246140625-573b715d11dc?w=200&q=80',
+  'hero_4': 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&q=80',
+  'hero_5': 'https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=200&q=80',
+};
+
 // ================================================================
 // HOME TAB (Redesigned with Mega Cards)
 // ================================================================
@@ -1860,6 +2004,18 @@ class _HomeTab extends StatelessWidget {
               gradient: const [Color(0xFFB79891), Color(0xFF94716B)],
               icon: Icons.construction_rounded,
               onTap: () => onTileTap('construction'),
+            ),
+            // SKILL HEROES (Aug 29 2026) — the customer-side entry
+            // for electrician / plumber / laptop & PC / TV / fridge &
+            // AC. Sits beside Construction because that is the same
+            // mental category for a customer with a broken thing at
+            // home.
+            BannerTextSlide(
+              title: 'Home Services 🔧',
+              subtitle: 'Electrician, plumber, AC, TV & laptop — Heroes within 5 km',
+              gradient: const [Color(0xFF2D9CDB), Color(0xFF56CCF2)],
+              icon: Icons.handyman_rounded,
+              onTap: () => onTileTap('homeservices'),
             ),
             BannerTextSlide(
               title: 'Internet Offers 🌐',
@@ -2048,12 +2204,34 @@ class _HomeTab extends StatelessWidget {
   }
 
 
+  // NEW (Nizam: "sila customer image paathe easy-a understand pannikuvanga
+  // andhandha section kulla povanga") — a 3rd icon theme, 'photo_realistic',
+  // for customers who recognize a real photo faster than a 3D render or
+  // flat glyph. One representative network photo per category, fetched
+  // through CachedCloudImage — same widget eseva_service_screen.dart
+  // already uses — so it downloads once and is served from disk cache
+  // on every later open (including offline). Deliberately ONE photo per
+  // category, not five: the mega-card row's 5 mini-icons stay whatever
+  // the OTHER active setting is (pink 3D or flat multicolor) — retrofitting
+  // 5 distinct real photos per category is a separate, much bigger asset
+  // job than this pass. Only the header icon and the top carousel's
+  // single icon switch to a photo.
   // Small section-header icon (the one next to "Hero Booking" / "Taxi &
   // Transportation" / "Food Delivery" titles) — swaps the flat FluentEmoji
   // glyph for that category's own pink_icons render so the header matches
   // the row of icons underneath instead of staying multicolor.
   Widget _themedHeaderIcon(BuildContext context, String category, String slot, Widget defaultIcon) {
     final iconTheme = context.watch<ThemeService>().iconThemeKey;
+    // CHANGED (Nizam: "catogory name ku munnadi irukka image ah remove
+    // pannitu anga text iruntha screen la namaku konjam space kidaikkum")
+    // — the header used to show a small (32x32) photo next to the title;
+    // dropped entirely in Photo Realistic theme so the title text gets
+    // that width back, and because the REAL identification work now
+    // happens on the 5 bigger buttons below (_themedSlot), not this tiny
+    // header thumbnail.
+    if (iconTheme == 'photo_realistic') {
+      return const SizedBox.shrink();
+    }
     if (iconTheme == 'pink_white_3d') {
       // No ClipOval here: these renders already have their background
       // removed (transparent webp), so circle-cropping just chopped off
@@ -2070,8 +2248,56 @@ class _HomeTab extends StatelessWidget {
     return defaultIcon;
   }
 
-  Widget _themedSlot(BuildContext context, String category, int slot, Duration duration, Widget defaultSlot) {
+  Widget _themedSlot(BuildContext context, String category, int slot, Duration duration, Widget defaultSlot, {bool hasThirdFrame = false}) {
     final iconTheme = context.watch<ThemeService>().iconThemeKey;
+    final slotPhoto = kSlotPhotoUrl['${category}_$slot'];
+    if (iconTheme == 'photo_realistic' && slotPhoto != null) {
+      // CHANGED (Nizam: "button big-a panni antha button suthi irukka
+      // pink line ku konjam mattum gape irukamari") — grown from 44 to
+      // 50 inside the mega card row's fixed 56px-tall container, leaving
+      // just a ~3px gap to the pink border on each side instead of the
+      // wider gap the other two themes' 44px icon leaves.
+      //
+      // CHANGED (Nizam: "orey image asingala... ovvoru button layum
+      // smooth animation oodatum") — reuses the SAME AutoWidgetSlider
+      // (fade+slide crossfade) the pink_white_3d theme already uses for
+      // its a/b frames, just fed CachedCloudImage widgets instead of
+      // local assets, so it's our own established animation language,
+      // not a new one-off.
+      //
+      // FIX (Nizam: "orey photove again and again varuthu... 5 images
+      // set pannu, onnu maathi onnu varanum") — the previous version
+      // crossfaded each button between ITS OWN photo and the category's
+      // ONE shared header photo, so all 5 buttons in a row kept
+      // converging on that same shared frame and looked repetitive.
+      // Now each button cycles through ALL 5 of the category's photos
+      // (still the same 50 URLs already sourced, no new fetching),
+      // just started at ITS OWN slot so slot 1 shows order [1,2,3,4,5],
+      // slot 2 shows [2,3,4,5,1], etc. — every button always shows a
+      // different frame than its neighbours at any given moment, and
+      // no photo is shared/repeated across the row.
+      Widget photoTile(String url) => ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: CachedCloudImage(
+              url,
+              width: 50,
+              height: 50,
+              fit: BoxFit.cover,
+              cacheWidth: 200,
+              errorWidget: defaultSlot,
+            ),
+          );
+      final rotated = List.generate(5, (i) => kSlotPhotoUrl['${category}_${((slot - 1 + i) % 5) + 1}'])
+          .whereType<String>()
+          .toSet() // dedupe in case a category has fewer than 5 distinct entries
+          .toList();
+      return AutoWidgetSlider(
+        width: 50,
+        height: 50,
+        duration: duration,
+        children: rotated.map(photoTile).toList(),
+      );
+    }
     if (iconTheme == 'pink_white_3d') {
       // No ClipOval: these are already background-removed transparent
       // cutouts (bg-removed at asset-prep time), so a circular clip just
@@ -2081,6 +2307,7 @@ class _HomeTab extends StatelessWidget {
         imagePaths: [
           'assets/images/pink_icons/${category}_${slot}_a.webp',
           'assets/images/pink_icons/${category}_${slot}_b.webp',
+          if (hasThirdFrame) 'assets/images/pink_icons/${category}_${slot}_c.webp',
         ],
         width: 44,
         height: 44,
@@ -2186,24 +2413,34 @@ class _HomeTab extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
+                Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        SvgPicture.string(FluentEmojiFlat.shopping_cart, width: 20, height: 20),
+                        _themedHeaderIcon(context, 'grocery', '1', SvgPicture.string(FluentEmojiFlat.shopping_cart, width: 20, height: 20)),
                         const SizedBox(width: 6),
-                        Text(
-                          context.watch<LocalizationService>().t('grocery_mega_title'),
-                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(
+                                text: context.watch<LocalizationService>().t('grocery_mega_title'),
+                                style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w800),
+                              ),
+                              TextSpan(
+                                text: ' - ${context.watch<LocalizationService>().t('grocery_mega_subtitle')}',
+                                style: GoogleFonts.outfit(color: kMuted, fontSize: 11, fontWeight: FontWeight.w500),
+                              ),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
-                    Text(
-                      '  ${context.watch<LocalizationService>().t('grocery_mega_subtitle')}',
-                      style: TextStyle(color: kMuted, fontSize: 11),
-                    ),
                   ],
+                ),
                 ),
               ],
             ),
@@ -2227,11 +2464,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.leafy_green), SvgPicture.string(FluentEmojiFlat.broccoli)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.red_apple), SvgPicture.string(FluentEmojiFlat.banana)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.carrot), SvgPicture.string(FluentEmojiFlat.potato)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.onion), SvgPicture.string(FluentEmojiFlat.garlic)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.shopping_cart), SvgPicture.string(FluentEmojiFlat.shopping_bags)])),
+                  _themedSlot(context, 'grocery', 1, const Duration(seconds: 3), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.leafy_green), SvgPicture.string(FluentEmojiFlat.broccoli)]))),
+                  _themedSlot(context, 'grocery', 2, const Duration(milliseconds: 3200), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.red_apple), SvgPicture.string(FluentEmojiFlat.banana)]))),
+                  _themedSlot(context, 'grocery', 3, const Duration(milliseconds: 2800), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.carrot), SvgPicture.string(FluentEmojiFlat.potato)]))),
+                  _themedSlot(context, 'grocery', 4, const Duration(milliseconds: 3500), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.onion), SvgPicture.string(FluentEmojiFlat.garlic)])), hasThirdFrame: true),
+                  _themedSlot(context, 'grocery', 5, const Duration(milliseconds: 3100), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.shopping_cart), SvgPicture.string(FluentEmojiFlat.shopping_bags)])), hasThirdFrame: true),
                 ],
               ),
             ),
@@ -2273,30 +2510,35 @@ class _HomeTab extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
+                Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        SvgPicture.string(FluentEmojiFlat.mobile_phone,
-                            width: 20, height: 20),
+                        _themedHeaderIcon(context, 'mobile', '1', SvgPicture.string(FluentEmojiFlat.mobile_phone,
+                            width: 20, height: 20)),
                         const SizedBox(width: 6),
-                        Text(
-                          context
-                              .watch<LocalizationService>()
-                              .t('mobiles_mega_title'),
-                          style: GoogleFonts.outfit(
-                              color: kText,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(
+                                text: context.watch<LocalizationService>().t('mobiles_mega_title'),
+                                style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w800),
+                              ),
+                              TextSpan(
+                                text: ' - ${context.watch<LocalizationService>().t('mobiles_mega_subtitle')}',
+                                style: GoogleFonts.outfit(color: kMuted, fontSize: 11, fontWeight: FontWeight.w500),
+                              ),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
-                    Text(
-                      '  ${context.watch<LocalizationService>().t('mobiles_mega_subtitle')}',
-                      style: TextStyle(color: kMuted, fontSize: 11),
-                    ),
                   ],
+                ),
                 ),
               ],
             ),
@@ -2317,11 +2559,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.mobile_phone), SvgPicture.string(FluentEmojiFlat.laptop)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.battery), SvgPicture.string(FluentEmojiFlat.electric_plug)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.hammer_and_wrench), SvgPicture.string(FluentEmojiFlat.gear)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.shopping_bags), SvgPicture.string(FluentEmojiFlat.shopping_cart)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.label), SvgPicture.string(FluentEmojiFlat.receipt)])),
+                  _themedSlot(context, 'mobile', 1, const Duration(seconds: 3), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.mobile_phone), SvgPicture.string(FluentEmojiFlat.laptop)]))),
+                  _themedSlot(context, 'mobile', 2, const Duration(milliseconds: 3200), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.battery), SvgPicture.string(FluentEmojiFlat.electric_plug)]))),
+                  _themedSlot(context, 'mobile', 3, const Duration(milliseconds: 2800), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.hammer_and_wrench), SvgPicture.string(FluentEmojiFlat.gear)]))),
+                  _themedSlot(context, 'mobile', 4, const Duration(milliseconds: 3500), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.shopping_bags), SvgPicture.string(FluentEmojiFlat.shopping_cart)]))),
+                  _themedSlot(context, 'mobile', 5, const Duration(milliseconds: 3100), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.label), SvgPicture.string(FluentEmojiFlat.receipt)]))),
                 ],
               ),
             ),
@@ -2424,24 +2666,34 @@ class _HomeTab extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
+                Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        SvgPicture.string(FluentEmojiFlat.oncoming_taxi, width: 20, height: 20),
+                        _themedHeaderIcon(context, 'carwash', '1', SvgPicture.string(FluentEmojiFlat.oncoming_taxi, width: 20, height: 20)),
                         const SizedBox(width: 6),
-                        Text(
-                          context.watch<LocalizationService>().t('carservice_mega_title'),
-                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(
+                                text: context.watch<LocalizationService>().t('carservice_mega_title'),
+                                style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w800),
+                              ),
+                              TextSpan(
+                                text: ' - ${context.watch<LocalizationService>().t('carservice_mega_subtitle')}',
+                                style: GoogleFonts.outfit(color: kMuted, fontSize: 11, fontWeight: FontWeight.w500),
+                              ),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
-                    Text(
-                      '  ${context.watch<LocalizationService>().t('carservice_mega_subtitle')}',
-                      style: TextStyle(color: kMuted, fontSize: 11),
-                    ),
                   ],
+                ),
                 ),
               ],
             ),
@@ -2464,11 +2716,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.oncoming_taxi), SvgPicture.string(FluentEmojiFlat.sport_utility_vehicle)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.sweat_droplets), SvgPicture.string(FluentEmojiFlat.sponge)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.gear), SvgPicture.string(FluentEmojiFlat.nut_and_bolt)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.hammer_and_wrench), SvgPicture.string(FluentEmojiFlat.wrench)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.sport_utility_vehicle), SvgPicture.string(FluentEmojiFlat.oncoming_automobile)])),
+                  _themedSlot(context, 'carwash', 1, const Duration(seconds: 3), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.oncoming_taxi), SvgPicture.string(FluentEmojiFlat.sport_utility_vehicle)]))),
+                  _themedSlot(context, 'carwash', 2, const Duration(milliseconds: 3200), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.sweat_droplets), SvgPicture.string(FluentEmojiFlat.sponge)]))),
+                  _themedSlot(context, 'carwash', 3, const Duration(milliseconds: 2800), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.gear), SvgPicture.string(FluentEmojiFlat.nut_and_bolt)]))),
+                  _themedSlot(context, 'carwash', 4, const Duration(milliseconds: 3500), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.hammer_and_wrench), SvgPicture.string(FluentEmojiFlat.wrench)]))),
+                  _themedSlot(context, 'carwash', 5, const Duration(milliseconds: 3100), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.sport_utility_vehicle), SvgPicture.string(FluentEmojiFlat.oncoming_automobile)]))),
                 ],
               ),
             ),
@@ -2493,24 +2745,34 @@ class _HomeTab extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
+                Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        SvgPicture.string(FluentEmojiFlat.building_construction, width: 20, height: 20),
+                        _themedHeaderIcon(context, 'construction', '1', SvgPicture.string(FluentEmojiFlat.building_construction, width: 20, height: 20)),
                         const SizedBox(width: 6),
-                        Text(
-                          context.watch<LocalizationService>().t('construction_mega_title'),
-                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(
+                                text: context.watch<LocalizationService>().t('construction_mega_title'),
+                                style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w800),
+                              ),
+                              TextSpan(
+                                text: ' - ${context.watch<LocalizationService>().t('construction_mega_subtitle')}',
+                                style: GoogleFonts.outfit(color: kMuted, fontSize: 11, fontWeight: FontWeight.w500),
+                              ),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
-                    Text(
-                      '  ${context.watch<LocalizationService>().t('construction_mega_subtitle')}',
-                      style: TextStyle(color: kMuted, fontSize: 11),
-                    ),
                   ],
+                ),
                 ),
               ],
             ),
@@ -2533,11 +2795,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.building_construction), SvgPicture.string(FluentEmojiFlat.house)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.brick), SvgPicture.string(FluentEmojiFlat.wood)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.construction_worker), SvgPicture.string(FluentEmojiFlat.man_construction_worker)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.triangular_ruler), SvgPicture.string(FluentEmojiFlat.straight_ruler)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.office_building), SvgPicture.string(FluentEmojiFlat.classical_building)])),
+                  _themedSlot(context, 'construction', 1, const Duration(seconds: 3), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.building_construction), SvgPicture.string(FluentEmojiFlat.house)]))),
+                  _themedSlot(context, 'construction', 2, const Duration(milliseconds: 3200), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.brick), SvgPicture.string(FluentEmojiFlat.wood)]))),
+                  _themedSlot(context, 'construction', 3, const Duration(milliseconds: 2800), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.construction_worker), SvgPicture.string(FluentEmojiFlat.man_construction_worker)]))),
+                  _themedSlot(context, 'construction', 4, const Duration(milliseconds: 3500), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.triangular_ruler), SvgPicture.string(FluentEmojiFlat.straight_ruler)]))),
+                  _themedSlot(context, 'construction', 5, const Duration(milliseconds: 3100), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.office_building), SvgPicture.string(FluentEmojiFlat.classical_building)]))),
                 ],
               ),
             ),
@@ -2674,24 +2936,34 @@ class _HomeTab extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
+                Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        SvgPicture.string(FluentEmojiFlat.printer, width: 20, height: 20),
+                        _themedHeaderIcon(context, 'printing', '1', SvgPicture.string(FluentEmojiFlat.printer, width: 20, height: 20)),
                         const SizedBox(width: 6),
-                        Text(
-                          context.watch<LocalizationService>().t('printing_mega_title'),
-                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(
+                                text: context.watch<LocalizationService>().t('printing_mega_title'),
+                                style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w800),
+                              ),
+                              TextSpan(
+                                text: ' - ${context.watch<LocalizationService>().t('printing_mega_subtitle')}',
+                                style: GoogleFonts.outfit(color: kMuted, fontSize: 11, fontWeight: FontWeight.w500),
+                              ),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
-                    Text(
-                      '  ${context.watch<LocalizationService>().t('printing_mega_subtitle')}',
-                      style: TextStyle(color: kMuted, fontSize: 11),
-                    ),
                   ],
+                ),
                 ),
               ],
             ),
@@ -2716,11 +2988,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.card_index), SvgPicture.string(FluentEmojiFlat.card_file_box)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.scroll), SvgPicture.string(FluentEmojiFlat.page_facing_up)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.framed_picture), SvgPicture.string(FluentEmojiFlat.artist_palette)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.label), SvgPicture.string(FluentEmojiFlat.bookmark)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.printer), SvgPicture.string(FluentEmojiFlat.camera)])),
+                  _themedSlot(context, 'printing', 1, const Duration(seconds: 3), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.card_index), SvgPicture.string(FluentEmojiFlat.card_file_box)]))),
+                  _themedSlot(context, 'printing', 2, const Duration(milliseconds: 3200), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.scroll), SvgPicture.string(FluentEmojiFlat.page_facing_up)]))),
+                  _themedSlot(context, 'printing', 3, const Duration(milliseconds: 2800), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.framed_picture), SvgPicture.string(FluentEmojiFlat.artist_palette)]))),
+                  _themedSlot(context, 'printing', 4, const Duration(milliseconds: 3500), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.label), SvgPicture.string(FluentEmojiFlat.bookmark)]))),
+                  _themedSlot(context, 'printing', 5, const Duration(milliseconds: 3100), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.printer), SvgPicture.string(FluentEmojiFlat.camera)]))),
                 ],
               ),
             ),
@@ -2753,24 +3025,34 @@ class _HomeTab extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
+                Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        SvgPicture.string(FluentEmojiFlat.scroll, width: 20, height: 20),
+                        _themedHeaderIcon(context, 'eseva', '1', SvgPicture.string(FluentEmojiFlat.scroll, width: 20, height: 20)),
                         const SizedBox(width: 6),
-                        Text(
-                          context.watch<LocalizationService>().t('eseva_mega_title'),
-                          style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(
+                                text: context.watch<LocalizationService>().t('eseva_mega_title'),
+                                style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w800),
+                              ),
+                              TextSpan(
+                                text: ' - ${context.watch<LocalizationService>().t('eseva_mega_subtitle')}',
+                                style: GoogleFonts.outfit(color: kMuted, fontSize: 11, fontWeight: FontWeight.w500),
+                              ),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
-                    Text(
-                      '  ${context.watch<LocalizationService>().t('eseva_mega_subtitle')}',
-                      style: TextStyle(color: kMuted, fontSize: 11),
-                    ),
                   ],
+                ),
                 ),
               ],
             ),
@@ -2795,11 +3077,11 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.card_index), SvgPicture.string(FluentEmojiFlat.identification_card)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.scroll), SvgPicture.string(FluentEmojiFlat.rolled_up_newspaper)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.label), SvgPicture.string(FluentEmojiFlat.receipt)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.office_building), SvgPicture.string(FluentEmojiFlat.bank)])),
-                  ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.printer), SvgPicture.string(FluentEmojiFlat.fax_machine)])),
+                  _themedSlot(context, 'eseva', 1, const Duration(seconds: 3), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.card_index), SvgPicture.string(FluentEmojiFlat.identification_card)]))),
+                  _themedSlot(context, 'eseva', 2, const Duration(milliseconds: 3200), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.scroll), SvgPicture.string(FluentEmojiFlat.rolled_up_newspaper)]))),
+                  _themedSlot(context, 'eseva', 3, const Duration(milliseconds: 2800), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.label), SvgPicture.string(FluentEmojiFlat.receipt)]))),
+                  _themedSlot(context, 'eseva', 4, const Duration(milliseconds: 3500), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.office_building), SvgPicture.string(FluentEmojiFlat.bank)]))),
+                  _themedSlot(context, 'eseva', 5, const Duration(milliseconds: 3100), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.printer), SvgPicture.string(FluentEmojiFlat.fax_machine)]))),
                 ],
               ),
             ),
@@ -2819,24 +3101,34 @@ class _HomeTab extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
+              Expanded(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      SvgPicture.string(FluentEmojiFlat.hammer_and_wrench, width: 20, height: 20),
+                      _themedHeaderIcon(context, 'other_services', '1', SvgPicture.string(FluentEmojiFlat.hammer_and_wrench, width: 20, height: 20)),
                       const SizedBox(width: 6),
-                      Text(
-                        context.watch<LocalizationService>().t('otherservices_mega_title'),
-                        style: GoogleFonts.outfit(color: kText, fontSize: 14, fontWeight: FontWeight.w800),
+                      Expanded(
+                        child: Text.rich(
+                          TextSpan(children: [
+                            TextSpan(
+                              text: context.watch<LocalizationService>().t('otherservices_mega_title'),
+                              style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w800),
+                            ),
+                            TextSpan(
+                              text: ' - ${context.watch<LocalizationService>().t('otherservices_mega_subtitle')}',
+                              style: GoogleFonts.outfit(color: kMuted, fontSize: 11, fontWeight: FontWeight.w500),
+                            ),
+                          ]),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
-                  Text(
-                    '  ${context.watch<LocalizationService>().t('otherservices_mega_subtitle')}',
-                    style: TextStyle(color: kMuted, fontSize: 11),
-                  ),
                 ],
+              ),
               ),
             ],
           ),
@@ -2852,10 +3144,10 @@ class _HomeTab extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildSmallActionTile(context, FluentEmojiFlat.antenna_bars, context.watch<LocalizationService>().t('other_internet_label'), () => onTileTap('broadband')),
-                _buildSmallActionTile(context, FluentEmojiFlat.motorcycle, context.watch<LocalizationService>().t('other_puncture_label'), () => onTileTap('puncture')),
-                _buildSmallActionTile(context, FluentEmojiFlat.broom, context.watch<LocalizationService>().t('other_cleaning_label'), () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ComingSoonScreen(role: 'Home Cleaning')))),
-                _buildSmallActionTile(context, FluentEmojiFlat.high_voltage, context.watch<LocalizationService>().t('other_electrician_label'), () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ComingSoonScreen(role: 'Electrician')))),
+                _buildSmallActionTile(context, FluentEmojiFlat.antenna_bars, context.watch<LocalizationService>().t('other_internet_label'), () => onTileTap('broadband'), photoUrl: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=200&q=80'),
+                _buildSmallActionTile(context, FluentEmojiFlat.motorcycle, context.watch<LocalizationService>().t('other_puncture_label'), () => onTileTap('puncture'), photoUrl: 'https://images.unsplash.com/photo-1449426468159-d96dbf08f19f?w=200&q=80'),
+                _buildSmallActionTile(context, FluentEmojiFlat.broom, context.watch<LocalizationService>().t('other_cleaning_label'), () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ComingSoonScreen(role: 'Home Cleaning'))), photoUrl: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=200&q=80'),
+                _buildSmallActionTile(context, FluentEmojiFlat.high_voltage, context.watch<LocalizationService>().t('other_electrician_label'), () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ComingSoonScreen(role: 'Electrician'))), photoUrl: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=200&q=80'),
               ],
             ),
           ),
@@ -2864,7 +3156,9 @@ class _HomeTab extends StatelessWidget {
     );
   }
 
-  Widget _buildSmallActionTile(BuildContext context, String iconSvg, String label, VoidCallback onTap) {
+  Widget _buildSmallActionTile(BuildContext context, String iconSvg, String label, VoidCallback onTap, {String? photoUrl}) {
+    final iconTheme = context.watch<ThemeService>().iconThemeKey;
+    final usePhoto = iconTheme == 'photo_realistic' && photoUrl != null;
     return GestureDetector(
       onTap: onTap,
       child: Column(
@@ -2880,7 +3174,18 @@ class _HomeTab extends StatelessWidget {
                 BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 3)),
               ],
             ),
-            child: Center(child: SvgPicture.string(iconSvg, width: 28, height: 28)),
+            child: usePhoto
+                ? ClipOval(
+                    child: CachedCloudImage(
+                      photoUrl,
+                      width: 48,
+                      height: 48,
+                      fit: BoxFit.cover,
+                      cacheWidth: 192,
+                      errorWidget: Center(child: SvgPicture.string(iconSvg, width: 28, height: 28)),
+                    ),
+                  )
+                : Center(child: SvgPicture.string(iconSvg, width: 28, height: 28)),
           ),
           const SizedBox(height: 6),
           Text(
@@ -4337,6 +4642,34 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
     ],
   ];
 
+  // Three short highlight/benefit points per category — shown next to a
+  // single big pink 3D icon when the pink theme is active (see
+  // _slidePinkCategory below), replacing the scrolling multicolor icon
+  // row so the slide actually tells the customer what the service does.
+  static const List<List<String>> _slideBenefits = [
+    ['Aadhaar, PAN & ID services', 'Govt certificates online', 'No queue, doorstep help'],
+    ['Flex, sticker & photo printing', 'Business cards same day', 'Bulk order discounts'],
+    ['Genuine parts guaranteed', 'Doorstep pickup & drop', 'Same-day repair service'],
+    ['High-speed connections', 'Mobile & laptop setup help', 'Best plan comparison'],
+    ['Verified contractors', 'Design to build support', 'Transparent material costs'],
+    ['Foam wash & polish', 'SUV & sedan service', 'Doorstep car service'],
+    ['Any errand, any time', 'Verified local heroes', 'Live tracking & support'],
+    ['Order from any local shop', 'Fresh veggies & fruits', 'Fast doorstep delivery'],
+    ['Order from any shop in Erode', 'Hot & fresh delivery', 'Real onboarded partners'],
+    ['Bike, Auto, Cab & more', 'Transparent fare pricing', 'Live driver tracking'],
+  ];
+
+  // These have real pink_icons/*.webp renders today (taxi, hero, food,
+  // electronics, grocery, printing, construction, eseva, carwash) — the
+  // rest keep the flat FluentEmoji until matching pink assets exist for
+  // them too. null = no swap for that slide.
+  // 'broadband' has no pink_icons asset (falls back to flat FluentEmoji
+  // for pink_white_3d via errorBuilder, unchanged), but DOES have a
+  // kCategoryPhotoUrl entry so Photo Realistic theme covers it too.
+  static const List<String?> _slidePinkCategory = [
+    'eseva', 'printing', 'electronics', 'broadband', 'construction', 'carwash', 'hero', 'grocery', 'food', 'taxi',
+  ];
+
   // Reverse-order tap ids matching _titles above. 'route:x' entries open
   // a screen directly instead of going through onTileTap's switch.
   static const List<String> _tapIds = [
@@ -4354,7 +4687,13 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
 
   List<_CategorySlideData> _buildSlides() {
     return List.generate(_slideCount, (i) =>
-        _CategorySlideData(title: _titles[i], icons: _slideIcons[i], tapId: _tapIds[i]),);
+        _CategorySlideData(
+          title: _titles[i],
+          icons: _slideIcons[i],
+          benefits: _slideBenefits[i],
+          pinkCategory: _slidePinkCategory[i],
+          tapId: _tapIds[i],
+        ),);
   }
 
   void _handleTap(BuildContext context, String tapId) {
@@ -4421,14 +4760,68 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
                     border: Border.all(color: kPink.withValues(alpha: 0.2)),
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(slide.title, style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 8),
-                      Expanded(child: _IconMarquee(icons: slide.icons)),
-                    ],
-                  ),
+                  // Every slide now always shows title + 3 benefit points —
+                  // that never changes with theme. Only the single icon on
+                  // the left switches: the category's own pink_icons render
+                  // in pink theme (for the 4 categories that have one
+                  // today), or its flat FluentEmoji glyph otherwise. No more
+                  // scrolling multicolor marquee — that was the "just
+                  // running, means nothing" look this replaces.
+                  child: Builder(builder: (context) {
+                    final iconTheme = context.watch<ThemeService>().iconThemeKey;
+                    final isPink = iconTheme == 'pink_white_3d' && slide.pinkCategory != null;
+                    final photoUrl = iconTheme == 'photo_realistic' ? kCategoryPhotoUrl[slide.pinkCategory] : null;
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 56,
+                          height: 56,
+                          child: photoUrl != null
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: CachedCloudImage(
+                                    photoUrl,
+                                    fit: BoxFit.cover,
+                                    cacheWidth: 112,
+                                    errorWidget: SvgPicture.string(slide.icons.first, width: 44, height: 44),
+                                  ),
+                                )
+                              : isPink
+                                  ? Image.asset(
+                                      'assets/images/pink_icons/${slide.pinkCategory}_1_a.webp',
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, __, ___) => SvgPicture.string(slide.icons.first, width: 44, height: 44),
+                                    )
+                                  : Center(child: SvgPicture.string(slide.icons.first, width: 44, height: 44)),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(slide.title, style: GoogleFonts.outfit(color: kText, fontSize: 15, fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 6),
+                              ...slide.benefits.map((point) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 2),
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Icon(Icons.check_circle_rounded, color: kPink, size: 12),
+                                        const SizedBox(width: 5),
+                                        Expanded(
+                                          child: Text(point, style: GoogleFonts.outfit(color: kMuted, fontSize: 10.5, fontWeight: FontWeight.w500)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
                 ),
               );
             },
@@ -4456,8 +4849,16 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
 class _CategorySlideData {
   final String title;
   final List<String> icons;
+  final List<String> benefits;
+  final String? pinkCategory;
   final String tapId;
-  const _CategorySlideData({required this.title, required this.icons, required this.tapId});
+  const _CategorySlideData({
+    required this.title,
+    required this.icons,
+    required this.benefits,
+    required this.pinkCategory,
+    required this.tapId,
+  });
 }
 
 class _IconMarquee extends StatefulWidget {

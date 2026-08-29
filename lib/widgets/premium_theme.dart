@@ -170,7 +170,6 @@ class PremiumCard extends StatelessWidget {
     // is the kind of detail that makes an app feel unfinished.
     return Stack(
       children: [
-        card,
         Positioned.fill(
           child: Material(
             color: Colors.transparent,
@@ -182,6 +181,7 @@ class PremiumCard extends StatelessWidget {
             ),
           ),
         ),
+        card,
       ],
     );
   }

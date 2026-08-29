@@ -24,6 +24,9 @@ import '../../config/payment_config.dart';
 import '../../models/ride_model.dart';
 import '../../utils/otp_utils.dart';
 import '../../services/app_minimizer_service.dart';
+import '../../services/chitti_nudge_service.dart';
+import '../../services/chitti_order_memory_service.dart';
+import '../../services/chitti_overlay_service.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../payment_screen.dart';
 import 'bike_booking_screen.dart';
@@ -99,6 +102,11 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   double? _tipAmount;
   double? _remainingDistanceKm;
   int? _remainingEtaMinutes;
+  // NEW (Aug 25 2026 — "Priority 2: Proactive Nudges"). One-shot per
+  // ride, not a timer-based cooldown — a ride never repeats, so there
+  // is nothing to re-arm. Guards against re-firing on every subsequent
+  // location update once the ETA has already crossed the threshold.
+  bool _etaNudgeSent = false;
 
   // RTDB live GPS tracking (Zero-Read Rule)
   StreamSubscription<DatabaseEvent>? _captainLocationSub;
@@ -233,6 +241,38 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     _remainingEtaMinutes = etaMinutes;
   }
 
+  // NEW (Aug 25 2026 — "Priority 2: Proactive Nudges", ETA trigger).
+  // Scoped to the hero heading to PICKUP only (not mid-ride ETA-to-drop
+  // — the customer is already in the ride at that point, so there's
+  // nothing useful to tell them). One-shot per ride via _etaNudgeSent,
+  // not a timer: a ride never repeats, so there's nothing to re-arm.
+  void _maybeNudgeEtaNear() {
+    if (_etaNudgeSent) return;
+    final etaMinutes = _remainingEtaMinutes;
+    if (etaMinutes == null || etaMinutes > 2) return;
+    if (_rideStatus == 'in_progress' || _rideStatus == 'started') return;
+    _etaNudgeSent = true;
+    unawaited(_fireEtaNudge(etaMinutes));
+  }
+
+  Future<void> _fireEtaNudge(int etaMinutes) async {
+    // perTypeCooldown: Duration.zero — uniqueness for THIS ride is
+    // already guaranteed by _etaNudgeSent above; the global cooldown
+    // and daily cap in ChittiNudgeService still apply on top, so this
+    // doesn't bypass any of the shared anti-spam rules, it just doesn't
+    // add a SECOND, redundant per-ride cooldown on top of the one
+    // already enforced here.
+    final allowed = await ChittiNudgeService.instance.tryFire(
+      'ride_eta_near',
+      perTypeCooldown: Duration.zero,
+    );
+    if (!allowed) return;
+    final minsWord = etaMinutes == 1 ? 'min' : 'mins';
+    unawaited(ChittiOverlayService.instance.showNudge(
+      'Your Hero is about $etaMinutes $minsWord away!',
+    ));
+  }
+
   void _fitTrackingCamera() {
     final pickup = _pickupTarget();
     if (pickup == null || _captainLat == null || _captainLng == null) {
@@ -319,6 +359,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       vehicleType: normalizedVehicle,
     );
     _refreshTrackingMetrics(heroLat, heroLng);
+    _maybeNudgeEtaNear();
 
     final target = _routeTargetForStatus();
     final now = DateTime.now();
@@ -436,6 +477,26 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       return;
     }
     _handledPaidFlow = true;
+    // FIX (Aug 25 2026 — "Chitti never dances"). ChittiCompanion's
+    // completeService() has existed since Aug 19 2026 but was never
+    // called from anywhere in the app — the dance mood it drives was
+    // fully built and completely dead code. This is the ride-completion
+    // half of wiring it up; see service_request_payment_screen.dart for
+    // the food/grocery half. No-ops safely when the companion isn't
+    // showing (web, or hero/seller/admin) — see completeService()'s own
+    // isShowing guard.
+    unawaited(ChittiOverlayService.instance.completeService());
+    // NEW (Aug 25 2026 — Super Chitti Phase 1, Step 2: Hive Order
+    // Memory). Fire-and-forget on purpose — see
+    // ChittiOrderMemoryService.record()'s own contract: a memory-write
+    // failure must never block ride closure.
+    final dropAddress = widget.ride.dropAddress?.trim();
+    unawaited(ChittiOrderMemoryService.record(
+      service: widget.ride.vehicleType ?? 'bike',
+      summary: (dropAddress != null && dropAddress.isNotEmpty)
+          ? 'ride to $dropAddress'
+          : 'a ride',
+    ));
     if (!mounted) return;
     final rating = await showDialog<int>(
       context: context,

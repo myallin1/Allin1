@@ -228,7 +228,7 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
         iconTheme: const IconThemeData(color: _kText),
         title: Text(
           _step == 0 ? 'Delivery Details' : 'Payment',
-          style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800),
+          style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: _kText),
         ),
       ),
       body: SafeArea(

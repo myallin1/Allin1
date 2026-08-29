@@ -50,6 +50,18 @@
         }
       }
     },
+    "seller_pings": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$sellerId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "$requestId": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      }
+    },
     "online_heroes": {
       ".read": "auth != null",
       "$heroId": {

@@ -13,8 +13,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../app_navigator.dart' show chittiRouteObserver;
 // GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
 import '../services/auth_prompt_service.dart';
+import '../services/chitti_memory_service.dart';
 import '../services/cloudinary_upload_service.dart';
 import '../services/grocery_ai_notes_service.dart';
 import '../services/service_request_service.dart';
@@ -40,7 +42,7 @@ class GroceryOrderScreen extends StatefulWidget {
   State<GroceryOrderScreen> createState() => _GroceryOrderScreenState();
 }
 
-class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
+class _GroceryOrderScreenState extends State<GroceryOrderScreen> with RouteAware {
   List<OrderLineItem> _lineItems = [OrderLineItem()];
   // NEW (per Nizam's request — every service request needs a real
   // navigable delivery point for the hero): this form used to collect
@@ -67,6 +69,8 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
   @override
   void initState() {
     super.initState();
+    // NEW (Aug 25 2026 — Super Chitti Phase 1, Step 1).
+    ChittiMemoryService.instance.setCurrentScreen('Grocery Dashboard');
     final pending = GroceryAiNotesService.instance.consumeAll();
     if (pending.isNotEmpty) {
       final newItems = pending
@@ -84,7 +88,29 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic>) {
+      chittiRouteObserver.subscribe(this, route);
+    }
+  }
+
+  // FIX (Aug 25 2026 — "Screen Forgetting Sickness"): re-registers the
+  // label when the user navigates BACK to this screen after pushing
+  // something on top of it — see chitti_screen_tag.dart's header for
+  // the full explanation of why initState()/dispose() alone miss this.
+  @override
+  void didPopNext() {
+    ChittiMemoryService.instance.setCurrentScreen('Grocery Dashboard');
+  }
+
+  @override
   void dispose() {
+    chittiRouteObserver.unsubscribe(this);
+    if (ChittiMemoryService.instance.currentScreen == 'Grocery Dashboard') {
+      ChittiMemoryService.instance.setCurrentScreen(null);
+    }
     _deliveryAddressCtrl.dispose();
     super.dispose();
   }

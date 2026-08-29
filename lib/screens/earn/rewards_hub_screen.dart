@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/video_warmup_service.dart';
 import '../../models/mobile_models.dart' show youtubeVideoId;
 import '../mobiles/listing_video_player.dart'
     show showPremiumVideoModal, VideoThumbnail;
@@ -340,6 +341,9 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
   Map<String, String> _taskStatuses = {};
   // Key: adId, Value: pending/approved/rejected
 
+  /// Guards the one-time video warm-up — see the carousel builder.
+  bool _videosWarmed = false;
+
   @override
   void initState() {
     super.initState();
@@ -483,6 +487,8 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
 
   @override
   void dispose() {
+    // A WebView held open for a page nobody is on is pure cost.
+    VideoWarmupService.instance.dispose();
     _tabCtrl.dispose();
     _carouselTimer?.cancel();
     super.dispose();
@@ -1673,6 +1679,44 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
                   d.id, d.data()! as Map<String, dynamic>,),
             )
             .toList();
+        // WARM-UP (Aug 28 2026 — Nizam: "reward page kulla vanthathume
+        // videos net-la irunthu load agikatum ... takkunu play agurathu,
+        // ready-yum irukum 1st time").
+        //
+        // Two different things, and the second one is the big one:
+        //   • every thumbnail is precached, so the cards are already
+        //     drawn by the time the carousel reaches them;
+        //   • ONE player is built and cued, which pulls YouTube's
+        //     player JavaScript into the WebView's HTTP cache.
+        // That second effect is not limited to the warmed video — once
+        // those assets are cached, EVERY video in this carousel starts
+        // faster, including ones the customer scrolls to later.
+        //
+        // Only one player, deliberately: see the lazy-player note above
+        // and video_warmup_service.dart. Ten hidden WebViews would trade
+        // a short wait for an out-of-memory kill on the phones most of
+        // Erode actually uses.
+        if (!_videosWarmed) {
+          _videosWarmed = true;
+          final videoIds = ads
+              .map((a) => a.videoId)
+              .whereType<String>()
+              .toList(growable: false);
+          if (videoIds.isNotEmpty) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              VideoWarmupService.instance.warm(videoIds.first);
+              // Rebuild so VideoWarmupHost below actually mounts the
+              // player — without this it stays a SizedBox.shrink and
+              // nothing loads.
+              setState(() {});
+              unawaited(
+                VideoWarmupService.precacheThumbnails(context, videoIds),
+              );
+            });
+          }
+        }
+
         final idx = _carouselIdx % ads.length;
         final ad = ads[idx];
 
@@ -1687,9 +1731,13 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
         });
         return Container(
           margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          // The warm player is mounted here, 1x1 and invisible. A
+          // platform view downloads nothing until it is laid out, so it
+          // needs a real box in the tree rather than Offstage.
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const VideoWarmupHost(),
               Row(
                 children: [
                   Text(

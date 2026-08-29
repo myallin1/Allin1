@@ -77,6 +77,76 @@ const CACHE_VERSION = '__ALLIN1_CACHE_VERSION__'.indexOf('__') === 0
   ? 'allin1-dev-local'
   : '__ALLIN1_CACHE_VERSION__';
 
+// ================================================================
+// FIREBASE HOSTING LIMIT FALLBACK (503/402 ERROR HANDLER)
+// ================================================================
+// When Firebase Hosting quota is exceeded, Firebase returns a 503 or 402 error.
+// Instead of showing the generic Firebase error page, we intercept it and show 
+// this inline HTML page prompting them to download the MyAllin1 Turbo App.
+function getTurboAppFallbackHTML() {
+  return `
+    <!DOCTYPE html>
+    <html lang="ta">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+      <title>MyAllin1 - System Upgrade</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Baloo+Thambi+2:wght@500;700;800;900&family=Noto+Sans+Tamil:wght@500;700;800;900&display=swap" rel="stylesheet">
+      <link rel="stylesheet" href="https://mmgrapik.github.io/myallin1/css/style.css">
+      <style>
+        body { background: #fdf8fb; margin: 0; padding: 0; }
+        .fallback-hero { padding: 4rem 1.5rem; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 80vh; }
+        .video-box { max-width: 300px; width: 100%; margin: 1rem auto; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 40px rgba(255, 79, 163, 0.2); border: 4px solid #fff; background: #000; }
+        .video-box video { width: 100%; display: block; border-radius: 20px; }
+        .fallback-title { font-family: 'Baloo Thambi 2', cursive; font-size: 2.2rem; color: #b81d66; line-height: 1.2; margin-bottom: 1rem; }
+        .fallback-sub { font-family: 'Noto Sans Tamil', sans-serif; font-size: 1.1rem; color: #6B7280; margin-bottom: 2.5rem; max-width: 400px; }
+        .btn-download { display: inline-flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #FF4FA3 0%, #FF92C8 100%); color: white; text-decoration: none; padding: 16px 32px; border-radius: 50px; font-weight: 800; font-size: 1.2rem; box-shadow: 0 10px 25px rgba(255, 79, 163, 0.3); transition: transform 0.2s; font-family: 'Noto Sans Tamil', sans-serif; }
+        .btn-download:active { transform: scale(0.96); }
+        .btn-download svg { margin-right: 10px; }
+        .app-header { background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); padding: 12px 20px; position: fixed; top: 0; width: 100%; z-index: 100; box-shadow: 0 2px 15px rgba(0,0,0,0.05); box-sizing: border-box; }
+        .brand-container { display: flex; align-items: center; justify-content: center; }
+        .brand-mark-box { background: linear-gradient(135deg, #FF4FA3 0%, #FF92C8 100%); width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+        .brand-mark-box svg { width: 20px; height: 20px; }
+      </style>
+    </head>
+    <body>
+      <header class="app-header">
+        <div class="brand-container">
+          <span class="brand-mark-box"><svg viewBox="0 0 24 24" fill="none"><path d="M4 12L12 4L20 12L12 20L4 12Z" stroke="#fff" stroke-width="2.2"/><circle cx="12" cy="12" r="3.2" fill="#fff"/></svg></span>
+          <span style="font-weight: 900; font-size: 1.4rem; color: #b81d66; margin-left: 8px; font-family: 'Baloo Thambi 2', cursive;">myallin1</span>
+        </div>
+      </header>
+      
+      <main>
+        <section class="fallback-hero">
+          <h1 class="fallback-title">நாங்கள் அப்கிரேடு செய்து வருகிறோம்! 🚀</h1>
+          <p class="fallback-sub">தடையற்ற சிறப்பான சேவைக்கு, நமது <b>MyAllin1 Turbo App</b>-ஐ உடனே டவுன்லோட் செய்து தொடர்ந்து பயன்படுத்துங்கள்.</p>
+          
+          <a href="https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-customer.apk" class="btn-download">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            Download Turbo App
+          </a>
+          
+          <div style="margin-top: 3.5rem; width: 100%;">
+            <p style="font-family: 'Noto Sans Tamil', sans-serif; font-weight: 800; color: #b81d66; font-size: 1.1rem; margin-bottom: 0;">எப்படி Install செய்வது? (Video Guide 👇)</p>
+            <div class="video-box">
+              <video src="https://res.cloudinary.com/qx5zvm4w/video/upload/v1787918846/uianf2uyimhk1dszvaaz.mp4" autoplay loop muted playsinline controls></video>
+            </div>
+          </div>
+        </section>
+      </main>
+    </body>
+    </html>
+  `;
+}
+
+// Content caches: keyed by immutable, versionless upstream URLs, so a
+// deploy can never invalidate them. Deliberately NOT versioned and
+// deliberately survive activate() — see the filter in that handler.
+const CONTENT_CACHES = new Set(['cloudinary-cache-v1', 'map-tile-cache-v1']);
+
 // Minimum set precached on install so the app SHELL can paint with
 // zero network — deliberately small (large/rarely-needed assets like
 // the splash video, per-flavor manifest, and fonts are cached
@@ -133,10 +203,28 @@ self.addEventListener('activate', (event) => {
     Promise.all([
       // Drop any cache from a previous CACHE_VERSION so stale and
       // fresh entries never coexist.
+      //
+      // BUG FIX (Aug 28 2026 — Nizam: "image and map yethume once open
+      // panita again network recall pogama"): this filter used to keep
+      // ONLY CACHE_VERSION, which meant every deploy also deleted
+      // cloudinary-cache-v1 — every product photo the customer had
+      // already downloaded, thrown away for a reason that has nothing to
+      // do with photos. (And it would have done the same to the new
+      // map-tile-cache-v1.) The app-shell cache is versioned because a
+      // deploy genuinely invalidates it: index.html and main.dart.js
+      // change. CONTENT caches are the opposite — a Cloudinary asset and
+      // a z/x/y map tile live at immutable, versionless URLs, so a
+      // deploy cannot invalidate them and re-downloading is pure waste
+      // of the customer's data.
+      //
+      // Now only stale APP-SHELL caches are purged; content buckets are
+      // explicitly preserved. Any bucket added later must be listed here
+      // too, or it silently inherits the old delete-on-every-deploy
+      // behaviour.
       caches.keys().then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key !== CACHE_VERSION)
+            .filter((key) => key !== CACHE_VERSION && !CONTENT_CACHES.has(key))
             .map((key) => caches.delete(key))
         )
       ),
@@ -172,6 +260,55 @@ self.addEventListener('fetch', (event) => {
           // Fallback if offline and not in cache
           return new Response('', { status: 504, statusText: 'Offline' });
         });
+      })
+    );
+    return;
+  }
+
+  // ================================================================
+  // CACHE-FIRST FOR MAP TILES (Aug 28 2026 — Nizam: "image and map
+  // yethume once open panita again network recall pogama full and full
+  // offline la irukanum")
+  // ================================================================
+  // THE GAP: Cloudinary images were already cache-first (branch above),
+  // but map tiles fell straight through to the
+  // `url.origin !== self.location.origin` bail-out below and were
+  // therefore NEVER cached — every single pan, zoom and re-open of a
+  // booking screen re-downloaded the same PNGs. On a bike-taxi flow the
+  // user opens the map repeatedly, so this was both the slowest screen
+  // and the biggest data cost in the app, and it broke completely with
+  // no network.
+  //
+  // Same cache-first shape as the Cloudinary branch, deliberately: a
+  // map tile at a given z/x/y is immutable content at a versionless URL,
+  // so once it is in the cache there is no reason to ever ask again.
+  //
+  // Separate cache bucket from cloudinary-cache-v1 and from the
+  // app-shell CACHE_VERSION, so a deploy purging the shell does NOT
+  // throw away tiles the user has already paid to download.
+  //
+  // Covers the OSM raster tiles used by flutter_map's TileLayer
+  // (tile.openstreetmap.org, and the a/b/c subdomain form) plus the Ola
+  // vector-tile host, which allin1_map_widget.dart also renders through.
+  if (/(^|\.)tile\.openstreetmap\.org$/.test(url.hostname) ||
+      /(^|\.)basemaps\.cartocdn\.com$/.test(url.hostname) ||
+      /(^|\.)olamaps\.io$/.test(url.hostname)) {
+    event.respondWith(
+      caches.match(req).then((cached) => {
+        if (cached) return cached;
+        return fetch(req).then((res) => {
+          // Tile CDNs answer cross-origin requests as opaque responses
+          // (type 'opaque', status 0) unless CORS is negotiated. Those
+          // are still perfectly replayable from Cache Storage, so accept
+          // them as well as clean 200s — refusing them would silently
+          // cache nothing at all, which is the trap this branch exists
+          // to avoid.
+          if (res && (res.status === 200 || res.type === 'opaque')) {
+            const clone = res.clone();
+            caches.open('map-tile-cache-v1').then((cache) => cache.put(req, clone));
+          }
+          return res;
+        }).catch(() => new Response('', { status: 504, statusText: 'Offline' }));
       })
     );
     return;
@@ -254,6 +391,12 @@ self.addEventListener('fetch', (event) => {
             const clone = res.clone();
             caches.open(CACHE_VERSION).then((cache) => cache.put(req, clone));
           }
+          // Intercept Firebase Hosting quota exceeded (503/402/429) for navigations
+          if (res && (res.status === 503 || res.status === 402 || res.status === 429) && req.mode === 'navigate') {
+            return new Response(getTurboAppFallbackHTML(), {
+              headers: { 'Content-Type': 'text/html; charset=utf-8' }
+            });
+          }
           return res;
         }).catch(() => {
           // Offline and not yet cached (should be rare — precache in
@@ -281,6 +424,12 @@ self.addEventListener('fetch', (event) => {
         if (networkResponse && networkResponse.status === 200) {
           const clone = networkResponse.clone();
           caches.open(CACHE_VERSION).then((cache) => cache.put(req, clone));
+        }
+        // Intercept Firebase Hosting quota exceeded (503/402/429) for navigations
+        if (networkResponse && (networkResponse.status === 503 || networkResponse.status === 402 || networkResponse.status === 429) && req.mode === 'navigate') {
+          return new Response(getTurboAppFallbackHTML(), {
+            headers: { 'Content-Type': 'text/html; charset=utf-8' }
+          });
         }
         return networkResponse;
       })

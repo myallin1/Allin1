@@ -288,7 +288,7 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
       padding: const EdgeInsets.only(bottom: 16),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             colors: [_offerPurple, _offerPink],
@@ -300,14 +300,14 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
         child: Row(
           children: [
             const Icon(Icons.local_offer_rounded,
-                color: Colors.white, size: 30),
+                color: Colors.white, size: 26),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 'Live offers from shops around Erode',
                 style: GoogleFonts.outfit(
                   color: Colors.white,
-                  fontSize: 14,
+                  fontSize: 12,
                   fontWeight: FontWeight.w800,
                   height: 1.3,
                 ),
@@ -338,13 +338,13 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
           const SizedBox(height: 12),
           Text(
             title,
-            style: GoogleFonts.outfit(color: _offerInk, fontSize: 16, fontWeight: FontWeight.w800),
+            style: GoogleFonts.outfit(color: _offerInk, fontSize: 14, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 6),
           Text(
             subtitle,
             textAlign: TextAlign.center,
-            style: GoogleFonts.outfit(color: _offerMuted, fontSize: 13, fontWeight: FontWeight.w600),
+            style: GoogleFonts.outfit(color: _offerMuted, fontSize: 11, fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -377,32 +377,46 @@ class _OfferCard extends StatelessWidget {
     // width. CachedNetworkImageProvider + optimizedUrl() are retained
     // exactly as the bandwidth audit left them; the redesign spends
     // pixels, not extra network calls.
-    return PremiumCard(
-      radius: kRadiusLg,
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (_) => OfferDetailScreen(offerId: offerId, data: data)),
-        );
-      },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    // FIX (Aug 29 2026 — "card tap pannuna screen apdiye iruku"): a plain
+    // Text's RenderObject always claims a hit test wherever its bounding
+    // box is (RenderParagraph.hitTestSelf is unconditionally true — it
+    // has to be, to support tappable TextSpans). This card is full of
+    // Text (shop name, valid-till chip, footer line), so when PremiumCard's
+    // whole-card InkWell sat BEHIND the card content, a tap landing on any
+    // of that text got "claimed" by the Text and never reached the InkWell
+    // underneath — the screen looked completely unresponsive. Nothing was
+    // actually broken about the InkWell; it just never got a turn.
+    //
+    // Fix: don't let PremiumCard wrap this in its own InkWell at all.
+    // Build the tap layering explicitly instead — whole-card InkWell ABOVE
+    // the (non-interactive) content, and the WATCH OFFER badge's own
+    // opaque GestureDetector on top of THAT, in its own small corner. Now
+    // every point either belongs to the badge or falls straight through
+    // to the InkWell — no Text in between to eat it.
+    return Stack(
+      children: [
+        PremiumCard(
+          radius: kRadiusLg,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
           SizedBox(
-            height: 156,
+            height: 140,
             width: double.infinity,
             child: Stack(
               fit: StackFit.expand,
               children: [
                 if (hasImage)
-                  Image(
-                    image: CachedNetworkImageProvider(
-                      CloudinaryUploadService.optimizedUrl(imageUrl,
-                          width: 720),
+                  Container(
+                    color: const Color(0xFFF3E7EF), // Neutral backing for letterbox bars
+                    child: Image(
+                      image: CachedNetworkImageProvider(
+                        CloudinaryUploadService.optimizedUrl(imageUrl,
+                            width: 720),
+                      ),
+                      fit: BoxFit.contain, // Changed to contain to show full image
+                      errorBuilder: (_, __, ___) => _posterFallback(offerPercent),
                     ),
-                    fit: BoxFit.contain, // Changed to contain to show full image
-                    errorBuilder: (_, __, ___) => _posterFallback(offerPercent),
                   )
                 else
                   _posterFallback(offerPercent),
@@ -429,7 +443,7 @@ class _OfferCard extends StatelessWidget {
                         '$offerPercent% OFF',
                         style: GoogleFonts.outfit(
                           color: Colors.white,
-                          fontSize: 13,
+                          fontSize: 11,
                           fontWeight: FontWeight.w900,
                           letterSpacing: -0.2,
                         ),
@@ -437,22 +451,17 @@ class _OfferCard extends StatelessWidget {
                     ),
                   ),
 
-                // WATCH OFFER — only when the admin actually saved a
-                // valid link. Tapping it opens the shared lazy modal
-                // player; nothing heavier than this poster image is
-                // ever built while scrolling.
+                // WATCH OFFER badge display ONLY here — the real tap
+                // target for it lives in the outer Stack below (see the
+                // "Aug 29 2026" note above _OfferCard.build), painted on
+                // top of the whole-card InkWell so it wins that corner
+                // without any Text in this box being able to swallow it.
                 if (videoId != null)
-                  Positioned(
+                  const Positioned(
                     top: 12,
                     right: 12,
-                    child: GestureDetector(
-                      onTap: () => showPremiumVideoModal(
-                        context,
-                        videoId: videoId,
-                        title: shopName,
-                        subtitle: _formatValidTill(validTill),
-                      ),
-                      child: const VideoGlowBadge(
+                    child: IgnorePointer(
+                      child: VideoGlowBadge(
                           label: 'WATCH OFFER', compact: false),
                     ),
                   ),
@@ -470,7 +479,7 @@ class _OfferCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.outfit(
                           color: Colors.white,
-                          fontSize: 19,
+                          fontSize: 17,
                           fontWeight: FontWeight.w900,
                           letterSpacing: -0.3,
                           shadows: const [
@@ -490,7 +499,7 @@ class _OfferCard extends StatelessWidget {
                               _formatValidTill(validTill),
                               style: GoogleFonts.outfit(
                                 color: Colors.white,
-                                fontSize: 11,
+                                fontSize: 9,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -510,14 +519,14 @@ class _OfferCard extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  width: 30,
-                  height: 30,
+                  width: 26,
+                  height: 26,
                   decoration: BoxDecoration(
                     color: kPremiumPink.withValues(alpha: 0.10),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.local_offer_rounded,
-                      color: kPremiumPink, size: 15),
+                      color: kPremiumPink, size: 13),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -525,16 +534,57 @@ class _OfferCard extends StatelessWidget {
                     videoId != null
                         ? 'Tap to view details \u00b7 video available'
                         : 'Tap to view shop details',
-                    style: premiumBody(size: 11.5),
+                    style: premiumBody(size: 9.5),
                   ),
                 ),
                 const Icon(Icons.arrow_forward_ios_rounded,
-                    color: kPremiumMuted, size: 13),
+                    color: kPremiumMuted, size: 11),
               ],
             ),
           ),
-        ],
-      ),
+            ],
+          ),
+        ),
+        // Whole-card tap target, ABOVE the (non-interactive) content so no
+        // Text inside it can ever swallow the tap before this sees it.
+        Positioned.fill(
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(kRadiusLg),
+              splashColor: kPremiumPink.withValues(alpha: 0.08),
+              highlightColor: kPremiumPink.withValues(alpha: 0.04),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                      builder: (_) =>
+                          OfferDetailScreen(offerId: offerId, data: data)),
+                );
+              },
+            ),
+          ),
+        ),
+        // The REAL WATCH OFFER tap target — opaque so its whole padded
+        // area (not just the icon/text glyphs) is tappable, and on top
+        // of the whole-card InkWell so it wins in this corner only.
+        if (videoId != null)
+          Positioned(
+            top: 12,
+            right: 12,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => showPremiumVideoModal(
+                context,
+                videoId: videoId,
+                title: shopName,
+                subtitle: _formatValidTill(validTill),
+              ),
+              child: const VideoGlowBadge(
+                  label: 'WATCH OFFER', compact: false),
+            ),
+          ),
+      ],
     );
   }
 
@@ -592,6 +642,7 @@ class OfferDetailScreen extends StatelessWidget {
     final lat = data['lat'];
     final lng = data['lng'];
     final imageUrl = data['imageUrl'] as String?;
+    final videoId = youtubeVideoId(data['videoUrl'] as String?);
 
     return Scaffold(
       backgroundColor: const Color(0xFFFFF6FA),
@@ -658,7 +709,7 @@ class OfferDetailScreen extends StatelessWidget {
                 children: [
                   Text(
                     shopName,
-                    style: GoogleFonts.outfit(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w900),
+                    style: GoogleFonts.outfit(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w900),
                   ),
                   const SizedBox(height: 10),
                   Container(
@@ -669,12 +720,48 @@ class OfferDetailScreen extends StatelessWidget {
                     ),
                     child: Text(
                       offerPercent != null ? '$offerPercent% OFF' : 'SPECIAL OFFER',
-                      style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11),
+                      style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 9),
                     ),
                   ),
                 ],
               ),
             ),
+            if (videoId != null) ...[
+              const SizedBox(height: 14),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => showPremiumVideoModal(
+                  context,
+                  videoId: videoId,
+                  title: shopName,
+                  subtitle: _formatValidTillFull(validTill),
+                ),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                        colors: [Color(0xFFFF2D2D), Color(0xFFE60000)]),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.play_circle_fill_rounded,
+                          color: Colors.white, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Watch Offer Video',
+                        style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
             _detailTile(
               icon: Icons.event_available_rounded,
@@ -743,9 +830,9 @@ class OfferDetailScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: GoogleFonts.outfit(color: _offerMuted, fontSize: 9, fontWeight: FontWeight.w700)),
+                Text(label, style: GoogleFonts.outfit(color: _offerMuted, fontSize: 7, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 3),
-                Text(value, style: GoogleFonts.outfit(color: _offerInk, fontSize: 11.5, fontWeight: FontWeight.w700)),
+                Text(value, style: GoogleFonts.outfit(color: _offerInk, fontSize: 9.5, fontWeight: FontWeight.w700)),
               ],
             ),
           ),
@@ -761,6 +848,7 @@ class OfferDetailScreen extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -772,7 +860,7 @@ class OfferDetailScreen extends StatelessWidget {
           children: [
             Icon(icon, color: Colors.white, size: 22),
             const SizedBox(height: 6),
-            Text(label, style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 10)),
+            Text(label, style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 8)),
           ],
         ),
       ),

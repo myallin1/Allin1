@@ -247,7 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         title: Text(
           t('settings_title'),
-          style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w600),
+          style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: kText),
         ),
       ),
       body: SingleChildScrollView(
@@ -309,7 +309,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       title.toUpperCase(),
       style: GoogleFonts.outfit(
         color: kMuted,
-        fontSize: 13,
+        fontSize: 11.5,
         fontWeight: FontWeight.w700,
         letterSpacing: 1.1,
       ),
@@ -418,7 +418,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   t('theme_title'),
                   style: GoogleFonts.outfit(
                     color: kText,
-                    fontSize: 15.5,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -426,7 +426,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   t('theme_subtitle'),
                   style: GoogleFonts.outfit(
                     color: kMuted,
-                    fontSize: 12.5,
+                    fontSize: 11,
                   ),
                 ),
               ],
@@ -436,7 +436,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: DropdownButton<String>(
               value: themeService.themeKey,
               dropdownColor: kCard,
-              style: GoogleFonts.outfit(color: kText, fontSize: 13),
+              style: GoogleFonts.outfit(color: kText, fontSize: 11.5),
               items: const [
                 DropdownMenuItem(
                   value: 'pink_white',
@@ -494,7 +494,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   'Icon Theme',
                   style: GoogleFonts.outfit(
                     color: kText,
-                    fontSize: 15.5,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -502,7 +502,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   'Change home icons',
                   style: GoogleFonts.outfit(
                     color: kMuted,
-                    fontSize: 12.5,
+                    fontSize: 11,
                   ),
                 ),
               ],
@@ -512,7 +512,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: DropdownButton<String>(
               value: themeService.iconThemeKey,
               dropdownColor: kCard,
-              style: GoogleFonts.outfit(color: kText, fontSize: 13),
+              style: GoogleFonts.outfit(color: kText, fontSize: 11.5),
               items: const [
                 DropdownMenuItem(
                   value: 'pink_white_3d',
@@ -521,6 +521,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 DropdownMenuItem(
                   value: 'multicolor',
                   child: Text('Multicolor'),
+                ),
+                DropdownMenuItem(
+                  value: 'photo_realistic',
+                  child: Text('Photo Realistic'),
                 ),
               ],
               onChanged: (value) {
@@ -651,7 +655,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final messenger = ScaffoldMessenger.of(context)..removeCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
-        content: Text(msg, style: GoogleFonts.outfit(fontSize: 12.5)),
+        content: Text(msg, style: GoogleFonts.outfit(fontSize: 11)),
         duration: const Duration(milliseconds: 900),
         behavior: SnackBarBehavior.floating,
       ),
@@ -680,15 +684,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: activated
-                  ? const Color(0x4D00C853)
-                  : const Color(0x4DFF4FA3),
-            ),
-            gradient: LinearGradient(
-              colors: activated
-                  ? [const Color(0x1A00C853), const Color(0x0D00C853)]
-                  : [const Color(0x1AFF4FA3), const Color(0x0DB21FFF)],
+            border: Border.all(color: const Color(0x4DFF4FA3)),
+            gradient: const LinearGradient(
+              colors: [Color(0x1AFF4FA3), Color(0x0DB21FFF)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -723,8 +721,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Text(
                       'Activate ur Own Ai superhero Chitti',
                       style: GoogleFonts.outfit(
-                        color: activated ? const Color(0xFF00C853) : kText,
-                        fontSize: 13,
+                        color: activated ? const Color(0xFFB21FFF) : kText,
+                        fontSize: 11.5,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -1003,7 +1001,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title,
                   style: GoogleFonts.outfit(
                     color: kText,
-                    fontSize: 15.5,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -1011,7 +1009,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle,
                   style: GoogleFonts.outfit(
                     color: kMuted,
-                    fontSize: 12.5,
+                    fontSize: 11,
                   ),
                 ),
               ],
@@ -1020,8 +1018,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeThumbColor: kGold,
-            activeTrackColor: kGold.withValues(alpha: 0.3),
+            activeThumbColor: kPurple,
+            activeTrackColor: kPurple.withValues(alpha: 0.3),
             inactiveThumbColor: kMuted,
             inactiveTrackColor: kBorder,
           ),
@@ -1063,7 +1061,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       title,
                       style: GoogleFonts.outfit(
                         color: titleColor ?? kText,
-                        fontSize: 15.5,
+                        fontSize: 13.5,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -1071,7 +1069,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       subtitle,
                       style: GoogleFonts.outfit(
                         color: kMuted,
-                        fontSize: 12.5,
+                        fontSize: 11,
                       ),
                     ),
                   ],
@@ -1101,7 +1099,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             t('app_version_name'),
             style: GoogleFonts.outfit(
               color: kText,
-              fontSize: 16,
+              fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -1110,7 +1108,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             t('app_version_number'),
             style: GoogleFonts.outfit(
               color: kMuted,
-              fontSize: 12,
+              fontSize: 10.5,
             ),
           ),
           const SizedBox(height: 8),
@@ -1118,7 +1116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             t('app_made_with_love'),
             style: GoogleFonts.outfit(
               color: kMuted,
-              fontSize: 11,
+              fontSize: 10,
             ),
           ),
         ],
@@ -1196,7 +1194,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   t('language_picker_title'),
                   style: GoogleFonts.outfit(
                     color: kText,
-                    fontSize: 18,
+                    fontSize: 14,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1205,7 +1203,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 4),
             Text(
               t('language_picker_subtitle'),
-              style: GoogleFonts.outfit(color: kMuted, fontSize: 11),
+              style: GoogleFonts.outfit(color: kMuted, fontSize: 10),
             ),
             const SizedBox(height: 20),
             ...langs.map((lang) {
@@ -1256,7 +1254,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           child: Text(
                             lang['emoji']!,
                             style: const TextStyle(
-                              fontSize: 16,
+                              fontSize: 14,
                               fontWeight: FontWeight.w800,
                               color: Colors.white,
                             ),
@@ -1271,7 +1269,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             Text(
                               lang['name']!,
                               style: TextStyle(
-                                fontSize: 15,
+                                fontSize: 13,
                                 fontWeight: FontWeight.w700,
                                 color: isSel ? kGold : kText,
                               ),
@@ -1280,7 +1278,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             Text(
                               lang['desc']!,
                               style: GoogleFonts.outfit(
-                                fontSize: 11,
+                                fontSize: 10,
                                 color: kMuted,
                               ),
                             ),
@@ -1325,7 +1323,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Expanded(
                     child: Text(
                       'Language change next restart-la apply agum.',
-                      style: GoogleFonts.outfit(fontSize: 10, color: kMuted),
+                      style: GoogleFonts.outfit(fontSize: 9, color: kMuted),
                     ),
                   ),
                 ],

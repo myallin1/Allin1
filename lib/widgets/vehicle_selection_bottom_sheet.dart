@@ -1,9 +1,56 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../config/fare_rates.dart';
 import '../config/ride_catalog.dart';
 import '../models/ride_model.dart';
+import '../services/theme_service.dart';
+import 'cached_cloud_image.dart';
+
+// Maps a ride_catalog vehicle key to its slot in the Home dashboard's
+// Taxi & Transportation pink icon set (taxi_1..taxi_5), so this sheet
+// shows the same themed render instead of a plain unicode emoji when the
+// customer has picked the Pink & White 3D icon theme. mini_truck and
+// lorry share slot 5 (both are the "truck" render); emergency_manpower
+// has no pink asset yet and keeps its emoji.
+int? _taxiPinkSlot(String vehicleKey) {
+  switch (vehicleKey) {
+    case 'bike':
+      return 1;
+    case 'auto':
+      return 2;
+    case 'cab':
+      return 3;
+    case 'parcel':
+      return 4;
+    case 'mini_truck':
+    case 'lorry':
+      return 5;
+    default:
+      return null;
+  }
+}
+
+// Photo Realistic theme — same photo set as bike_booking_screen.dart's
+// inline map, kept in sync manually since they're two different files.
+String? _taxiPhotoUrl(String vehicleKey) {
+  switch (vehicleKey) {
+    case 'bike':
+      return 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=200&q=80';
+    case 'auto':
+      return 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=200&q=80';
+    case 'cab':
+      return 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=200&q=80';
+    case 'parcel':
+      return 'https://images.unsplash.com/photo-1595246140625-573b715d11dc?w=200&q=80';
+    case 'mini_truck':
+    case 'lorry':
+      return 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=200&q=80';
+    default:
+      return null;
+  }
+}
 
 const Color _brandPink = Color(0xFFFF4FA3);
 const Color _brandPurple = Color(0xFFB21FFF);
@@ -340,10 +387,31 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                     ],
                   ),
                   child: Center(
-                    child: Text(
-                      icon,
-                      style: const TextStyle(fontSize: 20),
-                    ),
+                    child: Builder(builder: (context) {
+                      final iconTheme = context.watch<ThemeService>().iconThemeKey;
+                      final photoUrl = _taxiPhotoUrl(type);
+                      if (iconTheme == 'photo_realistic' && photoUrl != null) {
+                        return ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: CachedCloudImage(
+                            photoUrl,
+                            width: 28, height: 28, fit: BoxFit.cover,
+                            cacheWidth: 112,
+                            errorWidget: Text(icon, style: const TextStyle(fontSize: 20)),
+                          ),
+                        );
+                      }
+                      final pinkSlot = _taxiPinkSlot(type);
+                      final isPink = pinkSlot != null && iconTheme == 'pink_white_3d';
+                      if (isPink) {
+                        return Image.asset(
+                          'assets/images/pink_icons/taxi_${pinkSlot}_a.webp',
+                          width: 28, height: 28, fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => Text(icon, style: const TextStyle(fontSize: 20)),
+                        );
+                      }
+                      return Text(icon, style: const TextStyle(fontSize: 20));
+                    }),
                   ),
                 ),
                 const SizedBox(width: 10),

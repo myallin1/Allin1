@@ -103,6 +103,32 @@ service cloud.firestore {
       return isAdmin() || isAdminViaCollection();
     }
 
+    // Seller-earnings audit, Phase 1 — server-side idempotency +
+    // ownership check for crediting a seller's pendingPayouts (and for
+    // the matching wallet_transactions ledger entry). Declared here for
+    // the same $(database)-binding reason as isAdminViaCollection()
+    // above. Reads the linked service_requests/{reqId} doc's
+    // PRE-transaction committed state — a client's Firestore Transaction
+    // can never make this see its own in-flight writes, which is exactly
+    // what makes this a real idempotency gate rather than a formality:
+    // once _completeAndCreditSeller() (service_request_service.dart) has
+    // successfully committed `earningsCredited: true` for a request, any
+    // later attempt — retried, forged, or otherwise — evaluates this
+    // function against that already-true value and is rejected.
+    function creditableRequest(reqId, sellerId) {
+      let req = get(/databases/$(database)/documents/service_requests/$(reqId)).data;
+      // .get(key, default) rather than bare field access on both of
+      // these: non-food requestTypes (hero_booking/custom_order/
+      // grocery_order) have no `details.sellerId` key at all, and any
+      // service_requests doc written before this fix has no
+      // `earningsCredited` key either — a bare `req.details.sellerId` or
+      // `req.earningsCredited` would throw on those instead of failing
+      // this check cleanly.
+      return req.details.get('sellerId', null) == sellerId
+        && req.get('earningsCredited', false) != true
+        && (req.assignedHeroId == request.auth.uid || isAdminAny());
+    }
+
     // ==============================================================
     // ADMINS COLLECTION
     // ==============================================================
@@ -378,9 +404,110 @@ service cloud.firestore {
       // Approve/Reject buttons (writing status -> 'active'/'rejected' on
       // sellers/{sellerId}, a doc the admin does NOT own) would have
       // failed with permission-denied for every real admin account.
-      allow create: if isAdminAny() || isSellerOwner(sellerId);
-      allow update: if isAdminAny() || isSellerOwner(sellerId);
+      //
+      // FIX (seller-earnings audit, Phase 1 — "seller can arbitrarily
+      // edit their own money"): `isSellerOwner(sellerId)` used to grant
+      // that seller unrestricted write access to every field on their
+      // own doc, walletBalance/pendingPayouts/totalSettled included —
+      // nothing stopped a seller's client from self-crediting an
+      // arbitrary payout. `create` still needs the seller to be able to
+      // write their own onboarding profile in one `.set()`
+      // (createSellerProfile → SellerModel.toJson()), so it's value-
+      // locked instead of field-locked: every financial field must start
+      // at exactly 0. `update` is split into three non-overlapping
+      // clauses below so a normal profile edit (isOpen toggle, etc.), the
+      // seller's own ₹5 accept-fee debit, and a hero/admin's earnings
+      // credit are each scoped to exactly the fields and values they
+      // need and nothing else.
+      allow create: if isAdminAny()
+        || (isSellerOwner(sellerId)
+            && request.resource.data.walletBalance == 0
+            && request.resource.data.pendingPayouts == 0
+            && request.resource.data.totalSettled == 0);
+
+      // Clause B: normal profile fields — every financial field is
+      // simply absent from this allow-list, so it can never appear in
+      // the diff no matter what a seller's client sends.
+      allow update: if isAdminAny()
+        || (isSellerOwner(sellerId)
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly([
+                   'id', 'name', 'shopName', 'category', 'subCategory',
+                   'hotelType', 'address', 'latitude', 'longitude', 'phone',
+                   'rating', 'isOpen', 'estimatedPrepTimeMin', 'status',
+                   'imageUrl', 'coverImageUrl', 'emoji', 'metadata',
+                   'businessVertical', 'city', 'role', 'hours',
+                   'fcmToken', 'fcmTokenUpdatedAt', 'updatedAt'
+                 ]))
+        // Clause C: the seller's own ₹5 platform-fee debit
+        // (advanceSellerStage → 'accepted'). Locked to EXACTLY that
+        // field pair and EXACTLY a -5.0 delta — a seller's client can
+        // never use this clause to move their own balance any other
+        // way, up or down.
+        || (isSellerOwner(sellerId)
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['walletBalance', 'totalFeesDeducted', 'updatedAt'])
+            // .get(..., 0) default — same reasoning as Clause D below:
+            // a legacy seller doc created before these fields existed on
+            // SellerModel must not throw on its very first debit.
+            && request.resource.data.walletBalance == resource.data.get('walletBalance', 0) - 5.0
+            && request.resource.data.totalFeesDeducted == resource.data.get('totalFeesDeducted', 0) + 5.0)
+        // Clause D: earnings credit on order completion
+        // (_completeAndCreditSeller in service_request_service.dart).
+        // Deliberately NOT isSellerOwner-gated — this is the assigned
+        // HERO (or admin) crediting the SELLER's doc, a genuinely
+        // different party. creditableRequest() is the real gate: it
+        // requires the linked service_requests doc to belong to this
+        // seller, to not already be credited, and to be assigned to the
+        // caller (or the caller to be admin) — see its definition above
+        // for why that check can't be bypassed by a retry.
+        || (isAuth()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['pendingPayouts', 'lastCreditedRequestId', 'updatedAt'])
+            // resource.data.get(..., 0) rather than a bare field access:
+            // no seller doc has ever had `pendingPayouts` written before
+            // this fix (confirmed — it was read-only dead weight on the
+            // dashboard's Payouts card), so a bare
+            // `resource.data.pendingPayouts` would throw on every
+            // EXISTING seller's very first credit, since the field is
+            // simply absent from their stored document.
+            && request.resource.data.pendingPayouts > resource.data.get('pendingPayouts', 0)
+            && request.resource.data.lastCreditedRequestId is string
+            && creditableRequest(request.resource.data.lastCreditedRequestId, sellerId));
+
       allow delete: if isAdminAny();
+
+      // ── Wallet Transactions Ledger (seller-earnings audit, Phase 1) ──
+      // sellers/{sellerId}/wallet_transactions/{txnId} — the immutable
+      // audit trail behind every walletBalance/pendingPayouts mutation.
+      // Both writers (the seller's own fee debit, the hero/admin's
+      // earnings credit) use a DETERMINISTIC doc id
+      // (`${requestId}_fee` / `${requestId}_credit` — see
+      // service_request_service.dart), so a duplicate write for the same
+      // order hits Firestore's create-vs-update disambiguation: the doc
+      // already exists, so it's evaluated as an `update` — and there is
+      // no `allow update` clause here at all, for anyone but admin. That
+      // makes a double-write structurally impossible, independent of any
+      // idempotency check in the Dart code that produced it.
+      match /wallet_transactions/{txnId} {
+        allow read: if isAdminAny() || isSellerOwner(sellerId);
+
+        allow create: if isAdminAny()
+          || (isAuth()
+              && request.resource.data.keys()
+                   .hasOnly(['requestId', 'sellerId', 'amount', 'type', 'createdAt'])
+              && request.resource.data.sellerId == sellerId
+              && (
+                   (request.resource.data.type == 'platform_fee'
+                     && isSellerOwner(sellerId)
+                     && request.resource.data.amount == -5.0)
+                || (request.resource.data.type == 'order_credit'
+                     && request.resource.data.amount > 0
+                     && creditableRequest(request.resource.data.requestId, sellerId))
+              ));
+
+        allow update, delete: if isAdminAny();
+      }
 
       // ── Menu Items Subcollection ──────────────────────────────
       // Customers:   read only
@@ -632,8 +759,38 @@ service cloud.firestore {
       // here and pings real heroes to ride out to a real address. A guest
       // may open and fill in every one of those screens; the guard fires
       // at submit (see requireRealAuth() in auth_prompt_service.dart).
+      // FIX (post-fix audit — "customer create rule has no field
+      // allow-list"): this used to check ONLY customerId, matching the
+      // create-time equivalent of a bug the update rule below was
+      // already hardened against (see Clause 6's comment on hasOnly()).
+      // Without this, an authenticated customer could create a
+      // service_requests doc with status:'completed', an already-set
+      // assignedHeroId, or a sellerStage past 'new' — skipping the
+      // entire dispatch lifecycle at the source. createServiceRequest()
+      // (service_request_service.dart) is the SINGLE creation point for
+      // every requestType (hero_booking/custom_order/catalog_food_order/
+      // custom_hotel_order/grocery_order) and always writes exactly this
+      // field set with exactly these initial values, so this allow-list
+      // is not a guess — it mirrors that function's actual `.set()` call
+      // verbatim.
       allow create: if isRealUser()
-        && request.resource.data.customerId == request.auth.uid;
+        && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+             'requestId', 'requestType', 'customerId', 'customerName',
+             'customerPhone', 'details', 'status', 'assignedHeroId',
+             'assignedHeroName', 'assignedHeroPhone', 'assignmentMethod',
+             'city', 'sellerStage', 'sellerStageAt', 'earningsCredited',
+             'createdAt', 'updatedAt'
+           ])
+        && request.resource.data.status == 'pending'
+        && request.resource.data.assignedHeroId == null
+        && request.resource.data.assignedHeroName == null
+        && request.resource.data.assignedHeroPhone == null
+        && request.resource.data.assignmentMethod == null
+        && request.resource.data.sellerStageAt == null
+        && request.resource.data.earningsCredited == false
+        && (request.resource.data.sellerStage == null
+            || request.resource.data.sellerStage == 'new');
 
       // FIX (root cause of "seller never sees catalog food orders"):
       // seller_detail_screen.dart's checkout writes catalog/menu food
@@ -858,6 +1015,50 @@ service cloud.firestore {
 
     match /ux_audit_reports/{reportId} {
       allow read, write: if isAdminAny();
+    }
+
+    // NEW (Aug 28 2026 — Chitti price/market enquiries).
+    //
+    // A customer asks Chitti what a display costs; Chitti shows a
+    // market reference and files this so a human at NJ Tech can quote
+    // the real rate. Deliberately NOT service_requests: that collection
+    // dispatches a Hero, and nobody should be riding out for a price
+    // question.
+    //
+    // Same shape as app_bug_reports above and for the same reason — an
+    // enquiry from an anonymous uid carries no phone number, so there
+    // is nobody to call back, and the collection would otherwise be an
+    // unlimited unauthenticated write target.
+    // An approved seller, for the enquiry monitor below.
+    //
+    // A price enquiry is asked BEFORE any shop is chosen, so there is
+    // no sellerId on the document to scope by — which means this grants
+    // every approved seller sight of every open enquiry. That is the
+    // intent (Nizam: monitored on "seller and admin phone"), not an
+    // oversight: whoever can quote the rate first should be able to.
+    // `approved` is required so a pending or rejected registration
+    // cannot read customer phone numbers.
+    function isApprovedSeller() {
+      return isAuth()
+        && exists(/databases/$(database)/documents/sellers/$(request.auth.uid))
+        && get(/databases/$(database)/documents/sellers/$(request.auth.uid)).data.status == 'approved';
+    }
+
+    match /chitti_enquiries/{enquiryId} {
+      allow create: if isRealUser()
+        && request.resource.data.customerId == request.auth.uid;
+      // The customer may see their own. Admins and approved sellers see
+      // all open ones — without this the seller-side monitor renders
+      // "couldn't load", which on this screen reads as "no leads": the
+      // most damaging possible lie, since the customer was already told
+      // NJ Tech would call them back.
+      allow read: if isAdminAny()
+        || isApprovedSeller()
+        || (isRealUser() && resource.data.customerId == request.auth.uid);
+      // Sellers may close a lead they answered, but may not delete it —
+      // deletion is what the admin's own audit trail depends on.
+      allow update: if isAdminAny() || isApprovedSeller();
+      allow delete: if isAdminAny();
     }
 
     match /app_usage_stats/{docId} {
@@ -1329,6 +1530,21 @@ service cloud.firestore {
     // (needed for the offers list + detail page); only admins can
     // create/edit/delete/toggle-active from AdminErodeOffersScreen.
     match /erode_offers/{offerId} {
+      allow read: if isAuth();
+      allow write: if isAdminAny();
+    }
+
+    // tutorial_videos — "how it works" clips for the Hero app, the Hero
+    // PWA and the Customer app (Aug 29 2026). Same shape as ads/
+    // erode_offers above: anyone signed in can read, only admin writes.
+    //
+    // READ IS DELIBERATELY isAuth() AND NOT RESTRICTED FURTHER. The
+    // single most important place these play is the hero ONBOARDING
+    // form — a person who is not a hero yet, has no heroes/{uid} doc and
+    // no approval, watching "how to register". Any rule keyed on hero
+    // status would deny exactly the reader the videos exist for.
+    // Nothing sensitive is stored: a title and a public YouTube link.
+    match /tutorial_videos/{videoId} {
       allow read: if isAuth();
       allow write: if isAdminAny();
     }

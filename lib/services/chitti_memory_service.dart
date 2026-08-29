@@ -36,6 +36,8 @@
 
 import 'package:flutter/foundation.dart';
 
+import 'chitti_order_memory_service.dart';
+
 /// One thing Chitti is currently helping with. `serviceId` is whatever
 /// the owning flow already uses as its identifier (a rideId, a
 /// requestId, an orderId) so nothing new has to be minted or tracked.
@@ -82,6 +84,34 @@ class ChittiMemoryService extends ChangeNotifier {
 
   ChittiServiceContext? _active;
   final List<ChittiTurn> _turns = <ChittiTurn>[];
+
+  // ── PASSIVE SCREEN AWARENESS (Aug 25 2026 — Super Chitti Phase 1,
+  // Step 1) ────────────────────────────────────────────────────────
+  // Deliberately NOT the same thing as `_active`/ChittiServiceContext
+  // above. `_active` means "the customer is mid-way through a real
+  // service (a ride, an order) and Chitti is following it" — it is
+  // set/cleared explicitly by that flow via beginService()/endService().
+  //
+  // `_currentScreen` means only "this widget is the one on screen right
+  // now", updated on every navigation regardless of whether anything is
+  // actually happening there. It's what lets a vague command like "book
+  // it for me" resolve correctly depending on whether the customer is
+  // sitting on the Food Dashboard or the Bike Taxi screen. See
+  // route_breadcrumb_observer.dart, which is the single call site that
+  // updates this on every push/replace across the app.
+  String? _currentScreen;
+  String? get currentScreen => _currentScreen;
+
+  /// [screenLabel] should be a short, human-readable name Chitti can
+  /// reason about directly in a prompt (e.g. "Food Dashboard", "Bike
+  /// Taxi booking") — not a raw route path or widget class name.
+  void setCurrentScreen(String? screenLabel) {
+    final trimmed = screenLabel?.trim();
+    final next = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    if (next == _currentScreen) return;
+    _currentScreen = next;
+    notifyListeners();
+  }
 
   /// Hard ceiling on remembered turns. Beyond this the oldest are
   /// dropped rather than the list growing forever — an unbounded
@@ -177,6 +207,21 @@ class ChittiMemoryService extends ChangeNotifier {
         a.facts.forEach((k, v) => buf.writeln('- $k: $v'));
       }
       buf.writeln('Stay focused on helping with this until it is finished.');
+    } else if (_currentScreen != null) {
+      // Only shown when there's no active service context above — an
+      // in-progress ride/order is always the more specific, more
+      // useful signal, so it takes priority over the passive screen.
+      buf.writeln('The customer is currently looking at the '
+          '$_currentScreen screen of the app. If they say something '
+          'vague like "book it for me" or "order this", assume they '
+          'mean whatever that screen is for unless they say otherwise.');
+    }
+
+    final recentOrders = ChittiOrderMemoryService.recentSummary();
+    if (recentOrders.isNotEmpty) {
+      buf
+        ..writeln()
+        ..writeln(recentOrders);
     }
 
     final lookup = knowledgeLookup;

@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 // GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
@@ -16,6 +17,8 @@ import '../services/auth_service.dart';
 import '../services/cart_service.dart';
 import '../services/category_gateway_service.dart';
 import '../services/service_request_service.dart';
+import '../services/theme_service.dart';
+import '../widgets/cached_cloud_image.dart';
 import '../widgets/product_card.dart';
 import 'custom_hotel_view_screen.dart';
 import 'food_checkout_screen.dart';
@@ -427,7 +430,41 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
                   color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 26),
+                // UI polish (3D Pink Icons pass) — same theme-gated swap
+                // pattern already used in dashboard_screen.dart/
+                // custom_food_order_screen.dart: falls back to the flat
+                // Material icon whenever the pink 3D icon theme isn't
+                // active, so nothing changes for users on other themes.
+                child: Builder(
+                  builder: (context) {
+                    final iconTheme = context.watch<ThemeService>().iconThemeKey;
+                    if (iconTheme == 'photo_realistic') {
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: CachedCloudImage(
+                          'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=200&q=80',
+                          width: 26,
+                          height: 26,
+                          fit: BoxFit.cover,
+                          cacheWidth: 104,
+                          errorWidget: const Icon(Icons.storefront_rounded, color: Colors.white, size: 26),
+                        ),
+                      );
+                    }
+                    final isPink = iconTheme == 'pink_white_3d';
+                    if (!isPink) {
+                      return const Icon(Icons.storefront_rounded, color: Colors.white, size: 26);
+                    }
+                    return Image.asset(
+                      'assets/images/pink_icons/food_1_a.webp',
+                      width: 26,
+                      height: 26,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) =>
+                          const Icon(Icons.storefront_rounded, color: Colors.white, size: 26),
+                    );
+                  },
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -695,7 +732,39 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('📦', style: TextStyle(fontSize: 48)),
+            // UI polish (3D Pink Icons pass) — same theme-gated swap
+            // pattern as the storefront badge above; falls back to the
+            // flat emoji on every other theme.
+            Builder(
+              builder: (context) {
+                final iconTheme = context.watch<ThemeService>().iconThemeKey;
+                if (iconTheme == 'photo_realistic') {
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: CachedCloudImage(
+                      'https://images.unsplash.com/photo-1607166452427-7e4477079cb9?w=200&q=80',
+                      width: 64,
+                      height: 64,
+                      fit: BoxFit.cover,
+                      cacheWidth: 256,
+                      errorWidget: const Text('📦', style: TextStyle(fontSize: 48)),
+                    ),
+                  );
+                }
+                final isPink = iconTheme == 'pink_white_3d';
+                if (!isPink) {
+                  return const Text('📦', style: TextStyle(fontSize: 48));
+                }
+                return Image.asset(
+                  'assets/images/pink_icons/food_2_a.webp',
+                  width: 64,
+                  height: 64,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) =>
+                      const Text('📦', style: TextStyle(fontSize: 48)),
+                );
+              },
+            ),
             const SizedBox(height: 16),
             Text(
               'No products available',
@@ -860,7 +929,32 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
       final db = FirebaseFirestore.instance;
       await db.runTransaction((tx) async {
         final itemDocs = <String, DocumentSnapshot>{};
-        
+
+        // FIX (checkout race condition — seller closes shop between
+        // menu-load and "Place Order"): _isOpen() only ever reflects the
+        // seller data loaded when this screen first opened; nothing
+        // re-checked it at checkout time, so a seller flipping
+        // isOpen:false (or getting deactivated) mid-browse never blocked
+        // the order — it silently landed on their dashboard anyway with
+        // no one to prepare it. Reading the seller doc INSIDE this same
+        // transaction (rather than a separate live fetch beforehand,
+        // which would leave its own race window between the fetch and
+        // the write) makes the open/active check atomic with the stock
+        // check below — the same live-data guarantee custom_hotel_view_
+        // screen.dart already gets for free from its isOpen StreamBuilder.
+        final sellerSnap =
+            await tx.get(db.collection('sellers').doc(sellerId));
+        if (!sellerSnap.exists) {
+          throw Exception('This shop is no longer available.');
+        }
+        final sellerData = sellerSnap.data()! as Map<String, dynamic>;
+        final sellerStatus = sellerData['status'] as String? ?? 'active';
+        final sellerIsOpen = sellerData['isOpen'] as bool? ?? true;
+        if (sellerStatus != 'active' || !sellerIsOpen) {
+          throw Exception(
+              "This shop just closed and can't accept new orders right now.");
+        }
+
         // Read phase
         //
         // FIX (Aug 17 2026 seller-app audit — "seller app dummy mari
@@ -1042,10 +1136,56 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
               // Cart Items
               Expanded(
                 child: items.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'Your cart is empty',
-                          style: TextStyle(color: _kMuted),
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // UI polish (3D Pink Icons pass) — same
+                            // theme-gated swap pattern used elsewhere in
+                            // this screen.
+                            Builder(
+                              builder: (context) {
+                                final iconTheme =
+                                    context.watch<ThemeService>().iconThemeKey;
+                                if (iconTheme == 'photo_realistic') {
+                                  return ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: CachedCloudImage(
+                                      'https://images.unsplash.com/photo-1584473457406-6240486418e9?w=200&q=80',
+                                      width: 56,
+                                      height: 56,
+                                      fit: BoxFit.cover,
+                                      cacheWidth: 224,
+                                      errorWidget: const Icon(
+                                          Icons.shopping_cart_outlined,
+                                          size: 48,
+                                          color: _kMuted),
+                                    ),
+                                  );
+                                }
+                                final isPink = iconTheme == 'pink_white_3d';
+                                if (!isPink) {
+                                  return const Icon(Icons.shopping_cart_outlined,
+                                      size: 48, color: _kMuted);
+                                }
+                                return Image.asset(
+                                  'assets/images/pink_icons/food_3_a.webp',
+                                  width: 56,
+                                  height: 56,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, __, ___) => const Icon(
+                                      Icons.shopping_cart_outlined,
+                                      size: 48,
+                                      color: _kMuted),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Your cart is empty',
+                              style: TextStyle(color: _kMuted),
+                            ),
+                          ],
                         ),
                       )
                     : ListView.builder(

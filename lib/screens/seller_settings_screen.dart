@@ -20,6 +20,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+
+import 'ai_settings_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/cloudinary_upload_service.dart';
@@ -129,6 +131,15 @@ class _SellerSettingsScreenState extends State<SellerSettingsScreen> {
             const SizedBox(height: 12),
             _buildNotificationSettings(),
             const SizedBox(height: 28),
+            // NEW (Aug 28 2026 - Nizam: "mobile la chitti innum girl
+            // voice la than pesuran"). The voice picker existed but was
+            // only reachable from the customer app's routes - a Seller
+            // had no way to audition their phone's actual voice list
+            // and pin the right one.
+            _buildSectionHeader("Chitti's Voice"),
+            const SizedBox(height: 12),
+            _buildChittiVoiceSettings(),
+            const SizedBox(height: 28),
             _buildSectionHeader('Language & Region'),
             const SizedBox(height: 12),
             _buildLanguageSettings(),
@@ -155,6 +166,56 @@ class _SellerSettingsScreenState extends State<SellerSettingsScreen> {
         color: _text,
         fontSize: 18,
         fontWeight: FontWeight.w800,
+      ),
+    );
+  }
+
+  Widget _buildChittiVoiceSettings() {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _pink.withValues(alpha: 0.2)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12FF4FA3),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ListTile(
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: _pink.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(Icons.record_voice_over_rounded,
+              color: _pink, size: 22),
+        ),
+        title: Text(
+          'Voice & Tone',
+          style: GoogleFonts.outfit(
+            color: _text,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        subtitle: Text(
+          "Pick which of your phone's installed voices Chitti uses",
+          style: GoogleFonts.outfit(
+            color: _muted,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right_rounded, color: _muted),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute<void>(builder: (_) => const AiSettingsScreen()),
+        ),
       ),
     );
   }

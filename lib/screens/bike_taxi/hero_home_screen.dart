@@ -26,6 +26,7 @@ import '../../config/city_config.dart';
 import '../../models/ride_model.dart';
 import '../../models/service_request_model.dart';
 import '../../services/app_update_checker.dart';
+import '../../services/chitti/chitti_host_bridge.dart';
 import '../../services/db_usage_tracker.dart';
 import '../../services/hero_foreground_service.dart';
 import '../../services/hero_ride_notification_service.dart';
@@ -38,6 +39,7 @@ import '../../services/location_service.dart';
 import '../../services/service_request_service.dart';
 import '../../services/update_service.dart';
 import '../../utils/daily_boost_messages.dart';
+import '../../widgets/stranded_orders_banner.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../../widgets/hero_premium_loader.dart';
 import '../../widgets/order_photo_gallery.dart';
@@ -46,6 +48,7 @@ import '../../widgets/economic_vision_banner.dart';
 import '../notifications_screen.dart';
 import 'hero_ride_screen.dart';
 import '../../config/hero_service_access.dart';
+import '../../config/hero_skill_catalog.dart';
 // RELATIVE, not package: (Aug 19 2026).
 //
 // These were the ONLY three `package:erode_superapp/` imports in this
@@ -63,6 +66,7 @@ import '../../config/hero_service_access.dart';
 import '../../services/app_update_gate_service.dart';
 import '../../services/pwa_cache_platform_stub.dart'
     if (dart.library.html) '../../services/pwa_cache_platform_web.dart';
+import '../../widgets/cached_tile_provider.dart';
 
 class HeroHomeScreen extends StatefulWidget {
   const HeroHomeScreen({
@@ -155,6 +159,19 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   // the mirror writes nothing in that case — an absent key means
   // "allowed", so untouched heroes keep behaving exactly as before.
   Map<String, dynamic>? _serviceAccess;
+
+  // SKILL HEROES (Aug 29 2026). Loaded from heroes/{uid}.skills and
+  // mirrored into the RTDB presence node exactly like _serviceAccess
+  // above, for exactly the same reason: skill matching happens inside
+  // service_request_service._broadcastToEligibleHeroes, which iterates
+  // the whole online_heroes node and cannot afford a Firestore read per
+  // hero per booking.
+  //
+  // Empty for every vehicle hero, and an empty list mirrors NOTHING —
+  // heroHasSkill() reads a missing field as "no skills", which is the
+  // correct answer for a bike rider, and writing an empty array to
+  // three presence nodes per GPS tick would be pure noise.
+  List<String> _heroSkills = const <String>[];
 
   /// Live listener on the hero's own doc, so an admin toggling a service
   /// takes effect on a hero who is ALREADY online. Without this the
@@ -740,6 +757,13 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         showDailyBoostSnackBar(context, randomHeroBoostMessage());
       });
     });
+    // NEW (Aug 27 2026 — Chitti hero tools): register the ONE safe way
+    // for Chitti to take this hero online/offline. It runs this
+    // screen's own _syncOnlineStatus(), which is what acquires the
+    // location fix, writes the RTDB radar entry dispatch reads, and
+    // attaches the ping listeners. See chitti_host_bridge.dart for why
+    // Chitti must never write the online flag itself.
+    ChittiHostBridge.heroOnlineHandler = _chittiSetOnline;
     _user = FirebaseAuth.instance.currentUser;
     // Build the query streams exactly once — see the field comments.
     final streamUid = _user?.uid;
@@ -1037,6 +1061,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               ? Map<String, dynamic>.from(
                   data[kHeroServiceAccessField] as Map)
               : null;
+          _heroSkills = heroSkillsOf(data);
           _isOnline = restoredOnline;
         });
       }
@@ -1121,6 +1146,41 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   }
 
   // Sync captain online status to Firestore & RTDB
+  /// Chitti entry point for `hero_set_online_status`.
+  ///
+  /// Mirrors the header toggle exactly — optimistic local flip, then
+  /// the real [_syncOnlineStatus] — so a hero who says "I'm starting
+  /// work" ends up in precisely the state the button would have put
+  /// them in, listeners and radar entry included.
+  ///
+  /// Going online can legitimately fail (location denied, most often on
+  /// web), and [_syncOnlineStatus] flips `_isOnline` back when it does.
+  /// Re-reading the flag afterwards rather than assuming success is the
+  /// point: telling a hero they are online when they are not means they
+  /// sit waiting for pings that will never arrive.
+  Future<String> _chittiSetOnline(bool online) async {
+    if (_user == null) {
+      return "You don't seem to be signed in — please sign in first.";
+    }
+    if (_isOnline == online) {
+      return online
+          ? "You're already online and receiving job pings."
+          : "You're already offline.";
+    }
+    if (mounted) setState(() => _isOnline = online);
+    await _syncOnlineStatus(online);
+    if (_isOnline != online) {
+      return online
+          ? "I couldn't take you online — check your location permission on "
+              'the home screen and try the toggle there.'
+          : "I couldn't take you offline just now — please use the toggle on "
+              'the home screen.';
+    }
+    return online
+        ? "You're online — job pings will start coming in."
+        : "You're offline now. No pings until you go back online.";
+  }
+
   Future<void> _syncOnlineStatus(bool online) async {
     if (_user == null) {
       return;
@@ -1255,6 +1315,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         // spending a Firestore read per hero per booking. See
         // lib/config/hero_service_access.dart.
         if (_serviceAccess != null) kHeroServiceAccessField: _serviceAccess,
+        if (_heroSkills.isNotEmpty) kHeroSkillsField: _heroSkills,
               'city': _heroCity,
               'lastUpdated': ServerValue.timestamp,
             });
@@ -1502,6 +1563,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         // spending a Firestore read per hero per booking. See
         // lib/config/hero_service_access.dart.
         if (_serviceAccess != null) kHeroServiceAccessField: _serviceAccess,
+        if (_heroSkills.isNotEmpty) kHeroSkillsField: _heroSkills,
         'city': _heroCity,
         'lastUpdated': ServerValue.timestamp,
         // Clear the disconnect stamp — this is a live reconnect, so the
@@ -1638,6 +1700,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         // spending a Firestore read per hero per booking. See
         // lib/config/hero_service_access.dart.
         if (_serviceAccess != null) kHeroServiceAccessField: _serviceAccess,
+        if (_heroSkills.isNotEmpty) kHeroSkillsField: _heroSkills,
           'lastUpdated': ServerValue.timestamp,
         });
         // See the matching comment on the other online_heroes.set() call
@@ -1690,12 +1753,22 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           ? Map<String, dynamic>.from(data[kHeroServiceAccessField] as Map)
           : null;
 
+      // Skills ride along on this same listener rather than getting a
+      // second one: it is already watching the whole hero doc, and an
+      // admin granting a hero a second trade mid-shift should reach
+      // dispatch on the next booking, not the next app restart.
+      final nextSkills = heroSkillsOf(data);
+
       // Cheap equality check — this listener also fires for every other
       // field on the hero doc (coins, commission, status...), and we do
       // not want an RTDB presence rewrite on each of those.
-      if (next.toString() == _serviceAccess.toString()) return;
+      if (next.toString() == _serviceAccess.toString() &&
+          nextSkills.join(',') == _heroSkills.join(',')) {
+        return;
+      }
 
       _serviceAccess = next;
+      _heroSkills = nextSkills;
       if (!mounted) return;
       setState(() {});
 
@@ -1707,6 +1780,10 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             .update({
           if (next != null) kHeroServiceAccessField: next,
           if (next == null) kHeroServiceAccessField: null,
+          // Null, not an omitted key: this is an update(), so writing
+          // null is what actually CLEARS a stale skill list from the
+          // presence node when an admin removes a hero's trade.
+          kHeroSkillsField: nextSkills.isEmpty ? null : nextSkills,
         }).catchError((Object e) {
           debugPrint('[HeroHome] serviceAccess presence sync failed: $e');
         });
@@ -1862,6 +1939,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
   @override
   void dispose() {
+    ChittiHostBridge.unregisterHeroOnline(_chittiSetOnline);
     WidgetsBinding.instance.removeObserver(this);
     // T1: Cancel UI-only subscriptions (foreground popup listeners).
     // FCM background handler in main_hero.dart continues to deliver
@@ -3759,6 +3837,15 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               children: [
                 _buildHeader(),
                 _buildActiveServiceRequestsBanner(),
+                // The unattended-order safety net (Aug 28 2026 — Nizam:
+                // "admin mobile attend pannalainalum... hero ku assign
+                // panni customer ku message anupuravaraikkum").
+                //
+                // Sits here, above the ride stream, because a hero with
+                // an empty stream is exactly who should see it — and it
+                // renders a zero-height box when nothing is stranded,
+                // so it costs this screen nothing on a normal day.
+                const StrandedOrdersBanner(),
                 if (_isOnline) ...[
                   if (_activeRideId.isNotEmpty) ...[
                     _buildActiveRideCard(),
@@ -4327,6 +4414,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                 TileLayer(
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'com.allin1.superapp',
+                  // Offline-first tiles (Aug 28 2026) — see
+                  // cached_tile_provider.dart.
+                  tileProvider: CachedTileProvider(),
                 ),
                 const CircleLayer(
                   circles: [
@@ -4915,6 +5005,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                                           'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                                       userAgentPackageName:
                                           'com.allin1.superapp',
+                                      // Offline-first tiles (Aug 28 2026)
+                                      // — see cached_tile_provider.dart.
+                                      tileProvider: CachedTileProvider(),
                                     ),
                                     const CircleLayer(circles: [
                                       CircleMarker(

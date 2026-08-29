@@ -13,6 +13,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart' as rtdb;
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:geolocator/geolocator.dart';
 
 import '../config/city_config.dart';
 import '../models/service_request_model.dart';
@@ -21,6 +22,7 @@ import 'hero_usage_accumulator_service.dart';
 import 'hero_wallet_service.dart';
 import 'usage_tracking_service.dart';
 import '../config/hero_service_access.dart';
+import '../config/hero_skill_catalog.dart';
 
 /// Canonical status enum — the single source of truth for lifecycle state.
 /// UI label sets (task-type vs goods-type) are presentation-only mappings
@@ -77,31 +79,45 @@ class ServiceRequestService {
   }
 
   /// Live list stream for one customer's own requests across every
-  /// requestType, typed. Deliberately mirrors my_orders_screen.dart's
-  /// original query shape exactly: a single `.where('customerId', ...)`
-  /// filter with NO paired `.orderBy()` (that combination needs a
-  /// composite index that doesn't exist here — the same class of bug
-  /// already fixed once this session in erode_offers_section.dart) —
-  /// sorted by `createdAt` descending client-side instead, after the
-  /// map to typed models.
+  /// requestType, typed.
+  ///
+  /// FIX (post-fix audit — silent-data-loss risk): this used to be a
+  /// single `.where('customerId', ...)` filter with NO `.orderBy()`,
+  /// paired with `.limit(50)` + a client-side sort AFTER the fetch. That
+  /// combination is broken once a customer has more than 50 requests
+  /// total: Firestore's `.limit()` without a matching `.orderBy()` picks
+  /// an unspecified 50 docs, NOT guaranteed to be the newest — sorting
+  /// them client-side after the fact only sorts whichever arbitrary 50
+  /// came back, so a genuinely recent order could simply never appear.
+  /// Moving `.orderBy('createdAt', descending: true)` into the query
+  /// itself (before `.limit()`) makes "50 most recent" a real guarantee
+  /// instead of an assumption.
+  ///
+  /// REQUIRES a composite index (customerId ASC, createdAt DESC) on
+  /// `service_requests` — added to firestore.indexes.json alongside this
+  /// change. MUST be deployed (`firebase deploy --only firestore:indexes`)
+  /// before this query will actually return data; until then it throws
+  /// `failed-precondition: requires an index`, which the `onError`
+  /// handler on the caller's side just logs — the same silent-failure
+  /// class this codebase has hit before (see erode_offers_section.dart).
   Stream<List<ServiceRequestModel>> streamCustomerRequests(
     String customerId,
   ) {
     return FirebaseFirestore.instance
         .collection('service_requests')
         .where('customerId', isEqualTo: customerId)
+        .orderBy('createdAt', descending: true)
+        // FIX (zero-cost Firestore audit): was fully uncapped — a
+        // long-time customer's entire lifetime order history would be
+        // re-read on every snapshot. 50 most-recent docs (now a real
+        // guarantee thanks to the orderBy above) is plenty for an
+        // order-history screen.
+        .limit(50)
         .snapshots()
         .map((snap) {
-      final models = snap.docs
+      return snap.docs
           .map((doc) => ServiceRequestModel.fromFirestore(doc.data(), doc.id))
           .toList();
-      models.sort((a, b) {
-        final aTs = a.createdAt;
-        final bTs = b.createdAt;
-        if (aTs == null || bTs == null) return 0;
-        return bTs.compareTo(aTs);
-      });
-      return models;
     });
   }
 
@@ -140,6 +156,23 @@ class ServiceRequestService {
     /// only the ping fan-out is skipped, until
     /// [requestDeliveryBroadcast] fires it.
     bool deferBroadcast = false,
+
+    /// Skill key (see lib/config/hero_skill_catalog.dart) when this is a
+    /// trade booking — electrician, plumber, laptop_pc, tv_service,
+    /// fridge_ac.
+    ///
+    /// NEW (Aug 29 2026 — Nizam: skill heroes). When set, the ping goes
+    /// ONLY to heroes carrying that skill, and only those within
+    /// `kSkillDispatchRadiusKm` of the customer's own location.
+    ///
+    /// Null for every existing caller, and null means the broadcast
+    /// behaves exactly as it did before this parameter existed — same
+    /// city-wide fan-out, same serviceAccess gate, no distance test.
+    /// That is what keeps rides, food, grocery and custom orders
+    /// untouched on a live fleet.
+    String? requiredSkill,
+    double? customerLat,
+    double? customerLng,
   }) async {
     // Allow callers that need the ID before the doc exists (e.g. grocery
     // orders that upload an image to a Storage path keyed by requestId)
@@ -173,6 +206,14 @@ class ServiceRequestService {
       // type so the field's absence never has to be special-cased.
       'sellerStage': deferBroadcast ? kSellerStageNew : null,
       'sellerStageAt': null,
+      // Financial idempotency flag (seller-earnings audit, Phase 1):
+      // flips to true exactly once, inside the same Firestore
+      // transaction that credits the seller's pendingPayouts on
+      // completion — see _completeAndCreditSeller(). Written false here
+      // (not omitted) so the field always exists for that transaction's
+      // read-check-write guard and so firestore.rules' create clause can
+      // enforce it starts false.
+      'earningsCredited': false,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -239,6 +280,54 @@ class ServiceRequestService {
         details: details,
         pingExpiresAt: pingExpiresAt,
         requestCity: requestCity,
+        requiredSkill: requiredSkill,
+        customerLat: customerLat,
+        customerLng: customerLng,
+      );
+    }
+
+    // NEW (Issue 2 fix — "seller app not receiving any order
+    // notification", zero-cost/no-Cloud-Functions constraint): wakes the
+    // seller's RTDB listener the exact same way heroes are woken —
+    // `hero_pings/{heroId}/{requestId}` — see main_seller.dart's
+    // _initSellerPingListener for the read side. Only orders that
+    // actually belong to a seller (catalog_food_order / custom_hotel_order,
+    // both of which pass details.sellerId) get a ping; every other
+    // requestType has no sellerId and is skipped.
+    //
+    // Kept deliberately tiny (no full item list/address) — this node
+    // exists only to wake the app and is deleted the moment it's read
+    // (or found expired), so it never accumulates against the project's
+    // 1GB RTDB budget the way a full order mirror would.
+    final sellerId = details['sellerId'] as String?;
+    if (sellerId != null && sellerId.isNotEmpty) {
+      final items = details['items'];
+      final itemsSummary = items is List
+          ? items
+              .whereType<Map>()
+              .take(3)
+              .map((it) => '${it['quantity'] ?? it['qty'] ?? 1} × ${it['name'] ?? 'Item'}')
+              .join(', ')
+          : '';
+      // Same "delete once consumed" contract as hero_pings — expiry here
+      // is a long backstop (48h) for the case the seller never opens the
+      // app at all, not the tight 90s ping window heroes use, since a
+      // seller order can legitimately sit unopened overnight.
+      final sellerPingExpiresAt = DateTime.now().toUtc().millisecondsSinceEpoch +
+          (48 * 60 * 60 * 1000);
+      unawaited(
+        rtdb.FirebaseDatabase.instance
+            .ref('seller_pings/$sellerId/$requestId')
+            .set({
+          'requestId': requestId,
+          'requestType': requestType,
+          'customerName': customerName,
+          'itemsSummary': itemsSummary,
+          'pingExpiresAt': sellerPingExpiresAt,
+          'createdAt': rtdb.ServerValue.timestamp,
+        }).catchError((Object e) {
+          debugPrint('[ServiceRequestService] seller_pings write failed (non-fatal): $e');
+        }),
       );
     }
 
@@ -267,29 +356,89 @@ class ServiceRequestService {
   static const String kSellerStageDeliveryRequested = 'delivery_requested';
 
   /// Moves the seller's own kitchen stage forward. Writes ONLY the three
-  /// fields firestore.rules' seller clause permits — adding any other
-  /// field here will make the whole update permission-denied.
+  /// `sellerStage`/`sellerStageAt`/`updatedAt` fields on the request doc
+  /// (firestore.rules' seller clause permits exactly those — adding any
+  /// other field there will make the whole update permission-denied),
+  /// plus — on the genuine first new->accepted transition — the ₹5
+  /// platform usage fee debit and its matching ledger entry.
+  ///
+  /// FIX (seller-earnings audit, Phase 1 — double-debit risk): this used
+  /// to be a plain WriteBatch that charged the fee unconditionally
+  /// whenever `stage == 'accepted'`, with the ONLY protection against a
+  /// duplicate charge being `_busyRequestIds` — in-memory widget state
+  /// on the seller dashboard, gone the instant the app is killed or
+  /// crashes mid-request. Now a real Firestore Transaction: reads the
+  /// request's CURRENT sellerStage first, and only debits when it isn't
+  /// already 'accepted' (or later). Firestore auto-retries a transaction
+  /// on write conflict with fresh data, so even two near-simultaneous
+  /// calls for the same order are safe — only the one that first
+  /// observes the pre-accept stage ever charges the fee. The ledger
+  /// entry's fixed id (`${requestId}_fee`) is a second, independent
+  /// idempotency layer enforced by firestore.rules itself (no `update`
+  /// rule exists for wallet_transactions, so a second create attempt at
+  /// the same id is rejected outright regardless of this Dart guard).
   Future<void> advanceSellerStage(String requestId, String stage, {String? sellerId}) async {
-    final batch = FirebaseFirestore.instance.batch();
-    
     final reqRef = FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId);
 
-    batch.update(reqRef, {
-      'sellerStage': stage,
-      'sellerStageAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snap = await tx.get(reqRef);
+      final currentStage = snap.data()?['sellerStage'] as String?;
+
+      tx.update(reqRef, {
+        'sellerStage': stage,
+        'sellerStageAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (stage == kSellerStageAccepted &&
+          sellerId != null &&
+          currentStage != kSellerStageAccepted) {
+        final sellerRef =
+            FirebaseFirestore.instance.collection('sellers').doc(sellerId);
+        tx.update(sellerRef, {
+          'walletBalance': FieldValue.increment(-5.0),
+          // Lifetime running total (seller-earnings audit, Phase 2 —
+          // Earnings screen's "Total Platform Fees" metric card). Purely
+          // additive bookkeeping alongside the real debit above — the
+          // per-transaction ledger entry below is still the source of
+          // truth for auditability; this is just a cheap pre-summed
+          // total so the Earnings screen doesn't need to sum the whole
+          // ledger just to show one number.
+          'totalFeesDeducted': FieldValue.increment(5.0),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        tx.set(
+          sellerRef.collection('wallet_transactions').doc('${requestId}_fee'),
+          {
+            'requestId': requestId,
+            'sellerId': sellerId,
+            'amount': -5.0,
+            'type': 'platform_fee',
+            'createdAt': FieldValue.serverTimestamp(),
+          },
+        );
+      }
     });
 
-    if (stage == 'accepted' && sellerId != null) {
-      final sellerRef = FirebaseFirestore.instance.collection('sellers').doc(sellerId);
-      batch.update(sellerRef, {
-        'walletBalance': FieldValue.increment(-5.0),
-      });
+    // 1GB RTDB budget cleanup safety net: the seller_pings/ node this
+    // order created (see createServiceRequest) is normally deleted the
+    // instant main_seller.dart's listener reads it, but a seller can
+    // reach "Accept Order" through means that never triggered that read
+    // (e.g. notifications permission was denied, or the listener hadn't
+    // attached yet). The order has definitely been seen by the time any
+    // stage advances, so it's always safe to sweep the ping here too.
+    if (sellerId != null) {
+      unawaited(
+        rtdb.FirebaseDatabase.instance
+            .ref('seller_pings/$sellerId/$requestId')
+            .remove()
+            .catchError((Object e) {
+          debugPrint('[ServiceRequestService] seller_pings cleanup failed (non-fatal): $e');
+        }),
+      );
     }
-
-    await batch.commit();
   }
 
   /// Fires the held-back hero broadcast for a deferred order — the
@@ -306,10 +455,26 @@ class ServiceRequestService {
 
     final node = Map<String, dynamic>.from(snap.value! as Map);
     final status = node['status'] as String? ?? '';
-    // Only a request still parked in the holding state may be released.
-    // Guards the double-tap case AND the case where an admin already
-    // dispatched this order by hand while the food was cooking.
-    if (status != 'awaiting_seller') return false;
+
+    // FIX (Task 1 — "Retry Finding Delivery Partner"): a request still
+    // parked in the holding state may always be released, same as
+    // before. NEW: a request already 'pinging' may ALSO be released if
+    // its previous broadcast's pingExpiresAt has already passed — no
+    // hero could still legitimately claim an expired ping (a hero's own
+    // client discards one past pingExpiresAt on sight, same check as
+    // main_hero.dart's global ping listener), so re-firing is safe and
+    // is exactly what lets the seller's "Retry Finding Delivery Partner"
+    // button (seller_dashboard_screen.dart) actually work instead of
+    // permanently no-op'ing once the first attempt goes stale. A request
+    // that's 'pinging' and NOT yet expired, or already claimed by a
+    // hero, is correctly still refused — guards the double-tap case AND
+    // the case where an admin already dispatched this order by hand.
+    final pingExpiresAtExisting = (node['pingExpiresAt'] as num?)?.toInt();
+    final isExpiredPinging = status == 'pinging' &&
+        pingExpiresAtExisting != null &&
+        pingExpiresAtExisting > 0 &&
+        DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAtExisting;
+    if (status != 'awaiting_seller' && !isExpiredPinging) return false;
 
     // Expiry is stamped NOW, not at order time — this is the whole point
     // of deferring (see the pingExpiresAt comment in createServiceRequest).
@@ -349,10 +514,23 @@ class ServiceRequestService {
     required Map<String, dynamic> details,
     required int pingExpiresAt,
     required String requestCity,
+    String? requiredSkill,
+    double? customerLat,
+    double? customerLng,
   }) async {
     final snap =
         await rtdb.FirebaseDatabase.instance.ref('online_heroes').get();
     if (!snap.exists || snap.value is! Map) return;
+
+    // SKILL DISPATCH (Aug 29 2026). Both conditions are required before
+    // the distance test switches on: a skill with no customer location
+    // must still reach every matching hero in the city rather than
+    // silently reaching nobody, because a request that pings zero heroes
+    // is indistinguishable, to the customer, from a broken app.
+    final skillKey = (requiredSkill ?? '').trim().toLowerCase();
+    final isSkillDispatch = skillKey.isNotEmpty;
+    final applyRadius =
+        isSkillDispatch && customerLat != null && customerLng != null;
 
     final heroes = Map<dynamic, dynamic>.from(snap.value! as Map);
     final futures = <Future<void>>[];
@@ -399,6 +577,39 @@ class ServiceRequestService {
       final serviceKey = serviceKeyForRequestType(requestType);
       if (serviceKey != null && !isServiceAllowed(heroData, serviceKey)) {
         return;
+      }
+
+      // ── SKILL MATCH + 5 KM RADIUS (Aug 29 2026) ──────────────────
+      // Guarded by isSkillDispatch, so this whole block is inert for
+      // every requestType that existed before skill heroes — rides,
+      // food, grocery, parcel and custom orders reach exactly the same
+      // heroes they reached yesterday.
+      //
+      // The skill test uses heroHasSkill(), which defaults to FALSE for
+      // a hero with no skills recorded. That is the point: a plumbing
+      // job must reach plumbers, not every hero who happens to be
+      // online. See hero_skill_catalog.dart for why this default is the
+      // opposite of isServiceAllowed's.
+      if (isSkillDispatch) {
+        if (!heroHasSkill(heroData, skillKey)) return;
+
+        if (applyRadius) {
+          final heroLat = (heroData['lat'] as num?)?.toDouble() ??
+              (heroData['latitude'] as num?)?.toDouble();
+          final heroLng = (heroData['lng'] as num?)?.toDouble() ??
+              (heroData['longitude'] as num?)?.toDouble();
+          // A hero whose presence node carries no usable position is
+          // SKIPPED rather than included. Including them would send a
+          // job to someone who may be 40km away, which is the failure
+          // the radius exists to prevent; the presence writer stamps
+          // lat/lng on every write, so a missing one means stale.
+          if (heroLat == null || heroLng == null) return;
+          final distanceKm = Geolocator.distanceBetween(
+                customerLat, customerLng, heroLat, heroLng,
+              ) /
+              1000.0;
+          if (distanceKm > kSkillDispatchRadiusKm) return;
+        }
       }
 
       futures.add(
@@ -536,6 +747,110 @@ class ServiceRequestService {
     };
   }
 
+  /// Completes a service_requests doc AND, in the SAME Firestore
+  /// Transaction, credits the owning seller's `pendingPayouts` for the
+  /// order's value — shared by advanceStatus('completed') and
+  /// completeWithFinalAmount() below (seller-earnings audit, Phase 1).
+  ///
+  /// Before this, NOTHING in the codebase ever credited a seller for a
+  /// completed order — `pendingPayouts`/`totalSettled` were read on the
+  /// dashboard's Payouts card but had no writer anywhere; the only
+  /// wallet write that existed was the ₹5 accept-time debit. Sellers
+  /// were only ever charged, never paid.
+  ///
+  /// Idempotency (two independent layers, so a retry after a
+  /// successful-but-unacknowledged prior attempt — app killed right
+  /// after commit, network drop on the response, etc. — can never
+  /// double-credit):
+  ///  1. This transaction reads `earningsCredited` first; if it's
+  ///     already true, the credit/ledger writes are skipped entirely
+  ///     (only the terminal status fields are written). Firestore
+  ///     auto-retries the whole transaction on write conflict with a
+  ///     fresh read, so two near-simultaneous completion calls for the
+  ///     same order are safe.
+  ///  2. firestore.rules independently enforces the same thing: the
+  ///     seller-doc credit write and the ledger-doc create both require
+  ///     (via a `get()` on this exact request doc) that
+  ///     `earningsCredited != true` in the PRE-transaction committed
+  ///     state — even a client that skipped/bypassed layer 1 gets
+  ///     rejected. The ledger doc's fixed id (`${requestId}_credit`)
+  ///     adds a third, structural guarantee: Firestore treats a second
+  ///     `.set()` on an existing doc id as an `update`, and no `update`
+  ///     rule exists for `wallet_transactions` — a duplicate can never
+  ///     successfully write regardless of any application-level bug.
+  ///
+  /// Credit amount: prefers an explicit `finalAmount` (from
+  /// completeWithFinalAmount's hero-entered bill); falls back to the
+  /// request doc's own `finalAmount` if already set, then to
+  /// `details.subtotal` (the original order value) for the
+  /// admin-manual-completion path via advanceStatus(), which carries no
+  /// amount parameter at all. A non-positive resolved amount credits
+  /// nothing (defensive — avoids writing a zero/garbage ledger entry).
+  ///
+  /// Non-food requestTypes (hero_booking/custom_order/grocery_order —
+  /// anything with no `details.sellerId`) simply have no seller to
+  /// credit; only the terminal status fields are written for those,
+  /// unchanged from before this fix.
+  Future<void> _completeAndCreditSeller(
+    String requestId, {
+    required Map<String, dynamic> requestFields,
+  }) async {
+    final reqRef =
+        FirebaseFirestore.instance.collection('service_requests').doc(requestId);
+
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snap = await tx.get(reqRef);
+      final data = snap.data();
+      if (data == null) {
+        // Doc gone (e.g. concurrently cancelled/deleted) — nothing left
+        // to complete or credit.
+        return;
+      }
+
+      final details = data['details'] as Map<String, dynamic>?;
+      final sellerId = details?['sellerId'] as String?;
+      final creditAmount = (requestFields['finalAmount'] as num?)?.toDouble() ??
+          (data['finalAmount'] as num?)?.toDouble() ??
+          (details?['subtotal'] as num?)?.toDouble() ??
+          0.0;
+      final alreadyCredited = data['earningsCredited'] == true;
+      final shouldCredit = !alreadyCredited &&
+          sellerId != null &&
+          sellerId.isNotEmpty &&
+          creditAmount > 0;
+
+      // Single update call on this document — Firestore transactions
+      // reject a second write to the same doc reference within one
+      // transaction, so `earningsCredited` is folded into the same map
+      // as the caller's terminal-status fields rather than a separate
+      // tx.update() call.
+      tx.update(reqRef, {
+        ...requestFields,
+        if (shouldCredit) 'earningsCredited': true,
+      });
+
+      if (!shouldCredit) return;
+
+      final sellerRef =
+          FirebaseFirestore.instance.collection('sellers').doc(sellerId);
+      tx.update(sellerRef, {
+        'pendingPayouts': FieldValue.increment(creditAmount),
+        'lastCreditedRequestId': requestId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      tx.set(
+        sellerRef.collection('wallet_transactions').doc('${requestId}_credit'),
+        {
+          'requestId': requestId,
+          'sellerId': sellerId,
+          'amount': creditAmount,
+          'type': 'order_credit',
+          'createdAt': FieldValue.serverTimestamp(),
+        },
+      );
+    });
+  }
+
   /// Hero or admin status-advance. Both paths write the exact same field
   /// on the exact same document — the customer tracking screen cannot
   /// tell (and does not need to know) which side triggered the update.
@@ -562,10 +877,7 @@ class ServiceRequestService {
     if (newStatus == 'completed') {
       final timelineFields =
           await _foldAndRemoveActiveServiceRequestNode(requestId);
-      await FirebaseFirestore.instance
-          .collection('service_requests')
-          .doc(requestId)
-          .update({
+      await _completeAndCreditSeller(requestId, requestFields: {
         'status': newStatus,
         'updatedAt': FieldValue.serverTimestamp(),
         ...timelineFields,
@@ -713,10 +1025,7 @@ class ServiceRequestService {
     // advanceStatus()'s 'completed' branch above.
     final timelineFields =
         await _foldAndRemoveActiveServiceRequestNode(requestId);
-    await FirebaseFirestore.instance
-        .collection('service_requests')
-        .doc(requestId)
-        .update({
+    await _completeAndCreditSeller(requestId, requestFields: {
       'finalAmount': finalAmount,
       'status': 'completed',
       'paymentStatus': 'pending_collection',
@@ -978,20 +1287,45 @@ class ServiceRequestService {
 
     await _sweepClearPings(requestId);
 
+    // FIX (Issue 3 — cancellation cleanup): _sweepClearPings above only
+    // ever cleared hero_service_pings, never seller_pings. A deferred
+    // catalog/custom-hotel order cancelled BEFORE the seller opened
+    // their app (so main_seller.dart's listener never consumed it) or
+    // advanced any kitchen stage (so advanceSellerStage's own cleanup
+    // never ran) left its seller_pings/{sellerId}/{requestId} node
+    // sitting in RTDB until its 48h expiry backstop — not an unbounded
+    // leak, but no reason to wait 48h when we can sweep it right now.
+    // Reads the doc once (needed for details.sellerId), reused below for
+    // the existing analytics write instead of a second read.
+    Map<String, dynamic>? requestData;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('service_requests')
+          .doc(requestId)
+          .get();
+      requestData = snap.data();
+      final details = requestData?['details'] as Map<String, dynamic>?;
+      final sellerId = details?['sellerId'] as String?;
+      if (sellerId != null && sellerId.isNotEmpty) {
+        await rtdb.FirebaseDatabase.instance
+            .ref('seller_pings/$sellerId/$requestId')
+            .remove();
+      }
+    } catch (e) {
+      // Best-effort — must never block the actual cancellation the
+      // customer is waiting on.
+      debugPrint('[ServiceRequestService] seller_pings cancel-sweep failed (non-fatal): $e');
+    }
+
     if (reason != null && reason.trim().isNotEmpty) {
       try {
-        final snap = await FirebaseFirestore.instance
-            .collection('service_requests')
-            .doc(requestId)
-            .get();
-        final data = snap.data();
         await FirebaseFirestore.instance
             .collection('cancellation_analytics')
             .add({
           'requestId': requestId,
           'source': 'service_requests',
-          'requestType': data?['requestType'],
-          'customerId': data?['customerId'],
+          'requestType': requestData?['requestType'],
+          'customerId': requestData?['customerId'],
           'cancellationReason': reason,
           'cancelledAt': FieldValue.serverTimestamp(),
         });

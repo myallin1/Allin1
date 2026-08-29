@@ -1,8 +1,16 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../services/ai_activation_service.dart';
+import '../services/chitti/chitti_backup_service.dart';
+import '../services/chitti/chitti_conversation_controller.dart';
+import '../services/chitti/chitti_voice_service.dart';
+import '../services/chitti/chitti_welcome_service.dart';
+import '../services/localization_service.dart';
 
 class AiSettingsScreen extends StatefulWidget {
   const AiSettingsScreen({super.key});
@@ -24,6 +32,67 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
   bool _saving = false;
   String _lastSyncedApiKey = '';
   String _lastSyncedGeminiKey = '';
+
+  // NEW (Aug 28 2026 — Nizam: "Chitti voice innum girl voice ah
+  // iruku"). Which voices exist is entirely device-dependent — TTS
+  // engine, installed language packs, browser — so no heuristic in
+  // ChittiVoiceService can be right on every phone. This section lets
+  // the actual voices on THIS device be auditioned and one pinned.
+  // That is the only reliable fix; the heuristic is just the default.
+  final FlutterTts _previewTts = FlutterTts();
+  List<ChittiVoiceOption> _voices = const <ChittiVoiceOption>[];
+  bool _loadingVoices = true;
+  String? _pinnedVoice;
+  ChittiVoiceTone _tone = ChittiVoiceTone.chitti;
+  bool _welcomeEnabled = true;
+  DateTime? _lastBackupAt;
+  bool _backupBusy = false;
+  ChittiConversationMode _convoMode = ChittiConversationMode.autoStop;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadVoices());
+  }
+
+  Future<void> _loadVoices() async {
+    // Read the saved tone/pin through a no-op apply first, so the
+    // controls below open showing what Chitti is ACTUALLY using
+    // rather than the enum default.
+    final locale = _ttsLocale();
+    await ChittiConversationPrefs.load();
+    await ChittiVoiceService.apply(_previewTts, locale);
+    final voices =
+        await ChittiVoiceService.availableVoices(_previewTts, locale);
+    final lastBackup = await ChittiBackupService.instance.lastBackupAt();
+    if (!mounted) return;
+    setState(() {
+      _voices = voices;
+      _pinnedVoice = ChittiVoiceService.pinnedVoiceName;
+      _tone = ChittiVoiceService.tone;
+      _welcomeEnabled = ChittiWelcomeService.enabled;
+      _convoMode = ChittiConversationPrefs.mode;
+      _lastBackupAt = lastBackup;
+      _loadingVoices = false;
+    });
+  }
+
+  String _ttsLocale() {
+    final code = context.read<LocalizationService>().languageCode;
+    return switch (code) {
+      'ta' || 'tg' => 'ta-IN',
+      'hi' => 'hi-IN',
+      'ml' => 'ml-IN',
+      _ => 'en-IN',
+    };
+  }
+
+  Future<void> _previewVoice() async {
+    final code = context.read<LocalizationService>().languageCode;
+    await ChittiVoiceService.apply(_previewTts, _ttsLocale());
+    await _previewTts.stop();
+    await _previewTts.speak(ChittiVoiceService.previewLine(code));
+  }
 
   @override
   void didChangeDependencies() {
@@ -49,11 +118,416 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
 
   @override
   void dispose() {
+    unawaited(_previewTts.stop());
     _apiKeyController.dispose();
     _apiKeyFocusNode.dispose();
     _geminiKeyController.dispose();
     _geminiKeyFocusNode.dispose();
     super.dispose();
+  }
+
+  /// Backup & restore.
+  ///
+  /// NEW (Aug 28 2026 — Nizam's WhatsApp model). The customer's chat
+  /// history, Chitti's memory of them, their order memory and their
+  /// preferences live on this device and in THEIR Google Drive — not in
+  /// our database. This is where they move it to a new phone.
+  ///
+  /// The wallet is deliberately absent: money stays server-side, so a
+  /// restored file can never be an edited balance.
+  Widget _buildBackupSection() {
+    const pink = Color(0xFFFF4FA3);
+    const deep = Color(0xFF4A1236);
+    const muted = Color(0xFF8A4E72);
+
+    final last = _lastBackupAt;
+    final subtitle = !ChittiBackupService.isSupported
+        ? 'Available in the installed app.'
+        : last == null
+            ? 'Not backed up yet.'
+            : 'Last backup: ${last.day}/${last.month} '
+                '${last.hour.toString().padLeft(2, '0')}:'
+                '${last.minute.toString().padLeft(2, '0')}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: 36, color: Color(0x22FF4FA3)),
+        Row(
+          children: [
+            const Icon(Icons.cloud_upload_rounded, color: pink, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Backup & Restore',
+              style: GoogleFonts.outfit(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: deep,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Your chats, Chitti\'s memory of you and your settings are saved '
+          'to your own Google Drive. Change phone, restore, and Chitti '
+          'picks up where you left off. Your wallet stays safe on our '
+          'servers and is never in the file.',
+          style: GoogleFonts.outfit(color: muted, fontSize: 11.5, height: 1.4),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          subtitle,
+          style: GoogleFonts.outfit(
+            color: muted,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (_backupBusy)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 10),
+            child: LinearProgressIndicator(color: pink, minHeight: 2),
+          )
+        else
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: ChittiBackupService.isSupported
+                      ? () => _runBackup(restore: false)
+                      : null,
+                  icon: const Icon(Icons.backup_rounded, size: 18),
+                  label: Text(
+                    'Back Up',
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: pink,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: ChittiBackupService.isSupported
+                      ? () => _runBackup(restore: true)
+                      : null,
+                  icon: const Icon(Icons.restore_rounded, size: 18, color: pink),
+                  label: Text(
+                    'Restore',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.w700,
+                      color: pink,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: const BorderSide(color: pink),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Future<void> _runBackup({required bool restore}) async {
+    if (restore) {
+      // Restore REPLACES local history rather than merging — merging two
+      // phones' conversations would interleave them out of order — so it
+      // gets a confirmation. Backing up needs none; it only ever adds.
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            'Restore from Drive?',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.w800),
+          ),
+          content: Text(
+            'This replaces the chats and history on this phone with what '
+            'is in your backup.',
+            style: GoogleFonts.outfit(fontSize: 13.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Restore'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    setState(() => _backupBusy = true);
+    final result = restore
+        ? await ChittiBackupService.instance.restoreNow()
+        : await ChittiBackupService.instance.backupNow();
+    if (!mounted) return;
+    setState(() {
+      _backupBusy = false;
+      if (result.ok && !restore) _lastBackupAt = result.at;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message)),
+    );
+  }
+
+  /// Voice controls. Kept in its own builder rather than inlined into
+  /// the already-long build() below, purely for readability — it adds
+  /// no state of its own beyond the three fields above.
+  Widget _buildVoiceSection() {
+    const pink = Color(0xFFFF4FA3);
+    const deep = Color(0xFF4A1236);
+    const muted = Color(0xFF8A4E72);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: 36, color: Color(0x22FF4FA3)),
+        Row(
+          children: [
+            const Icon(Icons.record_voice_over_rounded, color: pink, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Chitti Voice',
+              style: GoogleFonts.outfit(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: deep,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Pick how Chitti sounds, then tap Preview to hear it. Which '
+          'voices exist depends on this device, so what you hear here is '
+          'exactly what Chitti will use.',
+          style: GoogleFonts.outfit(
+            color: muted,
+            fontSize: 11.5,
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final tone in ChittiVoiceTone.values)
+              ChoiceChip(
+                selected: _tone == tone,
+                label: Text(
+                  switch (tone) {
+                    ChittiVoiceTone.natural => 'Natural',
+                    ChittiVoiceTone.chitti => 'Chitti',
+                    ChittiVoiceTone.robot => 'Full Robot',
+                  },
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12.5,
+                    color: _tone == tone ? Colors.white : deep,
+                  ),
+                ),
+                selectedColor: pink,
+                backgroundColor: const Color(0xFFFFF1F8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: const BorderSide(color: Color(0x33FF4FA3)),
+                ),
+                onSelected: (_) async {
+                  setState(() => _tone = tone);
+                  await ChittiVoiceService.setTone(tone);
+                  await _previewVoice();
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        if (_loadingVoices)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: LinearProgressIndicator(color: pink, minHeight: 2),
+          )
+        else if (_voices.isEmpty)
+          Text(
+            'No voices are installed for this language on this device. '
+            'Chitti will still speak using the system default, shaped to '
+            'the tone above.',
+            style: GoogleFonts.outfit(
+              color: muted,
+              fontSize: 11.5,
+              height: 1.4,
+            ),
+          )
+        else
+          DropdownButtonFormField<String>(
+            initialValue:
+                _voices.any((v) => v.name == _pinnedVoice) ? _pinnedVoice : null,
+            isExpanded: true,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: const Color(0xFFFFF1F8),
+              prefixIcon: const Icon(Icons.graphic_eq_rounded, color: pink),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            hint: Text(
+              'Auto (pick a male voice for me)',
+              style: GoogleFonts.outfit(color: muted, fontSize: 13),
+            ),
+            items: [
+              DropdownMenuItem<String>(
+                child: Text(
+                  'Auto (pick a male voice for me)',
+                  style: GoogleFonts.outfit(fontSize: 13, color: deep),
+                ),
+              ),
+              for (final voice in _voices)
+                DropdownMenuItem<String>(
+                  value: voice.name,
+                  child: Text(
+                    voice.label,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(fontSize: 13, color: deep),
+                  ),
+                ),
+            ],
+            onChanged: (name) async {
+              setState(() => _pinnedVoice = name);
+              final match = _voices.where((v) => v.name == name).firstOrNull;
+              await ChittiVoiceService.pinVoice(
+                name: name,
+                locale: match?.locale,
+              );
+              await _previewVoice();
+            },
+          ),
+        const SizedBox(height: 14),
+        Text(
+          'Hands-free conversation',
+          style: GoogleFonts.outfit(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            color: deep,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'After you tap the mic, Chitti keeps listening between its own '
+          'replies. You can cut in any time, and saying "stop" or '
+          '"podhum" always ends it.',
+          style: GoogleFonts.outfit(color: muted, fontSize: 11.5, height: 1.4),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          children: [
+            for (final mode in ChittiConversationMode.values)
+              ChoiceChip(
+                selected: _convoMode == mode,
+                label: Text(
+                  mode == ChittiConversationMode.autoStop
+                      ? 'Auto-stop'
+                      : 'Call mode',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12.5,
+                    color: _convoMode == mode ? Colors.white : deep,
+                  ),
+                ),
+                selectedColor: pink,
+                backgroundColor: const Color(0xFFFFF1F8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: const BorderSide(color: Color(0x33FF4FA3)),
+                ),
+                onSelected: (_) async {
+                  setState(() => _convoMode = mode);
+                  await ChittiConversationPrefs.save(mode);
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          _convoMode == ChittiConversationMode.autoStop
+              ? 'Ends on its own once the job is done, or after 8 seconds of '
+                  'quiet.'
+              : 'Stays open like a call until you stop it. Watch your battery.',
+          style: GoogleFonts.outfit(color: muted, fontSize: 11, height: 1.4),
+        ),
+        const SizedBox(height: 4),
+        SwitchListTile.adaptive(
+          contentPadding: EdgeInsets.zero,
+          value: _welcomeEnabled,
+          activeThumbColor: pink,
+          title: Text(
+            'Greet me when I open the app',
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: deep,
+            ),
+          ),
+          subtitle: Text(
+            // Worth stating plainly: on the web build the greeting
+            // cannot fire before the first touch, and a user who does
+            // not know that will report it as broken.
+            'Chitti says hello on your first tap, once per session.',
+            style: GoogleFonts.outfit(color: muted, fontSize: 11.5),
+          ),
+          onChanged: (value) async {
+            setState(() => _welcomeEnabled = value);
+            await ChittiWelcomeService.setEnabled(value);
+          },
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _previewVoice,
+            icon: const Icon(Icons.play_arrow_rounded, color: pink),
+            label: Text(
+              'Preview Chitti',
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.w700,
+                color: pink,
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              side: const BorderSide(color: pink),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _saveAiConfiguration() async {
@@ -116,8 +590,9 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
         title: Text(
           'AI Configuration',
           style: GoogleFonts.outfit(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
             color: const Color(0xFF4A1236),
-            fontWeight: FontWeight.w700,
           ),
         ),
       ),
@@ -366,6 +841,8 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
                   ),
                 ),
               ),
+              _buildVoiceSection(),
+              _buildBackupSection(),
             ],
           ),
         ),

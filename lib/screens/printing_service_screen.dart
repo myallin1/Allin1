@@ -105,7 +105,7 @@ class _PrintingServiceScreenState extends State<PrintingServiceScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text('Allin1 Designing and Printing',
-            style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 16),),
+            style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: _kText),),
         centerTitle: true,
       ),
       body: SafeArea(

@@ -18,8 +18,9 @@ class GuruOfferScreen extends StatelessWidget {
         title: Text(
           'Chitti AI Offer',
           style: GoogleFonts.outfit(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
             color: const Color(0xFF4A1236),
-            fontWeight: FontWeight.w700,
           ),
         ),
       ),

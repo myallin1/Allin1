@@ -26,7 +26,7 @@ class RiderScreen extends StatelessWidget {
         backgroundColor: kSurface,
         title: Text(
           'Rider Dashboard',
-          style: GoogleFonts.outfit(color: kText),
+          style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: kText),
         ),
       ),
       body: SingleChildScrollView(

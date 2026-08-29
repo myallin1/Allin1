@@ -206,7 +206,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         ),
         title: Text(
           'Register as $_userTypeDisplayName',
-          style: GoogleFonts.outfit(color: kText),
+          style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: kText),
         ),
         centerTitle: true,
       ),

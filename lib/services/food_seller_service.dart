@@ -24,7 +24,6 @@ class FoodSellerService {
 
   // ── Collection References ─────────────────────────────────────
   CollectionReference get _sellersRef => _firestore.collection('sellers');
-  CollectionReference get _ordersRef => _firestore.collection('food_orders');
 
   DocumentReference _sellerDocRef(String sellerId) =>
       _sellersRef.doc(sellerId);
@@ -92,6 +91,22 @@ class FoodSellerService {
     return _sellersRef
         .where('status', isEqualTo: 'active')
         .where('isOpen', isEqualTo: true)
+        // FIX (post-fix audit — silent-data-loss risk): orderBy added
+        // alongside the .limit(50) cap below — without it, once there
+        // are 50+ matching sellers platform-wide, Firestore's limit()
+        // picks an unspecified subset, so a seller who just went active/
+        // open could be permanently excluded from this list rather than
+        // simply appearing at the end of it. REQUIRES a composite index
+        // (status ASC, isOpen ASC, createdAt DESC) on `sellers` — added
+        // to firestore.indexes.json; must be deployed
+        // (`firebase deploy --only firestore:indexes`) or this throws
+        // failed-precondition.
+        .orderBy('createdAt', descending: true)
+        // FIX (zero-cost Firestore audit): was fully uncapped across
+        // every active seller platform-wide. Matches the cap
+        // category_gateway_service.dart's loadCategoryData() already
+        // uses for the same kind of seller-listing query.
+        .limit(50)
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
@@ -203,159 +218,6 @@ class FoodSellerService {
     } catch (e) {
       debugPrint('[FoodSellerService] Failed to get menu items: $e');
       return [];
-    }
-  }
-
-  // ================================================================
-  // FOOD ORDER OPERATIONS
-  // ================================================================
-
-  /// Place a new food order.
-  Future<String> placeOrder(FoodOrderModel order) async {
-    try {
-      final docRef = _ordersRef.doc(order.orderId);
-      await docRef.set(order.toJson());
-      debugPrint('[FoodSellerService] Order placed: ${order.orderId}');
-      return order.orderId;
-    } catch (e) {
-      debugPrint('[FoodSellerService] Failed to place order: $e');
-      rethrow;
-    }
-  }
-
-  /// Update the status of an order and record the timestamp in the timeline.
-  /// Deducts the usage fee from the seller's wallet if the status is 'accepted'.
-  Future<void> updateOrderStatus(
-      String orderId, String newStatus, {String? sellerId}) async {
-    try {
-      final timelineField = 'statusTimeline.$newStatus';
-      final batch = FirebaseFirestore.instance.batch();
-      
-      final orderRef = _ordersRef.doc(orderId);
-      batch.update(orderRef, {
-        'status': newStatus,
-        timelineField: FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      if (newStatus == 'accepted' && sellerId != null) {
-        final sellerRef = FirebaseFirestore.instance.collection('sellers').doc(sellerId);
-        // Fixed platform usage fee per order
-        batch.update(sellerRef, {
-          'walletBalance': FieldValue.increment(-5.0),
-        });
-      }
-
-      await batch.commit();
-      DbUsageTracker.instance.recordWrite(sellerId != null && newStatus == 'accepted' ? 2 : 1, 'seller_orders', 'order_status_update');
-      debugPrint(
-          '[FoodSellerService] Order $orderId status updated to: $newStatus',);
-    } catch (e) {
-      debugPrint('[FoodSellerService] Failed to update order status: $e');
-      rethrow;
-    }
-  }
-
-  /// Reactive stream of incoming orders for a specific seller.
-  Stream<List<FoodOrderModel>> listenToIncomingOrders(String sellerId) {
-    return _ordersRef
-        .where('sellerId', isEqualTo: sellerId)
-        .where('status', whereIn: ['placed', 'accepted', 'preparing', 'ready'])
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      DbUsageTracker.instance.recordRead(
-          snapshot.docs.length, 'seller_orders', 'incoming_orders_fetch');
-      return snapshot.docs.map((doc) {
-        final data = doc.data()! as Map<String, dynamic>;
-        return FoodOrderModel.fromJson(data);
-      }).toList();
-    });
-  }
-
-  /// Reactive stream of all orders for a specific seller (including completed/cancelled).
-  Stream<List<FoodOrderModel>> listenToSellerOrderHistory(String sellerId) {
-    return _ordersRef
-        .where('sellerId', isEqualTo: sellerId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      DbUsageTracker.instance.recordRead(
-          snapshot.docs.length, 'seller_orders', 'order_history_fetch');
-      return snapshot.docs.map((doc) {
-        final data = doc.data()! as Map<String, dynamic>;
-        return FoodOrderModel.fromJson(data);
-      }).toList();
-    });
-  }
-
-  /// Reactive stream of orders for a specific customer.
-  Stream<List<FoodOrderModel>> listenToCustomerOrders(String customerId) {
-    return _ordersRef
-        .where('customerId', isEqualTo: customerId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      DbUsageTracker.instance
-          .recordRead(snapshot.docs.length, 'customer_food_orders');
-      return snapshot.docs.map((doc) {
-        final data = doc.data()! as Map<String, dynamic>;
-        return FoodOrderModel.fromJson(data);
-      }).toList();
-    });
-  }
-
-  /// Fetch a single order by order ID.
-  Future<FoodOrderModel?> getOrderById(String orderId) async {
-    try {
-      final doc = await _ordersRef.doc(orderId).get();
-      if (!doc.exists) return null;
-      final data = doc.data()! as Map<String, dynamic>;
-      return FoodOrderModel.fromJson(data);
-    } catch (e) {
-      debugPrint('[FoodSellerService] Failed to get order: $e');
-      return null;
-    }
-  }
-
-  /// Fetch active orders for a seller (one-time read).
-  Future<List<FoodOrderModel>> getActiveOrders(String sellerId) async {
-    try {
-      final snapshot = await _ordersRef
-          .where('sellerId', isEqualTo: sellerId)
-          .where('status',
-              whereIn: ['placed', 'accepted', 'preparing', 'ready', 'pickedUp'],)
-          .orderBy('createdAt', descending: true)
-          .get();
-      return snapshot.docs.map((doc) {
-        final data = doc.data()! as Map<String, dynamic>;
-        return FoodOrderModel.fromJson(data);
-      }).toList();
-    } catch (e) {
-      debugPrint('[FoodSellerService] Failed to get active orders: $e');
-      return [];
-    }
-  }
-
-  /// Cancel an order (only if status is 'placed').
-  Future<bool> cancelOrder(String orderId, {String? reason}) async {
-    try {
-      final orderDoc = await _ordersRef.doc(orderId).get();
-      if (!orderDoc.exists) return false;
-
-      final data = orderDoc.data()! as Map<String, dynamic>;
-      if (data['status'] != 'placed') return false;
-
-      await _ordersRef.doc(orderId).update({
-        'status': 'cancelled',
-        'statusTimeline.cancelled': FieldValue.serverTimestamp(),
-        'note': reason,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      return true;
-    } catch (e) {
-      debugPrint('[FoodSellerService] Cancel order failed: $e');
-      return false;
     }
   }
 

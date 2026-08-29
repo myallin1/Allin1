@@ -199,7 +199,7 @@ class _SosKycVerificationScreenState extends State<SosKycVerificationScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: _text),
         title: Text('Verify KYC to Activate SOS',
-            style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 16),),
+            style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: _text),),
       ),
       body: Stack(
         children: [

@@ -19,12 +19,16 @@
 // payment-gateway integration, per the Unified Hero Task System
 // design decision).
 // ================================================================
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/service_request_model.dart';
+import '../services/chitti_order_memory_service.dart';
+import '../services/chitti_overlay_service.dart';
 import '../widgets/animated_meter_fare.dart';
 import '../widgets/rating_feedback_sheet.dart';
 
@@ -63,6 +67,48 @@ class _ServiceRequestPaymentScreenState
   // "Payment Received" action (hero_home_screen.dart ->
   // markServiceRequestPaymentReceived) can now set 'paid'. This screen
   // is now read-only for the customer until that happens.
+
+  // NEW (Aug 25 2026 — Super Chitti Phase 1, Step 2 wiring for
+  // food/grocery). This screen is the shared "task bill" for every
+  // service_requests type (food, grocery, hero_booking, custom
+  // orders) — the StreamBuilder in build() re-fires on every Firestore
+  // change, so this guard makes sure the memory write happens exactly
+  // once, the first time paymentStatus flips to 'paid', mirroring
+  // ride_tracking_screen.dart's `_handledPaidFlow` guard.
+  bool _memoryRecorded = false;
+
+  /// Short key matching the vocabulary already used elsewhere (Voice
+  /// Service enum, book_transport's tool enum) so Chitti doesn't have
+  /// to reconcile a third naming scheme.
+  String _memoryServiceKeyFor(String requestType) {
+    switch (requestType) {
+      case 'grocery_order':
+        return 'grocery';
+      case 'custom_food_order':
+      case 'catalog_food_order':
+        return 'food';
+      default:
+        return requestType;
+    }
+  }
+
+  String _memorySummaryFor(ServiceRequestModel request) {
+    final shopName = request.rawDetails['sellerName'] as String?;
+    final address = request.deliveryAddress?.trim();
+    switch (request.requestType) {
+      case 'grocery_order':
+        return (address != null && address.isNotEmpty)
+            ? 'grocery order to $address'
+            : 'a grocery order';
+      case 'custom_food_order':
+      case 'catalog_food_order':
+        return (shopName != null && shopName.trim().isNotEmpty)
+            ? 'food order from ${shopName.trim()}'
+            : 'a food order';
+      default:
+        return 'a completed task';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -114,6 +160,25 @@ class _ServiceRequestPaymentScreenState
           // hero_booking_tracking_screen.dart.
           final needsRating = isPaid &&
               snapshot.data!.data()!['customerRating'] == null;
+
+          // NEW (Aug 25 2026 — Super Chitti Phase 1, Step 2). Plain
+          // field mutation, no setState — this only guards against a
+          // duplicate write on the next stream rebuild, it doesn't
+          // need to trigger one itself. Fire-and-forget by contract,
+          // see ChittiOrderMemoryService.record().
+          if (isPaid && !_memoryRecorded) {
+            _memoryRecorded = true;
+            unawaited(ChittiOrderMemoryService.record(
+              service: _memoryServiceKeyFor(request.requestType),
+              summary: _memorySummaryFor(request),
+            ));
+            // FIX (Aug 25 2026 — "Chitti never dances"): food/grocery
+            // half of wiring up completeService(), which existed since
+            // Aug 19 2026 but was never called anywhere — see
+            // ride_tracking_screen.dart's identical hook for the ride
+            // half and the full explanation.
+            unawaited(ChittiOverlayService.instance.completeService());
+          }
 
           return Padding(
             padding: const EdgeInsets.all(20),

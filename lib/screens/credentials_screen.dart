@@ -204,8 +204,9 @@ class _CredentialsScreenState extends State<CredentialsScreen> {
         title: Text(
           'My Credentials',
           style: GoogleFonts.outfit(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
             color: kText,
-            fontWeight: FontWeight.w600,
           ),
         ),
         actions: [

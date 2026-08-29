@@ -19,9 +19,29 @@
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
+import '../../services/theme_service.dart';
+import '../../widgets/auto_image_slider.dart';
+import '../../widgets/cached_cloud_image.dart';
 import 'mobile_hub_screen.dart';
 import 'mobile_service_sheet.dart';
+
+/// Photo Realistic theme's per-issue photo — same CachedCloudImage
+/// disk-cache mechanism as dashboard_screen.dart's kSlotPhotoUrl. Covers
+/// all 9 issues (unlike pinkSlot above, which only has 5 3D renders
+/// today) since a real photo needs no bespoke asset production.
+const Map<String, String> kMobileIssuePhotoUrl = {
+  'screen': 'https://images.unsplash.com/photo-1601784551446-20c9e07cdbdb?w=200&q=80',
+  'battery': 'https://images.unsplash.com/photo-1620825141335-3b3d8c8b2a9c?w=200&q=80',
+  'charging': 'https://images.unsplash.com/photo-1583573636023-2b7b8b1a9c9c?w=200&q=80',
+  'water': 'https://images.unsplash.com/photo-1614064641938-3bbee52942c7?w=200&q=80',
+  'software': 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=200&q=80',
+  'camera': 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=200&q=80',
+  'speaker': 'https://images.unsplash.com/photo-1558756520-22cfe5d382ca?w=200&q=80',
+  'unlock': 'https://images.unsplash.com/photo-1633265486064-086b219458ec?w=200&q=80',
+  'other': 'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=200&q=80',
+};
 
 /// The repair categories offered. Free local data — no database.
 class _MobileIssue {
@@ -30,22 +50,27 @@ class _MobileIssue {
   final String subtitle;
   final IconData icon;
   final Color color;
+  // Slot number in assets/images/pink_icons/mobile_<slot>_a/b.webp — only
+  // 5 of the 9 issues have a real 3D render today (same partial-coverage
+  // pattern as dashboard_screen.dart's taxi/food/electronics/hero icons).
+  final int? pinkSlot;
 
   const _MobileIssue(
-      this.id, this.title, this.subtitle, this.icon, this.color);
+      this.id, this.title, this.subtitle, this.icon, this.color,
+      {this.pinkSlot});
 }
 
 const List<_MobileIssue> _issues = [
   _MobileIssue('screen', 'Screen / Display', 'Cracked, blank, touch not working',
-      Icons.phonelink_setup_rounded, Color(0xFFFF4FA3)),
+      Icons.phonelink_setup_rounded, Color(0xFFFF4FA3), pinkSlot: 3),
   _MobileIssue('battery', 'Battery', 'Draining fast, not charging, swollen',
-      Icons.battery_alert_rounded, Color(0xFF00C853)),
+      Icons.battery_alert_rounded, Color(0xFF00C853), pinkSlot: 1),
   _MobileIssue('charging', 'Charging Port', 'Loose, not charging, slow charge',
       Icons.power_rounded, Color(0xFFFFBB00)),
   _MobileIssue('water', 'Water Damage', 'Dropped in water, moisture damage',
-      Icons.water_drop_rounded, Color(0xFF1565C0)),
+      Icons.water_drop_rounded, Color(0xFF1565C0), pinkSlot: 5),
   _MobileIssue('software', 'Software', 'Hang, restart loop, update, format',
-      Icons.settings_suggest_rounded, Color(0xFF7B6FE0)),
+      Icons.settings_suggest_rounded, Color(0xFF7B6FE0), pinkSlot: 2),
   _MobileIssue('camera', 'Camera', 'Blur, not opening, glass broken',
       Icons.photo_camera_rounded, Color(0xFF00BFA5)),
   _MobileIssue('speaker', 'Speaker / Mic', 'No sound, call not audible',
@@ -95,6 +120,10 @@ class MobileServiceTab extends StatelessWidget {
                 itemCount: _issues.length,
                 itemBuilder: (context, i) {
                   final issue = _issues[i];
+                  final iconTheme = context.watch<ThemeService>().iconThemeKey;
+                  final usePink = iconTheme == 'pink_white_3d' && issue.pinkSlot != null;
+                  final photoUrl = kMobileIssuePhotoUrl[issue.id];
+                  final usePhoto = iconTheme == 'photo_realistic' && photoUrl != null;
                   return InkWell(
                     borderRadius: BorderRadius.circular(14),
                     onTap: () => showMobileServiceSheet(
@@ -112,16 +141,47 @@ class MobileServiceTab extends StatelessWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Container(
-                            width: 42,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              color: issue.color.withValues(alpha: 0.12),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(issue.icon,
-                                color: issue.color, size: 21),
-                          ),
+                          usePhoto
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: CachedCloudImage(
+                                    photoUrl,
+                                    width: 42,
+                                    height: 42,
+                                    fit: BoxFit.cover,
+                                    cacheWidth: 168,
+                                    errorWidget: Container(
+                                      width: 42,
+                                      height: 42,
+                                      decoration: BoxDecoration(
+                                        color: issue.color.withValues(alpha: 0.12),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(issue.icon, color: issue.color, size: 21),
+                                    ),
+                                  ),
+                                )
+                              : usePink
+                              ? AutoImageSlider(
+                                  imagePaths: [
+                                    'assets/images/pink_icons/mobile_${issue.pinkSlot}_a.webp',
+                                    'assets/images/pink_icons/mobile_${issue.pinkSlot}_b.webp',
+                                  ],
+                                  width: 42,
+                                  height: 42,
+                                  fit: BoxFit.contain,
+                                  duration: const Duration(seconds: 3),
+                                )
+                              : Container(
+                                  width: 42,
+                                  height: 42,
+                                  decoration: BoxDecoration(
+                                    color: issue.color.withValues(alpha: 0.12),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(issue.icon,
+                                      color: issue.color, size: 21),
+                                ),
                           const SizedBox(height: 8),
                           Text(
                             issue.title,

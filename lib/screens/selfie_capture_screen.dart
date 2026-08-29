@@ -253,7 +253,7 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
       appBar: AppBar(
         backgroundColor: _kBg,
         elevation: 0,
-        title: Text('Take a Live Selfie', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w700)),
+        title: Text('Take a Live Selfie', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: _kText)),
         iconTheme: const IconThemeData(color: _kText),
       ),
       body: FutureBuilder<void>(

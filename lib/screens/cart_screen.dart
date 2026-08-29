@@ -86,7 +86,7 @@ class _CartScreenState extends State<CartScreen> {
         ),
         title: Text(
           'My Cart',
-          style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w600),
+          style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: kText),
         ),
         actions: [
           Consumer<CartProvider>(

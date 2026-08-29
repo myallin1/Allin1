@@ -40,6 +40,8 @@ import 'screens/customer_login_screen.dart';
 // since Aug 8 — so it can be restored in one line if Guest Mode is ever
 // rolled back.
 import 'screens/dashboard_screen.dart';
+import 'services/daily_greeting_notification_service.dart';
+import 'services/chitti_order_memory_service.dart';
 import 'screens/guru_chat_screen.dart';
 import 'screens/guru_offer_screen.dart';
 import 'screens/hero_booking_screen.dart';
@@ -72,6 +74,8 @@ import 'services/shared_location_inbox.dart';
 import 'services/soundbox_easter_egg_service.dart';
 import 'services/theme_service.dart';
 import 'services/map_simulation_service.dart';
+import 'services/chitti/chitti_screen_tracker.dart';
+import 'widgets/chitti_first_touch_greeter.dart';
 import 'widgets/migration_notice_overlay.dart';
 
 @pragma('vm:entry-point')
@@ -469,6 +473,12 @@ void main() async {
 Future<void> _runBootPhase1() async {
   try {
     await Hive.initFlutter();
+    // NEW (Aug 25 2026 — Super Chitti Phase 1, Step 2): warms
+    // ChittiOrderMemoryService's in-memory cache so recentSummary() can
+    // stay synchronous when guru_api_service.dart builds a system
+    // prompt. Safe to skip on failure — the service just falls back to
+    // returning no history until the next record() call.
+    unawaited(ChittiOrderMemoryService.preload());
     await CacheService().initCritical();
 
     // FIX (Poster Campaign Tracking): Cache the 'source' parameter
@@ -569,6 +579,17 @@ Future<void> _warmDeferredCaches() async {
       LocalSyncService.instance.initialize(),
       ApiService.instance.initialize(),
     ]);
+
+    // Arm tomorrow's good-morning (Aug 28 2026 — Nizam: "daily morning
+    // ovvoru customer kum good morning boss nu solli, motivational
+    // quote kaatanum... database and server yethume use agakudathu").
+    //
+    // Deliberately NOT awaited: the OS holds the schedule, so there is
+    // nothing here worth delaying first paint for, and a failure to
+    // schedule a greeting must never be able to stop the app opening.
+    // Re-arming on every start is what keeps it alive across reboots,
+    // app updates and a customer changing their language.
+    unawaited(DailyGreetingNotificationService.instance.scheduleNext());
 
     await CacheService().cacheSettings({
       'bikeTaxiBaseFare': 25.0,
@@ -813,8 +834,12 @@ class CustomerApp extends StatelessWidget {
             return null;
           },
           navigatorObservers: [
+            // Keeps ChittiMemoryService.currentScreen in step with the
+            // navigator so Chitti knows which page the customer is on.
+            ChittiScreenObserver(),
             AnalyticsService.instance.getObserver(),
             RouteBreadcrumbObserver(),
+            chittiRouteObserver,
           ],
           // NEW (CTO mandate — Quick Task Global AI Overlay): the launcher
           // FAB lives here so it appears above every screen with zero
@@ -827,12 +852,20 @@ class CustomerApp extends StatelessWidget {
           // wraps EVERYTHING else here, including the AI FAB — a
           // migration lock must hide the whole app, not sit under a
           // still-interactive overlay.
-          builder: (context, child) => MigrationGate(
-            child: Stack(
-              children: [
-                if (child != null) child,
-                const GlobalGuruFab(),
-              ],
+          // NEW (Aug 28 2026): ChittiFirstTouchGreeter wraps the whole
+          // app so Chitti's spoken welcome fires on the first touch of
+          // the session — not on open, because browsers discard speech
+          // that happens before a user gesture and this build ships as
+          // a PWA. It passes every pointer straight through and removes
+          // itself once the greeting has run.
+          builder: (context, child) => ChittiFirstTouchGreeter(
+            child: MigrationGate(
+              child: Stack(
+                children: [
+                  if (child != null) child,
+                  const GlobalGuruFab(),
+                ],
+              ),
             ),
           ),
           // The bouncing Paytm soundbox used to be mounted HERE, at the

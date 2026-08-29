@@ -20,6 +20,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config/city_config.dart';
+import '../config/hero_service_access.dart';
+import '../config/hero_skill_catalog.dart';
 import '../services/affiliate_service.dart';
 import '../services/cloudinary_upload_service.dart';
 import '../services/hero_onboarding_cache.dart';
@@ -27,6 +29,7 @@ import '../services/hero_payment_qr_service.dart';
 import '../services/localization_service.dart';
 import '../services/location_service.dart';
 import '../widgets/hero_qr_pick_crop.dart';
+import '../widgets/tutorial_videos_section.dart';
 // ROUTING FIX (merge duplicate registration/status flows): this screen is
 // now reached DIRECTLY, before any sign-in step, so a fresh hero may have
 // no Firebase Auth session at all when they hit Submit — Google Sign-In is
@@ -61,6 +64,17 @@ class _DocUploadResult {
   final List<String> failures;
 }
 
+/// Which HALF of the category picker an option belongs to.
+///
+/// NEW (Aug 29 2026 — Nizam: "namma hero onboarding form ah heros ku
+/// kulappamillama fill panna option ready pannanum"). Adding the five
+/// trades to the existing flat Wrap would have put 12 near-identical
+/// cards in front of a hero — a bike rider scrolling past "Fridge & AC"
+/// to find "Bike Taxi" is exactly the confusion this splits apart. The
+/// hero answers one easy question first (do you bring a vehicle, or a
+/// skill?) and only ever sees the half that applies to them.
+enum _HeroKind { vehicle, skill }
+
 class _HeroCategory {
   const _HeroCategory({
     required this.key,
@@ -68,6 +82,8 @@ class _HeroCategory {
     required this.subtitle,
     required this.icon,
     required this.dbLabel,
+    this.kind = _HeroKind.vehicle,
+    this.tamilTitle = '',
   });
 
   final String key;
@@ -75,9 +91,16 @@ class _HeroCategory {
   final String subtitle;
   final IconData icon;
   final String dbLabel;
+  final _HeroKind kind;
+
+  /// Second line on the card, skill categories only — see
+  /// [HeroSkill.tamilTitle] for why the trades get one and the vehicle
+  /// categories don't (those already carry a universally understood
+  /// icon; "Fridge & AC" does not).
+  final String tamilTitle;
 }
 
-const List<_HeroCategory> _heroCategories = <_HeroCategory>[
+const List<_HeroCategory> _vehicleHeroCategories = <_HeroCategory>[
   _HeroCategory(
     key: 'bike',
     title: 'Bike Taxi',
@@ -134,6 +157,34 @@ const List<_HeroCategory> _heroCategories = <_HeroCategory>[
     icon: Icons.health_and_safety_rounded,
     dbLabel: 'Only Emergency Manpower',
   ),
+];
+
+/// The five trades, as picker cards. Derived from [kHeroSkills] rather
+/// than re-typed here, because the same keys are read by dispatch and by
+/// the customer-facing services grid — a second hand-maintained copy is
+/// how "electrician" and "electrical" end up in two files and no skill
+/// hero ever receives a job.
+final List<_HeroCategory> _skillHeroCategories = kHeroSkills
+    .map(
+      (skill) => _HeroCategory(
+        key: skill.key,
+        title: skill.title,
+        tamilTitle: skill.tamilTitle,
+        subtitle: skill.subtitle,
+        icon: skill.icon,
+        dbLabel: skill.title,
+        kind: _HeroKind.skill,
+      ),
+    )
+    .toList(growable: false);
+
+/// Every category, both halves. Order matters only for the `orElse`
+/// fallbacks below, which must land on a vehicle category to preserve
+/// the pre-existing behaviour for any hero whose draft holds an
+/// unrecognised key.
+final List<_HeroCategory> _heroCategories = <_HeroCategory>[
+  ..._vehicleHeroCategories,
+  ..._skillHeroCategories,
 ];
 
 class HeroRegisterScreen extends StatefulWidget {
@@ -251,6 +302,16 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     }
   }
   String? _selectedVehicleType;
+
+  /// Which half of the category picker is showing. Defaults to
+  /// [_HeroKind.vehicle] so the form a returning hero sees is byte-for-
+  /// byte the one that existed before the trades were added; the skill
+  /// half is one tap away, never in the way.
+  ///
+  /// Not persisted in the draft on purpose — it is derivable from the
+  /// saved category key (see _restoreDraft), and a second stored copy
+  /// could disagree with it.
+  _HeroKind _heroKind = _HeroKind.vehicle;
   bool _agreedEmergencyResponder = false;
 
   // FIX: form used to collect only the license/aadhaar/pan NUMBERS,
@@ -431,6 +492,10 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       setState(() {
         _selectedCity = d['city'] as String?;
         _selectedVehicleType = d['vehicleType'] as String?;
+        // Reopen the picker on the half the saved category lives in, so
+        // a half-finished electrician application doesn't come back
+        // showing the vehicle list with nothing selected.
+        _heroKind = _categoryFor(_selectedVehicleType)?.kind ?? _HeroKind.vehicle;
         _agreedEmergencyResponder = (d['agreed'] as bool?) ?? false;
       });
     } catch (e) {
@@ -471,6 +536,30 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     final isKnownKey = _heroCategories.any((c) => c.key == key);
     return isKnownKey ? key : 'bike';
   }
+
+  /// The picked category, or null when nothing valid is selected.
+  _HeroCategory? _categoryFor(String? key) {
+    if (key == null) return null;
+    final normalized = key.trim().toLowerCase();
+    for (final category in _heroCategories) {
+      if (category.key == normalized) return category;
+    }
+    return null;
+  }
+
+  /// True while the form is on the Skill half — drives every
+  /// conditional bit of the form (licence field, doc requirements).
+  ///
+  /// Reads [_heroKind], NOT the selected category. A hero who taps
+  /// "Skill Hero" but hasn't yet tapped a specific trade card still has
+  /// _selectedVehicleType == null, so gating on the category would keep
+  /// showing "Driving License Number" for that gap — precisely the
+  /// "kulappam" (confusion) a bike-only field on an electrician's form
+  /// is meant to prevent. The kind toggle is authoritative the instant
+  /// it's tapped; picking the exact trade only narrows which skill card
+  /// is highlighted, and by submit time (guarded separately by the
+  /// "select a category" check) the two always agree.
+  bool get _isSkillHero => _heroKind == _HeroKind.skill;
 
   String _vehicleCategoryLabel(String key) {
     return _heroCategories
@@ -704,7 +793,11 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
   ///    the single biggest UX win available in this pipeline.
   Future<_DocUploadResult> _uploadPickedDocPhotos(String uid) async {
     final jobs = <String, PlatformFile?>{
-      'licenseDocUrl': _licensePhoto,
+      // Omitted entirely for a skill hero rather than passed as null:
+      // a null entry is recorded as a FAILURE below, which would abort
+      // the submission of every electrician who — correctly — has no
+      // driving licence to upload.
+      if (!_isSkillHero) 'licenseDocUrl': _licensePhoto,
       'aadhaarDocUrl': _aadhaarPhoto,
       'panDocUrl': _panPhoto,
     };
@@ -774,7 +867,13 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     // 3 are missing instead of silently allowing an all-numbers-no-proof
     // registration through (which left admin nothing to visually verify).
     final missingDocs = <String>[
-      if (_licensePhoto == null) 'License photo',
+      // Skill heroes drive nothing, so there is no licence to
+      // photograph. Aadhaar, PAN and the live selfie stay mandatory for
+      // everyone: those are the
+      // identity checks Admin's KYC actually runs on, and they are what
+      // make "admin same approval" true for a plumber and a bike hero
+      // alike.
+      if (!_isSkillHero && _licensePhoto == null) 'License photo',
       if (_aadhaarPhoto == null) 'Aadhaar photo',
       if (_panPhoto == null) 'PAN photo',
       // NEW (CTO mandate — Advanced KYC & Facial Verification): a
@@ -812,8 +911,27 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
         );
         return;
       }
-      final vehicleType = _normalizeVehicleType(selectedVehicleType);
-      final vehicleCategoryLabel = _vehicleCategoryLabel(vehicleType);
+      final categoryKey = _normalizeVehicleType(selectedVehicleType);
+      final vehicleCategoryLabel = _vehicleCategoryLabel(categoryKey);
+      final isSkillHero = _categoryFor(categoryKey)?.kind == _HeroKind.skill;
+
+      // SKILL HEROES (Aug 29 2026) — the whole "backend logic maarama"
+      // requirement lives in these three lines.
+      //
+      // vehicleType is what ride dispatch matches on, so a trade must
+      // NOT be written into it: an electrician whose vehicleType said
+      // 'electrician' is merely unmatched today, but one whose field
+      // said 'bike' (the old _normalizeVehicleType fallback) would be
+      // handed passenger rides. kSkillWorkerVehicleType is a value no
+      // ride category can equal, by construction.
+      //
+      // heroCategory keeps the real trade, because that is what admin
+      // screens and the hero's own dashboard display.
+      //
+      // skills is the new list dispatch matches on. See
+      // lib/config/hero_skill_catalog.dart for why it is a list.
+      final vehicleType =
+          isSkillHero ? kSkillWorkerVehicleType : categoryKey;
 
       // FIX (duplicate-hero prevention, P4): heroes/{uid} is keyed by
       // Firebase Auth uid, so the same person signing in via 2 different
@@ -960,8 +1078,20 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
          // hero's city later from the admin app if needed.
          'city': _selectedCity ?? kDefaultCity,
          'vehicleType': vehicleType,
-         'heroCategory': vehicleType,
+         'heroCategory': categoryKey,
          'vehicleCategoryLabel': vehicleCategoryLabel,
+         // Empty list for a vehicle hero, so the field always exists and
+         // heroHasSkill()'s membership test never has to special-case a
+         // missing key.
+         kHeroSkillsField: isSkillHero
+             ? <String>[categoryKey]
+             : const <String>[],
+         // Written ONLY for skill heroes. A vehicle hero must keep
+         // getting no serviceAccess map at all — hero_service_access's
+         // "absent means allowed" default is what lets that file ship
+         // onto a live fleet without changing anyone's workload, and
+         // writing a map here for everyone would quietly retire it.
+         if (isSkillHero) kHeroServiceAccessField: skillHeroServiceAccess(),
          'isEmergencyHelper': true,
          'sosNetworkAcceptedAt': FieldValue.serverTimestamp(),
          'licenseNumber': _licenseNumberController.text.trim(),
@@ -1488,18 +1618,141 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     );
   }
 
+  /// One half of the "vehicle or skill" question at the top of the
+  /// picker. Deliberately two large targets rather than a segmented
+  /// control or a dropdown — this is the single most consequential tap
+  /// in the form (it decides which documents the hero is asked for and
+  /// which work they will be sent), and it is made by people filling
+  /// this in on a small phone, often outdoors.
+  Widget _buildKindOption({
+    required _HeroKind kind,
+    required IconData icon,
+    required String title,
+    required String tamilTitle,
+    required String subtitle,
+  }) {
+    final selected = _heroKind == kind;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          if (_heroKind == kind) return;
+          setState(() {
+            _heroKind = kind;
+            // Clear the selection when switching halves. Keeping it
+            // would leave a hero on the skill tab with "Bike Taxi" still
+            // silently selected underneath — they'd submit believing
+            // they had applied as an electrician.
+            _selectedVehicleType = null;
+          });
+          _scheduleDraftSave();
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          decoration: BoxDecoration(
+            color: selected
+                ? _njPink.withValues(alpha: 0.12)
+                : Colors.white.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected
+                  ? _njPink
+                  : Colors.white.withValues(alpha: 0.10),
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: selected ? _njPink : _muted, size: 26),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  color: selected ? _text : _muted,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                tamilTitle,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  color: selected ? _njPink : _muted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(color: _muted, fontSize: 10),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildHeroCategorySelector() {
+    // Only the half the hero chose is rendered — see [_HeroKind].
+    final visibleCategories = _heroKind == _HeroKind.skill
+        ? _skillHeroCategories
+        : _vehicleHeroCategories;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Hero Category',
+          'What kind of Hero are you?  /  நீங்க எந்த மாதிரி ஹீரோ?',
           style: GoogleFonts.outfit(
             color: _text,
             fontSize: 14,
             fontWeight: FontWeight.w700,
           ),
         ),
+        const SizedBox(height: 10),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildKindOption(
+              kind: _HeroKind.vehicle,
+              icon: Icons.two_wheeler_rounded,
+              title: 'Vehicle Hero',
+              tamilTitle: 'வண்டி ஹீரோ',
+              subtitle: 'Rides, parcels, delivery',
+            ),
+            const SizedBox(width: 10),
+            _buildKindOption(
+              kind: _HeroKind.skill,
+              icon: Icons.handyman_rounded,
+              title: 'Skill Hero',
+              tamilTitle: 'திறன் ஹீரோ',
+              subtitle: 'Electrician, plumber, AC, TV',
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Text(
+          _heroKind == _HeroKind.skill
+              ? 'Your trade  /  உங்க வேலை'
+              : 'Hero Category',
+          style: GoogleFonts.outfit(
+            color: _text,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        if (_heroKind == _HeroKind.skill) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Customers within 5 km will see you and can book you directly. '
+            'No driving licence needed.',
+            style: GoogleFonts.outfit(color: _muted, fontSize: 11),
+          ),
+        ],
         const SizedBox(height: 10),
         LayoutBuilder(
           builder: (context, constraints) {
@@ -1510,7 +1763,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
             return Wrap(
               spacing: 8,
               runSpacing: 10,
-              children: _heroCategories.map((category) {
+              children: visibleCategories.map((category) {
                 final selected = _selectedVehicleType == category.key;
                 return SizedBox(
                   width: cardWidth,
@@ -1648,6 +1901,21 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
               ),
               const SizedBox(height: 16),
               _buildHowToRegisterGuide(context),
+              const SizedBox(height: 16),
+
+              // ONBOARDING TUTORIALS (Aug 29 2026). Placed directly
+              // under the written 3-step guide, at the TOP of the form
+              // — a hero who is confused is confused before they start
+              // typing, not after. Renders literally nothing until the
+              // first tutorial_videos document exists, so this is safe
+              // to ship ahead of the videos themselves; see
+              // tutorial_videos_section.dart.
+              const TutorialVideosSection(
+                audience: TutorialAudience.hero,
+                // accentColor omitted — the section already defaults to
+                // this app's pink.
+                heading: 'Watch: how to join as a Hero',
+              ),
               const SizedBox(height: 20),
 
               // ── Personal Information ──────────────────────────
@@ -1758,25 +2026,47 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
               ),
               const SizedBox(height: 20),
 
+              // ── Hero Category ────────────────────
+              // MOVED ABOVE "Document Numbers" (Aug 29 2026, together
+              // with the skill categories). This picker used to sit near
+              // the bottom of the form, which was harmless while every
+              // hero was asked for the same three documents. It is not
+              // harmless now: the choice made here decides whether a
+              // driving licence is asked for at all, so leaving it below
+              // would show every electrician a mandatory licence field
+              // they cannot fill, and then make it vanish once they
+              // scrolled down and picked their trade. The question that
+              // changes the form belongs before the parts it changes.
+              _sectionLabel('🦸  Hero Category'),
+              const SizedBox(height: 12),
+              _buildHeroCategorySelector(),
+              const SizedBox(height: 24),
+
               // ── Document Numbers ──────────────────────────────
               _sectionLabel('📄  Document Numbers'),
               const SizedBox(height: 12),
-              _field(
-                controller: _licenseNumberController,
-                label: 'Driving License Number',
-                icon: Icons.drive_eta_rounded,
-                textCapitalization: TextCapitalization.characters,
-                validator: (v) =>
-                    v!.trim().isEmpty ? 'License number is required' : null,
-              ),
-              const SizedBox(height: 8),
-              _docPhotoTile(
-                label: 'License photo (required)',
-                photo: _licensePhoto,
-                onTap: () => _pickDocPhoto('license'),
-                onClear: () => setState(() => _licensePhoto = null),
-              ),
-              const SizedBox(height: 12),
+              // Hidden for skill heroes — an electrician has no driving
+              // licence, and a required field they cannot fill is a wall
+              // the application never gets past. The submit-time doc
+              // check drops it for them too; see [missingDocs].
+              if (!_isSkillHero) ...[
+                _field(
+                  controller: _licenseNumberController,
+                  label: 'Driving License Number',
+                  icon: Icons.drive_eta_rounded,
+                  textCapitalization: TextCapitalization.characters,
+                  validator: (v) =>
+                      v!.trim().isEmpty ? 'License number is required' : null,
+                ),
+                const SizedBox(height: 8),
+                _docPhotoTile(
+                  label: 'License photo (required)',
+                  photo: _licensePhoto,
+                  onTap: () => _pickDocPhoto('license'),
+                  onClear: () => setState(() => _licensePhoto = null),
+                ),
+                const SizedBox(height: 12),
+              ],
               _field(
                 controller: _aadhaarController,
                 label: 'Aadhaar Number',
@@ -1848,11 +2138,6 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
               ),
               const SizedBox(height: 20),
 
-              // ── Vehicle Category ──────────────────────────────
-              _sectionLabel('🚗  Vehicle Category'),
-              const SizedBox(height: 12),
-              _buildHeroCategorySelector(),
-              const SizedBox(height: 16),
               _buildEmergencyResponderAgreement(),
               const SizedBox(height: 24),
 
@@ -2256,6 +2541,24 @@ class _HeroCategoryCard extends StatelessWidget {
                 fontWeight: FontWeight.w800,
               ),
             ),
+            // Trades carry a Tamil line; vehicle categories don't need
+            // one — see [_HeroCategory.tamilTitle].
+            if (_category.tamilTitle.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                _category.tamilTitle,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.outfit(
+                  color: _selected
+                      ? Colors.white.withValues(alpha: 0.92)
+                      : _njPink,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
             const SizedBox(height: 4),
             Text(
               _category.subtitle,

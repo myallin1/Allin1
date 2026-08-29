@@ -1,7 +1,7 @@
 ﻿name: erode_superapp
 description: Erode All-in-One Super App - Multi-vendor Commerce MVP by NJ TECH
 publish_to: 'none'
-version: 1.0.9+252
+version: 1.0.9+271
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -14,7 +14,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   colorful_iconify_flutter: ^0.0.5
   flutter_svg: ^2.3.0
-  # MyAllin1 Super Hero ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â spoken clarifying questions for the Voice-to-Order
+  # MyAllin1 Super Hero ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â spoken clarifying questions for the Voice-to-Order
   # disambiguation flow (e.g. "Did you mean an Auto to Erode Railway
   # Station?"). Pinned to a long-stable 4.x release rather than latest,
   # since we can't run `flutter pub get` in this sandbox to verify a
@@ -23,14 +23,14 @@ dependencies:
   dio: ^5.4.0
   encrypt: ^5.0.3
   file_picker: ^8.1.2
-  # NEW (CTO mandate ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Advanced KYC & Facial Verification): file_picker
+  # NEW (CTO mandate ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â Advanced KYC & Facial Verification): file_picker
   # above only opens the gallery/file browser (no way to force a LIVE
   # camera capture, and no camera option at all on web). image_picker's
   # ImageSource.camera opens the actual camera on every platform this
   # app ships to (Android/iOS/web via <input capture>), which is what
   # a genuine "live selfie" requires. Used only in hero_register_screen.dart.
   image_picker: ^1.1.2
-  # NEW (per Nizam's request ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â live selfie with round-box face guide):
+  # NEW (per Nizam's request ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â live selfie with round-box face guide):
   # image_picker's ImageSource.camera opens the OS's native camera app,
   # which Flutter can't draw a custom oval overlay on top of. The
   # `camera` package gives an embedded, in-app live preview instead
@@ -39,12 +39,12 @@ dependencies:
   # it. Used only by selfie_capture_screen.dart (hero_register_screen.dart's
   # live selfie step). Run `flutter pub get` after this change.
   camera: ^0.11.0+2
-  # NEW (Aug 12 2026 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Hero Payment QR upload): verified publisher
+  # NEW (Aug 12 2026 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â Hero Payment QR upload): verified publisher
   # (hunghd.dev), 2.44k likes, 445k downloads. Android/iOS/Web crop UI
-  # (uCrop / TOCropViewController / Cropper.js respectively) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â used to
+  # (uCrop / TOCropViewController / Cropper.js respectively) ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â used to
   # square-crop a hero's gallery-picked UPI QR screenshot down to just
   # the QR itself before it's saved locally. Web needs cropperjs's CSS
-  # + JS added to web/index.html (see that file) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â no config needed on
+  # + JS added to web/index.html (see that file) ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â no config needed on
   # Android/iOS.
   image_cropper: ^12.2.1
   firebase_analytics: any
@@ -55,7 +55,7 @@ dependencies:
   firebase_messaging: ^16.1.2
   firebase_performance: any
   # firebase_storage REMOVED (Aug 11 2026): Allin1 stays on the Spark
-  # (free) plan, where new Storage buckets can't even be created ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â every
+  # (free) plan, where new Storage buckets can't even be created ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â every
   # image upload moved to Cloudinary long ago (see
   # lib/services/cloudinary_upload_service.dart). Confirmed via grep that
   # zero Dart code imports or references FirebaseStorage, so this was
@@ -92,7 +92,7 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   http: ^1.2.1
-  # Pure-Dart image decode/resize/re-encode ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â works on web (no platform
+  # Pure-Dart image decode/resize/re-encode ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â works on web (no platform
   # channels), used to compress photos client-side before uploading to
   # Cloudinary so we don't ship full-resolution camera photos over the
   # wire. See cloudinary_upload_service.dart.
@@ -110,34 +110,34 @@ dependencies:
   receive_sharing_intent: ^1.8.1
   lottie: ^3.1.0
   scratcher: ^2.5.0
-  # NEW (Aug 12 2026 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Admin QR Generator, "zero-budget escape hatch"
+  # NEW (Aug 12 2026 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â Admin QR Generator, "zero-budget escape hatch"
   # follow-up): verified publisher (theyakka.com), 1.58M downloads, pure
-  # Dart QR rendering with no native platform code ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â used only by
+  # Dart QR rendering with no native platform code ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â used only by
   # admin_qr_generator_screen.dart so the poster/flex QR's target URL has
   # a single source of truth in-repo instead of being hand-made externally.
   qr_flutter: ^4.1.0
-  # NEW (Aug 12 2026 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Admin QR Generator "Share to WhatsApp" follow-up):
+  # NEW (Aug 12 2026 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â Admin QR Generator "Share to WhatsApp" follow-up):
   # verified publisher (fluttercommunity.dev, Flutter Favorite), 3.15M
   # downloads, 140 points. Wraps Android's ACTION_SEND / iOS
   # UIActivityViewController so the OS's native share sheet (WhatsApp
-  # included, if installed) opens with the generated QR PNG attached ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â
+  # included, if installed) opens with the generated QR PNG attached ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â
   # used only by admin_qr_generator_screen.dart. Also has real Web Share
   # API support for the Admin PWA build.
   #
   # PINNED to 12.0.2, not latest (13.x): `flutter pub get` failed with a
-  # real version conflict ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â share_plus >=13.1.0 requires win32 ^6.0.1,
+  # real version conflict ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â share_plus >=13.1.0 requires win32 ^6.0.1,
   # but our own package_info_plus ^9.0.0 requires win32 ^5.5.3, and both
   # can't be satisfied at once. 12.0.2 depends on win32 ^5.5.3 (same
   # range package_info_plus already needs), so it resolves cleanly.
   # Verified on pub.dev: same verified publisher, same SharePlus/
   # ShareParams/XFile.fromData API used in admin_qr_generator_screen.dart
-  # ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â no code changes needed for this downgrade.
+  # ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â no code changes needed for this downgrade.
   share_plus: ^12.0.2
   shorebird_code_push: ^2.0.5
   speech_to_text: ^7.3.0
   url_launcher: ^6.3.2
 
-  # NEW (Aug 18 2026 — Mobile Hub video, Nizam's call). In-app YouTube
+  # NEW (Aug 18 2026 â€” Mobile Hub video, Nizam's call). In-app YouTube
   # player for used/new phone listings. YouTube hosts, transcodes and
   # streams the video, so we store only a URL string: zero Cloudinary
   # storage, zero bandwidth, viable on the Firebase Spark plan.
@@ -147,21 +147,21 @@ dependencies:
   # handing off to the YouTube app via url_launcher, which would be
   # free. Nizam picked embedded so customers stay inside Allin1.
   #
-  # 6.0.2 requires Dart ^3.10.0 / Flutter >=3.38.0 — satisfied by this
+  # 6.0.2 requires Dart ^3.10.0 / Flutter >=3.38.0 â€” satisfied by this
   # project's 3.12.2 / 3.44.2. Its webview_flutter ^4.13.1 and
   # url_launcher ^6.3.2 requirements are already admitted by the
   # constraints declared here.
   youtube_player_iframe: ^6.0.2
   uuid: ^4.4.0
   web: ^1.1.0
-  # NEW (Aug 19 2026 — WhatsApp deep link to shop screen): clean-path web
+  # NEW (Aug 19 2026 â€” WhatsApp deep link to shop screen): clean-path web
   # routing (my-allin1.web.app/shop/<id> instead of /#/shop/<id>) so
   # Android App Links can match by host+path. Ships with the Flutter SDK
-  # (no separate pub.dev version pin needed) — used only in
+  # (no separate pub.dev version pin needed) â€” used only in
   # main_customer.dart, web build only, zero effect on native flavors.
   flutter_web_plugins:
     sdk: flutter
-  # NEW (Aug 19 2026 — same deep-link effort): actively maintained
+  # NEW (Aug 19 2026 â€” same deep-link effort): actively maintained
   # replacement for the deprecated uni_links, used to catch the cold-start
   # and warm-start Android App Links Uri in main_customer.dart /
   # dashboard_screen.dart. Web is unaffected (guarded by !kIsWeb).
@@ -169,14 +169,17 @@ dependencies:
   open_filex: ^4.7.0
   path_provider: ^2.1.5
   flutter_local_notifications: ^21.0.0
-  # NEW (CTO mandate ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â FCM Layer 2 alternative, Option D): Android
+  # Required for zonedSchedule() â€” a daily notification at a fixed
+  # CLOCK time (not "24h from now") needs a real timezone database.
+  timezone: ^0.11.0
+  # NEW (CTO mandate ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â FCM Layer 2 alternative, Option D): Android
   # foreground service so the Hero app's process (and therefore the
   # existing in-process RTDB hero_pings/hero_service_pings listeners in
   # main_hero.dart/hero_home_screen.dart) survives being backgrounded
   # while a hero is Online, instead of the OS killing it and silently
   # losing Layer 1 dispatch. Shows the required persistent "You are
   # Online" notification while active. Android-only usage (see
-  # hero_foreground_service.dart) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â other flavors (Customer/Seller/
+  # hero_foreground_service.dart) ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â other flavors (Customer/Seller/
   # Admin) never call into this. Run `flutter pub get` after this
   # change; verify the pinned version against pub.dev, since this
   # sandbox can't run pub get to confirm it resolves.
@@ -200,18 +203,20 @@ dependencies:
   flutter_image_compress: ^2.5.1
   cached_network_image: ^3.4.1
   flutter_cache_manager: ^3.4.2
+  googleapis: ^17.0.0
+  extension_google_sign_in_as_googleapis_auth: ^2.0.13
 
 dev_dependencies:
   build_runner: ^2.4.8
   flutter_launcher_icons: ^0.14.4
-  # NEW (Aug 19 2026 — Nizam: "app open agumbothu ovvonnum vevvera
+  # NEW (Aug 19 2026 â€” Nizam: "app open agumbothu ovvonnum vevvera
   # vidhama kaatuthu"). ROOT CAUSE of the inconsistent splash: there was
   # no configured splash at all. launch_background.xml was left at the
   # Flutter template default (plain @android:color/white), a SEPARATE
   # values-night/styles.xml flipped it dark, and on Android 12+ the OS
   # ignores most of that and draws its own splash from the launcher
   # icon. Three different first frames depending on OS version and dark
-  # mode — which is exactly what was being seen.
+  # mode â€” which is exactly what was being seen.
   #
   # DEV dependency only: it GENERATES the native splash resources at
   # setup time and ships nothing into the APK.
@@ -220,8 +225,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   hive_generator: ^2.0.1
-  # NEW (CTO mandate ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Synthetic QA Test-Bot): SDK-bundled, no version
-  # pinning risk, dev-only ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â never ships in the release build. Drives
+  # NEW (CTO mandate ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â Synthetic QA Test-Bot): SDK-bundled, no version
+  # pinning risk, dev-only ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â never ships in the release build. Drives
   # the app the same way a real user would (see integration_test/), for
   # the 5-screen QA bot per QA_AGENT_BLUEPRINT.md.
   integration_test:
@@ -251,29 +256,29 @@ flutter:
     - assets/images/food_slides/
     # Taxi mega-card photo slider (Aug 19 2026). Flutter does not
     # recurse, so this folder was invisible to the bundle even though
-    # yellow_car.png already lived in it — the Taxi row's yellow car
+    # yellow_car.png already lived in it â€” the Taxi row's yellow car
     # would have silently failed to load in a release build.
     - assets/images/taxi_slides/
-    # Pink icon theme (Aug 24 2026) — ThemeService.iconThemeKey ==
+    # Pink icon theme (Aug 24 2026) â€” ThemeService.iconThemeKey ==
     # 'pink_white_3d' vehicle icons, referenced from dashboard_screen.dart.
     # Same non-recursion trap as taxi_slides/ above, so this needs its
     # own explicit line.
     - assets/images/pink_icons/
-    # Hero Booking mega-card photo slider (Aug 19 2026) — the 3D
+    # Hero Booking mega-card photo slider (Aug 19 2026) â€” the 3D
     # delivery-partner renders.
     - assets/images/hero_slides/
     # Native splash source art (Aug 19 2026).
     - assets/splash/
     # AI assistant robot (Aug 17 2026). Flutter does NOT recurse into
-    # subfolders â€” each one has to be listed, which is why the folders
+    # subfolders Ã¢â‚¬â€ each one has to be listed, which is why the folders
     # above are enumerated individually. Holds one 0.31 MB animated
     # WebP, compressed from a 7.7 MB / 188-frame GIF; see
     # widgets/ai_bot_avatar.dart for why the frame count mattered more
     # than the file size.
     - assets/ai/
     - assets/taxi/
-    # NEW (Aug 18 2026 — Mobile Hub): shared phone-model catalog.
-    # METADATA ONLY (names/brands/variants), ~8 KB of JSON — the model
+    # NEW (Aug 18 2026 â€” Mobile Hub): shared phone-model catalog.
+    # METADATA ONLY (names/brands/variants), ~8 KB of JSON â€” the model
     # PHOTOS are deliberately NOT bundled here (that would bloat the
     # APK for every user, including those who never open Mobiles).
     # Photos live in one shared Cloudinary folder, reused across every
@@ -298,7 +303,7 @@ flutter_launcher_icons:
 
 
 # ================================================================
-# flutter_native_splash — ONE first frame, everywhere
+# flutter_native_splash â€” ONE first frame, everywhere
 # ================================================================
 # Regenerate after ANY change here:
 #     dart run flutter_native_splash:create
@@ -307,21 +312,21 @@ flutter_launcher_icons:
 # The bug being fixed was inconsistency, so nothing is left to a
 # default that could differ between Android versions or themes:
 #
-#   color / color_dark  — the SAME white in both. Without color_dark,
+#   color / color_dark  â€” the SAME white in both. Without color_dark,
 #                         values-night keeps its own dark background and
 #                         the splash flips colour with the system theme.
-#   android_12          — Android 12+ uses a separate SplashScreen API
+#   android_12          â€” Android 12+ uses a separate SplashScreen API
 #                         and IGNORES the legacy drawable. Configuring
 #                         this block is what stops new phones falling
 #                         back to the bare launcher icon.
-#   web: false          — the PWA already has its own hand-built splash
+#   web: false          â€” the PWA already has its own hand-built splash
 #                         in web/index.html (logo + saffron/green glow +
 #                         spinner). Letting this package overwrite it
 #                         would throw that away.
 #
 # The tricolour side-glow and the loading text/spinner Nizam asked for
 # live in the FLUTTER splash (branded_loading_screen.dart), not here.
-# A native splash is a static image the OS draws before Dart starts —
+# A native splash is a static image the OS draws before Dart starts â€”
 # it cannot animate or run our gradient. Keeping this frame identical
 # in colour to that screen is what makes the handover invisible.
 flutter_native_splash:

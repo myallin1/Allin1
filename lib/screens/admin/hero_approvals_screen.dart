@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/city_config.dart';
+import '../../config/hero_skill_catalog.dart';
 import 'admin_hero_details_screen.dart';
 
 // ── Theme (matches admin dashboard) ────────────────────────────
@@ -678,6 +679,7 @@ class _HeroApprovalCard extends StatelessWidget {
     final phone = data['phone'] as String? ?? '';
     final vehicleNumber = data['vehicleNumber'] as String? ?? '';
     final vehicleType = data['vehicleType'] as String? ?? '';
+    final skills = heroSkillsOf(data);
     final email = data['email'] as String? ?? '';
     final createdAt = data['createdAt'] as Timestamp?;
 
@@ -751,27 +753,47 @@ class _HeroApprovalCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          // Vehicle info
-          Row(
-            children: [
-              const Icon(Icons.directions_bike, size: 14, color: _purple),
-              const SizedBox(width: 6),
-              Text(
-                vehicleType.isNotEmpty ? vehicleType : 'N/A',
-                style: const TextStyle(fontSize: 11, color: _muted),
-              ),
-              const SizedBox(width: 12),
-              const Icon(Icons.pin, size: 14, color: _muted),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  vehicleNumber.isNotEmpty ? vehicleNumber : 'N/A',
-                  style: const TextStyle(fontSize: 11, color: _muted),
-                  overflow: TextOverflow.ellipsis,
+          // SKILL HEROES (Aug 29 2026). A trade applicant goes through
+          // this exact same queue — Nizam's "admin same approval" — so
+          // the only thing needed here is telling the two apart at a
+          // glance. Showing an electrician a "Vehicle: skill_worker /
+          // Number: N/A" row would be actively misleading about what is
+          // being approved.
+          if (skills.isNotEmpty)
+            Row(
+              children: [
+                const Icon(Icons.handyman_rounded, size: 14, color: _purple),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Skill Hero — ${skills.map(heroSkillLabel).join(', ')}',
+                    style: const TextStyle(fontSize: 11, color: _muted),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                const Icon(Icons.directions_bike, size: 14, color: _purple),
+                const SizedBox(width: 6),
+                Text(
+                  vehicleType.isNotEmpty ? vehicleType : 'N/A',
+                  style: const TextStyle(fontSize: 11, color: _muted),
+                ),
+                const SizedBox(width: 12),
+                const Icon(Icons.pin, size: 14, color: _muted),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    vehicleNumber.isNotEmpty ? vehicleNumber : 'N/A',
+                    style: const TextStyle(fontSize: 11, color: _muted),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           if (email.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(

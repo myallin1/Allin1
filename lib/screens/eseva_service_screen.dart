@@ -20,8 +20,10 @@
 // ================================================================
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:erode_superapp/widgets/cached_cloud_image.dart';
+import 'package:erode_superapp/services/localization_service.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
 const Color _kPurple = Color(0xFF7B6FE0);
@@ -33,11 +35,11 @@ const Color _kMuted = Color(0xFF9999BB);
 const String _kPhoneNumber = '8825812798';
 
 class _EsevaService {
-  final String label;
+  final String labelKey;
   final IconData icon;
   final String imageUrl;
 
-  const _EsevaService({required this.label, required this.icon, required this.imageUrl});
+  const _EsevaService({required this.labelKey, required this.icon, required this.imageUrl});
 }
 
 // NEW (Aug 12 2026 — Nizam: "ovvoru catogory kum athoda image podama
@@ -50,54 +52,79 @@ class _EsevaService {
 // fallback below, so a slow/broken image never leaves a blank tile.
 const List<_EsevaService> _kEsevaServices = [
   _EsevaService(
-    label: 'New PAN Card & Correction',
-    icon: Icons.badge_rounded,
-    imageUrl: 'https://images.unsplash.com/photo-1580519542036-c47de6196ba5?w=200&q=80',
+    labelKey: 'eseva_xerox',
+    icon: Icons.print_rounded,
+    imageUrl: 'https://images.unsplash.com/photo-1598327105666-5b89351cb315?w=200&q=80',
   ),
   _EsevaService(
-    label: 'Aadhaar Card Update',
-    icon: Icons.fingerprint_rounded,
-    imageUrl: 'https://images.unsplash.com/photo-1614064548237-096d5814680f?w=200&q=80',
-  ),
-  _EsevaService(
-    label: 'Passport Application',
-    icon: Icons.menu_book_rounded,
-    imageUrl: 'https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?w=200&q=80',
-  ),
-  _EsevaService(
-    label: 'Voter ID Card',
+    labelKey: 'eseva_voter_id',
     icon: Icons.how_to_vote_rounded,
     imageUrl: 'https://images.unsplash.com/photo-1580128637411-70dfaf5ba591?w=200&q=80',
   ),
   _EsevaService(
-    label: 'Driving Licence',
-    icon: Icons.directions_car_filled_rounded,
-    imageUrl: 'https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=200&q=80',
+    labelKey: 'eseva_pan',
+    icon: Icons.badge_rounded,
+    imageUrl: 'https://images.unsplash.com/photo-1580519542036-c47de6196ba5?w=200&q=80',
   ),
   _EsevaService(
-    label: 'Ration Card',
-    icon: Icons.receipt_long_rounded,
-    imageUrl: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&q=80',
+    labelKey: 'eseva_aadhaar',
+    icon: Icons.fingerprint_rounded,
+    imageUrl: 'https://images.unsplash.com/photo-1614064548237-096d5814680f?w=200&q=80',
   ),
   _EsevaService(
-    label: 'Birth / Death Certificate',
+    labelKey: 'eseva_rental',
     icon: Icons.description_rounded,
     imageUrl: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=200&q=80',
   ),
   _EsevaService(
-    label: 'Income / Community Certificate',
-    icon: Icons.assignment_rounded,
+    labelKey: 'eseva_employment',
+    icon: Icons.work_outline_rounded,
     imageUrl: 'https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=200&q=80',
   ),
   _EsevaService(
-    label: 'Bank Account Opening & KYC',
-    icon: Icons.account_balance_rounded,
-    imageUrl: 'https://images.unsplash.com/photo-1541354329998-f4d9a9f9297f?w=200&q=80',
+    labelKey: 'eseva_ration',
+    icon: Icons.receipt_long_rounded,
+    imageUrl: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&q=80',
   ),
   _EsevaService(
-    label: 'Property & Legal Document Services',
-    icon: Icons.home_work_rounded,
+    labelKey: 'eseva_birth_death',
+    icon: Icons.child_care_rounded,
+    imageUrl: 'https://images.unsplash.com/photo-1519689680058-324335c77eba?w=200&q=80',
+  ),
+  _EsevaService(
+    labelKey: 'eseva_fssai_msme',
+    icon: Icons.storefront_rounded,
+    imageUrl: 'https://images.unsplash.com/photo-1556761175-4b46a572b786?w=200&q=80',
+  ),
+  _EsevaService(
+    labelKey: 'eseva_certificate',
+    icon: Icons.assignment_rounded,
     imageUrl: 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=200&q=80',
+  ),
+  _EsevaService(
+    labelKey: 'eseva_ayushman',
+    icon: Icons.medical_services_rounded,
+    imageUrl: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?w=200&q=80',
+  ),
+  _EsevaService(
+    labelKey: 'eseva_eshram',
+    icon: Icons.engineering_rounded,
+    imageUrl: 'https://images.unsplash.com/photo-1504307651254-35680f356f58?w=200&q=80',
+  ),
+  _EsevaService(
+    labelKey: 'eseva_laptop',
+    icon: Icons.computer_rounded,
+    imageUrl: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=200&q=80',
+  ),
+  _EsevaService(
+    labelKey: 'eseva_photo_print',
+    icon: Icons.photo_camera_rounded,
+    imageUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=200&q=80',
+  ),
+  _EsevaService(
+    labelKey: 'eseva_pvc',
+    icon: Icons.credit_card_rounded,
+    imageUrl: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=200&q=80',
   ),
 ];
 
@@ -120,6 +147,7 @@ class EsevaServiceScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.watch<LocalizationService>().t;
     return Scaffold(
       backgroundColor: _kBg,
       appBar: AppBar(
@@ -129,8 +157,8 @@ class EsevaServiceScreen extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _kText, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('E-Seva Online Services',
-            style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 16),),
+        title: Text(t('eseva_mega_title'),
+            style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: _kText),),
         centerTitle: true,
       ),
       body: SafeArea(
@@ -139,7 +167,7 @@ class EsevaServiceScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('What we help you with',
+              Text(t('What we help you with'),
                   style: GoogleFonts.outfit(color: _kMuted, fontSize: 13, fontWeight: FontWeight.w600),),
               const SizedBox(height: 14),
               GridView.builder(
@@ -155,7 +183,7 @@ class EsevaServiceScreen extends StatelessWidget {
                 itemBuilder: (context, i) => _EsevaTile(service: _kEsevaServices[i]),
               ),
               const SizedBox(height: 24),
-              Text('Ready to apply? Reach us directly:',
+              Text(t('Ready to apply? Reach us directly:'),
                   style: GoogleFonts.outfit(color: _kText, fontSize: 13, fontWeight: FontWeight.w700),),
               const SizedBox(height: 6),
               Text(_kPhoneNumber,
@@ -173,7 +201,7 @@ class EsevaServiceScreen extends StatelessWidget {
                         ),
                         onPressed: _launchCall,
                         icon: const Icon(Icons.call_rounded, color: Colors.white, size: 20),
-                        label: Text('Call Now',
+                        label: Text(t('Call Now'),
                             style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold),),
                       ),
                     ),
@@ -211,15 +239,21 @@ class _EsevaTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Deliberately no onTap wired yet — per Nizam's explicit "dummy vachu"
-    // instruction, these are placeholder buttons until each service gets
-    // its own in-app booking flow. InkWell still gives a tap ripple so it
-    // visually reads as a real button, just without a destination yet.
+    final t = context.watch<LocalizationService>().t;
+    final translatedLabel = t(service.labelKey);
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () {},
+        onTap: () async {
+          final uri = Uri.parse(
+            'https://wa.me/91$_kPhoneNumber?text=${Uri.encodeComponent("Hi, I want to book an E-Seva service: $translatedLabel")}',
+          );
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        },
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -261,7 +295,7 @@ class _EsevaTile extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              service.label,
+              translatedLabel,
               textAlign: TextAlign.center,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,

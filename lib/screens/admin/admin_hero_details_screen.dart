@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../config/hero_skill_catalog.dart';
 import '../../widgets/cached_cloud_image.dart';
 import '../../services/cloudinary_upload_service.dart';
 
@@ -35,6 +36,8 @@ class AdminHeroDetailsScreen extends StatelessWidget {
     if (val == null || val.toString().trim().isEmpty) return fallback;
     return val.toString();
   }
+
+  List<String> get _skills => heroSkillsOf(data);
 
   void _showFullImage(BuildContext context, String label, String url) {
     showDialog<void>(
@@ -287,9 +290,24 @@ class AdminHeroDetailsScreen extends StatelessWidget {
                   const Divider(color: Colors.black26),
                   _buildFieldRow('Preferred Area', _val('preferredWorkLocation', 'Anywhere')),
                   const Divider(color: Colors.black26),
-                  _buildFieldRow('Vehicle Type', _val('vehicleType')),
-                  const Divider(color: Colors.black26),
-                  _buildFieldRow('Vehicle No.', _val('vehicleNumber')),
+                  // SKILL HEROES (Aug 29 2026, found on re-audit). A trade
+                  // applicant's own vehicleType is literally the
+                  // placeholder 'skill_worker' (see hero_skill_catalog.dart
+                  // — that value exists so ride dispatch never matches
+                  // it), so showing it here read as a data-entry error
+                  // rather than the deliberate value it is. Showing the
+                  // actual trades instead is what admin needs to approve
+                  // an electrician correctly.
+                  if (_skills.isNotEmpty) ...[
+                    _buildFieldRow(
+                      'Trades',
+                      _skills.map(heroSkillLabel).join(', '),
+                    ),
+                  ] else ...[
+                    _buildFieldRow('Vehicle Type', _val('vehicleType')),
+                    const Divider(color: Colors.black26),
+                    _buildFieldRow('Vehicle No.', _val('vehicleNumber')),
+                  ],
                   const Divider(color: Colors.black26),
                   _buildFieldRow('Onboarding', _val('onboardingMethod')),
                 ],
@@ -302,7 +320,13 @@ class AdminHeroDetailsScreen extends StatelessWidget {
             const SizedBox(height: 12),
             _buildDocumentCard(context, 'Aadhaar Card', 'Aadhaar No.', _val('aadhaarNumber'), 'aadhaarDocUrl'),
             _buildDocumentCard(context, 'PAN Card', 'PAN No.', _val('panNumber'), 'panDocUrl'),
-            _buildDocumentCard(context, 'Driving License', 'License No.', _val('licenseNumber'), 'licenseDocUrl'),
+            // Skill heroes never upload one — the registration form
+            // doesn't even ask (see hero_register_screen.dart). Showing
+            // an always-empty "Driving License: N/A" card here made a
+            // correctly-submitted electrician application look
+            // incomplete.
+            if (_skills.isEmpty)
+              _buildDocumentCard(context, 'Driving License', 'License No.', _val('licenseNumber'), 'licenseDocUrl'),
           ],
         ),
       ),

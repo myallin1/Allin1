@@ -1,0 +1,1470 @@
+<!DOCTYPE html>
+<html lang="ta">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MyAllin1 Super App 🚀</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+Thambi+2:wght@500;700;800;900&family=Noto+Sans+Tamil:wght@500;700;800;900&display=swap" rel="stylesheet">
+  <meta name="description"
+    content="Ride, Food, Grocery, Help - Everything in one app.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://erode-super-app.web.app/">
+  <meta property="og:site_name" content="MyAllin1 Super App">
+  <meta property="og:title" content="MyAllin1 Super App 🚀">
+  <meta property="og:description"
+    content="Ride, Food, Grocery, Help - Everything in one app.">
+  <meta property="og:image" content="https://erode-super-app.web.app/og-preview-v2.jpg?v=3">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://erode-super-app.web.app/og-preview-v2.jpg?v=3">
+  <style>
+    :root {
+      --pink: #FF4FA3;
+      --pink-dark: #E63D8F;
+      --bg: #FFFFFF;
+      --card: #F9F9F9;
+      --card2: #F0F0F0;
+      --muted: #666666;
+      --text: #111111;
+      --green: #00C853;
+      --gold: #FFBB00;
+      --purple: #6C63FF;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Noto Sans Tamil UI", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-weight: 600;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    h1, h2, h3 {
+      font-family: 'Baloo Thambi 2', "Noto Sans Tamil UI", sans-serif;
+      font-weight: 900;
+    }
+
+    .wrap {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    header {
+      padding: 24px 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand {
+      font-weight: 800;
+      font-size: 20px;
+      letter-spacing: -0.5px;
+    }
+
+    .brand span {
+      color: var(--pink);
+    }
+
+    .lang-toggle {
+      display: flex;
+      background: var(--card2);
+      border: 1px solid #2A2A40;
+      border-radius: 999px;
+      padding: 4px;
+      gap: 2px;
+    }
+
+    .lang-toggle button {
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 7px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .lang-toggle button.active {
+      background: var(--pink);
+      color: #fff;
+    }
+
+    .hero {
+      text-align: center;
+      padding: 40px 0 36px;
+    }
+
+    .badge {
+      display: inline-block;
+      background: rgba(255, 79, 163, 0.12);
+      color: var(--pink);
+      border: 1px solid rgba(255, 79, 163, 0.3);
+      border-radius: 20px;
+      padding: 6px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 {
+      font-size: 34px;
+      font-weight: 800;
+      line-height: 1.3;
+      margin: 0 0 16px;
+    }
+
+    .hero h1 span {
+      color: var(--pink);
+    }
+
+    .hero p.sub {
+      color: var(--muted);
+      font-size: 17px;
+      max-width: 560px;
+      margin: 0 auto 32px;
+      line-height: 1.7;
+    }
+
+    .cta-main {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(135deg, var(--pink), var(--pink-dark));
+      color: #fff;
+      text-decoration: none;
+      font-weight: 800;
+      font-size: 18px;
+      padding: 18px 40px;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(255, 79, 163, 0.35);
+    }
+
+    .cta-sub {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 14px;
+    }
+
+    .download-strip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 18px;
+      background: var(--card2);
+      border: 1px solid rgba(255, 187, 0, 0.5);
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 13.5px;
+      padding: 10px 20px;
+      border-radius: 12px;
+      box-shadow: 0 0 0 0 rgba(255, 187, 0, 0.5);
+      animation: glow-pulse 2s ease-in-out infinite;
+    }
+
+    .download-strip .zap {
+      color: var(--gold);
+    }
+
+    @keyframes glow-pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(255, 187, 0, 0.45);
+      }
+
+      70% {
+        box-shadow: 0 0 0 10px rgba(255, 187, 0, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(255, 187, 0, 0);
+      }
+    }
+
+    .download-strip-block {
+      text-align: center;
+      margin: 40px 0;
+    }
+
+    .btn-fire {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 4px;
+      background: var(--card2);
+      border: 1px solid rgba(255, 79, 163, 0.6);
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 800;
+      font-size: 14px;
+      padding: 12px 24px;
+      border-radius: 12px;
+      box-shadow: 0 0 12px rgba(255, 79, 163, 0.4);
+      animation: fire-glow 1.5s ease-in-out infinite alternate;
+      width: 100%;
+      max-width: 280px;
+    }
+
+    .btn-fire .zap {
+      font-size: 18px;
+      color: #fff;
+    }
+    .btn-fire { background: linear-gradient(135deg, var(--pink), var(--pink-dark)); color: #fff; border:none; }
+
+    @keyframes fire-glow {
+      0% {
+        box-shadow: 0 0 8px rgba(255, 79, 163, 0.3), inset 0 0 4px rgba(255, 79, 163, 0.1);
+        border-color: rgba(255, 79, 163, 0.5);
+      }
+
+      100% {
+        box-shadow: 0 0 20px rgba(255, 79, 163, 0.75), inset 0 0 8px rgba(255, 79, 163, 0.2);
+        border-color: rgba(255, 79, 163, 1);
+      }
+    }
+
+    .section-title {
+      font-size: 24px;
+      font-weight: 800;
+      text-align: center;
+      margin: 56px 0 8px;
+    }
+
+    .section-sub {
+      text-align: center;
+      color: var(--muted);
+      font-size: 15px;
+      margin-bottom: 32px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid #202032;
+      border-radius: 16px;
+      padding: 22px;
+    }
+
+    .icon-badge {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    }
+
+    .icon-badge svg {
+      width: 26px;
+      height: 26px;
+    }
+
+    .card h3 {
+      margin: 0 0 6px;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13.5px;
+      line-height: 1.6;
+    }
+    
+    .evision {
+      display: block;
+      margin: 28px 0 28px;
+      padding: 32px;
+      border-radius: 22px;
+      color: #fff;
+      background: linear-gradient(135deg, #FF4FA3 0%, #7B1E52 100%);
+      box-shadow: 0 14px 34px rgba(255, 79, 163, .30);
+    }
+
+    .evision h2 {
+      margin: 0 0 10px;
+      font-size: 24px;
+      font-weight: 800;
+      line-height: 1.32;
+      color: #fff;
+    }
+
+    .evision p {
+      margin: 0 0 18px;
+      font-size: 15px;
+      line-height: 1.65;
+      color: rgba(255, 255, 255, .94);
+    }
+
+    .evision-stats {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-top: 24px;
+    }
+
+    .evision-stats div {
+      flex: 1;
+      min-width: 140px;
+      background: rgba(255, 255, 255, .15);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .evision-stats strong {
+      display: block;
+      font-size: 22px;
+      font-weight: 800;
+      color: #FFD700;
+    }
+
+    .evision-stats span {
+      display: block;
+      font-size: 13px;
+      opacity: .92;
+      margin-top: 6px;
+    }
+
+    .hero-cta-block {
+      background: linear-gradient(135deg, rgba(108, 99, 255, 0.16), rgba(108, 99, 255, 0.04));
+      border: 1px solid rgba(108, 99, 255, 0.35);
+      border-radius: 20px;
+      padding: 32px;
+      margin: 56px 0;
+      text-align: center;
+    }
+
+    .hero-cta-block .icon-badge {
+      margin: 0 auto 14px;
+    }
+
+    .hero-cta-block h2 {
+      margin: 0 0 8px;
+      font-size: 20px;
+    }
+
+    .hero-cta-block p {
+      color: var(--muted);
+      font-size: 14px;
+      margin: 0 0 22px;
+      max-width: 460px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .btn-purple {
+      display: inline-block;
+      background: var(--purple);
+      color: #fff;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 14.5px;
+      padding: 13px 28px;
+      border-radius: 12px;
+    }
+
+    .how {
+      background: var(--card2);
+      border-radius: 20px;
+      padding: 32px;
+      margin: 56px 0;
+      text-align: center;
+    }
+
+    .how h2 {
+      margin: 0 0 8px;
+      font-size: 20px;
+    }
+
+    .how p.sub2 {
+      color: var(--muted);
+      font-size: 14px;
+      margin: 0 0 24px;
+    }
+
+    .steps {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .step {
+      max-width: 200px;
+    }
+
+    .step .num {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--pink);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      margin: 0 auto 10px;
+    }
+
+    .step p {
+      color: var(--text);
+      font-size: 13.5px;
+      margin: 0;
+    }
+
+    footer {
+      text-align: center;
+      padding: 40px 0 32px;
+      color: var(--muted);
+      font-size: 13px;
+      border-top: 1px solid #1c1c2e;
+      margin-top: 40px;
+    }
+
+    footer a {
+      color: var(--pink);
+      text-decoration: none;
+    }
+    
+    .feature-image-container {
+      margin: 32px auto;
+      max-width: 800px;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 14px 34px rgba(0, 0, 0, .10);
+    }
+    
+    .feature-image-container img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    [data-lang="en"] {
+      display: none;
+    }
+
+    body.lang-en [data-lang="ta"] {
+      display: none;
+    }
+
+    body.lang-en [data-lang="en"] {
+      display: block;
+    }
+
+    body.lang-en .steps[data-lang="en"] {
+      display: flex;
+    }
+
+    body.lang-en .grid[data-lang="en"] {
+      display: grid;
+    }
+
+    @media (max-width: 600px) {
+      .hero h1 {
+        font-size: 26px;
+      }
+
+      .cta-main {
+        font-size: 16px;
+        padding: 16px 28px;
+      }
+    }
+    
+    @keyframes pop-zoom {
+      0% { transform: scale(1); }
+      100% { transform: scale(1.08); }
+    }
+    
+    .header-logo-container {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 24px;
+      margin-top: 24px;
+    }
+    
+  /* Neural Network Hub */
+  .neural-network-hub {
+    position: relative;
+    padding: 80px 20px;
+    background: #FAFAFA;
+    border-top: 1px solid #EAEAEA;
+    text-align: center;
+    overflow: visible;
+    margin: 40px 0;
+    border-radius: 24px;
+  }
+  .neural-title {
+    font-size: 26px;
+    font-weight: 900;
+    margin-bottom: 50px;
+    color: var(--text);
+  }
+  .neural-container {
+    position: relative;
+    max-width: 800px;
+    margin: 0 auto;
+    height: 500px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .neural-center-logo {
+    position: absolute;
+    width: 110px;
+    height: 110px;
+    background: #fff;
+    border: 4px solid var(--pink);
+    border-radius: 50%;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 30px rgba(255, 79, 163, 0.4);
+    animation: pulse-ring 2s infinite alternate;
+  }
+  .neural-center-logo svg {
+    width: 36px;
+    height: 36px;
+    color: var(--pink);
+    margin-bottom: 4px;
+  }
+  .neural-center-logo span {
+    font-size: 14px;
+    font-weight: 900;
+    color: var(--pink);
+  }
+  .neural-lines {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+    pointer-events: none;
+  }
+  .neural-lines .web {
+    stroke: var(--pink);
+    stroke-width: 1;
+    stroke-dasharray: 4;
+    opacity: 0.15;
+  }
+  .neural-lines line {
+    stroke: var(--pink);
+    stroke-width: 2;
+    opacity: 0.3;
+  }
+  .neural-pulse {
+    fill: var(--pink);
+    filter: drop-shadow(0 0 6px var(--pink));
+  }
+  .neural-node {
+    position: absolute;
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 4px solid #fff;
+    transition: transform 0.3s, border-color 0.3s;
+  }
+  .neural-node:hover {
+    transform: scale(1.15);
+    z-index: 20;
+    border-color: var(--pink);
+  }
+  .neural-node img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+  .neural-node span {
+    position: absolute;
+    bottom: -35px;
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--text);
+    white-space: nowrap;
+    background: #fff;
+    padding: 6px 14px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    border: 1px solid rgba(0,0,0,0.05);
+  }
+  .node-1 { top: 5%; left: 50%; transform: translateX(-50%); }
+  .node-2 { top: 20%; right: 15%; }
+  .node-3 { top: 50%; right: 5%; transform: translateY(-50%); }
+  .node-4 { bottom: 20%; right: 15%; }
+  .node-5 { bottom: 5%; left: 50%; transform: translateX(-50%); }
+  .node-6 { bottom: 20%; left: 15%; }
+  .node-7 { top: 50%; left: 5%; transform: translateY(-50%); }
+  .node-8 { top: 20%; left: 15%; }
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 20px rgba(255, 79, 163, 0.4), 0 0 0 0 rgba(255, 79, 163, 0.2); }
+    100% { box-shadow: 0 0 40px rgba(255, 79, 163, 0.8), 0 0 0 20px rgba(255, 79, 163, 0); }
+  }
+  @keyframes dash-flow {
+    to { stroke-dashoffset: -24; }
+  }
+  @media (max-width: 600px) {
+    .neural-network-hub { padding: 40px 10px; }
+    .neural-container { height: 480px; }
+    .neural-node { width: 64px; height: 64px; }
+    .neural-node span { font-size: 10.5px; padding: 3px 8px; bottom: -24px; }
+    .neural-center-logo { width: 80px; height: 80px; }
+    .neural-center-logo svg { width: 24px; height: 24px; }
+    .neural-center-logo span { font-size: 11px; }
+    .node-1 { top: 0%; }
+    .node-5 { bottom: 0%; }
+    .node-2 { top: 12%; right: 2%; }
+    .node-3 { right: -2%; }
+    .node-4 { bottom: 12%; right: 2%; }
+    .node-6 { bottom: 12%; left: 2%; }
+    .node-7 { left: -2%; }
+    .node-8 { top: 12%; left: 2%; }
+  }
+  </style>
+</head>
+
+<body>
+
+  <div class="wrap">
+    <div class="header-logo-container">
+      <div class="lang-toggle">
+        <button id="btn-ta" class="active" onclick="setLang('ta')">தமிழ்</button>
+        <button id="btn-en" onclick="setLang('en')">English</button>
+      </div>
+    </div>
+
+    <!-- ===================== TAMIL ===================== -->
+    <div data-lang="ta">
+      <section class="hero">
+        <div class="badge">📍 ஈரோடிற்காகவே உருவாக்கப்பட்டது</div>
+        <h1>ரைடு, உணவு, மளிகை, உதவி —<br>எல்லாம் <span>ஒரே ஆப்பில்</span></h1>
+        <p class="sub">பைக் டாக்சி புக் பண்ணுங்க, உங்க பிடித்த ஹோட்டல்/கடையிலிருந்து உணவு &amp; மளிகை ஆர்டர் பண்ணுங்க,
+          எலக்ட்ரானிக்ஸ் வாங்குங்க, SOS emergency உதவி பெறுங்க — எல்லாம் உங்க ஊருக்கே சொந்தமான ஒரே ஆப்பில்.</p>
+        <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 16px; animation: pop-zoom 1.5s infinite alternate ease-in-out;">
+          <span style="font-size: 20px; font-weight: 900; color: #000080; font-family: 'Baloo Thambi 2', sans-serif;">Chitty AI உதவியுடன்</span>
+          <img src="chitty_ai.webp" alt="Chitty AI Animation" style="height: 100px; width: auto; object-fit: contain;">
+        </div>
+
+        <a class="cta-main" href="https://my-allin1.web.app" target="_blank" rel="noopener">🚀 My Allin1-ஐ திற</a>
+        <p class="cta-sub">உங்க போன் Browser-லேயே திறக்கும் — Install ஆகவும் தேவையில்லை, App போல் use
+          பண்ணலாம்.<br><strong
+            style="color:var(--pink); margin-top: 8px; display:inline-flex; align-items:center; gap:6px;"><svg
+              viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+              <line x1="12" y1="18" x2="12.01" y2="18"></line>
+            </svg> சிறந்த Budget Phone App!</strong></p>
+        <br>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 14px;">
+          <a class="btn-fire"
+            href="https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-customer.apk">
+            <span class="zap" style="display:flex;align-items:center;"><svg viewBox="0 0 576 512" width="20" height="20"
+                fill="currentColor">
+                <path
+                  d="M420.22 84.49 460 15.62a11.16 11.16 0 0 0-4.08-15.34 11.23 11.23 0 0 0-15.42 4.05L400.1 74.05A278.49 278.49 0 0 0 288 51.2a278 278 0 0 0-112.1 22.85l-40.4-69.72a11.12 11.12 0 1 0-19.5 11.29l39.78 68.87a275 275 0 0 0-109 119.5h482.44a275.46 275.46 0 0 0-108.97-119.5zM203.26 153.6a20.48 20.48 0 1 1 20.48-20.48 20.48 20.48 0 0 1-20.48 20.48zm169.48 0a20.48 20.48 0 1 1 20.48-20.48 20.48 20.48 0 0 1-20.48 20.48zM46.72 230.4A46.72 46.72 0 1 0 0 277.12V392a46.72 46.72 0 1 0 93.44 0V277.12a46.72 46.72 0 1 0-46.72-46.72zm482.56 0A46.72 46.72 0 1 0 576 277.12V392a46.72 46.72 0 1 0-93.44 0V277.12a46.72 46.72 0 1 0 46.72-46.72zM128 230.4h320V416a64 64 0 0 1-64 64H192a64 64 0 0 1-64-64zm72.96 249.6h-11.52A46.72 46.72 0 1 0 128 512v-16a16 16 0 0 1 16-16h56.96v-16a46.72 46.72 0 1 0 0-93.44zm174.08 0h11.52A46.72 46.72 0 1 1 448 512v-16a16 16 0 0 0-16-16h-56.96v-16a46.72 46.72 0 1 1 0-93.44z" />
+              </svg></span> Download Myallin1 AI Turbo App
+          </a>
+          <a href="https://my-allin1.web.app" style="color: var(--pink); font-size: 14px; font-weight: 700; text-decoration: none; margin-top: -4px;">🍎 For iPhone / Web Users</a>
+          <div class="trust-badge-container"
+            style="background-color: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 16px; padding: 18px; margin-top: 8px; width: 100%; max-width: 340px; box-sizing: border-box; box-shadow: 0 4px 12px rgba(0,0,0,0.04);">
+            <div
+              style="display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--green); font-weight: 700; font-size: 1.1rem; margin-bottom: 14px;">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+              </svg>
+              100% Genuine App
+            </div>
+            <ul
+              style="list-style: none; padding: 0; margin: 0; font-size: 0.95rem; color: #444; line-height: 1.5; font-weight: 500;">
+              <li style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px;">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--purple)" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:2px;">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg>
+                <span>You can scan the app before you install</span>
+              </li>
+              <li style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px;">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--pink)" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:2px;">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <span>AI turbo app only on this site, not in Play Store</span>
+              </li>
+            </ul>
+            <div
+              style="display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(0, 177, 79, 0.1); color: var(--green); padding: 10px 16px; border-radius: 10px; font-weight: 700; font-size: 0.95rem;">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <path
+                  d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993.0004.5511-.4482.9997-.9993.9997zm-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997zm11.4045-6.02l1.9973-3.4592a.416.416 0 0 0-.1521-.5676.416.416 0 0 0-.5676.1521l-2.022 3.503C15.5492 8.2435 13.8532 7.8504 12 7.8504s-3.5492.3931-5.1371 1.0997L4.841 5.4471a.417.417 0 0 0-.5676-.1521.416.416 0 0 0-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396z" />
+              </svg>
+              Only For Android
+            </div>
+          </div>
+
+        </div>
+      </section>
+      
+      <div class="evision">
+        <h2 data-lang="ta">ஏன் இது முக்கியம்? ஈரோட்டு பணத்தை ஈரோட்டிலேயே சுழலவைப்போம்.</h2>
+        <h2 data-lang="en">Why it matters? Keep Erode's money in Erode.</h2>
+        <p data-lang="ta">அதிக கமிஷன் வாங்கும் தேசிய தளங்கள், ரைடு மற்றும் டெலிவரிக்கு செலவழிக்கும் பணத்தில் பெரும் பகுதியை உள்ளூர் பொருளாதாரத்தை விட்டு வெளியேற்றுகின்றன. myallin1 அதற்கு நேர்மாறான மாடலில் கட்டப்பட்டது — உள்ளூர் விற்பனையாளர்கள், உள்ளூர் ரைடர்கள், உள்ளூர் வருமானம்.</p>
+        <p data-lang="en" style="display:none">National apps take a huge commission, draining wealth from our local economy. myallin1 is built differently — zero commission for our local riders, helping our community grow.</p>
+        <div class="evision-stats">
+          <div><strong>0%</strong><span data-lang="ta">ரைடர் வருமானத்தில் Commission இல்லை</span><span data-lang="en" style="display:none">Zero Rider Commission</span></div>
+          <div><strong>8 in 1</strong><span data-lang="ta">ஒரே ஆப்பில் 8 சேவைகள்</span><span data-lang="en" style="display:none">8 Services in One App</span></div>
+          <div><strong>₹14,400+ Cr</strong><span data-lang="ta">வெளியேறும் தொகை — இதைக் குறைப்போம்</span><span data-lang="en" style="display:none">Leaves our economy yearly</span></div>
+        </div>
+      </div>
+
+      <div style="background: rgba(255, 79, 163, 0.05); border: 1px solid rgba(255, 79, 163, 0.2); border-radius: 24px; padding: 40px 20px; margin: 40px 0; text-align: center;">
+        <h2 style="font-size: 26px; color: var(--text); margin-bottom: 12px;"><span data-lang="ta">8 தனித்தனி ஆப் தேவையில்லை...</span><span data-lang="en" style="display:none">Why download 8 separate apps?</span></h2>
+        <p style="color: var(--muted); font-size: 16px; margin-bottom: 30px;"><span data-lang="ta">ஈரோட்டிற்கு தேவையான அனைத்து சேவைகளும் ஒரே சூப்பர் ஆப்பில்!</span><span data-lang="en" style="display:none">Everything Erode needs is now inside one super app!</span></p>
+        
+        <div style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 15px; max-width: 800px; margin: 0 auto;">
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+            <div style="width: 56px; height: 56px; background:#fff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display:flex; align-items:center; justify-content:center; color: var(--pink);"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5" /><circle cx="5.5" cy="17.5" r="3.5" /><circle cx="15" cy="5" r="1" /><path d="M12 17.5V14l-3-3 4-3 2 3h2" /></svg></div>
+            <span style="font-size: 11px; font-weight:700; color:var(--muted)">Taxi</span>
+          </div>
+          <div style="color:var(--muted); font-weight:900;">+</div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+            <div style="width: 56px; height: 56px; background:#fff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display:flex; align-items:center; justify-content:center; color: var(--gold);"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2s2-.9 2-2V2" /><path d="M7 2v20" /><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" /></svg></div>
+            <span style="font-size: 11px; font-weight:700; color:var(--muted)">Food</span>
+          </div>
+          <div style="color:var(--muted); font-weight:900;">+</div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+            <div style="width: 56px; height: 56px; background:#fff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display:flex; align-items:center; justify-content:center; color: var(--green);"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" /></svg></div>
+            <span style="font-size: 11px; font-weight:700; color:var(--muted)">Grocery</span>
+          </div>
+          <div style="color:var(--muted); font-weight:900;">+</div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+            <div style="width: 56px; height: 56px; background:#fff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display:flex; align-items:center; justify-content:center; color: var(--purple);"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="11" rx="1.5" /><path d="M2 20h20" /><path d="M9 20v-2h6v2" /></svg></div>
+            <span style="font-size: 11px; font-weight:700; color:var(--muted)">Store</span>
+          </div>
+          <div style="color:var(--muted); font-weight:900;">+</div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+            <div style="width: 56px; height: 56px; background:#fff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display:flex; align-items:center; justify-content:center; color: #FF3C3C;"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /><path d="M12 8v4" /><path d="M12 16h.01" /></svg></div>
+            <span style="font-size: 11px; font-weight:700; color:var(--muted)">SOS</span>
+          </div>
+          <div style="color:var(--muted); font-weight:900;">+</div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+            <div style="width: 56px; height: 56px; background:#fff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display:flex; align-items:center; justify-content:center; color: var(--gold);"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="4" rx="1" /><path d="M12 8v13" /><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" /><path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8Zm9 0a2.5 2.5 0 0 0 0-5C13 3 12 8 12 8Z" /></svg></div>
+            <span style="font-size: 11px; font-weight:700; color:var(--muted)">Offers</span>
+          </div>
+          <div style="color:var(--muted); font-weight:900;">+</div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+            <div style="width: 56px; height: 56px; background:#fff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display:flex; align-items:center; justify-content:center; color: var(--green);"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l1.5-4h15L21 7" /><path d="M4 7v13h16V7" /><path d="M9 21v-6h6v6" /><path d="M4 7h16" /></svg></div>
+            <span style="font-size: 11px; font-weight:700; color:var(--muted)">Sell</span>
+          </div>
+          <div style="color:var(--muted); font-weight:900;">+</div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+            <div style="width: 56px; height: 56px; background:#fff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display:flex; align-items:center; justify-content:center; color: var(--purple);"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="6" /><line x1="6" y1="12" x2="10" y2="12" /><line x1="8" y1="10" x2="8" y2="14" /><circle cx="15" cy="13" r="1" /><circle cx="18" cy="11" r="1" /></svg></div>
+            <span style="font-size: 11px; font-weight:700; color:var(--muted)">Games</span>
+          </div>
+
+          <div style="display:flex; align-items:center; justify-content:center; margin: 10px 20px;">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="var(--pink)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+          </div>
+          
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px; animation: pop-zoom 1.5s infinite alternate ease-in-out;">
+            <div style="width: 72px; height: 72px; background:var(--pink); border-radius: 20px; box-shadow: 0 8px 24px rgba(255, 79, 163, 0.4); display:flex; align-items:center; justify-content:center; color: #fff;"><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12L12 4L20 12L12 20L4 12Z" /><circle cx="12" cy="12" r="2.6" fill="currentColor"/></svg></div>
+            <span style="font-size: 14px; font-weight:900; color:var(--pink)">MyAllin1</span>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="section-title"><span data-lang="ta">ஈரோட்டுக்கு தேவையான எல்லாமே ஒரே இடத்தில்</span><span data-lang="en" style="display:none">Everything Erode needs, in one place</span></div>
+      <div class="section-sub"><span data-lang="ta">5 வேற வேற ஆப் தேவையில்லை — myallin1 மட்டும் போதும்.</span><span data-lang="en" style="display:none">No more juggling five different apps for five different things.</span></div>
+      
+      <div class="feature-image-container">
+        <img src="services_feature.jpg" alt="Taxi & Food Delivery Services in MyAllin1" loading="lazy">
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="icon-badge" style="background:var(--pink);color:#fff"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18.5" cy="17.5" r="3.5" />
+              <circle cx="5.5" cy="17.5" r="3.5" />
+              <circle cx="15" cy="5" r="1" />
+              <path d="M12 17.5V14l-3-3 4-3 2 3h2" />
+            </svg></div>
+          <h3>பைக் / கார் டாக்சி</h3>
+          <p>ஈரோடு முழுக்க வேகமா, குறைந்த கட்டணத்தில் ரைடு, லைவ் டிராக்கிங்கோட.</p>
+        </div>
+        <div class="card">
+          <div class="icon-badge" style="background:var(--gold);color:#fff"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 2v7c0 1.1.9 2 2 2s2-.9 2-2V2" />
+              <path d="M7 2v20" />
+              <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" />
+            </svg></div>
+          <h3>Food Genie</h3>
+          <p>உங்க ஊர் ஹோட்டல்/ரெஸ்டாரண்ட்ல இருந்து உணவு ஆர்டர், வீட்டு வாசல் வரை.</p>
+        </div>
+        <div class="card">
+          <div class="icon-badge" style="background:var(--green);color:#fff"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8" cy="21" r="1" />
+              <circle cx="19" cy="21" r="1" />
+              <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
+            </svg></div>
+          <h3>மளிகை Delivery</h3>
+          <p>உங்க கிராசரி லிஸ்ட் அனுப்புங்க, அருகில் இருக்கும் கடையில் இருந்து டெலிவரி.</p>
+        </div>
+        <div class="card">
+          <div class="icon-badge" style="background:var(--purple);color:#fff"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="4" width="16" height="11" rx="1.5" />
+              <path d="M2 20h20" />
+              <path d="M9 20v-2h6v2" />
+            </svg></div>
+          <h3>NJ Tech Store</h3>
+          <p>Trusted local sellers கிட்ட இருந்து எலக்ட்ரானிக்ஸ் &amp; gadgets வாங்குங்க.</p>
+        </div>
+        <div class="card">
+          <div class="icon-badge" style="background:#FF3C3C;color:#fff"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+              <path d="M12 8v4" />
+              <path d="M12 16h.01" />
+            </svg></div>
+          <h3>SOS Emergency உதவி</h3>
+          <p>ஒரே tap-ல emergency உதவி, verified identity-ஓட உண்மையான பாதுகாப்பு.</p>
+        </div>
+        <div class="card">
+          <div class="icon-badge" style="background:var(--gold);color:#fff"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="8" width="18" height="4" rx="1" />
+              <path d="M12 8v13" />
+              <path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
+              <path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8Zm9 0a2.5 2.5 0 0 0 0-5C13 3 12 8 12 8Z" />
+            </svg></div>
+          <h3>Rewards &amp; Erode Offers</h3>
+          <p>Coins சம்பாதிங்க, local deals திறக்கலாம், exclusive ஈரோடு offers அனுபவிங்க.</p>
+        </div>
+        <div class="card">
+          <div class="icon-badge" style="background:var(--green);color:#fff"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7l1.5-4h15L21 7" />
+              <path d="M4 7v13h16V7" />
+              <path d="M9 21v-6h6v6" />
+              <path d="M4 7h16" />
+            </svg></div>
+          <h3>Allin1-ல Sell பண்ணுங்க</h3>
+          <p>உங்க கடையை list பண்ணி ஈரோடு முழுக்க customers-ஐ அடையுங்க.</p>
+        </div>
+        <div class="card">
+          <div class="icon-badge" style="background:var(--purple);color:#fff"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="6" width="20" height="12" rx="6" />
+              <line x1="6" y1="12" x2="10" y2="12" />
+              <line x1="8" y1="10" x2="8" y2="14" />
+              <circle cx="15" cy="13" r="1" />
+              <circle cx="18" cy="11" r="1" />
+            </svg></div>
+          <h3>Game Zone</h3>
+          <p>காத்திருக்கும் போது 2048, Memory Match, Whack-a-Mole போன்ற game விளையாடுங்க.</p>
+        </div>
+      </div>
+
+      <div class="how">
+        <h2>எப்படி ஆரம்பிக்கலாம்?</h2>
+        <p class="sub2">Install பண்ண வேண்டாம் — Browser-லேயே ஆப் போல் use பண்ணலாம்.</p>
+        <div class="steps">
+          <div class="step">
+            <div class="num">1</div>
+            <p>மேலே "My Allin1-ஐ திற" பட்டனை tap பண்ணுங்க</p>
+          </div>
+          <div class="step">
+            <div class="num">2</div>
+            <p>உங்க போன் நம்பர் வச்சு ஒரு நிமிடத்தில் Sign up பண்ணுங்க</p>
+          </div>
+          <div class="step">
+            <div class="num">3</div>
+            <p>ரைடு, உணவு, மளிகை — எதுவேணும்னாலும் Order பண்ணுங்க!</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="download-strip-block" style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+        <a class="btn-fire"
+          href="https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-customer.apk">
+          <span class="zap" style="display:flex;align-items:center;"><svg viewBox="0 0 576 512" width="20" height="20"
+              fill="currentColor">
+              <path
+                d="M420.22 84.49 460 15.62a11.16 11.16 0 0 0-4.08-15.34 11.23 11.23 0 0 0-15.42 4.05L400.1 74.05A278.49 278.49 0 0 0 288 51.2a278 278 0 0 0-112.1 22.85l-40.4-69.72a11.12 11.12 0 1 0-19.5 11.29l39.78 68.87a275 275 0 0 0-109 119.5h482.44a275.46 275.46 0 0 0-108.97-119.5zM203.26 153.6a20.48 20.48 0 1 1 20.48-20.48 20.48 20.48 0 0 1-20.48 20.48zm169.48 0a20.48 20.48 0 1 1 20.48-20.48 20.48 20.48 0 0 1-20.48 20.48zM46.72 230.4A46.72 46.72 0 1 0 0 277.12V392a46.72 46.72 0 1 0 93.44 0V277.12a46.72 46.72 0 1 0-46.72-46.72zm482.56 0A46.72 46.72 0 1 0 576 277.12V392a46.72 46.72 0 1 0-93.44 0V277.12a46.72 46.72 0 1 0 46.72-46.72zM128 230.4h320V416a64 64 0 0 1-64 64H192a64 64 0 0 1-64-64zm72.96 249.6h-11.52A46.72 46.72 0 1 0 128 512v-16a16 16 0 0 1 16-16h56.96v-16a46.72 46.72 0 1 0 0-93.44zm174.08 0h11.52A46.72 46.72 0 1 1 448 512v-16a16 16 0 0 0-16-16h-56.96v-16a46.72 46.72 0 1 1 0-93.44z" />
+            </svg></span> Download Myallin1 AI Turbo App
+        </a>
+        <div class="trust-badge-container"
+          style="background-color: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 16px; padding: 18px; margin-top: 8px; width: 100%; max-width: 340px; box-sizing: border-box; box-shadow: 0 4px 12px rgba(0,0,0,0.04);">
+          <div
+            style="display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--green); font-weight: 700; font-size: 1.1rem; margin-bottom: 14px;">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            100% Genuine App
+          </div>
+          <ul
+            style="list-style: none; padding: 0; margin: 0; font-size: 0.95rem; color: #444; line-height: 1.5; font-weight: 500;">
+            <li style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px;">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--purple)" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:2px;">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              </svg>
+              <span>You can scan the app before you install</span>
+            </li>
+            <li style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px;">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--pink)" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:2px;">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <span>AI turbo app only on this site, not in Play Store</span>
+            </li>
+          </ul>
+          <div
+            style="display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(0, 177, 79, 0.1); color: var(--green); padding: 10px 16px; border-radius: 10px; font-weight: 700; font-size: 0.95rem;">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path
+                d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993.0004.5511-.4482.9997-.9993.9997zm-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997zm11.4045-6.02l1.9973-3.4592a.416.416 0 0 0-.1521-.5676.416.416 0 0 0-.5676.1521l-2.022 3.503C15.5492 8.2435 13.8532 7.8504 12 7.8504s-3.5492.3931-5.1371 1.0997L4.841 5.4471a.417.417 0 0 0-.5676-.1521.416.416 0 0 0-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396z" />
+            </svg>
+            Only For Android
+          </div>
+        </div>
+
+      </div>
+
+      <div class="hero-cta-block">
+        <div class="icon-badge" style="background:var(--purple);color:#fff;margin:0 auto 14px"><svg viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="18.5" cy="17.5" r="3.5" />
+            <circle cx="5.5" cy="17.5" r="3.5" />
+            <circle cx="15" cy="5" r="1" />
+            <path d="M12 17.5V14l-3-3 4-3 2 3h2" />
+          </svg></div>
+        <h2>Allin1-ல Hero-வா சேர விரும்புறீங்களா?</h2>
+        <p>உங்க பைக்/கார்-ல ரைடு &amp; டெலிவரி பண்ணி சம்பாதிங்க. இப்பவே Hero-வா register பண்ணுங்க.</p>
+        <a class="btn-purple" href="https://hero-allin1.web.app" target="_blank" rel="noopener">🏍️ Hero-வா Register
+          பண்ணு</a>
+        <a class="download-strip"
+          href="https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-hero.apk">⬇️ Hero App
+          APK download பண்ணு</a>
+      </div>
+    </div>
+
+    <!-- ===================== ENGLISH ===================== -->
+    <div data-lang="en">
+      <section class="hero">
+        <div class="badge">📍 Built for Erode, Tamil Nadu</div>
+        <h1>Rides, food, groceries &amp; help —<br>all in <span>one app</span></h1>
+        <p class="sub">Book a bike-taxi, order food or groceries from local sellers, shop electronics, and get SOS
+          emergency help — all from one app made for your city.</p>
+
+        <a class="cta-main" href="https://my-allin1.web.app" target="_blank" rel="noopener">🚀 Open My Allin1</a>
+        <p class="cta-sub">Opens right in your phone's browser — no install needed, works just like an app.<br><strong
+            style="color:var(--pink); margin-top: 8px; display:inline-flex; align-items:center; gap:6px;"><svg
+              viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+              <line x1="12" y1="18" x2="12.01" y2="18"></line>
+            </svg> Perfect for Budget Phones!</strong></p>
+        <br>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 14px;">
+          <a class="btn-fire"
+            href="https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-customer.apk">
+            <span class="zap" style="display:flex;align-items:center;"><svg viewBox="0 0 576 512" width="20" height="20"
+                fill="currentColor">
+                <path
+                  d="M420.22 84.49 460 15.62a11.16 11.16 0 0 0-4.08-15.34 11.23 11.23 0 0 0-15.42 4.05L400.1 74.05A278.49 278.49 0 0 0 288 51.2a278 278 0 0 0-112.1 22.85l-40.4-69.72a11.12 11.12 0 1 0-19.5 11.29l39.78 68.87a275 275 0 0 0-109 119.5h482.44a275.46 275.46 0 0 0-108.97-119.5zM203.26 153.6a20.48 20.48 0 1 1 20.48-20.48 20.48 20.48 0 0 1-20.48 20.48zm169.48 0a20.48 20.48 0 1 1 20.48-20.48 20.48 20.48 0 0 1-20.48 20.48zM46.72 230.4A46.72 46.72 0 1 0 0 277.12V392a46.72 46.72 0 1 0 93.44 0V277.12a46.72 46.72 0 1 0-46.72-46.72zm482.56 0A46.72 46.72 0 1 0 576 277.12V392a46.72 46.72 0 1 0-93.44 0V277.12a46.72 46.72 0 1 0 46.72-46.72zM128 230.4h320V416a64 64 0 0 1-64 64H192a64 64 0 0 1-64-64zm72.96 249.6h-11.52A46.72 46.72 0 1 0 128 512v-16a16 16 0 0 1 16-16h56.96v-16a46.72 46.72 0 1 0 0-93.44zm174.08 0h11.52A46.72 46.72 0 1 1 448 512v-16a16 16 0 0 0-16-16h-56.96v-16a46.72 46.72 0 1 1 0-93.44z" />
+              </svg></span> Download Myallin1 AI Turbo App
+          </a>
+          <a href="https://my-allin1.web.app" style="color: var(--pink); font-size: 14px; font-weight: 700; text-decoration: none; margin-top: -4px;">🍎 For iPhone / Web Users</a>
+          <div class="trust-badge-container"
+            style="background-color: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 16px; padding: 18px; margin-top: 8px; width: 100%; max-width: 340px; box-sizing: border-box; box-shadow: 0 4px 12px rgba(0,0,0,0.04);">
+            <div
+              style="display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--green); font-weight: 700; font-size: 1.1rem; margin-bottom: 14px;">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+              </svg>
+              100% Genuine App
+            </div>
+            <ul
+              style="list-style: none; padding: 0; margin: 0; font-size: 0.95rem; color: #444; line-height: 1.5; font-weight: 500;">
+              <li style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px;">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--purple)" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:2px;">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg>
+                <span>You can scan the app before you install</span>
+              </li>
+              <li style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px;">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--pink)" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:2px;">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <span>AI turbo app only on this site, not in Play Store</span>
+              </li>
+            </ul>
+            <div
+              style="display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(0, 177, 79, 0.1); color: var(--green); padding: 10px 16px; border-radius: 10px; font-weight: 700; font-size: 0.95rem;">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <path
+                  d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993.0004.5511-.4482.9997-.9993.9997zm-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997zm11.4045-6.02l1.9973-3.4592a.416.416 0 0 0-.1521-.5676.416.416 0 0 0-.5676.1521l-2.022 3.503C15.5492 8.2435 13.8532 7.8504 12 7.8504s-3.5492.3931-5.1371 1.0997L4.841 5.4471a.417.417 0 0 0-.5676-.1521.416.416 0 0 0-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396z" />
+              </svg>
+              Only For Android
+            </div>
+          </div>
+
+        </div>
+      </section>
+      
+      <div class="evision">
+        <h2>Why it matters? Keep Erode's money in Erode.</h2>
+        <p>National apps take a huge 30% commission, draining wealth from our local economy. myallin1 is built differently — zero commission for our local riders, helping our community grow.</p>
+        <div class="evision-stats">
+          <div><strong>0%</strong><span>Commission on Rider &amp; Driver Earnings</span></div>
+          <div><strong>8</strong><span>Services in One App — from Rides to SOS</span></div>
+          <div><strong>₹14,400+ Cr</strong><span>Leaves our economy yearly — we're here to change that</span></div>
+        </div>
+      </div>
+
+      <div class="section-title">Everything Erode needs, in one place</div>
+      <div class="section-sub">No more juggling five different apps for five different things.</div>
+      
+      <div class="feature-image-container">
+        <img src="services_feature.jpg" alt="Taxi & Food Delivery Services in MyAllin1" loading="lazy">
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="icon-badge" style="background:var(--pink);color:#fff"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18.5" cy="17.5" r="3.5" />
+              <circle cx="5.5" cy="17.5" r="3.5" />
+              <circle cx="15" cy="5" r="1" />
+              <path d="M12 17.5V14l-3-3 4-3 2 3h2" />
+            </svg></div>
+          <h3>Bike &amp; Car Taxi</h3>
+          <p>Quick, affordable rides across Erode with live tracking and upfront fares.</p>
+        </div>
+        <div class="card">
+          <div class="icon-badge" style="background:var(--gold);color:#fff"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 2v7c0 1.1.9 2 2 2s2-.9 2-2V2" />
+              <path d="M7 2v20" />
+              <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" />
+            </svg></div>
+          <h3>Food Genie</h3>
+          <p>Order from your favourite local hotels and restaurants, tracked door to door.</p>
+        </div>
+        <div class="card">
+          <div class="icon-badge" style="background:var(--green);color:#fff"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8" cy="21" r="1" />
+              <circle cx="19" cy="21" r="1" />
+              <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
+            </svg></div>
+          <h3>Grocery Delivery</h3>
+          <p>Send your grocery list and get it delivered from nearby local shops.</p>
+        </div>
+        <div class="card">
+          <div class="icon-badge" style="background:var(--purple);color:#fff"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="4" width="16" height="11" rx="1.5" />
+              <path d="M2 20h20" />
+              <path d="M9 20v-2h6v2" />
+            </svg></div>
+          <h3>NJ Tech Store</h3>
+          <p>Shop electronics and gadgets from trusted local sellers.</p>
+        </div>
+        <div class="card">
+          <div class="icon-badge" style="background:#FF3C3C;color:#fff"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+              <path d="M12 8v4" />
+              <path d="M12 16h.01" />
+            </svg></div>
+          <h3>SOS Emergency Help</h3>
+          <p>One-tap emergency assistance with verified identity for real safety.</p>
+        </div>
+        <div class="card">
+          <div class="icon-badge" style="background:var(--gold);color:#fff"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="8" width="18" height="4" rx="1" />
+              <path d="M12 8v13" />
+              <path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
+              <path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8Zm9 0a2.5 2.5 0 0 0 0-5C13 3 12 8 12 8Z" />
+            </svg></div>
+          <h3>Rewards &amp; Erode Offers</h3>
+          <p>Earn coins, unlock local deals, and enjoy exclusive Erode-only offers.</p>
+        </div>
+        <div class="card">
+          <div class="icon-badge" style="background:var(--green);color:#fff"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7l1.5-4h15L21 7" />
+              <path d="M4 7v13h16V7" />
+              <path d="M9 21v-6h6v6" />
+              <path d="M4 7h16" />
+            </svg></div>
+          <h3>Sell on Allin1</h3>
+          <p>Local shop owners can list their store and reach customers across Erode.</p>
+        </div>
+        <div class="card">
+          <div class="icon-badge" style="background:var(--purple);color:#fff"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="6" width="20" height="12" rx="6" />
+              <line x1="6" y1="12" x2="10" y2="12" />
+              <line x1="8" y1="10" x2="8" y2="14" />
+              <circle cx="15" cy="13" r="1" />
+              <circle cx="18" cy="11" r="1" />
+            </svg></div>
+          <h3>Game Zone</h3>
+          <p>Play quick games like 2048, Memory Match, and Whack-a-Mole while you wait.</p>
+        </div>
+      </div>
+
+      <div class="how">
+        <h2>How to get started</h2>
+        <p class="sub2">No install needed — use it right in your browser, just like an app.</p>
+        <div class="steps">
+          <div class="step">
+            <div class="num">1</div>
+            <p>Tap "Open My Allin1" above</p>
+          </div>
+          <div class="step">
+            <div class="num">2</div>
+            <p>Sign up in under a minute with your phone number</p>
+          </div>
+          <div class="step">
+            <div class="num">3</div>
+            <p>Order anything — rides, food, groceries, and more!</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="download-strip-block" style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+        <a class="btn-fire"
+          href="https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-customer.apk">
+          <span class="zap" style="display:flex;align-items:center;"><svg viewBox="0 0 576 512" width="20" height="20"
+              fill="currentColor">
+              <path
+                d="M420.22 84.49 460 15.62a11.16 11.16 0 0 0-4.08-15.34 11.23 11.23 0 0 0-15.42 4.05L400.1 74.05A278.49 278.49 0 0 0 288 51.2a278 278 0 0 0-112.1 22.85l-40.4-69.72a11.12 11.12 0 1 0-19.5 11.29l39.78 68.87a275 275 0 0 0-109 119.5h482.44a275.46 275.46 0 0 0-108.97-119.5zM203.26 153.6a20.48 20.48 0 1 1 20.48-20.48 20.48 20.48 0 0 1-20.48 20.48zm169.48 0a20.48 20.48 0 1 1 20.48-20.48 20.48 20.48 0 0 1-20.48 20.48zM46.72 230.4A46.72 46.72 0 1 0 0 277.12V392a46.72 46.72 0 1 0 93.44 0V277.12a46.72 46.72 0 1 0-46.72-46.72zm482.56 0A46.72 46.72 0 1 0 576 277.12V392a46.72 46.72 0 1 0-93.44 0V277.12a46.72 46.72 0 1 0 46.72-46.72zM128 230.4h320V416a64 64 0 0 1-64 64H192a64 64 0 0 1-64-64zm72.96 249.6h-11.52A46.72 46.72 0 1 0 128 512v-16a16 16 0 0 1 16-16h56.96v-16a46.72 46.72 0 1 0 0-93.44zm174.08 0h11.52A46.72 46.72 0 1 1 448 512v-16a16 16 0 0 0-16-16h-56.96v-16a46.72 46.72 0 1 1 0-93.44z" />
+            </svg></span> Download Myallin1 AI Turbo App
+        </a>
+        <div class="trust-badge-container"
+          style="background-color: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 16px; padding: 18px; margin-top: 8px; width: 100%; max-width: 340px; box-sizing: border-box; box-shadow: 0 4px 12px rgba(0,0,0,0.04);">
+          <div
+            style="display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--green); font-weight: 700; font-size: 1.1rem; margin-bottom: 14px;">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            100% Genuine App
+          </div>
+          <ul
+            style="list-style: none; padding: 0; margin: 0; font-size: 0.95rem; color: #444; line-height: 1.5; font-weight: 500;">
+            <li style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px;">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--purple)" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:2px;">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              </svg>
+              <span>You can scan the app before you install</span>
+            </li>
+            <li style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px;">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--pink)" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:2px;">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <span>AI turbo app only on this site, not in Play Store</span>
+            </li>
+          </ul>
+          <div
+            style="display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(0, 177, 79, 0.1); color: var(--green); padding: 10px 16px; border-radius: 10px; font-weight: 700; font-size: 0.95rem;">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path
+                d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993.0004.5511-.4482.9997-.9993.9997zm-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997zm11.4045-6.02l1.9973-3.4592a.416.416 0 0 0-.1521-.5676.416.416 0 0 0-.5676.1521l-2.022 3.503C15.5492 8.2435 13.8532 7.8504 12 7.8504s-3.5492.3931-5.1371 1.0997L4.841 5.4471a.417.417 0 0 0-.5676-.1521.416.416 0 0 0-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396z" />
+            </svg>
+            Only For Android
+          </div>
+        </div>
+
+      </div>
+
+      <div class="hero-cta-block">
+        <div class="icon-badge" style="background:var(--purple);color:#fff;margin:0 auto 14px"><svg viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="18.5" cy="17.5" r="3.5" />
+            <circle cx="5.5" cy="17.5" r="3.5" />
+            <circle cx="15" cy="5" r="1" />
+            <path d="M12 17.5V14l-3-3 4-3 2 3h2" />
+          </svg></div>
+        <h2>Want to become an Allin1 Hero?</h2>
+        <p>Earn money giving rides and deliveries on your own bike or car. Register as a Hero right now.</p>
+        <a class="btn-purple" href="https://hero-allin1.web.app" target="_blank" rel="noopener">🏍️ Register as a
+          Hero</a>
+        <a class="download-strip"
+          href="https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-hero.apk">⬇️ Download
+          the Hero App (APK)</a>
+      </div>
+    </div>
+
+    <!-- Neural Network Section -->
+    <section class="neural-network-hub">
+      <div class="neural-title">
+        <span data-lang="ta">ஈரோட்டின் 8 சேவைகள், மையத்தில் MyAllin1 🚀</span>
+        <span data-lang="en" style="display:none">8 Services for Erode, MyAllin1 at the Center 🚀</span>
+      </div>
+      <div class="neural-container">
+        
+        <svg class="neural-lines" viewBox="0 0 800 500" preserveAspectRatio="none">
+          <!-- Center is 400,250 -->
+          <!-- Web connections -->
+          <polygon class="web" points="400,50 650,120 750,250 650,380 400,450 150,380 50,250 150,120" fill="none" />
+          
+          <!-- Spokes -->
+          <line x1="400" y1="250" x2="400" y2="50" />
+          <line x1="400" y1="250" x2="650" y2="120" />
+          <line x1="400" y1="250" x2="750" y2="250" />
+          <line x1="400" y1="250" x2="650" y2="380" />
+          <line x1="400" y1="250" x2="400" y2="450" />
+          <line x1="400" y1="250" x2="150" y2="380" />
+          <line x1="400" y1="250" x2="50" y2="250" />
+          <line x1="400" y1="250" x2="150" y2="120" />
+
+          <!-- Animated Neural Particles -->
+          <circle class="neural-pulse" r="5">
+            <animateMotion dur="2s" repeatCount="indefinite" path="M400,250 L400,50" />
+          </circle>
+          <circle class="neural-pulse" r="5">
+            <animateMotion dur="2.5s" repeatCount="indefinite" path="M400,250 L650,120" />
+          </circle>
+          <circle class="neural-pulse" r="5">
+            <animateMotion dur="1.8s" repeatCount="indefinite" path="M400,250 L750,250" />
+          </circle>
+          <circle class="neural-pulse" r="5">
+            <animateMotion dur="2.2s" repeatCount="indefinite" path="M400,250 L650,380" />
+          </circle>
+          <circle class="neural-pulse" r="5">
+            <animateMotion dur="1.9s" repeatCount="indefinite" path="M400,250 L400,450" />
+          </circle>
+          <circle class="neural-pulse" r="5">
+            <animateMotion dur="2.7s" repeatCount="indefinite" path="M400,250 L150,380" />
+          </circle>
+          <circle class="neural-pulse" r="5">
+            <animateMotion dur="1.6s" repeatCount="indefinite" path="M400,250 L50,250" />
+          </circle>
+          <circle class="neural-pulse" r="5">
+            <animateMotion dur="2.3s" repeatCount="indefinite" path="M400,250 L150,120" />
+          </circle>
+        </svg>
+
+        <div class="neural-center-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 12L12 4L20 12L12 20L4 12Z" />
+            <circle cx="12" cy="12" r="2.6" fill="currentColor"/>
+          </svg>
+          <span>MyAllin1</span>
+        </div>
+
+        <!-- 1: Taxi -->
+        <div class="neural-node node-1">
+          <img src="https://images.unsplash.com/photo-1558227097-6a4a15998124?auto=format,compress&w=200&q=80" alt="Taxi" loading="lazy">
+          <span data-lang="ta">டாக்சி & ஆட்டோ</span><span data-lang="en" style="display:none">Taxi & Auto</span>
+        </div>
+        <!-- 2: Food -->
+        <div class="neural-node node-2">
+          <img src="https://images.unsplash.com/photo-1589302168068-964664d93dc0?auto=format,compress&w=200&q=80" alt="Food" loading="lazy">
+          <span data-lang="ta">உணவு ஆர்டர்</span><span data-lang="en" style="display:none">Food Delivery</span>
+        </div>
+        <!-- 3: Grocery -->
+        <div class="neural-node node-3">
+          <img src="https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format,compress&w=200&q=80" alt="Grocery" loading="lazy">
+          <span data-lang="ta">மளிகை</span><span data-lang="en" style="display:none">Fresh Grocery</span>
+        </div>
+        <!-- 4: Store -->
+        <div class="neural-node node-4">
+          <img src="https://images.unsplash.com/photo-1580927752452-89d86da3fa0a?auto=format,compress&w=200&q=80" alt="Store" loading="lazy">
+          <span data-lang="ta">எலக்ட்ரானிக்ஸ்</span><span data-lang="en" style="display:none">Mobiles</span>
+        </div>
+        <!-- 5: SOS -->
+        <div class="neural-node node-5">
+          <img src="https://images.unsplash.com/photo-1584813470613-5b1c1cad3d69?auto=format,compress&w=200&q=80" alt="SOS" loading="lazy">
+          <span data-lang="ta">SOS உதவி</span><span data-lang="en" style="display:none">24/7 SOS</span>
+        </div>
+        <!-- 6: Offers -->
+        <div class="neural-node node-6">
+          <img src="https://images.unsplash.com/photo-1607083206968-13611e3d76db?auto=format,compress&w=200&q=80" alt="Offers" loading="lazy">
+          <span data-lang="ta">ஆஃபர்கள்</span><span data-lang="en" style="display:none">Local Offers</span>
+        </div>
+        <!-- 7: Sell -->
+        <div class="neural-node node-7">
+          <img src="https://images.unsplash.com/photo-1555626906-fcf10d6851b4?auto=format,compress&w=200&q=80" alt="Sell" loading="lazy">
+          <span data-lang="ta">பழைய பொருட்கள்</span><span data-lang="en" style="display:none">Sell Items</span>
+        </div>
+        <!-- 8: Games -->
+        <div class="neural-node node-8">
+          <img src="https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format,compress&w=200&q=80" alt="Games" loading="lazy">
+          <span data-lang="ta">கேம்ஸ்</span><span data-lang="en" style="display:none">Games</span>
+        </div>
+
+      </div>
+    </section>
+
+    <footer>
+      <p data-lang="ta" style="display:block">myallin1 by NJ Tech — ஈரோடிற்காக பெருமையுடன் உருவாக்கப்பட்டது.</p>
+      <p data-lang="en">myallin1 by NJ Tech — proudly built for Erode, Tamil Nadu.</p>
+      <p><a href="https://my-allin1.web.app/privacy.html">Privacy Policy</a> &nbsp;·&nbsp; <a
+          href="https://my-allin1.web.app/terms.html">Terms of Service</a> &nbsp;·&nbsp; <a
+          href="mailto:support@myallin1.com">support@myallin1.com</a></p>
+    </footer>
+  </div>
+
+  <script>
+    function setLang(lang) {
+      document.body.classList.toggle('lang-en', lang === 'en');
+      document.getElementById('btn-ta').classList.toggle('active', lang === 'ta');
+      document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+      try { localStorage.setItem('allin1_landing_lang', lang); } catch (e) { }
+    }
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem('allin1_landing_lang'); } catch (e) { }
+      if (saved === 'en') setLang('en');
+    })();
+
+    // Usage tracking
+    (function () {
+      var PROJECT_ID = 'erode-super-app';
+      var DOC_PATH = 'app_usage_stats/funnel';
+      var COMMIT_URL = 'https://firestore.googleapis.com/v1/projects/' +
+        PROJECT_ID + '/databases/(default)/documents:commit';
+
+      function trackIncrement(fieldName) {
+        var body = {
+          writes: [
+            {
+              update: {
+                name: 'projects/' + PROJECT_ID + '/databases/(default)/documents/' + DOC_PATH,
+                fields: {}
+              },
+              updateMask: { fieldPaths: [] },
+              updateTransforms: [
+                { fieldPath: fieldName, increment: { integerValue: '1' } },
+                { fieldPath: 'updatedAt', setToServerValue: 'REQUEST_TIME' }
+              ]
+            }
+          ]
+        };
+        try {
+          fetch(COMMIT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            keepalive: true
+          }).catch(function () { });
+        } catch (e) { }
+      }
+
+      // Visit counter
+      trackIncrement('promoPageVisits');
+
+      // Affiliate & Campaign Tracking
+      try {
+        var urlParams = new URLSearchParams(window.location.search);
+        var source = urlParams.get('source');
+        var ref = urlParams.get('ref');
+        var rtype = urlParams.get('rtype');
+
+        if (source === 'poster_campaign') {
+          trackIncrement('poster_qr_scans');
+        }
+
+        // Append query params to outbound PWA links
+        if (source || ref || rtype) {
+          document.querySelectorAll('a[href^="https://my-allin1.web.app"], a[href^="https://hero-allin1.web.app"]').forEach(function (link) {
+            try {
+              var outUrl = new URL(link.href);
+              if (source) outUrl.searchParams.set('source', source);
+              if (ref) outUrl.searchParams.set('ref', ref);
+              if (rtype) outUrl.searchParams.set('rtype', rtype);
+              link.href = outUrl.toString();
+            } catch (e) { }
+          });
+        }
+      } catch (e) { }
+
+      // APK download link clicks
+      document.querySelectorAll('a.download-strip').forEach(function (link) {
+        link.addEventListener('click', function () {
+          trackIncrement('download_customer');
+
+          try {
+            var urlParams = new URLSearchParams(window.location.search);
+            var refCode = urlParams.get('ref');
+            var refType = urlParams.get('rtype') || 'customer';
+            if (refCode) {
+              var payload = 'allin1_ref:' + refCode + ':' + refType;
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(payload).catch(function (e) { });
+              } else {
+                var textArea = document.createElement("textarea");
+                textArea.value = payload;
+                textArea.style.position = "fixed";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try { document.execCommand('copy'); } catch (err) { }
+                document.body.removeChild(textArea);
+              }
+            }
+          } catch (e) { }
+        });
+      });
+    })();
+  </script>
+
+</body>
+
+</html>

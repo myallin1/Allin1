@@ -19,6 +19,10 @@
 //
 // Purely additive: a new screen + one new drawer entry in
 // super_admin_home_screen.dart. Nothing else was touched.
+import 'package:flutter_tts/flutter_tts.dart';
+
+import '../../services/chitti/chitti_model_provider.dart';
+import '../../services/chitti/chitti_voice_service.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -95,6 +99,26 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
   String _geminiModel = _kGeminiModels.first;
   String _deepseekModel = _kDeepSeekModels.first;
 
+  /// Which provider CHITTI uses (Aug 28 2026 — Nizam: "admin ketta atha
+  /// chitti agent app kulla udane [use pannanum]").
+  ///
+  /// Distinct from the three model dropdowns above, which pick WHICH
+  /// model within a provider. This picks which provider the assistant
+  /// itself talks to, and is read by ChittiModelProvider.
+  String _chittiModelId = defaultChittiModel.id;
+
+  // ── Voice & Tone (Aug 28 2026) ──────────────────────────────────
+  //
+  // Same gap as Hero and Seller Settings had: the picker existed, but
+  // nothing in THIS app could open it. An admin whose phone's own TTS
+  // settings already show a male voice had no way to tell Chitti to
+  // use it - the heuristic's guess was final.
+  final FlutterTts _voicePreviewTts = FlutterTts();
+  ChittiVoiceTone _voiceTone = ChittiVoiceTone.chitti;
+  String? _pinnedVoice;
+  List<ChittiVoiceOption> _voices = const <ChittiVoiceOption>[];
+  bool _loadingVoices = true;
+
   @override
   void initState() {
     super.initState();
@@ -106,6 +130,8 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
     _groqCtrl.text = prefs.getString(_kGroqKeyPrefsKey) ?? '';
     _geminiCtrl.text = prefs.getString(_kGeminiKeyPrefsKey) ?? '';
     _deepseekCtrl.text = prefs.getString(_kDeepSeekKeyPrefsKey) ?? '';
+    _chittiModelId =
+        prefs.getString(kChittiModelPrefsKey) ?? defaultChittiModel.id;
     final savedGroqModel = prefs.getString(_kGroqModelPrefsKey);
     final savedGeminiModel = prefs.getString(_kGeminiModelPrefsKey);
     final savedDeepSeekModel = prefs.getString(_kDeepSeekModelPrefsKey);
@@ -118,7 +144,20 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
     if (savedDeepSeekModel != null && _kDeepSeekModels.contains(savedDeepSeekModel)) {
       _deepseekModel = savedDeepSeekModel;
     }
-    if (mounted) setState(() => _loading = false);
+    // Admin's own language, same source LocalizationService itself
+    // reads from - so the preview list matches whatever locale Chitti
+    // is actually replying in, not a hardcoded English guess.
+    final locale = _adminVoiceLocale(prefs.getString('customer_language_code'));
+    final voices =
+        await ChittiVoiceService.availableVoices(_voicePreviewTts, locale);
+    if (!mounted) return;
+    setState(() {
+      _voiceTone = ChittiVoiceService.tone;
+      _pinnedVoice = ChittiVoiceService.pinnedVoiceName;
+      _voices = voices;
+      _loadingVoices = false;
+      _loading = false;
+    });
   }
 
   @override
@@ -139,6 +178,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
       if (groq.isEmpty) {
         await prefs.remove(_kGroqKeyPrefsKey);
       } else {
+        await prefs.setString(kChittiModelPrefsKey, _chittiModelId);
         await prefs.setString(_kGroqKeyPrefsKey, groq);
       }
       if (gemini.isEmpty) {
@@ -200,6 +240,114 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
     );
   }
 
+  static String _adminVoiceLocale(String? languageCode) => switch (languageCode) {
+        'ta' || 'tg' => 'ta-IN',
+        _ => 'en-IN',
+      };
+
+  Future<void> _setVoiceTone(ChittiVoiceTone tone) async {
+    setState(() => _voiceTone = tone);
+    await ChittiVoiceService.setTone(tone);
+  }
+
+  Future<void> _pinVoice(String? name) async {
+    setState(() => _pinnedVoice = name);
+    final match = _voices.where((v) => v.name == name).firstOrNull;
+    await ChittiVoiceService.pinVoice(name: name, locale: match?.locale);
+  }
+
+  Widget _buildChittiVoiceSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Chitti's Voice",
+          style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          "If your phone's own TTS settings already have a male voice, "
+          "pick it below by name rather than relying on Chitti to guess "
+          "it from the raw voice list.",
+          style: GoogleFonts.outfit(color: _muted, fontSize: 11.5, height: 1.35),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          children: [
+            for (final t in ChittiVoiceTone.values)
+              ChoiceChip(
+                selected: _voiceTone == t,
+                label: Text(
+                  t.name,
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _voiceTone == t ? Colors.white : _text,
+                  ),
+                ),
+                selectedColor: _red,
+                backgroundColor: _bg,
+                onSelected: (_) => _setVoiceTone(t),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (_loadingVoices)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: LinearProgressIndicator(minHeight: 2),
+          )
+        else if (_voices.isEmpty)
+          Text(
+            'No voices are installed for this language on this device. '
+            'Chitti will still speak using the system default, shaped to '
+            'the tone above.',
+            style: GoogleFonts.outfit(color: _muted, fontSize: 11.5, height: 1.4),
+          )
+        else
+          DropdownButtonFormField<String>(
+            initialValue:
+                _voices.any((v) => v.name == _pinnedVoice) ? _pinnedVoice : null,
+            isExpanded: true,
+            dropdownColor: _card,
+            style: GoogleFonts.outfit(fontSize: 13, color: _text),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: _bg,
+              prefixIcon: const Icon(Icons.graphic_eq_rounded, color: _red),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            hint: Text(
+              'Auto (pick a male voice for me)',
+              style: GoogleFonts.outfit(color: _muted, fontSize: 13),
+            ),
+            items: [
+              DropdownMenuItem<String>(
+                child: Text(
+                  'Auto (pick a male voice for me)',
+                  style: GoogleFonts.outfit(fontSize: 13, color: _text),
+                ),
+              ),
+              for (final voice in _voices)
+                DropdownMenuItem<String>(
+                  value: voice.name,
+                  child: Text(
+                    voice.label,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(fontSize: 13, color: _text),
+                  ),
+                ),
+            ],
+            onChanged: _pinVoice,
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -237,6 +385,54 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 20),
+                    // Which provider CHITTI itself uses. Placed above
+                    // the keys because it is the choice the CTO makes
+                    // often; the keys are pasted once and forgotten.
+                    Text(
+                      "Chitti's brain",
+                      style: GoogleFonts.outfit(
+                        color: _text,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Which provider the Chitti assistant talks to. If its '
+                      'key is missing or revoked, Chitti falls back to '
+                      'whichever one is configured rather than going dead.',
+                      style: GoogleFonts.outfit(
+                        color: _muted,
+                        fontSize: 11.5,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        for (final m in kChittiModels)
+                          ChoiceChip(
+                            selected: _chittiModelId == m.id,
+                            label: Text(
+                              m.label,
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _chittiModelId == m.id
+                                    ? Colors.white
+                                    : _text,
+                              ),
+                            ),
+                            selectedColor: _red,
+                            backgroundColor: _bg,
+                            onSelected: (_) =>
+                                setState(() => _chittiModelId = m.id),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    _buildChittiVoiceSection(),
                     const SizedBox(height: 20),
                     Text('Groq API Key', style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 8),

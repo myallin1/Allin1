@@ -4,7 +4,9 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -29,6 +31,91 @@ import 'services/seller_alert_notification_service.dart';
 import 'widgets/branded_loading_screen.dart';
 import 'widgets/migration_notice_overlay.dart';
 import 'services/guru_overlay_service.dart';
+
+// NEW (Issue 2 fix — "seller app not receiving any order notification").
+// Zero-cost infra constraint: no Cloud Functions / Blaze plan, so this is
+// NOT an FCM push. Reuses the EXACT SAME pattern main_hero.dart already
+// runs in production for ride/service pings — a persistent RTDB
+// `onChildAdded` listener attached at app boot (not scoped to a single
+// screen, so it survives navigation) that fires a loud local notification
+// via flutter_local_notifications. Same tradeoff hero already accepts:
+// this only reaches a seller whose app process is still alive
+// (foreground or backgrounded-but-not-killed, kept alive by
+// SellerForegroundService) — there is no way to wake a fully killed app
+// without a server push, which this project deliberately does not run.
+//
+// ServiceRequestService.createServiceRequest() writes the RTDB node this
+// listens on (`seller_pings/{sellerId}/{requestId}`) — see that file for
+// the write side and the 1GB-budget cleanup story.
+StreamSubscription<User?>? _sellerPingAuthSub;
+StreamSubscription<DatabaseEvent>? _sellerPingSub;
+
+void _initSellerPingListener() {
+  _sellerPingAuthSub?.cancel();
+  _sellerPingAuthSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+    _sellerPingSub?.cancel();
+    if (user == null) {
+      debugPrint('[SellerPing] User logged out — stopping listener');
+      return;
+    }
+
+    final uid = user.uid;
+    debugPrint('[SellerPing] Attaching global seller_pings/$uid listener');
+
+    _sellerPingSub = FirebaseDatabase.instance
+        .ref('seller_pings/$uid')
+        .onChildAdded
+        .listen((event) async {
+      final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
+      final requestId = event.snapshot.key ?? '';
+      if (pingData == null || requestId.isEmpty) return;
+
+      final nodeRef = FirebaseDatabase.instance.ref('seller_pings/$uid/$requestId');
+
+      // 1GB RTDB budget (per Nizam/CTO's zero-cost constraint): a ping is
+      // a wake-up trigger, not the order record itself (the seller's
+      // order list is Firestore `service_requests`, already cached via
+      // HiveCache in seller_dashboard_screen.dart) — so it is always safe
+      // to delete it the moment it's been read, whether that's because
+      // it fired a notification below or because it's stale. Nothing
+      // else in the app depends on this node continuing to exist.
+      final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
+      if (pingExpiresAt != null &&
+          DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
+        debugPrint('[SellerPing] Expired ping — removing: $requestId');
+        await nodeRef.remove();
+        return;
+      }
+
+      debugPrint('[SellerPing] ✅ New order ping received: $requestId');
+
+      if (!kIsWeb) {
+        try {
+          // The ping payload already carries everything needed to show
+          // the alert (customerName/itemsSummary written at order-creation
+          // time — see ServiceRequestService.createServiceRequest) so this
+          // never needs an extra Firestore read just to notify.
+          final customerName = pingData['customerName'] as String? ?? 'A customer';
+          final itemsSummary = pingData['itemsSummary'] as String? ?? '';
+          await SellerAlertNotificationService.showForegroundAlert(
+            title: '🛎️ New Order Received!',
+            body: itemsSummary.isNotEmpty
+                ? '$customerName: $itemsSummary'
+                : '$customerName placed a new order — open the app to accept and pack.',
+            payloadId: 'order_$requestId',
+          );
+          debugPrint('[SellerPing] 🔔 Notification fired for: $requestId');
+        } catch (e) {
+          debugPrint('[SellerPing] Notification error: $e');
+        }
+      }
+
+      await nodeRef.remove();
+    }, onError: (Object e) {
+      debugPrint('[SellerPing] RTDB listener error: $e');
+    });
+  });
+}
 
 // FIX (Aug 10 2026 — Nizam's "video every launch is too slow / disturbs
 // repeat users" report, same pattern as main_customer.dart/main_hero.dart):
@@ -244,6 +331,15 @@ void main() async {
         );
       }
       DbUsageTracker.instance.init('seller');
+
+      // NEW (Issue 2 fix — "seller app not receiving any order
+      // notification"): attaches the global seller_pings/{uid} RTDB
+      // listener the moment a seller is signed in (fresh login or a
+      // warm session restored from disk) — same zero-cost RTDB pattern
+      // main_hero.dart already runs for ride/service pings, no Cloud
+      // Functions involved. See _initSellerPingListener above.
+      _initSellerPingListener();
+
       // NOTE (boot-flicker audit, per Nizam's request to mirror the fix
       // across all 4 apps): unlike main_customer.dart/main_hero.dart/
       // main_admin.dart, SellerApp's root route goes straight to

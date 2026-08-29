@@ -20,6 +20,7 @@ import '../config/api_config.dart';
 import '../services/hive_cache.dart';
 import '../services/map_service.dart';
 import '../services/ola_maps_provider.dart';
+import 'cached_tile_provider.dart';
 
 // ── Erode Default Coordinates ──
 const LatLng kErodeCenter = LatLng(11.3410, 77.7171);
@@ -895,7 +896,13 @@ class _DynamicTileProvider extends TileProvider {
       debugPrint(
         '[Allin1MapWidget] Loading tile provider=${mapService.currentProvider.name} url=$url',
       );
-      return NetworkImage(url, headers: _platformTileHeaders);
+      // Aug 28 2026 (offline-first maps): was a bare NetworkImage, i.e.
+      // in-memory only, so every cold start re-downloaded every tile and
+      // the map was blank with no network. Now persisted to disk on
+      // native; on web the service worker's map-tile-cache-v1 does the
+      // same job. See cached_tile_provider.dart for why the platforms
+      // differ.
+      return CachedTileProvider.imageProviderFor(url, _platformTileHeaders);
     } catch (e) {
       debugPrint('[Allin1MapWidget] Tile URL generation failed: $e');
       mapService.markFailure();

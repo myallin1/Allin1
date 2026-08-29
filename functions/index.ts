@@ -25,3 +25,9 @@ export { notifyHeroOnServicePing } from './notifyHeroOnServicePing';
 // booking, unlike the deprecated targeted_hero_id onUpdate path).
 export { notifyAdminOnNewRide } from './notifyAdminOnNewRide';
 export { notifyAdminOnNewServiceRequest } from './notifyAdminOnNewServiceRequest';
+
+// NOTE: seller order alerts (Issue 2 fix) deliberately do NOT use a
+// Cloud Function — zero-cost infra constraint (no Blaze plan). See
+// lib/main_seller.dart's _initSellerPingListener and
+// ServiceRequestService.createServiceRequest's seller_pings/ RTDB write
+// for the client-side-only replacement.

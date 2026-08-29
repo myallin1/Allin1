@@ -99,7 +99,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         ),
         title: Text(
           'Notifications',
-          style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w600),
+          style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: kText),
         ),
         actions: [
           TextButton(

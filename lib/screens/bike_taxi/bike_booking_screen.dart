@@ -18,11 +18,15 @@ import '../../config/fare_rates.dart';
 import '../../config/ride_catalog.dart';
 import '../../models/ride_model.dart';
 // GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../../app_navigator.dart' show chittiRouteObserver;
 import '../../services/auth_prompt_service.dart';
+import '../../services/chitti_memory_service.dart';
 // Phone lookups consolidated here (Aug 11 2026) — single source of truth.
 import '../../services/auth_service.dart';
 // INSTANT-SEED (Aug 11 2026): remembers the last confirmed pickup.
 import '../../services/pickup_memory_service.dart';
+import '../../services/theme_service.dart';
+import '../../widgets/cached_cloud_image.dart';
 // INSTANT-SEED: the app's existing drag-a-pin picker, reused for the
 // manual pickup path instead of adding tap plumbing to the shared map.
 import '../location_picker_screen.dart';
@@ -41,6 +45,7 @@ import '../../widgets/vehicle_selection_bottom_sheet.dart';
 import '../payment_screen.dart';
 import 'ride_search_screen.dart';
 import 'ride_tracking_screen.dart';
+import '../../widgets/cached_tile_provider.dart';
 
 // Approximate Erode road paths aligned to major corridors such as
 // Brough Road, EVN Road, and Perundurai Road for ambient traffic.
@@ -219,7 +224,7 @@ class BikeBookingScreen extends StatefulWidget {
 }
 
 class _BikeBookingScreenState extends State<BikeBookingScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, RouteAware {
   static const List<String> _restorableCustomerRideStatuses = <String>[
     'searching',
     'assigned',
@@ -309,7 +314,14 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // NEW (Aug 25 2026 — Super Chitti Phase 1, Step 1: Passive Screen
+    // Awareness). Chitti reads this via ChittiMemoryService's system
+    // prompt injection so a vague command like "book it for me" while
+    // sitting here resolves to a ride, not food or groceries.
+    ChittiMemoryService.instance.setCurrentScreen('Bike Taxi booking (Taxi Dashboard)');
     _mapService.initialize();
+    // (didChangeDependencies below subscribes to chittiRouteObserver for
+    // the didPopNext() re-registration — see its doc comment.)
     // Fare numbers are hardcoded (lib/config/fare_rates.dart) per
     // Nizam's MVP decision — no Firestore read needed here anymore.
     // _fares is populated directly from that single source of truth
@@ -352,6 +364,24 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       unawaited(_hydrateDummyTrafficRoutes());
       _refreshHeroMarkers();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic>) {
+      chittiRouteObserver.subscribe(this, route);
+    }
+  }
+
+  // FIX (Aug 25 2026 — "Screen Forgetting Sickness"): re-registers the
+  // label when the user navigates BACK to this screen after pushing
+  // something on top of it (e.g. RideTrackingScreen) — see
+  // chitti_screen_tag.dart's header for the full explanation.
+  @override
+  void didPopNext() {
+    ChittiMemoryService.instance.setCurrentScreen('Bike Taxi booking (Taxi Dashboard)');
   }
 
   @override
@@ -941,6 +971,13 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
 
   @override
   void dispose() {
+    // Only clear if nothing else already overwrote it (e.g. a screen
+    // pushed on top of this one, which tags itself on its own
+    // initState) — best-effort, matches ChittiScreenTag's own note.
+    chittiRouteObserver.unsubscribe(this);
+    if (ChittiMemoryService.instance.currentScreen == 'Bike Taxi booking (Taxi Dashboard)') {
+      ChittiMemoryService.instance.setCurrentScreen(null);
+    }
     MapSimulationService.instance.removeListener(_onSimulationChanged);
     WidgetsBinding.instance.removeObserver(this);
     _nearbyCaptainsSub?.cancel();
@@ -2855,15 +2892,68 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                 SizedBox(
                   width: 34,
                   height: 34,
-                  child: Image.asset(
-                    assetPath,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => Icon(
-                      fallbackIcon,
-                      color: _accentOrange,
-                      size: 30,
-                    ),
-                  ),
+                  child: Builder(builder: (context) {
+                    // Same taxi pink slot mapping as the Home dashboard
+                    // and the confirm-ride sheet (vehicle_selection_
+                    // bottom_sheet.dart) — bike=1, auto=2, cab=3,
+                    // parcel=4, mini_truck/lorry=5. emergency_manpower
+                    // has no pink asset yet.
+                    const pinkSlots = {
+                      'bike': 1, 'auto': 2, 'cab': 3, 'parcel': 4,
+                      'mini_truck': 5, 'lorry': 5,
+                    };
+                    // Photo Realistic theme — covers 'emergency_manpower'
+                    // too, which has no pink asset yet, since a photo
+                    // needs no bespoke asset production.
+                    const photoUrls = {
+                      'bike': 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=200&q=80',
+                      'auto': 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=200&q=80',
+                      'cab': 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=200&q=80',
+                      'parcel': 'https://images.unsplash.com/photo-1595246140625-573b715d11dc?w=200&q=80',
+                      'mini_truck': 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=200&q=80',
+                      'lorry': 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=200&q=80',
+                      'emergency_manpower': 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=200&q=80',
+                    };
+                    final iconTheme = context.watch<ThemeService>().iconThemeKey;
+                    final photoUrl = photoUrls[categoryKey];
+                    if (iconTheme == 'photo_realistic' && photoUrl != null) {
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: CachedCloudImage(
+                          photoUrl,
+                          fit: BoxFit.cover,
+                          cacheWidth: 136,
+                          errorWidget: Image.asset(
+                            assetPath,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => Icon(fallbackIcon, color: _accentOrange, size: 30),
+                          ),
+                        ),
+                      );
+                    }
+                    final pinkSlot = pinkSlots[categoryKey];
+                    final isPink = pinkSlot != null && iconTheme == 'pink_white_3d';
+                    if (isPink) {
+                      return Image.asset(
+                        'assets/images/pink_icons/taxi_${pinkSlot}_a.webp',
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => Image.asset(
+                          assetPath,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => Icon(fallbackIcon, color: _accentOrange, size: 30),
+                        ),
+                      );
+                    }
+                    return Image.asset(
+                      assetPath,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => Icon(
+                        fallbackIcon,
+                        color: _accentOrange,
+                        size: 30,
+                      ),
+                    );
+                  }),
                 ),
                 const SizedBox(height: 4),
                 AnimatedContainer(
@@ -3191,6 +3281,12 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                                   'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
                               subdomains: const ['a', 'b', 'c', 'd'],
                               userAgentPackageName: 'com.allin1.superapp',
+                              // Offline-first tiles (Aug 28 2026) — see
+                              // cached_tile_provider.dart. Without this the
+                              // default provider is memory-only, so this map
+                              // re-downloaded every tile on every cold start
+                              // and was blank with no network.
+                              tileProvider: CachedTileProvider(),
                             ),
                           ],
                         ),

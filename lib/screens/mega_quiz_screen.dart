@@ -382,8 +382,9 @@ class _MegaQuizScreenState extends State<MegaQuizScreen> {
         title: Text(
           'Mega Quiz',
           style: GoogleFonts.outfit(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
             color: Colors.white,
-            fontWeight: FontWeight.w900,
           ),
         ),
       ),

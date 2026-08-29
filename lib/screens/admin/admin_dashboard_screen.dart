@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/chitti/chitti_enquiry_service.dart';
 import '../../services/app_minimizer_service.dart';
 import '../../widgets/native_update_button.dart';
 import '../../services/db_usage_tracker.dart';
@@ -26,6 +27,7 @@ import 'admin_hero_dispatch_screen.dart';
 import 'admin_new_orders_screen.dart';
 import 'admin_ride_tracking_screen.dart';
 import 'admin_seller_approval_screen.dart';
+import 'chitti_enquiries_screen.dart';
 import 'ads_management_screen.dart';
 import 'approved_heroes_screen.dart';
 import 'commission_settings_screen.dart';
@@ -109,6 +111,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   // Same caching reasoning — feeds the new "Seller Approvals" badge in
   // the nav sheet (seller approval gate, per Nizam/CTO's request).
   late final Stream<QuerySnapshot> _pendingSellerApprovalsStream;
+  late final Stream<List<ChittiEnquiry>> _openEnquiriesStream;
 
   // Same caching reasoning as above — feeds the "New Orders" bottom-nav
   // badge, which (like the AppBar) is always mounted regardless of
@@ -176,6 +179,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         .orderBy('createdAt', descending: true)
         .limit(100)
         .snapshots();
+    // Built once. See _MoreSheet.openEnquiriesStream.
+    _openEnquiriesStream = ChittiEnquiryService.watchOpen();
     _pendingSellerApprovalsStream = FirebaseFirestore.instance
         .collection('sellers')
         .where('status', isEqualTo: 'pending')
@@ -906,6 +911,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       builder: (_) => _MoreSheet(
         pendingHeroApprovalsStream: _pendingHeroApprovalsStream,
         pendingSellerApprovalsStream: _pendingSellerApprovalsStream,
+        openEnquiriesStream: _openEnquiriesStream,
         onTopUp: () => _showTopUpDialog(context),
         onDownloadApp: _downloadAdminApp,
       ),
@@ -1826,12 +1832,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 class _MoreSheet extends StatelessWidget {
   final Stream<QuerySnapshot> pendingHeroApprovalsStream;
   final Stream<QuerySnapshot> pendingSellerApprovalsStream;
+  /// Built once by the parent, not per rebuild: re-attaching a
+  /// Firestore listener re-bills its whole result set.
+  final Stream<List<ChittiEnquiry>> openEnquiriesStream;
   final VoidCallback onTopUp;
   final VoidCallback onDownloadApp;
 
   const _MoreSheet({
     required this.pendingHeroApprovalsStream,
     required this.pendingSellerApprovalsStream,
+    required this.openEnquiriesStream,
     required this.onTopUp,
     required this.onDownloadApp,
   });
@@ -1940,6 +1950,37 @@ class _MoreSheet extends StatelessWidget {
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const AdminSellerApprovalScreen()));
+              },
+            ),
+            _sheetTile(
+              context,
+              icon: Icons.forum_outlined,
+              iconColor: _teal,
+              // Reachable without Chitti on purpose. These are leads
+              // with a phone number and a shelf life — a rate question
+              // answered tomorrow has already been answered by
+              // somebody else's shop — so they must not depend on
+              // anyone thinking to ask the assistant.
+              label: 'Customer Enquiries',
+              trailing: StreamBuilder<List<ChittiEnquiry>>(
+                stream: openEnquiriesStream,
+                builder: (context, snap) {
+                  final count = snap.data?.length ?? 0;
+                  if (count == 0) return const SizedBox.shrink();
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: _red,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(count > 9 ? '9+' : '$count',
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),),
+                  );
+                },
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const ChittiEnquiriesScreen()));
               },
             ),
             const SizedBox(height: 16),

@@ -82,7 +82,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         backgroundColor: kSurface,
         title: Text(
           'Admin Panel',
-          style: GoogleFonts.outfit(color: kText),
+          style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: kText),
         ),
         centerTitle: true,
         actions: [

@@ -207,6 +207,33 @@ class ChittiOverlayService with WidgetsBindingObserver {
 
   void setMood(ChittiMood m) => _mood.value = m;
   void setCaption(String? c) => _caption.value = c;
+
+  // NEW (Aug 25 2026 — "Priority 2: Proactive Nudges"). The ONE way an
+  // unprompted message reaches the customer. Callers MUST have already
+  // passed ChittiNudgeService.tryFire() — this method only owns HOW a
+  // permitted nudge is delivered, not WHETHER it's allowed to fire at
+  // all (that split mirrors the rest of this codebase's "code enforces
+  // the safety rule, the caller just asks" pattern used for the
+  // create_service_request gate elsewhere).
+  //
+  // Deliberately passive, same reasoning as completeService()'s dance:
+  // a caption bubble beside the companion, auto-clearing itself — never
+  // a dialog, snackbar, or auto-opened chat panel. The customer can
+  // ignore it with zero friction; if they want to act on it, tapping
+  // the companion opens the real chat where they can just say "yes".
+  //
+  // No-ops when the companion isn't showing at all (web, or
+  // hero/seller/admin, which never call show()) — there is nothing to
+  // caption if nobody is on screen to see it.
+  Future<void> showNudge(String text) async {
+    if (!isShowing) return;
+    wake();
+    _caption.value = text;
+    await Future<void>.delayed(const Duration(seconds: 6));
+    // Only clear if nothing else (another mood/caption change) has
+    // already replaced this exact nudge in the meantime.
+    if (_caption.value == text) _caption.value = null;
+  }
 }
 
 /// The draggable, animated layer itself.

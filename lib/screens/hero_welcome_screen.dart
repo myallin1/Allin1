@@ -21,6 +21,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../services/theme_service.dart';
+import '../widgets/tutorial_videos_section.dart';
 import 'bike_taxi/hero_dashboard_shell.dart';
 
 class HeroWelcomeScreen extends StatefulWidget {
@@ -118,7 +119,20 @@ class _HeroWelcomeScreenState extends State<HeroWelcomeScreen> {
                   textAlign: TextAlign.center,
                   style: GoogleFonts.outfit(fontSize: 14.5, color: muted, height: 1.5),
                 ).animate().fadeIn(delay: 500.ms, duration: 400.ms).slideY(begin: 0.2, end: 0),
-                const SizedBox(height: 36),
+                const SizedBox(height: 28),
+
+                // Approved-hero tutorials (Aug 29 2026). This screen is
+                // shown exactly once, at the moment a hero is approved
+                // and about to open the dashboard for the first time —
+                // the single highest-attention point in their whole
+                // lifecycle, and the right place for "how to go online
+                // and take your first job". Invisible until Nizam adds
+                // the videos; see tutorial_videos_section.dart.
+                const TutorialVideosSection(
+                  audience: TutorialAudience.hero,
+                  heading: 'Watch before you start',
+                ),
+                const SizedBox(height: 28),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(

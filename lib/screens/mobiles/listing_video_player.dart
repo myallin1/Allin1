@@ -21,10 +21,13 @@
 // thumbnail endpoint, cached like any other image).
 // ================================================================
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
+import '../../services/video_warmup_service.dart';
 import '../../widgets/premium_theme.dart';
 
 // ================================================================
@@ -77,35 +80,117 @@ class _PremiumVideoSheet extends StatefulWidget {
 
 class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
   late final YoutubePlayerController _controller;
+  StreamSubscription<YoutubePlayerValue>? _stateSub;
+
+  /// Whether [_controller] belongs to VideoWarmupService. A borrowed
+  /// player is handed back rather than closed — that is what makes the
+  /// second open instant.
+  bool _borrowedWarmController = false;
+
+  /// Whether a real video frame is on screen yet. Until it is, the
+  /// poster stays up — see the note on the overlay in build().
+  bool _showingVideo = false;
 
   @override
   void initState() {
     super.initState();
     // Safe to build eagerly HERE — this State only exists once the
     // customer has already tapped to open the modal.
-    _controller = YoutubePlayerController.fromVideoId(
-      videoId: widget.videoId,
-      autoPlay: true,
-      params: const YoutubePlayerParams(
-        showControls: true,
-        showFullscreenButton: true,
-        // Keeps end-screen suggestions within the same channel where
-        // possible — we don't want a competitor's shop suggested at the
-        // end of our seller's clip.
-        strictRelatedVideos: true,
-      ),
-    );
+    //
+    // FIX (Aug 28 2026 — Nizam: "video play aanalum buffer agi audio
+    // mattum than kekuthu, video romba late ah varuthu". Seen on BOTH
+    // the APK and the PWA, which is what points at the cause.)
+    //
+    // autoPlay was true. That starts playback at the exact moment the
+    // modal is animating in and the player's platform view is still
+    // being attached and sized. YouTube's audio track needs no surface
+    // and begins immediately; the video needs one, does not have it
+    // yet, and arrives late. Same story on Android (WebView surface
+    // still attaching) and on web (a CanvasKit platform view mid-
+    // composite) — which is why it showed up on both.
+    //
+    // So: create it PAUSED, and start only once the player itself says
+    // it is ready. A few hundred milliseconds later, but it starts with
+    // picture and sound together, which is what "smooth" means here.
+    // A player warmed while the customer was browsing, if this is the
+    // video that was warmed. Reusing it skips the two slowest parts of
+    // a cold start — creating the WebView and fetching YouTube's player
+    // JavaScript — so playback begins almost at once. See
+    // video_warmup_service.dart.
+    final warm = VideoWarmupService.instance.take(widget.videoId);
+    _borrowedWarmController = warm != null;
+
+    _controller = warm ??
+        YoutubePlayerController.fromVideoId(
+          videoId: widget.videoId,
+          // Explicit even though false is the default: this being false
+          // is the fix, and a future "tidy up redundant args" pass must
+          // not silently drop it.
+          // ignore: avoid_redundant_argument_values
+          autoPlay: false,
+          params: const YoutubePlayerParams(
+            showFullscreenButton: true,
+            // Keeps end-screen suggestions within the same channel
+            // where possible — we don't want a competitor's shop
+            // suggested at the end of our seller's clip.
+            strictRelatedVideos: true,
+            // Off: captions cost extra work at start-up and arrive in
+            // the wrong language for most of this audience anyway.
+            // Viewers who want them can still turn them on.
+            enableCaption: false,
+          ),
+        );
+
+    _stateSub = _controller.listen((value) {
+      if (!mounted) return;
+      // `playing` is the first state that guarantees a decoded frame is
+      // actually on screen — `unStarted`/`cued` only mean the iframe
+      // has loaded.
+      final playing = value.playerState == PlayerState.playing;
+      if (playing && !_showingVideo) {
+        setState(() => _showingVideo = true);
+      }
+    });
+
+    // One frame after the modal has settled, not during its entrance
+    // animation. Starting mid-animation is the thing being fixed.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // A warmed player is already loaded, so it only needs the modal's
+      // entrance to settle. A cold one also needs the iframe up.
+      await Future<void>.delayed(
+        Duration(milliseconds: _borrowedWarmController ? 120 : 350),
+      );
+      if (!mounted) return;
+      try {
+        await _controller.playVideo();
+      } catch (e) {
+        // A failed autostart is not fatal — the customer still has the
+        // play button, and the poster below stays up until it works.
+        debugPrint('[PremiumVideoSheet] autostart failed: $e');
+      }
+    });
   }
 
   @override
   void dispose() {
-    _controller.close();
+    unawaited(_stateSub?.cancel());
+    // release(), not close(): a borrowed player is paused and kept so
+    // reopening the same video costs nothing. A player we built
+    // ourselves is closed by release() on our behalf.
+    VideoWarmupService.instance.release(_controller);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return PremiumModalScrim(
+    // Plain dark scrim, NOT PremiumModalScrim's BackdropFilter blur.
+    // Flutter Web renders the YouTube player as a real DOM iframe
+    // (a platform view), and platform views do not composite correctly
+    // under a BackdropFilter — the blur sampling has nothing to draw
+    // over, so the iframe (and anything on it, like the play button)
+    // simply fails to render. Same visual weight (black scrim), no blur.
+    return Container(
+      color: Colors.black.withValues(alpha: 0.6),
       child: SafeArea(
         top: false,
         child: Padding(
@@ -123,20 +208,71 @@ class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
                 ),
               ),
               const SizedBox(height: 14),
+              // FIX (same Aug 28 pass, the web half).
+              //
+              // The player used to sit INSIDE this ClipRRect. On web it
+              // is a platform view — a real DOM iframe — and this app
+              // renders with CanvasKit, where a clip ancestor forces the
+              // view into its own composited layer. That is the same
+              // family of problem this file already documents for
+              // BackdropFilter a few lines below.
+              //
+              // The player now sits outside the clip with its own square
+              // top corners, and only the info card beneath it is
+              // rounded. Slightly different corners, a video that
+              // actually appears.
+              Container(
+                color: kPremiumWhite,
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      YoutubePlayer(
+                        controller: _controller,
+                        aspectRatio: 16 / 9,
+                      ),
+                      // POSTER. Covers the player until a real frame is
+                      // playing, so the wait reads as "loading" rather
+                      // than "the sound works but the picture is
+                      // broken" — which is exactly how the bug was
+                      // described. IgnorePointer so the player's own
+                      // controls stay reachable underneath.
+                      if (!_showingVideo)
+                        IgnorePointer(
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              VideoThumbnail(videoId: widget.videoId),
+                              Container(
+                                color: Colors.black.withValues(alpha: 0.35),
+                              ),
+                              const Center(
+                                child: SizedBox(
+                                  width: 30,
+                                  height: 30,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
               ClipRRect(
-                borderRadius: BorderRadius.circular(kRadiusLg),
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(kRadiusLg),
+                ),
                 child: Container(
                   color: kPremiumWhite,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      AspectRatio(
-                        aspectRatio: 16 / 9,
-                        child: YoutubePlayer(
-                          controller: _controller,
-                          aspectRatio: 16 / 9,
-                        ),
-                      ),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(18, 14, 12, 16),
                         child: Row(
@@ -164,7 +300,32 @@ class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
                                 ],
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 4),
+                            // Reels-style fullscreen (Aug 29 2026 — Nizam:
+                            // "youtube la reels ooduramari full screen la
+                            // play pannamudiyuma"). The package already
+                            // supports this — enterFullScreen() expands
+                            // the player over the whole screen via its own
+                            // overlay, no device rotation required — but
+                            // the only way to reach it before this was a
+                            // tiny icon inside YouTube's own in-video
+                            // controls, easy to miss on a phone screen.
+                            // This makes the same action an obvious tap.
+                            IconButton(
+                              tooltip: 'Fullscreen',
+                              onPressed: () =>
+                                  _controller.enterFullScreen(lock: false),
+                              icon: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: kPremiumHairline,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.fullscreen_rounded,
+                                    size: 18, color: kPremiumInk),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
                             IconButton(
                               tooltip: 'Close',
                               onPressed: () => Navigator.maybePop(context),

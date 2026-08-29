@@ -130,9 +130,9 @@ class _NjTechServiceScreenState extends State<NjTechServiceScreen> {
         title: Text(
           'NJ Tech Services',
           style: GoogleFonts.outfit(
-            color: _njWhite,
+            fontSize: 18,
             fontWeight: FontWeight.w800,
-            fontSize: 22,
+            color: _njWhite,
           ),
         ),
       ),

@@ -639,9 +639,9 @@ class _PaymentScreenState extends State<PaymentScreen>
         title: Text(
           'Paytm Soundbox Bill',
           style: GoogleFonts.outfit(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
             color: Colors.white,
-            fontWeight: FontWeight.w700,
-            fontSize: 16,
           ),
         ),
         bottom: PreferredSize(

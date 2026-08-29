@@ -16,6 +16,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../services/localization_service.dart';
+import '../widgets/chitti_screen_tag.dart';
 import 'custom_food_order_screen.dart';
 import 'partner_shop_order_screen.dart';
 
@@ -31,7 +32,9 @@ class FoodHubScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = context.watch<LocalizationService>().t;
-    return Scaffold(
+    return ChittiScreenTag(
+      label: 'Food Dashboard',
+      child: Scaffold(
       backgroundColor: _kBg,
       appBar: AppBar(
         backgroundColor: _kBg,
@@ -98,6 +101,7 @@ class FoodHubScreen extends StatelessWidget {
                 .toList(),
           ),
         ],
+      ),
       ),
     );
   }

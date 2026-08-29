@@ -15,15 +15,18 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../models/food_models.dart';
 import '../models/service_request_model.dart';
+import '../services/chitti/chitti_enquiry_service.dart';
+import 'admin/chitti_enquiries_screen.dart';
 import '../services/app_minimizer_service.dart';
+import '../services/chitti/chitti_host_bridge.dart';
 import '../widgets/native_update_button.dart';
 import '../services/db_usage_tracker.dart';
 import '../services/food_seller_service.dart';
 import '../services/hive_cache.dart';
 import '../services/seller_foreground_service.dart';
-import '../services/seller_live_alert_service.dart';
 import '../services/service_request_service.dart';
 import 'seller_custom_hotel_builder_screen.dart';
+import 'seller_earnings_screen.dart';
 import 'seller_electronics_dashboard_screen.dart';
 import 'seller_mobile_dashboard_screen.dart';
 import 'seller_grocery_dashboard_screen.dart';
@@ -55,14 +58,21 @@ class SellerDashboardScreen extends StatefulWidget {
 }
 
 class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
+  /// Built once in initState, never inside build().
+  ///
+  /// Calling watchOpen() inline would create a fresh stream on every
+  /// rebuild, tearing down and re-attaching the Firestore listener each
+  /// time — and a fresh attach re-bills the whole result set. This is
+  /// the build most likely to sit running on a shop counter for weeks,
+  /// so a per-rebuild re-attach is the worst kind of quiet cost.
+  late final Stream<List<ChittiEnquiry>> _openEnquiriesStream;
+
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final FoodSellerService _service = FoodSellerService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   bool _isLoadingProfile = true;
   SellerModel? _seller;
-  StreamSubscription<List<FoodOrderModel>>? _ordersSub;
-  List<FoodOrderModel> _activeOrders = [];
   int _menuItemCount = 0;
 
   // FIX (root cause of "customer places order, seller never sees it"):
@@ -104,9 +114,26 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   StreamSubscription<User?>? _authSub;
   bool _showRetryButton = false;
 
+  // Task 1 (delivery-handoff timeout): whether an order's "Notifying
+  // delivery partners nearby…" banner should have flipped to "Retry
+  // Finding Delivery Partner" is a pure function of elapsed wall-clock
+  // time (sellerStageAt vs now) — nothing about it changes the
+  // underlying Firestore data, so no new snapshot would ever arrive to
+  // trigger a rebuild on its own. This timer's only job is to force
+  // periodic rebuilds so that transition actually becomes visible
+  // without the seller having to background/reopen the app.
+  Timer? _uiTickTimer;
+
   @override
   void initState() {
     super.initState();
+    _openEnquiriesStream = ChittiEnquiryService.watchOpen();
+    // NEW (Aug 27 2026 — Chitti seller tools): let Chitti flip the shop
+    // open/closed through THIS screen's own _toggleOnlineStatus rather
+    // than writing `isOpen` behind its back. Same write, same local
+    // state update, same error handling — see chitti_host_bridge.dart
+    // for why a parallel implementation was rejected.
+    ChittiHostBridge.sellerShopOpenHandler = _chittiSetShopOpen;
     _loadProfile();
     _authSub = _auth.authStateChanges().listen((user) {
       if (user != null && _seller == null && mounted) {
@@ -120,6 +147,9 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
       if (mounted && _isLoadingProfile) {
         setState(() => _showRetryButton = true);
       }
+    });
+    _uiTickTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) setState(() {});
     });
   }
 
@@ -219,10 +249,16 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
 
       // Start zero-delay background notification alarm
       SellerForegroundService.start();
-      SellerLiveAlertService.instance.start(uid);
+      // FIX (double-fire cleanup): SellerLiveAlertService.instance.start(uid)
+      // used to run here in parallel with main_seller.dart's
+      // seller_pings RTDB listener — both would fire a local alert for
+      // the same incoming order (this one had no requestType filter and
+      // fired on ANY status:'pending' doc for the seller, which catalog/
+      // custom-hotel orders always start as). Retired entirely; the
+      // seller_pings RTDB mechanism (zero-cost, no Cloud Functions) is
+      // now the single source of the "New Order" alert. See
+      // main_seller.dart's _initSellerPingListener.
 
-      // _startFoodOrdersListener(uid) NOT called — see its comment. The
-      // two listeners below are the ones carrying real orders.
       _listenToCatalogOrders(uid);
       _listenToCustomHotelOrders(uid);
       _loadMenuItemCount(uid);
@@ -233,47 +269,26 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
     }
   }
 
-  // ================================================================
-  // DEAD PIPELINE (Aug 17 2026 seller audit — Phase 2)
-  // ================================================================
-  // This listened to `food_orders` via FoodSellerService.
-  // NOTHING IN THE CUSTOMER APP EVER WRITES TO food_orders — verified by
-  // grepping every placeOrder()/FoodOrderModel() call site. The customer
-  // checkout paths write to `service_requests`
-  // (catalog_food_order / custom_hotel_order), which is what
-  // _listenToCatalogOrders / _listenToCustomHotelOrders below actually
-  // read, and what the seller genuinely sees.
-  //
-  // So this was a permanent live snapshot listener, on every seller
-  // device, watching a collection that can never receive a document.
-  // On the Spark plan that is a standing cost for zero information.
-  //
-  // NOT DELETED, deliberately. The FoodSellerService methods, the
-  // FoodOrderModel and the _buildOrderCard() renderer are all left
-  // exactly as they are — the model is the cleanest of the three order
-  // shapes in this codebase (proper statusTimeline, variants, coupon
-  // fields) and is the natural target if the order pipelines are ever
-  // consolidated. Re-enabling is one line: call _startFoodOrdersListener
-  // below. Until something writes to food_orders, starting it just
-  // spends reads to render an empty list.
-  //
-  // _activeOrders stays an empty list, so every widget that reads it
-  // keeps compiling and simply renders nothing — no UI branch removed.
-  // ignore: unused_element
-  void _startFoodOrdersListener(String sellerId) {
-    _ordersSub = _service.listenToIncomingOrders(sellerId).listen(
-      (orders) {
-        if (mounted) {
-          setState(() => _activeOrders = orders);
-        }
-      },
-    );
-  }
-
   // See the FIX comment near _catalogOrders above — this is the
-  // missing piece that let orders vanish for the seller. Equality-only
-  // filters (requestType + details.sellerId + status whereIn), no
-  // orderBy, so no composite index is needed.
+  // missing piece that let orders vanish for the seller.
+  //
+  // FIX (post-fix audit — silent-data-loss risk): this used to be
+  // equality-only (requestType + details.sellerId + status whereIn), no
+  // orderBy, deliberately to avoid needing a composite index. Once
+  // .limit(50) was added for the zero-cost query-cap fix, that became a
+  // real bug: without a matching orderBy, Firestore's limit() picks an
+  // unspecified 50 docs, not guaranteed to be the newest — so once a
+  // seller has 50+ matching orders (plausible if some get stuck; see the
+  // no-timeout edge case for kSellerStageReady), a brand-new order could
+  // simply never appear. `.orderBy('createdAt', descending: true)`
+  // before `.limit(50)` makes "50 most recent" a real guarantee.
+  //
+  // REQUIRES a composite index (requestType ASC, details.sellerId ASC,
+  // status ASC, createdAt DESC) on `service_requests` — added to
+  // firestore.indexes.json alongside this change and MUST be deployed
+  // (`firebase deploy --only firestore:indexes`) before this listener
+  // returns data; until then it throws `failed-precondition: requires an
+  // index`, only visible via the onError debugPrint below.
   void _listenToCatalogOrders(String sellerId) async {
     // 1. Hydrate from cache immediately
     final cached = await HiveCache.getCachedSellerOrders('${sellerId}_catalog');
@@ -294,6 +309,13 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
           'in_progress',
           'nearing_completion',
         ],)
+        .orderBy('createdAt', descending: true)
+        // FIX (zero-cost RTDB/Firestore audit): was fully uncapped — a
+        // seller with a large active-order backlog re-read every single
+        // matching doc on every snapshot. A busy kitchen realistically
+        // never has more than a handful of orders in-flight at once, so
+        // 50 is a generous ceiling, not a real limit on normal use.
+        .limit(50)
         .snapshots()
         .listen((snap) {
       DbUsageTracker.instance
@@ -313,7 +335,9 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   // NEW (CTO mandate — Custom Hotel Ordering & Checkout Pipeline). Same
   // proven pattern as _listenToCatalogOrders above — requestType
   // 'custom_hotel_order' instead of 'catalog_food_order', everything
-  // else identical.
+  // else identical, including the orderBy+composite-index fix and its
+  // requirement (same index covers both: field set is identical, only
+  // the requestType value differs).
   void _listenToCustomHotelOrders(String sellerId) async {
     // 1. Hydrate from cache immediately
     final cached = await HiveCache.getCachedSellerOrders('${sellerId}_custom');
@@ -334,6 +358,10 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
           'in_progress',
           'nearing_completion',
         ],)
+        .orderBy('createdAt', descending: true)
+        // FIX (zero-cost RTDB/Firestore audit) — same cap and reasoning
+        // as _listenToCatalogOrders above.
+        .limit(50)
         .snapshots()
         .listen((snap) {
       DbUsageTracker.instance
@@ -361,11 +389,38 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
 
   @override
   void dispose() {
-    _ordersSub?.cancel();
+    ChittiHostBridge.unregisterSellerShop(_chittiSetShopOpen);
     _catalogOrdersSub?.cancel();
     _customHotelOrdersSub?.cancel();
     _authSub?.cancel();
+    _uiTickTimer?.cancel();
     super.dispose();
+  }
+
+  /// Chitti entry point for `seller_set_shop_open`.
+  ///
+  /// Idempotent on purpose: a seller saying "close the shop" when it is
+  /// already closed should get a calm confirmation, not a pointless
+  /// Firestore write and certainly not a toggle that flips it back open.
+  /// [_toggleOnlineStatus] is a flip, so the desired-state check has to
+  /// live here.
+  Future<String> _chittiSetShopOpen(bool open) async {
+    if (_seller == null) {
+      return "I couldn't reach your shop profile just now — please try the "
+          'toggle on the dashboard.';
+    }
+    if (_seller!.isOpen == open) {
+      return open
+          ? 'Your shop is already open and taking orders.'
+          : 'Your shop is already closed.';
+    }
+    await _toggleOnlineStatus();
+    if (_seller?.isOpen != open) {
+      return "That didn't go through — please use the toggle on the dashboard.";
+    }
+    return open
+        ? 'Done — your shop is open and accepting orders again.'
+        : 'Done — your shop is closed. No new orders will come in.';
   }
 
   Future<void> _toggleOnlineStatus() async {
@@ -385,44 +440,11 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
     }
   }
 
-  Future<void> _acceptOrder(String orderId) async {
-    try {
-      await _service.updateOrderStatus(orderId, 'accepted', sellerId: _seller?.id);
-      await _service.updateOrderStatus(orderId, 'preparing');
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to accept order: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _markFoodReady(String orderId) async {
-    try {
-      await _service.updateOrderStatus(orderId, 'ready');
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update: $e')),
-        );
-      }
-    }
-  }
-
   // ================================================================
   // SELLER KITCHEN ACTIONS on the LIVE order pipeline
   // ================================================================
-  // (Aug 17 2026 seller audit.) The methods above operate on
-  // `food_orders`, which no customer screen writes to — so every button
-  // that used them was unreachable, and the order cards a seller
-  // actually sees (_buildCatalogOrderCard / _buildCustomHotelOrderCard,
-  // both fed by service_requests) had no buttons at all. That is the
-  // whole of "seller app dummy mari iruku": the seller could watch
-  // orders arrive and do nothing about them.
-  //
   // These act on service_requests via the seller-scoped rules clause
-  // added in the same change.
+  // added in the Aug 17 2026 seller audit.
 
   /// Set of request IDs with an action in flight, so a double-tap can't
   /// fire two broadcasts or two stage writes.
@@ -464,14 +486,48 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
     try {
       final fired =
           await ServiceRequestService().requestDeliveryBroadcast(request.requestId);
-      
+
+      // Task 1 (resolve stuck 'pinging' state): a fired broadcast — first
+      // attempt OR a retry after the previous one expired, see
+      // requestDeliveryBroadcast()'s isExpiredPinging branch — moves the
+      // seller's own kitchen-stage banner to kSellerStageDeliveryRequested
+      // so _buildSellerActionStrip shows a live waiting state instead of
+      // silently re-offering the same button. Also stamps a fresh
+      // sellerStageAt, which is what restarts this order's retry-timeout
+      // window on a genuine retry. Best-effort and non-blocking: a failure
+      // here must never hide the SnackBar result of the broadcast itself,
+      // which is the part that actually matters to heroes.
+      if (fired) {
+        unawaited(
+          ServiceRequestService()
+              .advanceSellerStage(
+                request.requestId,
+                ServiceRequestService.kSellerStageDeliveryRequested,
+                sellerId: _seller?.id,
+              )
+              .catchError((Object e) {
+            debugPrint('[SellerDashboard] delivery_requested stage write failed (non-fatal): $e');
+          }),
+        );
+      }
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             fired
                 ? 'Delivery partners notified — first to accept takes it'
-                : 'A delivery partner is already on this order',
+                // FIX (Issue 3): requestDeliveryBroadcast() returns false
+                // both when a hero already claimed this order AND when its
+                // RTDB dispatch record is simply missing (e.g. a dropped
+                // write at order-creation time) — those are very
+                // different situations for the seller to hear about, but
+                // both used to show the same "already on this order" text
+                // even when nothing was actually being delivered.
+                : (request.assignedHeroName?.isNotEmpty ?? false) ||
+                        request.status == 'hero_assigned'
+                    ? 'A delivery partner is already on this order'
+                    : "Couldn't notify delivery partners — please try again or contact support",
           ),
           backgroundColor: fired ? _green : _muted,
         ),
@@ -496,7 +552,32 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   /// Once a hero has claimed the order (status leaves the pre-assign
   /// states) the strip collapses to a status line — the kitchen's part
   /// is done and the seller should not be able to re-ping heroes.
+  /// How long "Notifying delivery partners nearby…" is shown before the
+  /// strip switches to a "Retry Finding Delivery Partner" action. Matches
+  /// requestDeliveryBroadcast()'s own RTDB ping-expiry window
+  /// (kServiceRequestPingExpirySeconds) plus a small buffer, so the retry
+  /// button never appears a few seconds before the server side would
+  /// actually treat the prior broadcast as expired and allow a re-fire.
+  static const Duration _kDeliveryHandoffTimeout =
+      Duration(seconds: kServiceRequestPingExpirySeconds + 30);
+
   Widget _buildSellerActionStrip(ServiceRequestModel request) {
+    // Task 1, Step 3 — explicit admin-review banner: releaseServiceRequest()
+    // (a hero giving a task back) routes the Firestore doc to
+    // status:'admin_review' and clears assignedHeroId. Before this, that
+    // status wasn't special-cased at all here, so the strip fell straight
+    // through to the sellerStage switch below and silently re-offered
+    // "Book Delivery Partner" for an order that had actually already been
+    // kicked to a human for manual handling — a real order in limbo,
+    // masked by a button that looked perfectly normal.
+    if (request.status == 'admin_review') {
+      return _stageBanner(
+        Icons.support_agent_rounded,
+        "Under review by our team — we're helping resolve this order",
+        _orange,
+      );
+    }
+
     final assignedHeroName = request.assignedHeroName ?? '';
     if (assignedHeroName.isNotEmpty || request.status == 'hero_assigned') {
       return _stageBanner(
@@ -508,20 +589,41 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
       );
     }
 
-    // A NULL sellerStage means this order was broadcast to heroes at
-    // creation time rather than being held for the kitchen — i.e. a
-    // custom-hotel order (deliberately not deferred, see the long
-    // comment in custom_hotel_view_screen.dart) or any order placed
-    // before this feature shipped. Showing the Accept -> ... -> Book
-    // Delivery Partner strip on those would be a lie: a hero has
-    // already been pinged, and the final button would do nothing.
-    // Show the honest status instead.
+    // A NULL sellerStage historically meant this order was broadcast to
+    // heroes at creation time rather than being held for the kitchen —
+    // any order placed before the seller-kitchen-stage feature shipped.
+    // catalog_food_order and custom_hotel_order (seller_detail_screen.dart
+    // / custom_hotel_view_screen.dart) both always pass
+    // deferBroadcast:true now, so sellerStage should never actually be
+    // null for those two — if it is, it is a genuine data anomaly (e.g. a
+    // partial write), not a "hero already pinged" order.
+    //
+    // FIX (Issue 3 — "after they made food cant book a hero"): treating
+    // every null sellerStage as "already broadcast" left a seller with a
+    // real, un-dispatched catalog/custom-hotel order stuck on a passive
+    // banner with NO button at all — nothing to tap, ever. Since
+    // requestDeliveryBroadcast() is itself a safe no-op (checks the RTDB
+    // node's status and returns false if a hero is already on it), it's
+    // always safe to offer the button for these two request types instead
+    // of guessing the order is already handled.
     final stage = request.sellerStage;
-    if (stage == null) {
+    final isDeferredOrderType = request.requestType == 'catalog_food_order' ||
+        request.requestType == 'custom_hotel_order';
+    if (stage == null && !isDeferredOrderType) {
       return _stageBanner(
         Icons.notifications_active_outlined,
         'Delivery partners already notified — please prepare this order',
         _gold,
+      );
+    }
+    if (stage == null) {
+      final busy = _busyRequestIds.contains(request.requestId);
+      return _actionButton(
+        label: 'Book Delivery Partner',
+        icon: Icons.two_wheeler_rounded,
+        color: _green,
+        busy: busy,
+        onTap: () => _bookDeliveryPartner(request),
       );
     }
 
@@ -574,6 +676,30 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
           onTap: () => _bookDeliveryPartner(request),
         );
       case ServiceRequestService.kSellerStageDeliveryRequested:
+        // Task 1, Step 2 — timeout & retry: this used to be a static
+        // "Notifying…" banner forever, even long after the broadcast's
+        // own 90s ping window had lapsed with no hero accepting — a
+        // genuinely dead end, since nothing else in the app would ever
+        // let the seller re-trigger a broadcast for this order.
+        // sellerStageAt (stamped fresh by _bookDeliveryPartner on every
+        // fire, including a retry) is purely a client-computed elapsed-
+        // time check — no server component needed — that flips this to
+        // an actionable retry once it's been waiting too long.
+        // _uiTickTimer (see initState) is what keeps this check re-
+        // evaluating on a plain time-based schedule instead of only ever
+        // updating alongside an unrelated Firestore snapshot.
+        final stageAt = request.sellerStageAt;
+        final waitedTooLong = stageAt != null &&
+            DateTime.now().difference(stageAt) > _kDeliveryHandoffTimeout;
+        if (waitedTooLong) {
+          return _actionButton(
+            label: 'Retry Finding Delivery Partner',
+            icon: Icons.refresh_rounded,
+            color: _red,
+            busy: busy,
+            onTap: () => _bookDeliveryPartner(request),
+          );
+        }
         return _stageBanner(
           Icons.podcasts_rounded,
           'Notifying delivery partners nearby…',
@@ -861,6 +987,55 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
           // actually exists, so it costs the app bar no space on the
           // normal day. Same widget as Admin — see
           // native_update_button.dart.
+          // Customer price enquiries (Aug 28 2026 — Nizam: monitored
+          // on "seller and admin phone"). Badged rather than buried in
+          // a menu: these leads carry a phone number and go cold within
+          // hours, so the seller has to be able to see one is waiting
+          // without going looking for it.
+          StreamBuilder<List<ChittiEnquiry>>(
+            stream: _openEnquiriesStream,
+            builder: (context, snap) {
+              final count = snap.data?.length ?? 0;
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.forum_outlined, color: _muted),
+                    tooltip: 'Customer Enquiries',
+                    onPressed: () => Navigator.push<void>(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => const ChittiEnquiriesScreen(),
+                      ),
+                    ),
+                  ),
+                  if (count > 0)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _red,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          count > 9 ? '9+' : '$count',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
           const NativeUpdateButton(appVariant: 'seller'),
           if (_seller?.role != 'staff')
             IconButton(
@@ -1200,8 +1375,8 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         _buildStatCard(
           icon: Icons.receipt_long,
           label: 'Active Orders',
-          value: '${_activeOrders.length}',
-          color: _activeOrders.isNotEmpty ? _orange : _muted,
+          value: '${_catalogOrders.length + _customHotelOrders.length}',
+          color: (_catalogOrders.isNotEmpty || _customHotelOrders.isNotEmpty) ? _orange : _muted,
         ),
         const SizedBox(width: 12),
         _buildStatCard(
@@ -1216,12 +1391,27 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
 
   Widget _buildWalletCard() {
     if (_seller == null || _seller!.role == 'staff') return const SizedBox.shrink();
-    
+
     // Default to 0 if null
     final pending = _seller!.pendingPayouts;
     final settled = _seller!.totalSettled;
 
-    return Container(
+    // Task 2 — Earnings & Wallet screen: the whole card is now the entry
+    // point ("accessible directly from the Seller Dashboard"), tapping
+    // through to the metrics + live transaction ledger. Passes the
+    // current in-memory _seller as a fast first paint; the earnings
+    // screen itself re-subscribes to a live doc stream rather than
+    // trusting this snapshot for its own numbers.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => SellerEarningsScreen(seller: _seller!),
+          ),
+        ),
+        child: Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: _card,
@@ -1231,13 +1421,32 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Payouts & Settlement',
-            style: GoogleFonts.outfit(
-              color: _text,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Payouts & Settlement',
+                style: GoogleFonts.outfit(
+                  color: _text,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'View Details',
+                    style: GoogleFonts.outfit(
+                      color: _teal,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right_rounded, color: _teal, size: 18),
+                ],
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           Row(
@@ -1296,6 +1505,8 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
           ),
         ],
       ),
+        ),
+      ),
     );
   }
 
@@ -1338,6 +1549,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   }
 
   Widget _buildActiveOrders() {
+    final hasAnyOrders = _catalogOrders.isNotEmpty || _customHotelOrders.isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1352,15 +1564,15 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            if (_activeOrders.isNotEmpty)
+            if (hasAnyOrders)
               Text(
-                '${_activeOrders.length} active',
+                '${_catalogOrders.length + _customHotelOrders.length} active',
                 style: GoogleFonts.outfit(color: _orange, fontSize: 12),
               ),
           ],
         ),
         const SizedBox(height: 12),
-        if (_activeOrders.isEmpty)
+        if (!hasAnyOrders)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(32),
@@ -1390,9 +1602,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                 ),
               ],
             ),
-          )
-        else
-          ..._activeOrders.map(_buildOrderCard),
+          ),
         if (_catalogOrders.isNotEmpty) ...[
           const SizedBox(height: 20),
           Text(
@@ -1539,208 +1749,4 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
     );
   }
 
-  Widget _buildOrderCard(FoodOrderModel order) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: _teal.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.receipt, color: _teal, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Order #${order.orderId.length > 8 ? order.orderId.substring(0, 8).toUpperCase() : order.orderId}',
-                      style: GoogleFonts.outfit(
-                        color: _text,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      order.statusDisplay,
-                      style: GoogleFonts.outfit(
-                        color: _statusColor(order.status),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                '₹${order.totalAmount.toStringAsFixed(0)}',
-                style: GoogleFonts.outfit(
-                  color: _gold,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ...order.items.take(3).map(
-                (item) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.circle, size: 4, color: _muted),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '${item.quantity ?? 1}x ${item.name ?? 'Unknown'}',
-                          style:
-                              GoogleFonts.outfit(color: _muted, fontSize: 13),
-                        ),
-                      ),
-                      Text(
-                        '₹${(item.totalPrice ?? 0).toStringAsFixed(0)}',
-                        style: GoogleFonts.outfit(color: _muted, fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          if (order.items.length > 3)
-            Padding(
-              padding: const EdgeInsets.only(left: 12),
-              child: Text(
-                '+${order.items.length - 3} more items',
-                style: GoogleFonts.outfit(color: _muted, fontSize: 12),
-              ),
-            ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(Icons.person_outline, size: 14, color: _muted),
-              const SizedBox(width: 4),
-              Text(
-                order.customerName ?? 'Customer',
-                style: GoogleFonts.outfit(color: _muted, fontSize: 12),
-              ),
-              if (order.estimatedPrepTimeMin != null) ...[
-                const Spacer(),
-                const Icon(Icons.timer_outlined, size: 14, color: _orange),
-                const SizedBox(width: 4),
-                Text(
-                  '${order.estimatedPrepTimeMin} min',
-                  style: GoogleFonts.outfit(color: _orange, fontSize: 12),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (order.status == 'placed')
-            SizedBox(
-              width: double.infinity,
-              height: 42,
-              child: ElevatedButton.icon(
-                onPressed: () => _acceptOrder(order.orderId),
-                icon: const Icon(Icons.check_circle_outline, size: 18),
-                label: Text(
-                  'Accept Order & Start Preparing',
-                  style: GoogleFonts.outfit(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _teal,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                ),
-              ),
-            ),
-          if (order.status == 'preparing')
-            SizedBox(
-              width: double.infinity,
-              height: 42,
-              child: ElevatedButton.icon(
-                onPressed: () => _markFoodReady(order.orderId),
-                icon: const Icon(Icons.food_bank_outlined, size: 18),
-                label: Text(
-                  'Mark as Food Ready',
-                  style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _orange,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                ),
-              ),
-            ),
-          if (order.status == 'ready')
-            Center(
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  color: _gold.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.delivery_dining, color: _gold, size: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Waiting for Hero to pick up',
-                      style: GoogleFonts.outfit(
-                        color: _gold,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'placed':
-        return _tealLight;
-      case 'accepted':
-        return Colors.blueAccent;
-      case 'preparing':
-        return _orange;
-      case 'ready':
-        return _gold;
-      case 'pickedUp':
-        return _green;
-      case 'delivered':
-        return _muted;
-      case 'cancelled':
-        return _red;
-      default:
-        return _muted;
-    }
-  }
 }

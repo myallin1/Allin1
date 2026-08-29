@@ -194,9 +194,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         title: Text(
           widget.title,
           style: GoogleFonts.outfit(
-            color: _kPinkDark,
-            fontSize: 17,
+            fontSize: 18,
             fontWeight: FontWeight.w800,
+            color: _kPinkDark,
           ),
         ),
       ),
