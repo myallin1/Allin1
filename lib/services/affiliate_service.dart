@@ -35,6 +35,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' as flutter_services;
 import 'package:shared_preferences/shared_preferences.dart';
+import './firestore_usage_tracking.dart';
 
 class AffiliateService {
   AffiliateService._();
@@ -669,6 +670,6 @@ class AffiliateService {
 
   /// Live list for the admin dashboard, newest first.
   Stream<QuerySnapshot<Map<String, dynamic>>> watchAffiliateCodes() {
-    return _codesRef.orderBy('createdAt', descending: true).snapshots();
+    return _codesRef.orderBy('createdAt', descending: true).trackedSnapshots();
   }
 }

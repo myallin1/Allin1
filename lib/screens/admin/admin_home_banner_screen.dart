@@ -25,6 +25,7 @@ import 'package:image/image.dart' as img;
 import '../../models/mobile_models.dart' show isValidYoutubeUrl;
 import '../../services/cloudinary_upload_service.dart';
 import '../../widgets/video_link_field.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0F0B14);
 const Color _surface = Color(0xFF1B1524);
@@ -65,7 +66,7 @@ class AdminHomeBannerScreen extends StatelessWidget {
         stream: FirebaseFirestore.instance
             .collection(kHomeBannerCollection)
             .orderBy('createdAt', descending: true)
-            .snapshots(),
+            .trackedSnapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: _pink));

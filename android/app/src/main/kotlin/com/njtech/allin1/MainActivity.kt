@@ -24,18 +24,26 @@ class MainActivity : FlutterActivity() {
 
         @JvmField
         var smsReceivedCallback: ((String, String) -> Unit)? = null
+
+        // NEW (Sep 1 2026 — in-call screen): fired when the in-call
+        // notification is tapped, so Flutter can open the live call UI
+        // rather than dropping the admin on the app's home screen.
+        @JvmField
+        var openInCallScreenCallback: (() -> Unit)? = null
     }
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
         maybeWakeOverLockScreen(intent)
         maybeHandleAssistTrigger(intent)
+        maybeHandleOpenInCall(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         maybeWakeOverLockScreen(intent)
         maybeHandleAssistTrigger(intent)
+        maybeHandleOpenInCall(intent)
 
         val voiceCmd = intent.getStringExtra("voice_command")
         if (!voiceCmd.isNullOrEmpty()) {
@@ -50,6 +58,16 @@ class MainActivity : FlutterActivity() {
     // autoStartMic: true) — see ChittiAccessibilityBridge.onAssistTriggered),
     // matching what a wake-word trigger will eventually do once Picovoice
     // is wired in.
+    // NEW (Sep 1 2026 — in-call screen): the in-call notification
+    // launches MainActivity with this extra so Flutter can route
+    // straight to the live call UI. Consumed on read so a later
+    // resume does not re-open it.
+    private fun maybeHandleOpenInCall(intent: Intent?) {
+        if (intent?.getBooleanExtra("open_in_call_screen", false) != true) return
+        intent.removeExtra("open_in_call_screen")
+        openInCallScreenCallback?.invoke()
+    }
+
     private fun maybeHandleAssistTrigger(intent: Intent?) {
         if (intent?.getBooleanExtra("assist_trigger", false) != true) return
         intent.removeExtra("assist_trigger")
@@ -106,12 +124,26 @@ class MainActivity : FlutterActivity() {
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "requestCallPermissions" -> {
-                    val permissions = arrayOf(
+                    // FIX (Sep 1 2026 — Nizam: "call attend pannuna
+                    // athukapram antha call ah manage panna yentha
+                    // screen um ila"). POST_NOTIFICATIONS is declared in
+                    // the manifest but on Android 13+ it ALSO needs a
+                    // runtime grant — without it, the in-call Hang Up /
+                    // Speaker notification (PhoneCallService.
+                    // showInCallNotification) is silently never shown,
+                    // which is exactly why no call-management UI ever
+                    // appeared once Chitti became the default dialer.
+                    val basePermissions = arrayOf(
                         android.Manifest.permission.READ_PHONE_STATE,
                         android.Manifest.permission.ANSWER_PHONE_CALLS,
                         android.Manifest.permission.RECORD_AUDIO,
                         android.Manifest.permission.READ_CALL_LOG
                     )
+                    val permissions = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                        basePermissions + android.Manifest.permission.POST_NOTIFICATIONS
+                    } else {
+                        basePermissions
+                    }
                     val toRequest = permissions.filter {
                         androidx.core.content.ContextCompat.checkSelfPermission(this, it) != android.content.pm.PackageManager.PERMISSION_GRANTED
                     }
@@ -413,6 +445,127 @@ class MainActivity : FlutterActivity() {
                     }
                     result.success(outcome)
                 }
+                // NEW (Sep 1 2026 — CTO/Gemini diagnosis): routes the
+                // call-screening greeting through a native TextToSpeech
+                // instance configured with USAGE_VOICE_COMMUNICATION
+                // (ChittiCallVoice.kt) instead of flutter_tts's
+                // hardcoded media-usage attributes — see that file's
+                // header for the full reasoning. Events (START/DONE/
+                // ERROR) come back async via onCallVoiceEvent since
+                // TTS playback isn't synchronous.
+                "speakOnCallStream" -> {
+                    val text = call.argument<String>("text") ?: ""
+                    val locale = call.argument<String>("locale") ?: "en-US"
+                    try {
+                        val clazz = Class.forName("com.njtech.allin1.ChittiCallVoice")
+                        val method = clazz.getMethod(
+                            "speak",
+                            android.content.Context::class.java,
+                            String::class.java,
+                            String::class.java,
+                            Function1::class.java,
+                        )
+                        val onEvent: (String) -> Unit = { event ->
+                            runOnUiThread {
+                                channel.invokeMethod("onCallVoiceEvent", mapOf("event" to event))
+                            }
+                        }
+                        method.invoke(null, this, text, locale, onEvent)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("CALL_VOICE_FAILED", e.message, null)
+                    }
+                }
+                "stopCallVoice" -> {
+                    try {
+                        val clazz = Class.forName("com.njtech.allin1.ChittiCallVoice")
+                        val method = clazz.getMethod("stop")
+                        method.invoke(null)
+                    } catch (_: Exception) {}
+                    result.success(true)
+                }
+                // NEW (Sep 1 2026 — minimal dialer, see
+                // admin_dialer_screen.dart). Once this app holds
+                // ROLE_DIALER the OS stops offering its own phone UI,
+                // so placing/ending a call has to be possible from
+                // here. placeCall() is the same system entry point
+                // ChittiDialerActivity uses for tel: taps — one calling
+                // path, not two.
+                "placeCall" -> {
+                    val number = call.argument<String>("number")?.trim() ?: ""
+                    if (number.isEmpty()) {
+                        result.success("No number given")
+                    } else {
+                        try {
+                            val tm = getSystemService(android.telecom.TelecomManager::class.java)
+                            val uri = android.net.Uri.fromParts("tel", number, null)
+                            tm?.placeCall(uri, null)
+                            result.success("Calling $number…")
+                        } catch (e: SecurityException) {
+                            result.success("CALL_PHONE permission not granted — allow it in app settings.")
+                        } catch (e: Exception) {
+                            result.success("Could not place the call: ${e.message}")
+                        }
+                    }
+                }
+                "hangUpCall" -> {
+                    try {
+                        val serviceClass = Class.forName("com.njtech.allin1.PhoneCallService")
+                        val method = serviceClass.getMethod("hangUpActiveCall", android.content.Context::class.java)
+                        val instance = try { serviceClass.getField("INSTANCE").get(null) } catch (e: Exception) { null }
+                        method.invoke(instance, this)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                }
+                "toggleSpeaker" -> {
+                    try {
+                        val serviceClass = Class.forName("com.njtech.allin1.PhoneCallService")
+                        val method = serviceClass.getMethod("toggleSpeakerOnActiveCall", android.content.Context::class.java)
+                        val instance = try { serviceClass.getField("INSTANCE").get(null) } catch (e: Exception) { null }
+                        method.invoke(instance, this)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                }
+                // Distinct from "getActiveCallState" above, which reports
+                // the screening pipeline's own cached state. This one
+                // reports the live Telecom call the dialer UI needs.
+                "getActiveCallInfo" -> {
+                    try {
+                        val serviceClass = Class.forName("com.njtech.allin1.PhoneCallService")
+                        val method = serviceClass.getMethod("activeCallInfo")
+                        val instance = try { serviceClass.getField("INSTANCE").get(null) } catch (e: Exception) { null }
+                        @Suppress("UNCHECKED_CAST")
+                        val info = method.invoke(instance) as? Map<String, Any?>
+                        result.success(info)
+                    } catch (e: Exception) {
+                        result.success(null)
+                    }
+                }
+                // NEW (Sep 1 2026 — in-call screen): start/stop call
+                // recording DURING a call, rather than the choice being
+                // fixed when the call connected. Returns the resulting
+                // state so the UI reflects what actually happened (e.g.
+                // it stays off if the recorder failed to start).
+                "setCallRecording" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    try {
+                        val serviceClass = Class.forName("com.njtech.allin1.PhoneCallService")
+                        val method = serviceClass.getMethod(
+                            "setRecordingActive",
+                            android.content.Context::class.java,
+                            Boolean::class.javaPrimitiveType,
+                        )
+                        val instance = try { serviceClass.getField("INSTANCE").get(null) } catch (e: Exception) { null }
+                        val nowRecording = method.invoke(instance, this, enabled) as? Boolean ?: false
+                        result.success(nowRecording)
+                    } catch (e: Exception) {
+                        result.error("RECORDING_TOGGLE_FAILED", e.message, null)
+                    }
+                }
                 "getRecentSms" -> {
                     try {
                         val prefs = getSharedPreferences("FlutterSharedPreferences", android.content.Context.MODE_PRIVATE)
@@ -437,6 +590,13 @@ class MainActivity : FlutterActivity() {
         callStateCallback = { event, number, recordingPath ->
             runOnUiThread {
                 channel.invokeMethod("onCallStateChanged", mapOf("event" to event, "number" to number, "recordingPath" to recordingPath))
+            }
+        }
+
+        // Setup listener for the in-call notification tap
+        openInCallScreenCallback = {
+            runOnUiThread {
+                channel.invokeMethod("onOpenInCallScreen", null)
             }
         }
 
@@ -547,6 +707,7 @@ class MainActivity : FlutterActivity() {
         callStateCallback = null
         assistTriggerCallback = null
         smsReceivedCallback = null
+        openInCallScreenCallback = null
         super.onDestroy()
     }
 }

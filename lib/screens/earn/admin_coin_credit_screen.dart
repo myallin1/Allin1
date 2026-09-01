@@ -7,6 +7,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A12);
 const Color _card = Color(0xFF1A1A2A);
@@ -228,7 +229,7 @@ class _AdminCoinCreditScreenState extends State<AdminCoinCreditScreen> {
             .where('status', isEqualTo: _filterStatus)
             .orderBy('createdAt', descending: true)
             .limit(100)
-            .snapshots(),
+            .trackedSnapshots(),
         builder: (_, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: _gold));

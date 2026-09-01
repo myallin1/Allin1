@@ -25,6 +25,7 @@ import '../../services/map_service.dart';
 import '../../utils/otp_utils.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../../widgets/hero_payment_qr_popup.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 class CaptainRideScreen extends StatefulWidget {
   final RideModel ride;
@@ -538,7 +539,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
     _rideDocSubscription = FirebaseFirestore.instance
         .collection('rides')
         .doc(widget.rideDocId)
-        .snapshots()
+        .trackedSnapshots()
         .listen((snap) {
       if (snap.exists && mounted) {
         final data = snap.data()!;

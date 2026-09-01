@@ -43,6 +43,7 @@ import '../../services/hero_task_recovery_service.dart';
 import '../../services/service_request_service.dart';
 import 'hero_home_screen.dart' show HeroTaskDetailScreen;
 import 'hero_ride_screen.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFFFFF7FB);
 const Color _card = Colors.white;
@@ -161,7 +162,7 @@ class _HeroIncompleteTasksScreenState
           .collection('rides')
           .where('heroId', isEqualTo: uid)
           .where('status', whereIn: kStuckRideStatuses)
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Padding(
@@ -189,7 +190,7 @@ class _HeroIncompleteTasksScreenState
           .collection('service_requests')
           .where('assignedHeroId', isEqualTo: uid)
           .where('status', whereIn: kStuckServiceRequestStatuses)
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Padding(

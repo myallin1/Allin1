@@ -38,6 +38,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import './firestore_usage_tracking.dart';
 
 class MigrationGateService extends ChangeNotifier {
   MigrationGateService._();
@@ -120,7 +121,7 @@ class MigrationGateService extends ChangeNotifier {
     _sub = FirebaseFirestore.instance
         .collection(_collection)
         .doc(_docId)
-        .snapshots()
+        .trackedSnapshots()
         .listen(
       (snap) {
         final data = snap.data();

@@ -21,6 +21,7 @@ import '../../services/service_request_service.dart';
 import '../../services/service_requests_listener.dart';
 import '../../widgets/admin/admin_selection_mixin.dart';
 import '../../widgets/order_photo_gallery.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -224,7 +225,7 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
         .collection('service_requests')
         .where('assignmentMethod', isEqualTo: 'admin_manual')
         .where('status', whereIn: ['hero_assigned', 'in_progress', 'nearing_completion'])
-        .snapshots()
+        .trackedSnapshots()
         .listen(
       (snapshot) {
         final models = snapshot.docs

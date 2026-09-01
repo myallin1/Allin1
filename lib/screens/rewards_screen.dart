@@ -12,6 +12,7 @@ import '../models/gift_coupon_model.dart';
 import '../services/db_usage_tracker.dart';
 import '../services/gift_coupon_service.dart';
 import '../widgets/banner_slider.dart';
+import '../widgets/gift_scratch_card.dart';
 import '../widgets/promo_overlay.dart';
 import '../widgets/server_busy_dialog.dart' show kCallCenterNumberIntl;
 import '../widgets/soundbox_easter_egg_overlay.dart';
@@ -351,13 +352,16 @@ class _RewardsScreenState extends State<RewardsScreen>
   List<Widget> _buildRewardsTabContent() {
     return [
       StreamBuilder<List<GiftCouponModel>>(
-        stream: _giftCouponService.streamActiveCouponsForCurrentUser(),
+        stream: _giftCouponService.streamMyCoupons(),
         builder: (context, snapshot) {
           final coupons = snapshot.data ?? const [];
           if (coupons.isEmpty) return const SizedBox.shrink();
           return Padding(
             padding: const EdgeInsets.only(bottom: 20),
-            child: _GiftCouponsSection(coupons: coupons),
+            child: _GiftCouponsSection(
+              coupons: coupons,
+              service: _giftCouponService,
+            ),
           );
         },
       ),
@@ -970,17 +974,21 @@ class _AiQuizDialogState extends State<_AiQuizDialog> {
 }
 
 // ================================================================
-// My Gift Coupons — repair/replacement -> Hero/Hotel bill discount.
-// Read-only display; the actual "apply" action lives at the two
-// redemption points themselves (service_request_payment_screen.dart
-// for a Hero task bill, custom_hotel_view_screen.dart for a Hotel
-// order checkout) since that's where the amount being discounted
-// actually exists.
+// My Gift Coupons — the scratch-card rewards a customer earns by
+// paying for a service. The card itself (locked / counting down /
+// scratchable / revealed) lives in GiftScratchCard; this section is
+// just the heading and the list.
+//
+// A revealed ₹ discount is SPENT elsewhere — at the two places an
+// amount to discount actually exists: service_request_payment_screen
+// .dart (Hero task bill) and custom_hotel_view_screen.dart (Hotel
+// checkout).
 // ================================================================
 class _GiftCouponsSection extends StatelessWidget {
-  const _GiftCouponsSection({required this.coupons});
+  const _GiftCouponsSection({required this.coupons, required this.service});
 
   final List<GiftCouponModel> coupons;
+  final GiftCouponService service;
 
   @override
   Widget build(BuildContext context) {
@@ -993,14 +1001,25 @@ class _GiftCouponsSection extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'Use these at a Hero task bill or Hotel order checkout.',
+          'You earn one every time you pay for a service.',
           style: GoogleFonts.outfit(color: _rewardInk.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
         ...coupons.map(
           (c) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _GiftCouponTile(coupon: c),
+            padding: const EdgeInsets.only(bottom: 12),
+            child: GiftScratchCard(
+              key: ValueKey(c.id),
+              coupon: c,
+              service: service,
+              onRevealed: (reveal) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('🎉 You won ${reveal.giftDescription}!'),
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ],
@@ -1011,79 +1030,7 @@ class _GiftCouponsSection extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(IterableProperty<GiftCouponModel>('coupons', coupons));
-  }
-}
-
-class _GiftCouponTile extends StatelessWidget {
-  const _GiftCouponTile({required this.coupon});
-
-  final GiftCouponModel coupon;
-
-  @override
-  Widget build(BuildContext context) {
-    final expiresAt = coupon.expiresAt;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFFC107), Color(0xFFFF8F00)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFFF8F00).withValues(alpha: 0.28),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
-            child: const Icon(Icons.card_giftcard_rounded, color: Color(0xFFFF8F00), size: 26),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '₹${coupon.value.toStringAsFixed(0)} OFF',
-                  style: GoogleFonts.outfit(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900),
-                ),
-                if (coupon.sourceSummary.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    'From: ${coupon.sourceSummary}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.outfit(color: Colors.white.withValues(alpha: 0.92), fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                ],
-                if (expiresAt != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    'Valid till ${expiresAt.day}/${expiresAt.month}/${expiresAt.year}',
-                    style: GoogleFonts.outfit(color: Colors.white.withValues(alpha: 0.85), fontSize: 11, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
-    super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<GiftCouponModel>('coupon', coupon));
+    properties.add(DiagnosticsProperty<GiftCouponService>('service', service));
   }
 }
 

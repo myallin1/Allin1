@@ -21,6 +21,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import 'admin_alert_notification_service.dart';
+import './firestore_usage_tracking.dart';
 
 class AdminLiveAlertService {
   AdminLiveAlertService._();
@@ -54,7 +55,7 @@ class AdminLiveAlertService {
     _ridesSub = FirebaseFirestore.instance
         .collection('rides')
         .where('createdAt', isGreaterThan: since)
-        .snapshots()
+        .trackedSnapshots()
         .listen((snap) {
       for (final change in snap.docChanges) {
         final data = change.doc.data();
@@ -103,7 +104,7 @@ class AdminLiveAlertService {
     _requestsSub = FirebaseFirestore.instance
         .collection('service_requests')
         .where('createdAt', isGreaterThan: since)
-        .snapshots()
+        .trackedSnapshots()
         .listen((snap) {
       for (final change in snap.docChanges) {
         final data = change.doc.data();

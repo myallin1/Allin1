@@ -23,6 +23,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../models/service_request_model.dart';
 import '../widgets/allin1_map_widget.dart';
+import '../services/firestore_usage_tracking.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
 const Color _kBg = Color(0xFFFFFFFF);
@@ -104,7 +105,7 @@ class _ServiceRequestLiveMapScreenState
         stream: FirebaseFirestore.instance
             .collection('service_requests')
             .doc(widget.requestId)
-            .snapshots(),
+            .trackedSnapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(

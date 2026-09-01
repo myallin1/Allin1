@@ -47,6 +47,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart' as rtdb;
 import 'package:flutter/foundation.dart';
+import '../firestore_usage_tracking.dart';
 
 /// How the escalation ended, so callers can say something true.
 enum EscalationOutcome {
@@ -98,7 +99,7 @@ class ChittiOrderEscalationService {
         .collection('service_requests')
         .where('status', isEqualTo: pendingAdminStatus)
         .limit(limit)
-        .snapshots()
+        .trackedSnapshots()
         .map((snap) {
       final now = DateTime.now();
       final items = snap.docs

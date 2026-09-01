@@ -20,6 +20,7 @@ import '../services/hero_onboarding_cache.dart';
 import '../services/theme_service.dart';
 import 'hero_login_screen.dart';
 import 'hero_welcome_screen.dart';
+import '../services/firestore_usage_tracking.dart';
 
 // NEW (Aug 12 2026 — Nizam: "register page la kaatura mariye whatsapp
 // admin to raise ur onboarding reuest nu whatsapp button kaatanum"):
@@ -212,7 +213,7 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
     _statusSubscription = FirebaseFirestore.instance
         .collection('heroes')
         .doc(currentUser.uid)
-        .snapshots()
+        .trackedSnapshots()
         .listen((snapshot) async {
       if (_isNavigating) return;
 

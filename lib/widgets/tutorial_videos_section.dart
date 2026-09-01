@@ -66,6 +66,7 @@ import '../models/mobile_models.dart' show youtubeVideoId;
 import '../screens/mobiles/listing_video_player.dart'
     show showPremiumVideoModal, VideoThumbnail;
 import '../services/video_warmup_service.dart';
+import '../services/firestore_usage_tracking.dart';
 
 /// Who a tutorial is for. Stored as the raw string in Firestore so an
 /// admin can type it, and matched case-insensitively on read.
@@ -192,7 +193,7 @@ class _TutorialVideosSectionState extends State<TutorialVideosSection> {
     // permanently empty section that looks exactly like "no videos yet".
     // These lists are a handful of documents; sorting them client-side
     // below is free and cannot fail that way.
-    return q.limit(20).snapshots();
+    return q.limit(20).trackedSnapshots();
   }
 
   void _warmFirst(List<TutorialVideo> videos) {

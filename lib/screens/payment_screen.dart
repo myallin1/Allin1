@@ -14,6 +14,7 @@ import '../services/localization_service.dart';
 import '../widgets/animated_meter_fare.dart';
 import '../widgets/rating_feedback_sheet.dart';
 import 'bike_taxi/bike_booking_screen.dart';
+import '../services/firestore_usage_tracking.dart';
 
 const Color _card = Colors.white;
 const Color _card2 = Color(0xFFFFEEF7);
@@ -165,7 +166,7 @@ class _PaymentScreenState extends State<PaymentScreen>
     _rideSubscription = FirebaseFirestore.instance
         .collection('rides')
         .doc(rideDocId)
-        .snapshots()
+        .trackedSnapshots()
         .listen((snap) {
           if (!mounted || !snap.exists) {
             return;

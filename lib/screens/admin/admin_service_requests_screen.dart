@@ -30,6 +30,7 @@ import '../../widgets/admin/admin_selection_mixin.dart';
 import '../../widgets/order_photo_gallery.dart';
 import '../service_request_tracking_screen.dart';
 import 'admin_new_orders_screen.dart' show AssignHeroSheet, requestSummary;
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -121,7 +122,7 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
         // Picked a safe default rather than blocking on a product
         // decision; raise this if 100 ever turns out to be too few.
         .limit(100)
-        .snapshots()
+        .trackedSnapshots()
         .listen(
       (snapshot) {
         final models = snapshot.docs

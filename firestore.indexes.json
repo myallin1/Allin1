@@ -1,6 +1,20 @@
 {
   "indexes": [
     {
+      "collectionGroup": "gift_coupons",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "erode_offers",
       "queryScope": "COLLECTION",
       "fields": [

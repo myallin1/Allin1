@@ -15,6 +15,7 @@ import '../../services/chitti/chitti_voice_service.dart';
 import '../../config/city_config.dart';
 import '../../config/hero_skill_catalog.dart';
 import 'admin_hero_details_screen.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 // ── Theme (matches admin dashboard) ────────────────────────────
 const Color _bg = Color(0xFF0A0A1A);
@@ -133,7 +134,7 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
               'approvalStatus',
               isEqualTo: _selectedTab == 0 ? 'pending' : 'rejected',
             )
-            .snapshots(),
+            .trackedSnapshots(),
         builder: (context, snap) {
           // Handle errors FIRST — missing Firestore index causes blank screen
           if (snap.hasError) {

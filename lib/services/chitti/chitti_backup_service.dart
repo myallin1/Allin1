@@ -34,13 +34,21 @@
 //      file the customer controls is a balance the customer can edit.
 //
 // ── PLATFORM ────────────────────────────────────────────────────────
-// Android and iOS. On web, google_sign_in cannot mint the Drive scope
-// the same way and this reports itself unsupported rather than failing
-// halfway through a restore — see [isSupported].
+// Drive backup: Android and iOS only. On web, google_sign_in cannot
+// mint the Drive scope the same way and this reports itself
+// unsupported rather than failing halfway through a restore — see
+// [isSupported].
+//
+// Local file backup (backupToLocalFile/restoreFromLocalFile, added per
+// Nizam's request for an offline path that isn't tied to a Google
+// account at all): every platform FilePicker supports, web included —
+// gated only on [_hasRealAccount], not [isSupported].
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -437,6 +445,158 @@ class ChittiBackupService {
       return const ChittiBackupResult(
         ok: false,
         message: 'Could not restore just now. Please try again.',
+      );
+    }
+  }
+
+  // ── Local file (file manager) ───────────────────────────────────
+  //
+  // NEW (per Nizam's request): a second, independent backup path — a
+  // plain .json file the customer saves wherever they like (Downloads,
+  // an SD card, WhatsApp to themselves, their own cloud drive app) via
+  // the OS's own file picker, instead of only ours. Same payload,
+  // same applyPayload() restore path as the Drive flow above; the only
+  // difference is WHERE the bytes end up. Works on every platform
+  // FilePicker supports, including web — unlike the Drive path, this
+  // needs no Google sign-in at all.
+
+  static String _localFileName() {
+    final now = DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return 'myallin1_backup_${now.year}${two(now.month)}${two(now.day)}'
+        '_${two(now.hour)}${two(now.minute)}.json';
+  }
+
+  /// Lets the customer save a backup file wherever they choose via the
+  /// OS file picker (Downloads, SD card, another app via "Save to...").
+  Future<ChittiBackupResult> backupToLocalFile() async {
+    if (!_hasRealAccount) {
+      return const ChittiBackupResult(
+        ok: false,
+        message: 'Sign in first so the backup is tied to your account.',
+      );
+    }
+    try {
+      final payload = await buildPayload();
+      final bytes = Uint8List.fromList(utf8.encode(jsonEncode(payload)));
+
+      final savedPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save MyAllin1 backup',
+        fileName: _localFileName(),
+        type: FileType.custom,
+        allowedExtensions: <String>['json'],
+        bytes: bytes,
+      );
+
+      // A null path/result means the customer backed out of the picker
+      // — not a failure, just nothing to report as success either.
+      if (savedPath == null) {
+        return const ChittiBackupResult(
+          ok: false,
+          message: 'Backup cancelled.',
+        );
+      }
+
+      final now = DateTime.now();
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        // Deliberately the SAME key the Drive path stamps — from the
+        // customer's point of view there is one "backup", not two;
+        // Settings should show whichever happened most recently
+        // regardless of which button made it happen.
+        await prefs.setString(_lastBackupKey, now.toIso8601String());
+      } catch (_) {
+        // A missing timestamp only affects what Settings displays.
+      }
+
+      return ChittiBackupResult(
+        ok: true,
+        message: 'Backup saved to your device.',
+        at: now,
+      );
+    } catch (e) {
+      debugPrint('[ChittiBackup] local backup failed: $e');
+      return const ChittiBackupResult(
+        ok: false,
+        message: 'Could not save the backup file. Please try again.',
+      );
+    }
+  }
+
+  /// Lets the customer pick a previously saved backup file and restores
+  /// from it — same ownership check and schema-version guard as the
+  /// Drive restore, since this file can just as easily have come from
+  /// someone else's phone (forwarded, shared folder, etc.).
+  Future<ChittiBackupResult> restoreFromLocalFile() async {
+    if (!_hasRealAccount) {
+      return const ChittiBackupResult(
+        ok: false,
+        message: 'Sign in first so I know whose backup to restore.',
+      );
+    }
+    try {
+      // withData: true is required on mobile/web to get the bytes back
+      // directly — without it, PlatformFile.bytes is null on platforms
+      // that only hand back a content:// URI, not a real file path.
+      final picked = await FilePicker.platform.pickFiles(
+        dialogTitle: 'Choose a MyAllin1 backup file',
+        type: FileType.custom,
+        allowedExtensions: <String>['json'],
+        withData: true,
+      );
+      final file = picked?.files.singleOrNull;
+      if (file == null) {
+        return const ChittiBackupResult(
+          ok: false,
+          message: 'Restore cancelled.',
+        );
+      }
+
+      final bytes = file.bytes;
+      if (bytes == null) {
+        return const ChittiBackupResult(
+          ok: false,
+          message: 'Could not read that file.',
+        );
+      }
+
+      final decoded = jsonDecode(utf8.decode(bytes));
+      if (decoded is! Map<String, dynamic>) {
+        return const ChittiBackupResult(
+          ok: false,
+          message: 'That file is not a MyAllin1 backup.',
+        );
+      }
+
+      final owner = (decoded['ownerUid'] as String?) ?? '';
+      final me = _currentUid();
+      if (owner.isNotEmpty && me.isNotEmpty && owner != me) {
+        return const ChittiBackupResult(
+          ok: false,
+          message: 'That backup belongs to a different MyAllin1 account. '
+              'Sign in with that account to restore it.',
+        );
+      }
+
+      await applyPayload(decoded);
+
+      return ChittiBackupResult(
+        ok: true,
+        message: 'Restored. Chitti remembers you again.',
+        at: DateTime.now(),
+      );
+    } on ChittiBackupTooNewException catch (e) {
+      return ChittiBackupResult(ok: false, message: e.message);
+    } on FormatException {
+      return const ChittiBackupResult(
+        ok: false,
+        message: 'That file is not a valid MyAllin1 backup.',
+      );
+    } catch (e) {
+      debugPrint('[ChittiBackup] local restore failed: $e');
+      return const ChittiBackupResult(
+        ok: false,
+        message: 'Could not restore from that file. Please try again.',
       );
     }
   }

@@ -18,6 +18,7 @@ import '../models/service_request_model.dart';
 import '../utils/service_request_labels.dart';
 import 'hero_search_radar_screen.dart';
 import 'service_request_tracking_screen.dart';
+import '../services/firestore_usage_tracking.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
 const Color _kBg = Color(0xFFFFFFFF);
@@ -55,7 +56,7 @@ class GroceryOrderStatusScreen extends StatelessWidget {
                   .collection('service_requests')
                   .where('customerId', isEqualTo: user.uid)
                   .where('requestType', isEqualTo: 'grocery_order')
-                  .snapshots(),
+                  .trackedSnapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator(color: _kPink));

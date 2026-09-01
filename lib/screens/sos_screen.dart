@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/auth_service.dart';
 import 'sos_kyc_verification_screen.dart';
+import '../services/firestore_usage_tracking.dart';
 
 class SosScreen extends StatefulWidget {
   const SosScreen({super.key});
@@ -318,7 +319,7 @@ class _SosScreenState extends State<SosScreen> {
       stream: FirebaseFirestore.instance
           .collection('sos_kyc_requests')
           .doc(user.uid)
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Padding(

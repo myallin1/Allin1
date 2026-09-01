@@ -41,6 +41,7 @@ import 'partner_shop_order_screen.dart';
 import 'embedded_shop_screen.dart';
 import 'hero_search_radar_screen.dart';
 import 'service_request_tracking_screen.dart';
+import '../services/firestore_usage_tracking.dart';
 
 class CustomFoodOrderScreen extends StatefulWidget {
   // FIX (per Nizam's request): lets a caller like PartnerShopOrderScreen
@@ -687,7 +688,7 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
         .where('customerId', isEqualTo: user.uid)
         .where('requestType', isEqualTo: 'custom_food_order')
         .orderBy('createdAt', descending: true)
-        .snapshots();
+        .trackedSnapshots();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

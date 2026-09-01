@@ -86,4 +86,68 @@ class ChittiInCallService : InCallService() {
             false
         }
     }
+
+    // NEW (Sep 1 2026 — Nizam: "headphone jack la namma technical plan
+    // panni athukapram ithe idea va implement pannalam"). Confirmed via
+    // this session's own testing that the speaker route DOES work now
+    // (setAudioRoute(SPEAKER)=true) but the caller still can't hear
+    // Chitti — Android's Acoustic Echo Cancellation on the built-in
+    // speaker+mic pair is suppressing the acoustic loop the whole
+    // scheme depends on. A wired headset's electrical loopback cable
+    // (audio-out wired straight into mic-in) is being tried instead —
+    // this method is what actually routes the LIVE call to that
+    // headset once it's plugged in, which forceSpeakerRoute() never
+    // did (it always forced BUILTIN_SPEAKER, which would have silently
+    // defeated this test even with the cable correctly wired).
+    fun routeToWiredHeadset(): Boolean {
+        return try {
+            setAudioRoute(CallAudioState.ROUTE_WIRED_HEADSET)
+            Log.d(TAG, "setAudioRoute(ROUTE_WIRED_HEADSET) called on the real Telecom call.")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "setAudioRoute(ROUTE_WIRED_HEADSET) failed: ${e.message}")
+            false
+        }
+    }
+
+    /** True only once Android reports a wired headset is actually plugged in and usable as a call route. */
+    fun isWiredHeadsetRouteAvailable(): Boolean {
+        return try {
+            val mask = callAudioState?.supportedRouteMask ?: 0
+            (mask and CallAudioState.ROUTE_WIRED_HEADSET) != 0
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    // NEW (Sep 1 2026 — CTO's Bluetooth acoustic-bridge proposal). Same
+    // reasoning as routeToWiredHeadset above, and the same trap: with
+    // the call forced to ROUTE_SPEAKER, pairing a neckband changes
+    // nothing — Chitti's voice keeps coming out of the phone's own
+    // speaker and the bridge test fails for the wrong reason. This is
+    // the more promising of the two loopback paths, because the phone's
+    // AEC is calibrated for its OWN speaker/mic geometry and is
+    // typically not applied to the Bluetooth SCO path at all (the
+    // headset is expected to do its own). Note that a neckband with
+    // ENC/ANC on its mic may cancel the loop itself — a plain, cheap
+    // headset without noise cancellation is the right thing to test.
+    fun routeToBluetooth(): Boolean {
+        return try {
+            setAudioRoute(CallAudioState.ROUTE_BLUETOOTH)
+            Log.d(TAG, "setAudioRoute(ROUTE_BLUETOOTH) called on the real Telecom call.")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "setAudioRoute(ROUTE_BLUETOOTH) failed: ${e.message}")
+            false
+        }
+    }
+
+    fun isBluetoothRouteAvailable(): Boolean {
+        return try {
+            val mask = callAudioState?.supportedRouteMask ?: 0
+            (mask and CallAudioState.ROUTE_BLUETOOTH) != 0
+        } catch (e: Exception) {
+            false
+        }
+    }
 }

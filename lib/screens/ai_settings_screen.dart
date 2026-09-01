@@ -47,6 +47,7 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
   bool _welcomeEnabled = true;
   DateTime? _lastBackupAt;
   bool _backupBusy = false;
+  bool _localBackupBusy = false;
   ChittiConversationMode _convoMode = ChittiConversationMode.autoStop;
 
   @override
@@ -170,12 +171,22 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
         const SizedBox(height: 6),
         Text(
           'Your chats, Chitti\'s memory of you and your settings are saved '
-          'to your own Google Drive. Change phone, restore, and Chitti '
-          'picks up where you left off. Your wallet stays safe on our '
-          'servers and is never in the file.',
+          '— to your own Google Drive, or as a file you keep yourself. '
+          'Change phone, restore, and Chitti picks up where you left off. '
+          'Your wallet stays safe on our servers and is never in either.',
           style: GoogleFonts.outfit(color: muted, fontSize: 11.5, height: 1.4),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 14),
+        Text(
+          'GOOGLE DRIVE',
+          style: GoogleFonts.outfit(
+            color: muted,
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.6,
+          ),
+        ),
+        const SizedBox(height: 4),
         Text(
           subtitle,
           style: GoogleFonts.outfit(
@@ -184,7 +195,7 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
             fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         if (_backupBusy)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 10),
@@ -196,7 +207,7 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: ChittiBackupService.isSupported
-                      ? () => _runBackup(restore: false)
+                      ? () => _runDriveBackup(restore: false)
                       : null,
                   icon: const Icon(Icons.backup_rounded, size: 18),
                   label: Text(
@@ -217,7 +228,7 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: ChittiBackupService.isSupported
-                      ? () => _runBackup(restore: true)
+                      ? () => _runDriveBackup(restore: true)
                       : null,
                   icon: const Icon(Icons.restore_rounded, size: 18, color: pink),
                   label: Text(
@@ -238,11 +249,82 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
               ),
             ],
           ),
+        const SizedBox(height: 18),
+        Text(
+          'THIS DEVICE',
+          style: GoogleFonts.outfit(
+            color: muted,
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.6,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Save a backup file to your phone\'s storage — no Google '
+          'account needed. Works offline; share it to keep a copy '
+          'anywhere you like.',
+          style: GoogleFonts.outfit(
+            color: muted,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (_localBackupBusy)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 10),
+            child: LinearProgressIndicator(color: pink, minHeight: 2),
+          )
+        else
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _runLocalBackup(restore: false),
+                  icon: const Icon(Icons.save_alt_rounded, size: 18),
+                  label: Text(
+                    'Save File',
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: deep,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _runLocalBackup(restore: true),
+                  icon: const Icon(Icons.file_open_rounded, size: 18, color: deep),
+                  label: Text(
+                    'Load File',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.w700,
+                      color: deep,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: const BorderSide(color: deep),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
       ],
     );
   }
 
-  Future<void> _runBackup({required bool restore}) async {
+  Future<void> _runDriveBackup({required bool restore}) async {
     if (restore) {
       // Restore REPLACES local history rather than merging — merging two
       // phones' conversations would interleave them out of order — so it
@@ -285,6 +367,55 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
     if (!mounted) return;
     setState(() {
       _backupBusy = false;
+      if (result.ok && !restore) _lastBackupAt = result.at;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message)),
+    );
+  }
+
+  Future<void> _runLocalBackup({required bool restore}) async {
+    if (restore) {
+      // Same reasoning as the Drive restore confirm above — a local
+      // file restore also REPLACES this phone's history, not merges it.
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            'Restore from a file?',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.w800),
+          ),
+          content: Text(
+            'This replaces the chats and history on this phone with what '
+            'is in the backup file you pick.',
+            style: GoogleFonts.outfit(fontSize: 13.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Restore'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    setState(() => _localBackupBusy = true);
+    final result = restore
+        ? await ChittiBackupService.instance.restoreFromLocalFile()
+        : await ChittiBackupService.instance.backupToLocalFile();
+    if (!mounted) return;
+    setState(() {
+      _localBackupBusy = false;
       if (result.ok && !restore) _lastBackupAt = result.at;
     });
     ScaffoldMessenger.of(context).showSnackBar(

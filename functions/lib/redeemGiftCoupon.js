@@ -61,16 +61,12 @@ exports.redeemGiftCoupon = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('invalid-argument', 'couponId is required');
     }
     const requestId = data.requestId;
-    const orderAmount = data.orderAmount;
-    if (!requestId && (orderAmount === undefined || orderAmount === null)) {
-        throw new functions.https.HttpsError('invalid-argument', 'Either requestId (existing bill) or orderAmount (new order) is required');
-    }
-    if (orderAmount !== undefined && (typeof orderAmount !== 'number' || orderAmount < 0)) {
-        throw new functions.https.HttpsError('invalid-argument', 'orderAmount must be a non-negative number');
+    if (!requestId || typeof requestId !== 'string') {
+        throw new functions.https.HttpsError('invalid-argument', 'requestId is required');
     }
     try {
         return await db.runTransaction(async (tx) => {
-            var _a, _b;
+            var _a, _b, _c;
             const couponRef = db.collection('gift_coupons').doc(couponId);
             const couponSnap = await tx.get(couponRef);
             if (!couponSnap.exists) {
@@ -81,49 +77,61 @@ exports.redeemGiftCoupon = functions.https.onCall(async (data, context) => {
             if (coupon.customerId !== uid) {
                 throw new Error('NOT_OWNER');
             }
-            if (coupon.status !== 'active') {
-                throw new Error('ALREADY_REDEEMED');
+            // Only a card the customer has actually scratched open can be
+            // spent — 'awaiting_gift'/'ready' means they haven't seen the
+            // gift yet, and anything past 'scratched' is already spent.
+            if (coupon.status !== 'scratched') {
+                throw new Error(coupon.status === 'awaiting_gift' || coupon.status === 'ready'
+                    ? 'NOT_SCRATCHED'
+                    : 'ALREADY_REDEEMED');
+            }
+            // An 'item' gift is collected offline, not applied to a bill.
+            if (coupon.giftType !== 'discount') {
+                throw new Error('NOT_A_DISCOUNT');
             }
             const expiresAt = coupon.expiresAt;
             if (expiresAt && expiresAt.toDate() < new Date()) {
                 throw new Error('EXPIRED');
             }
             const value = typeof coupon.value === 'number' ? coupon.value : 0;
-            let baseAmount;
-            let requestRef = null;
-            let resolvedRequestType = (_a = data.requestType) !== null && _a !== void 0 ? _a : null;
-            if (requestId) {
-                // Case A — Heroes bill: read the REAL bill off the doc, never
-                // trust a client-passed amount here.
-                requestRef = db.collection('service_requests').doc(requestId);
-                const requestSnap = await tx.get(requestRef);
-                if (!requestSnap.exists) {
-                    throw new Error('REQUEST_NOT_FOUND');
-                }
-                const request = requestSnap.data();
-                if (request.customerId !== uid) {
-                    throw new Error('NOT_OWNER');
-                }
-                baseAmount =
-                    (typeof request.finalAmount === 'number' && request.finalAmount) ||
-                        (typeof request.estimatedAmount === 'number' && request.estimatedAmount) ||
-                        0;
-                resolvedRequestType = (_b = request.requestType) !== null && _b !== void 0 ? _b : resolvedRequestType;
+            // The bill is ALWAYS read off the doc — never client-supplied.
+            const requestRef = db.collection('service_requests').doc(requestId);
+            const requestSnap = await tx.get(requestRef);
+            if (!requestSnap.exists) {
+                throw new Error('REQUEST_NOT_FOUND');
             }
-            else {
-                // Case B — Hotel checkout: no bill doc exists yet.
-                baseAmount = orderAmount;
+            const request = requestSnap.data();
+            if (request.customerId !== uid) {
+                throw new Error('NOT_OWNER');
+            }
+            // Where the amount lives depends on requestType, so check every
+            // place this codebase writes one, most-authoritative first:
+            //   finalAmount     — set by completeWithFinalAmount() (hero tasks)
+            //   estimatedAmount — set by setEstimatedAmount()
+            //   details.totalAmount — written at creation by the priced-cart
+            //                     order types (custom_hotel_order,
+            //                     catalog_food_order); this is the one the
+            //                     Hotel flow relies on, since its order is
+            //                     created before any hero has billed it.
+            const details = ((_a = request.details) !== null && _a !== void 0 ? _a : {});
+            const candidates = [
+                request.finalAmount,
+                request.estimatedAmount,
+                details.totalAmount,
+                details.subtotal,
+            ];
+            const baseAmount = (_b = candidates.find((c) => typeof c === 'number' && c > 0)) !== null && _b !== void 0 ? _b : 0;
+            if (baseAmount <= 0) {
+                throw new Error('NO_BILL_AMOUNT');
             }
             const discount = Math.min(value, baseAmount);
             const payableAmount = Math.max(baseAmount - discount, 0);
-            if (requestRef) {
-                tx.update(requestRef, { finalAmount: payableAmount });
-            }
+            tx.update(requestRef, { finalAmount: payableAmount });
             tx.update(couponRef, {
                 status: 'redeemed',
                 redeemedAt: admin.firestore.FieldValue.serverTimestamp(),
-                redeemedOnRequestId: requestId !== null && requestId !== void 0 ? requestId : null,
-                redeemedOnRequestType: resolvedRequestType,
+                redeemedOnRequestId: requestId,
+                redeemedOnRequestType: (_c = request.requestType) !== null && _c !== void 0 ? _c : null,
             });
             return { success: true, discount, payableAmount };
         });
@@ -137,10 +145,16 @@ exports.redeemGiftCoupon = functions.https.onCall(async (data, context) => {
                 throw new functions.https.HttpsError('permission-denied', 'This coupon does not belong to you.');
             case 'ALREADY_REDEEMED':
                 throw new functions.https.HttpsError('failed-precondition', 'This coupon has already been used.');
+            case 'NOT_SCRATCHED':
+                throw new functions.https.HttpsError('failed-precondition', 'Scratch this card open in Rewards first.');
+            case 'NOT_A_DISCOUNT':
+                throw new functions.https.HttpsError('failed-precondition', 'This gift is collected in person, not applied to a bill.');
             case 'EXPIRED':
                 throw new functions.https.HttpsError('failed-precondition', 'This coupon has expired.');
             case 'REQUEST_NOT_FOUND':
                 throw new functions.https.HttpsError('not-found', 'The bill for this order could not be found.');
+            case 'NO_BILL_AMOUNT':
+                throw new functions.https.HttpsError('failed-precondition', 'This order has no bill amount to discount yet.');
             default:
                 if (error instanceof functions.https.HttpsError)
                     throw error;

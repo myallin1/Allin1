@@ -47,6 +47,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/hero_wallet_model.dart';
+import './firestore_usage_tracking.dart';
 
 class HeroWalletService {
   factory HeroWalletService() => _instance;
@@ -68,7 +69,7 @@ class HeroWalletService {
   /// this rather than a one-shot `get()` — balance changes on every ride
   /// completion, and the low-balance banner needs to react instantly.
   Stream<HeroWalletModel> watchWallet(String heroId) {
-    return _walletRef(heroId).snapshots().map((snap) {
+    return _walletRef(heroId).trackedSnapshots().map((snap) {
       if (!snap.exists || snap.data() == null) {
         return HeroWalletModel(heroId: heroId);
       }
@@ -83,7 +84,7 @@ class HeroWalletService {
     return _txnRef(heroId)
         .orderBy('createdAt', descending: true)
         .limit(limit)
-        .snapshots()
+        .trackedSnapshots()
         .map((snap) => snap.docs
             .map((d) => HeroWalletTransactionModel.fromFirestore(d.data(), d.id))
             .toList(),);
@@ -541,7 +542,7 @@ class HeroWalletService {
     return _rechargeRequestsRef
         .where('status', isEqualTo: WalletRechargeStatus.pending.wireName)
         .orderBy('requestedAt', descending: true)
-        .snapshots()
+        .trackedSnapshots()
         .map((snap) => snap.docs
             .map((d) => WalletRechargeRequestModel.fromFirestore(
                 d.data(), d.id,),)

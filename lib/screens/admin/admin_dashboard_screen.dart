@@ -39,6 +39,7 @@ import 'hero_approvals_screen.dart';
 // NEW (Aug 11 2026): Service Flow Monitor sub-page — fetch-on-demand.
 import 'service_flow_monitor_screen.dart';
 import 'admin_hero_earnings_screen.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 // ── Theme ──────────────────────────────────────────────────────
 const Color _bg = Color(0xFF0A0A1A);
@@ -172,20 +173,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _pendingHeroApprovalsStream = FirebaseFirestore.instance
         .collection('heroes')
         .where('approvalStatus', isEqualTo: 'pending')
-        .snapshots();
+        .trackedSnapshots();
     _adminReviewCountStream =
         ServiceRequestsListener.instance.waitingAndReviewStream;
     _ridesListStream = FirebaseFirestore.instance
         .collection('rides')
         .orderBy('createdAt', descending: true)
         .limit(100)
-        .snapshots();
+        .trackedSnapshots();
     // Built once. See _MoreSheet.openEnquiriesStream.
     _openEnquiriesStream = ChittiEnquiryService.watchOpen();
     _pendingSellerApprovalsStream = FirebaseFirestore.instance
         .collection('sellers')
         .where('status', isEqualTo: 'pending')
-        .snapshots();
+        .trackedSnapshots();
 
     // DB usage monitor — side-channel .listen() on each already-hoisted
     // stream just to count docs per snapshot; this does NOT add extra

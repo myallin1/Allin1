@@ -30,6 +30,7 @@ import '../widgets/rating_feedback_sheet.dart';
 import '../widgets/stage_progress_tracker.dart';
 import 'service_request_live_map_screen.dart';
 import 'service_request_payment_screen.dart';
+import '../services/firestore_usage_tracking.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
 const Color _kBg = Color(0xFFFFFFFF);
@@ -90,7 +91,7 @@ class HeroBookingTrackingScreen extends StatelessWidget {
                   // Was 5. A customer can queue up several tasks at
                   // once, and anything past the cap simply vanished.
                   .limit(20)
-                  .snapshots(),
+                  .trackedSnapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(

@@ -55,7 +55,13 @@ export const scratchGiftCoupon = functions.https.onCall(
     try {
       return await db.runTransaction<ScratchGiftCouponResponse>(async (tx) => {
         const couponRef = db.collection('gift_coupons').doc(couponId);
+        // The sealed envelope — what's actually inside. Kept in a
+        // collection the customer cannot read, so the prize is unknown
+        // to the client until this function copies it across below.
+        const giftRef = db.collection('gift_coupon_gifts').doc(couponId);
+
         const snap = await tx.get(couponRef);
+        const giftSnap = await tx.get(giftRef);
 
         if (!snap.exists) {
           throw new Error('NOT_FOUND');
@@ -85,12 +91,25 @@ export const scratchGiftCoupon = functions.https.onCall(
           throw new Error('STILL_LOCKED');
         }
 
-        const giftType = (coupon.giftType as string) ?? '';
-        const value = typeof coupon.value === 'number' ? coupon.value : 0;
-        const giftLabel = (coupon.giftLabel as string) ?? '';
+        // Open the envelope. A 'ready' coupon with no gift doc means an
+        // admin armed it and the gift write was lost — surface that as
+        // "not ready" rather than revealing an empty card.
+        if (!giftSnap.exists) {
+          throw new Error('NOT_READY');
+        }
+        const gift = giftSnap.data() as FirebaseFirestore.DocumentData;
+        const giftType = (gift.giftType as string) ?? '';
+        const value = typeof gift.value === 'number' ? gift.value : 0;
+        const giftLabel = (gift.giftLabel as string) ?? '';
 
+        // Copy the gift onto the customer-visible doc — from this point
+        // the card is open, so there is nothing left to hide, and
+        // redeemGiftCoupon reads `value`/`giftType` from here.
         tx.update(couponRef, {
           status: 'scratched',
+          giftType,
+          value,
+          giftLabel,
           scratchedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 

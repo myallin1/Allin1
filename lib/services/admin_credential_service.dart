@@ -15,6 +15,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/credential.dart' hide Timestamp;
 import 'encryption_service.dart';
 import 'session_service.dart';
+import './firestore_usage_tracking.dart';
 
 // ================================================================
 // Admin Credential Result Class
@@ -303,7 +304,7 @@ class AdminCredentialService {
 
     return _adminCredentialsCollection
         .orderBy('createdAt', descending: true)
-        .snapshots()
+        .trackedSnapshots()
         .map(
           (snapshot) => snapshot.docs
               .map(
@@ -593,7 +594,7 @@ class AdminCredentialService {
     return _adminCredentialsCollection
         .where('assignedUserIds', arrayContains: userId)
         .orderBy('updatedAt', descending: true)
-        .snapshots()
+        .trackedSnapshots()
         .map(
           (snapshot) => snapshot.docs
               .map(

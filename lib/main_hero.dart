@@ -35,6 +35,7 @@ import 'services/app_update_gate_service.dart';
 import 'widgets/branded_loading_screen.dart';
 import 'widgets/migration_notice_overlay.dart';
 import 'services/guru_overlay_service.dart';
+import 'services/chitti/hero_memory_service.dart';
 
 String? _rideIdFromPushData(Map<String, dynamic> data) {
   for (final key in const <String>[
@@ -625,6 +626,10 @@ void main() async {
 
       runApp(const HeroApp());
       unawaited(_warmHeroServices());
+      // NEW (Sep 1 2026 — Hero Memory): warms the synchronous in-memory
+      // cache HeroMemoryService.heroProfileForPrompt() reads from — see
+      // that file's header for why prompt-building must stay sync.
+      unawaited(HeroMemoryService.preload());
       // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch"): fire-and-forget,
       // fails open on any error — see MigrationGateService's own header.
       MigrationGateService.instance.start();

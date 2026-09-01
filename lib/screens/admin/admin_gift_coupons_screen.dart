@@ -115,6 +115,21 @@ class _CouponList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The gift itself lives in the admin-only `gift_coupon_gifts`
+    // collection (the customer must not be able to read it before
+    // scratching — see GiftCouponService.setGift). Admin still needs to
+    // SEE what's armed, so join that here: ONE stream for the whole
+    // list, never a read per card.
+    return StreamBuilder<Map<String, GiftCouponReveal>>(
+      stream: service.streamSealedGifts(),
+      builder: (context, giftsSnapshot) {
+        final gifts = giftsSnapshot.data ?? const <String, GiftCouponReveal>{};
+        return _buildList(context, gifts);
+      },
+    );
+  }
+
+  Widget _buildList(BuildContext context, Map<String, GiftCouponReveal> gifts) {
     return StreamBuilder<List<GiftCouponModel>>(
       stream: service.streamCouponsByStatus(status),
       builder: (context, snapshot) {
@@ -152,6 +167,7 @@ class _CouponList extends StatelessWidget {
           itemBuilder: (context, i) => _CouponCard(
             coupon: coupons[i],
             service: service,
+            sealedGift: gifts[coupons[i].id],
           ),
         );
       },
@@ -168,10 +184,31 @@ class _CouponList extends StatelessWidget {
 }
 
 class _CouponCard extends StatelessWidget {
-  const _CouponCard({required this.coupon, required this.service});
+  const _CouponCard({
+    required this.coupon,
+    required this.service,
+    this.sealedGift,
+  });
 
   final GiftCouponModel coupon;
   final GiftCouponService service;
+
+  /// What's in the envelope, from the admin-only collection. Null for a
+  /// coupon that hasn't been armed yet.
+  final GiftCouponReveal? sealedGift;
+
+  /// Admin-side gift label: from the coupon itself once it's scratched
+  /// (the Cloud Function copies it across at reveal), otherwise from
+  /// the sealed envelope.
+  String get _giftText => coupon.giftDescription.isNotEmpty
+      ? coupon.giftDescription
+      : (sealedGift?.giftDescription ?? '');
+
+  /// An 'item' gift still needs handing over in person; a discount
+  /// closes itself when it's spent on a bill.
+  bool get _isItemGift =>
+      coupon.giftType == GiftCouponType.item ||
+      sealedGift?.giftType == GiftCouponType.item;
 
   String _unlockLabel() {
     if (coupon.status == GiftCouponStatus.scratched) {
@@ -208,7 +245,7 @@ class _CouponCard extends StatelessWidget {
         title: Text('Mark as handed over?',
             style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800),),
         content: Text(
-          'Confirm that "${coupon.giftLabel}" has been given to '
+          'Confirm that "$_giftText" has been given to '
           '${coupon.customerName.isNotEmpty ? coupon.customerName : 'the customer'}. '
           'The coupon will close and disappear from their Rewards page.',
           style: const TextStyle(color: _muted, fontSize: 13),
@@ -243,10 +280,8 @@ class _CouponCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final needsGift = coupon.status == GiftCouponStatus.awaitingGift;
-    // An item gift that's been revealed still needs a human to hand the
-    // thing over; a discount closes itself when it's spent on a bill.
-    final needsHandover = coupon.status == GiftCouponStatus.scratched &&
-        coupon.giftType == GiftCouponType.item;
+    final needsHandover =
+        coupon.status == GiftCouponStatus.scratched && _isItemGift;
 
     return Card(
       color: _card,
@@ -271,8 +306,8 @@ class _CouponCard extends StatelessWidget {
                   child: Text(
                     needsGift
                         ? 'NEEDS GIFT'
-                        : (coupon.giftDescription.isNotEmpty
-                            ? coupon.giftDescription.toUpperCase()
+                        : (_giftText.isNotEmpty
+                            ? _giftText.toUpperCase()
                             : 'ARMED'),
                     style: TextStyle(
                       color: needsGift ? _pink : _gold,
@@ -341,6 +376,7 @@ class _CouponCard extends StatelessWidget {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<GiftCouponModel>('coupon', coupon));
     properties.add(DiagnosticsProperty<GiftCouponService>('service', service));
+    properties.add(DiagnosticsProperty<GiftCouponReveal?>('sealedGift', sealedGift));
   }
 }
 

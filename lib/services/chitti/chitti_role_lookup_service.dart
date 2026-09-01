@@ -33,10 +33,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import 'dart:async';
+
 import 'chitti_enquiry_service.dart';
 import 'chitti_local_read.dart';
 import 'chitti_accessibility_bridge.dart';
 import 'chitti_summarizer.dart';
+import 'hero_memory_service.dart';
 
 class ChittiRoleLookupService {
   ChittiRoleLookupService._();
@@ -122,6 +125,11 @@ class ChittiRoleLookupService {
         total += amount;
         count++;
       }
+
+      // NEW (Sep 1 2026 — Hero Memory): fire-and-forget snapshot so
+      // Chitti can compare today vs yesterday later without a second
+      // Firestore read — see HeroMemoryService's file header.
+      unawaited(HeroMemoryService.recordEarningsSnapshot(total, count));
 
       if (count == 0) {
         return "You haven't earned anything yet today. Go online and the pings "

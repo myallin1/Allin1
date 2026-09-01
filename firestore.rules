@@ -1631,6 +1631,26 @@ service cloud.firestore {
       allow delete: if isAdminAny();
     }
 
+    // gift_coupon_gifts — THE SEALED ENVELOPE.
+    //
+    // What is actually inside a coupon lives here, NOT on the
+    // gift_coupons doc, for one reason: a customer can read their own
+    // gift_coupons doc (they must — that's how the card and its
+    // countdown render). If the gift were stored there, anyone running
+    // a patched client could read the prize before scratching and spoil
+    // the whole mechanic. Money was never at risk either way (redeeming
+    // needs status 'scratched', which only a Cloud Function sets after
+    // a server-clock check) — but the surprise was, and the surprise IS
+    // the feature.
+    //
+    // Admin writes here when arming a card; scratchGiftCoupon (Admin
+    // SDK, bypasses these rules) reads it and copies the gift onto the
+    // customer-visible doc at the moment of the reveal. No customer
+    // read clause exists here at all, deliberately.
+    match /gift_coupon_gifts/{couponId} {
+      allow read, write: if isAdminAny();
+    }
+
     // tutorial_videos — "how it works" clips for the Hero app, the Hero
     // PWA and the Customer app (Aug 29 2026). Same shape as ads/
     // erode_offers above: anyone signed in can read, only admin writes.

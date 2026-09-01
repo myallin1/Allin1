@@ -20,14 +20,31 @@ export { checkDeviceFingerprint } from './checkDeviceFingerprint';
 // Nizam's request). Server-authoritative redemption — see
 // redeemGiftCoupon.ts for why this can't be a client-side Firestore
 // transaction for a discount that moves real money.
-// onServicePaidCreateCoupon mints a locked coupon the moment ANY
-// service is marked paid (client can never mint one); scratchGiftCoupon
-// enforces the unlock timer against the SERVER clock and is the only
-// thing that reveals the gift; redeemGiftCoupon spends a scratched
-// discount on a bill.
-export { onServicePaidCreateCoupon } from './onServicePaidCreateCoupon';
+//
+// onServiceRequestUpdated mints a locked coupon the moment ANY service
+// is marked paid, and revokes an unspent one if the service is
+// cancelled before payment — MERGED into one onUpdate trigger per CTO
+// audit v2 (§8.2), since service_requests is the highest-write
+// collection in the app and two separate onUpdate triggers on it meant
+// double the invocations on every write. scratchGiftCoupon enforces
+// the unlock timer against the SERVER clock and is the only thing that
+// reveals the gift; redeemGiftCoupon spends a scratched discount on a
+// bill.
+export { onServiceRequestUpdated } from './onServiceRequestUpdated';
 export { scratchGiftCoupon } from './scratchGiftCoupon';
 export { redeemGiftCoupon } from './redeemGiftCoupon';
+// CTO-audit lifecycle gaps: revoke a coupon whose service was deleted
+// (the customer's own cancel path deletes the doc rather than setting
+// a status, so this needs its own onDelete trigger — see
+// giftCouponMaintenance.ts for why it isn't merged into the onUpdate
+// trigger above), and auto-arm coupons an admin never got to so a
+// customer is never stuck on "preparing your gift" forever.
+export {
+  revokeCouponOnServiceDeleted,
+  armStaleGiftCoupons,
+} from './giftCouponMaintenance';
+// Brings the customer back into the app the moment their card is armed.
+export { notifyCustomerOnCouponReady } from './notifyCustomerOnCouponReady';
 export { manageHeroApproval } from './manageHeroApproval';
 export { notifyHeroOnRideAssigned } from './notifyHeroOnRideAssigned';
 // FCM Data Push Layer 2 (CTO mandate). Unlike notifyHeroOnRideAssigned

@@ -33,6 +33,7 @@ import '../services/chitti_overlay_service.dart';
 import '../services/gift_coupon_service.dart';
 import '../widgets/animated_meter_fare.dart';
 import '../widgets/rating_feedback_sheet.dart';
+import '../services/firestore_usage_tracking.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
 const Color _kBg = Color(0xFFFFFFFF);
@@ -96,7 +97,7 @@ class _ServiceRequestPaymentScreenState
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (sheetContext) => _CouponPickerSheet(
-        stream: _giftCouponService.streamActiveCouponsForCurrentUser(),
+        stream: _giftCouponService.streamSpendableDiscounts(),
       ),
     );
     if (coupon == null || !mounted) return;
@@ -177,7 +178,7 @@ class _ServiceRequestPaymentScreenState
         stream: FirebaseFirestore.instance
             .collection('service_requests')
             .doc(widget.requestId)
-            .snapshots(),
+            .trackedSnapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
@@ -388,6 +389,12 @@ class _CouponPickerSheet extends StatelessWidget {
               children: [
                 Text('Apply a Gift Coupon',
                     style: GoogleFonts.outfit(color: _kText, fontSize: 17, fontWeight: FontWeight.w800),),
+                const SizedBox(height: 4),
+                // CTO audit: state the no-rollover rule before they
+                // pick, not after — a ₹50 coupon on a ₹30 bill loses
+                // the difference.
+                Text('One coupon per bill. Any unused value is not carried over.',
+                    style: GoogleFonts.outfit(color: _kMuted, fontSize: 11.5),),
                 const SizedBox(height: 12),
                 if (snapshot.connectionState == ConnectionState.waiting)
                   const Padding(
@@ -397,7 +404,10 @@ class _CouponPickerSheet extends StatelessWidget {
                 else if (coupons.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: Text("You don't have any active gift coupons.",
+                    child: Text(
+                        "No gift coupons ready to use. Scratch one open in "
+                        'Rewards first — you earn one each time you pay for '
+                        'a service.',
                         style: GoogleFonts.outfit(color: _kMuted, fontSize: 13),),
                   )
                 else
@@ -420,7 +430,7 @@ class _CouponPickerSheet extends StatelessWidget {
                               const Icon(Icons.card_giftcard_rounded, color: Color(0xFFFF8F00)),
                               const SizedBox(width: 10),
                               Expanded(
-                                child: Text('₹${c.value.toStringAsFixed(0)} OFF'
+                                child: Text('${c.giftDescription}'
                                     '${c.sourceSummary.isNotEmpty ? ' — ${c.sourceSummary}' : ''}',
                                     style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w700, fontSize: 13),),
                               ),

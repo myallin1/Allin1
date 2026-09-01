@@ -23,6 +23,7 @@ import 'hero_wallet_service.dart';
 import 'usage_tracking_service.dart';
 import '../config/hero_service_access.dart';
 import '../config/hero_skill_catalog.dart';
+import './firestore_usage_tracking.dart';
 
 /// Canonical status enum — the single source of truth for lifecycle state.
 /// UI label sets (task-type vs goods-type) are presentation-only mappings
@@ -71,7 +72,7 @@ class ServiceRequestService {
     return FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
-        .snapshots()
+        .trackedSnapshots()
         .map((doc) {
       if (!doc.exists) return null;
       return ServiceRequestModel.fromFirestore(doc.data()!, doc.id);
@@ -113,7 +114,7 @@ class ServiceRequestService {
         // guarantee thanks to the orderBy above) is plenty for an
         // order-history screen.
         .limit(50)
-        .snapshots()
+        .trackedSnapshots()
         .map((snap) {
       return snap.docs
           .map((doc) => ServiceRequestModel.fromFirestore(doc.data(), doc.id))
@@ -826,9 +827,36 @@ class ServiceRequestService {
 
       final details = data['details'] as Map<String, dynamic>?;
       final sellerId = details?['sellerId'] as String?;
-      final creditAmount = (requestFields['finalAmount'] as num?)?.toDouble() ??
+      // SELLER CREDIT AMOUNT — the FOOD VALUE, not the hero's final bill.
+      //
+      // FIX (food-order flow audit, two bugs in one chain):
+      //
+      // 1. WRONG FIELD ORDER. `finalAmount` used to win. That is the
+      //    HERO's entered bill, which is what the CUSTOMER pays — food
+      //    plus the hero's delivery/service portion. Crediting it to the
+      //    hotel handed the hotel the hero's delivery money too: a ₹350
+      //    bill on a ₹300 order credited the seller ₹350. The seller is
+      //    owed exactly what they priced the food at, so the order's own
+      //    value now comes first and `finalAmount` is only a last-resort
+      //    fallback for a seller-bearing request that carries neither
+      //    field (defensive — no current caller produces that shape).
+      //    This is also what leaves a non-zero remainder for the hero's
+      //    own credit to claim — see _creditHeroEarning() below.
+      //
+      // 2. `totalAmount` WAS MISSING ENTIRELY. The chain knew only
+      //    `subtotal` (what catalog_food_order writes, see
+      //    seller_detail_screen.dart) — but custom_hotel_order writes its
+      //    order value as `totalAmount` (custom_hotel_view_screen.dart),
+      //    a key nothing here ever looked at. So a Custom Hotel order
+      //    completed WITHOUT a hero-entered final bill (admin's
+      //    advanceStatus('completed') path, which carries no amount at
+      //    all) resolved to 0.0, failed the `creditAmount > 0` guard
+      //    below, and silently credited the seller nothing — no error,
+      //    no ledger row, just a missing payout.
+      final creditAmount = (details?['subtotal'] as num?)?.toDouble() ??
+          (details?['totalAmount'] as num?)?.toDouble() ??
+          (requestFields['finalAmount'] as num?)?.toDouble() ??
           (data['finalAmount'] as num?)?.toDouble() ??
-          (details?['subtotal'] as num?)?.toDouble() ??
           0.0;
       final alreadyCredited = data['earningsCredited'] == true;
       final shouldCredit = !alreadyCredited &&
@@ -1095,11 +1123,119 @@ class ServiceRequestService {
   }) async {
     final requestRef =
         FirebaseFirestore.instance.collection('service_requests').doc(requestId);
-    await requestRef.update({
-      'paymentStatus': 'paid',
-      'paymentMethod': method,
-      'paidAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
+
+    // FIX (food-order flow audit — "hero earnings never recorded for
+    // food/grocery"): this used to be a bare update() that wrote only the
+    // payment fields. hero_ride_screen.dart has ALWAYS written a
+    // `wallet_transactions` credit row when a ride's payment is
+    // collected (see its 'self' branch), but this method — the close-out
+    // path for ALL FOUR non-ride categories (Hero Booking, Custom Order,
+    // Food, Grocery) — never wrote one. It only ever flushed the usage
+    // fee DEBIT below. Net effect on hero_earnings_screen.dart, which
+    // sums `wallet_transactions` rows filtered by `heroId`: a hero who
+    // delivered food all day saw a "Deducted" figure and "Earned ₹0.00".
+    // Their earnings were not merely mis-summed, they were never
+    // recorded at all.
+    //
+    // Now one transaction that writes the payment fields AND the hero's
+    // earning together, so a task can never be marked paid without the
+    // matching credit (or vice versa).
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snap = await tx.get(requestRef);
+      final data = snap.data();
+      if (data == null) return; // Concurrently cancelled/deleted.
+
+      final heroId = (data['assignedHeroId'] as String?) ??
+          (data['acceptedHeroId'] as String?);
+      final details = data['details'] as Map<String, dynamic>?;
+      final sellerId = details?['sellerId'] as String?;
+
+      // What the customer actually handed over.
+      final collected = (data['finalAmount'] as num?)?.toDouble() ??
+          (data['estimatedAmount'] as num?)?.toDouble() ??
+          0.0;
+
+      // What the SELLER is credited for this same order — the exact same
+      // resolution _completeAndCreditSeller() uses, so the two figures
+      // can never disagree about how one payment was split. Zero when
+      // there is no seller at all (hero_booking, custom_order,
+      // grocery_order carry no details.sellerId), and in that case the
+      // hero is credited the full collected amount — which is precisely
+      // how the ride flow already behaves.
+      final sellerPortion = (sellerId != null && sellerId.isNotEmpty)
+          ? ((details?['subtotal'] as num?)?.toDouble() ??
+              (details?['totalAmount'] as num?)?.toDouble() ??
+              0.0)
+          : 0.0;
+
+      final heroEarning = collected - sellerPortion;
+
+      // Idempotency, same two-layer discipline as _completeAndCreditSeller
+      // above: this flag guards the common retry (double-tap, app killed
+      // right after commit, network drop on the response), and the ledger
+      // doc's FIXED id `${requestId}_hero_credit` is the structural
+      // backstop — Firestore treats a second .set() on an existing id as
+      // an update, and firestore.rules grants no `update` on
+      // wallet_transactions to anyone but an admin, so a duplicate can
+      // never land regardless of any bug on this side.
+      final shouldCredit = data['heroEarningsCredited'] != true &&
+          heroId != null &&
+          heroId.isNotEmpty &&
+          heroEarning > 0;
+
+      tx.update(requestRef, {
+        'paymentStatus': 'paid',
+        'paymentMethod': method,
+        'paidAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        if (shouldCredit) 'heroEarningsCredited': true,
+      });
+
+      if (!shouldCredit) return;
+
+      // Mirrors hero_ride_screen.dart's own post-collection write.
+      // set(merge:true) rather than update() for the same reason it uses
+      // it there — never assume which optional fields already exist on
+      // the hero doc. Touches no approvalStatus field, so firestore.rules'
+      // heroes-update clause (which pins approvalStatus for a self-write)
+      // is satisfied.
+      tx.set(
+        FirebaseFirestore.instance.collection('heroes').doc(heroId),
+        {
+          'walletBalance': FieldValue.increment(heroEarning),
+          'totalEarnings': FieldValue.increment(heroEarning),
+          'lastTaskCompletedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+
+      // Field names deliberately match what hero_ride_screen.dart writes
+      // and what hero_earnings_screen.dart reads — `heroId`, `type`,
+      // `amount`, `timestamp`. Using `timestamp` (not `createdAt`) is
+      // what keeps this row visible to the earnings screen's date filter
+      // and distinct from the customer coin-ledger rows that share this
+      // collection; see that screen's header comment.
+      tx.set(
+        FirebaseFirestore.instance
+            .collection('wallet_transactions')
+            .doc('${requestId}_hero_credit'),
+        {
+          'heroId': heroId,
+          if (data['assignedHeroName'] != null)
+            'heroName': data['assignedHeroName'],
+          'type': 'credit',
+          'amount': heroEarning,
+          // Kept alongside the net figure so a payout dispute can be
+          // reconstructed from this one row without re-reading the order.
+          'grossCollected': collected,
+          'sellerPortion': sellerPortion,
+          'requestId': requestId,
+          'requestType': data['requestType'],
+          'paymentMethod': method,
+          'description': 'Payment collected for completed task',
+          'timestamp': FieldValue.serverTimestamp(),
+        },
+      );
     });
 
     // FIX (Aug 11 2026 — Nizam's "Phase 1" revenue-leak audit fix):

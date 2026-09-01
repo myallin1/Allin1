@@ -35,6 +35,7 @@ import 'seller_pending_screen.dart';
 import 'seller_settings_screen.dart';
 import 'seller_side_drawer.dart';
 import 'seller_vertical_picker_screen.dart';
+import '../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFFF7FAF8);
 const Color _surface = Color(0xFFFFFFFF);
@@ -66,6 +67,26 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   /// the build most likely to sit running on a shop counter for weeks,
   /// so a per-rebuild re-attach is the worst kind of quiet cost.
   late final Stream<List<ChittiEnquiry>> _openEnquiriesStream;
+
+  /// Quick Toggle's menu_items stream — built ONCE, the moment the
+  /// seller id becomes known, never inside build().
+  ///
+  /// FIX (zero-cost audit): _buildQuickMenuToggle() used to construct
+  /// `sellers/{id}/menu_items.limit(10).snapshots()` INLINE in its
+  /// StreamBuilder — the exact anti-pattern _openEnquiriesStream above
+  /// already documents. On its own that would be bad enough, but this
+  /// screen also runs _uiTickTimer, a Timer.periodic that calls
+  /// setState() every 15 SECONDS purely to re-evaluate the delivery
+  /// handoff timeout. Every one of those ticks rebuilt this widget,
+  /// which built a brand-new stream, which tore down and re-attached the
+  /// Firestore listener — and a fresh attach re-bills the whole result
+  /// set. That is up to 10 document reads every 15 seconds, ~2,400 reads
+  /// per hour, on the one screen most likely to be left open on a shop
+  /// counter all day, for data that changes maybe twice a week.
+  /// Hoisting it here makes it a single attach for the life of the
+  /// screen, which is what every other listener in this file already
+  /// does.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _quickMenuStream;
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final FoodSellerService _service = FoodSellerService();
@@ -245,6 +266,14 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
       setState(() {
         _seller = seller;
         _isLoadingProfile = false;
+        // Built once here rather than in build() — see the field's own
+        // comment for why a per-rebuild stream was costing real reads.
+        _quickMenuStream ??= FirebaseFirestore.instance
+            .collection('sellers')
+            .doc(seller.id)
+            .collection('menu_items')
+            .limit(10)
+            .trackedSnapshots();
       });
 
       // Start zero-delay background notification alarm
@@ -316,7 +345,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         // never has more than a handful of orders in-flight at once, so
         // 50 is a generous ceiling, not a real limit on normal use.
         .limit(50)
-        .snapshots()
+        .trackedSnapshots()
         .listen((snap) {
       DbUsageTracker.instance
           .recordRead(snap.docs.length, 'seller_catalog_orders');
@@ -362,7 +391,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         // FIX (zero-cost RTDB/Firestore audit) — same cap and reasoning
         // as _listenToCatalogOrders above.
         .limit(50)
-        .snapshots()
+        .trackedSnapshots()
         .listen((snap) {
       DbUsageTracker.instance
           .recordRead(snap.docs.length, 'seller_custom_hotel_orders');
@@ -734,8 +763,25 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                   ),
                 )
               : Icon(icon, size: 18),
-          label: Text(label,
-              style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+          // FIX (seller-app text-visibility bug — "accept buttons la text
+          // maraikuthu"): this SizedBox pins the height to 42, but
+          // ElevatedButton.icon puts its label in a Flexible, so a long
+          // label ('Retry Finding Delivery Partner' at 30 chars, and
+          // 'Book Delivery Partner' on a narrow phone) WRAPS to two lines
+          // and is then clipped against that fixed height — the seller
+          // sees a half-cut word and no way to tell what the button does.
+          // Same class of bug hero_home_screen.dart already fixed on Aug
+          // 11 2026 for 'Nearing Completion' / 'Payment Received
+          // (Cash/UPI)', and the identical FittedBox remedy: scale the
+          // label down to fit on ONE line instead of ever clipping it.
+          // FittedBox only shrinks, never grows, so short labels ('Accept
+          // Order', 'Food Ready') keep rendering at their natural size.
+          label: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(label,
+                maxLines: 1,
+                style: GoogleFonts.outfit(fontWeight: FontWeight.w700),),
+          ),
           style: ElevatedButton.styleFrom(
             backgroundColor: color,
             foregroundColor: Colors.white,
@@ -1160,22 +1206,21 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   }
 
   Widget _buildQuickMenuToggle() {
-    if (_seller == null) return const SizedBox.shrink();
+    if (_seller == null || _quickMenuStream == null) {
+      return const SizedBox.shrink();
+    }
 
-    return StreamBuilder<QuerySnapshot>(
-      // FIX (Aug 17 2026 seller-app audit): same wrong-subcollection bug
-      // as seller_detail_screen.dart's checkout transaction — this read
-      // `menu` while every writer/reader elsewhere uses `menu_items`.
-      // Here it failed SILENTLY rather than loudly: the builder below
-      // returns SizedBox.shrink() on an empty snapshot, so the whole
-      // "Quick Toggle" panel simply never rendered and the seller had no
-      // idea the feature existed at all.
-      stream: FirebaseFirestore.instance
-          .collection('sellers')
-          .doc(_seller!.id)
-          .collection('menu_items')
-          .limit(10) // Show top items
-          .snapshots(),
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      // Reads `menu_items` (NOT `menu`) — fixing that subcollection name
+      // was the Aug 17 2026 seller-app audit's find: it had failed
+      // SILENTLY, since the builder below returns SizedBox.shrink() on an
+      // empty snapshot, so the whole "Quick Toggle" panel simply never
+      // rendered and the seller had no idea the feature existed.
+      //
+      // The stream itself is now built once in _loadProfile() instead of
+      // here — see _quickMenuStream's declaration for the read-cost
+      // reason.
+      stream: _quickMenuStream,
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const SizedBox.shrink();
@@ -1201,7 +1246,9 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                 separatorBuilder: (_, __) => const SizedBox(width: 12),
                 itemBuilder: (context, index) {
                   final doc = snapshot.data!.docs[index];
-                  final data = doc.data() as Map<String, dynamic>;
+                  // No cast needed — the StreamBuilder above is now typed
+                  // to QuerySnapshot<Map<String, dynamic>>.
+                  final data = doc.data();
                   final name = data['name'] as String? ?? 'Item';
                   final isAvailable = data['isAvailable'] as bool? ?? true;
 
@@ -1679,7 +1726,15 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(color: _gold.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                child: Text(status, style: GoogleFonts.outfit(color: _gold, fontSize: 10, fontWeight: FontWeight.w700)),
+                // Raw status keys carry underscores ('nearing_completion',
+                // 'hero_assigned', 'admin_review') — shown verbatim they
+                // read as debug output on a seller-facing card. The hero
+                // app's own status chip already strips them the same way
+                // (hero_home_screen.dart's _ServiceRequestStatusCard).
+                child: Text(status.replaceAll('_', ' '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(color: _gold, fontSize: 10, fontWeight: FontWeight.w700),),
               ),
             ],
           ),
@@ -1728,7 +1783,11 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                   color: _orange.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(status,
+                // Same underscore-stripping as the custom-hotel card
+                // above — see that comment.
+                child: Text(status.replaceAll('_', ' '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.outfit(color: _orange, fontSize: 10, fontWeight: FontWeight.w700),),
               ),
             ],

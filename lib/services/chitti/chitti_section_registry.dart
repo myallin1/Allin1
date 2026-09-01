@@ -32,7 +32,9 @@
 import 'package:flutter/widgets.dart';
 
 import '../../screens/admin/admin_ai_settings_screen.dart';
+import '../../screens/admin/chitti_conversations_screen.dart';
 import '../../screens/admin/chitti_debug_logs_screen.dart';
+import '../../screens/admin/chitti_dev_monitor_screen.dart';
 import '../../screens/admin/super_admin_home_screen.dart';
 import '../../screens/admin/admin_db_usage_screen.dart';
 import '../../screens/admin/admin_hero_dispatch_screen.dart';
@@ -558,6 +560,42 @@ const List<ChittiSection> kChittiSections = <ChittiSection>[
       'call history logs', 'கால் லாக்ஸ்', 'டிபக் லாக்ஸ்',
     ],
   ),
+  // NEW (Sep 1 2026 — mobile-first dev pipeline monitoring). Voice
+  // reachable for the same reason the debug logs are: the admin is
+  // usually mid-task on the phone when they want to check whether a
+  // build finished, not sitting in the settings screen.
+  // NEW (Sep 1 2026): the business-readable record of screened calls —
+  // asked for by voice far more naturally than the debug logs are
+  // ("what did that caller want?"), so it gets its own aliases rather
+  // than sharing the debug screen's.
+  ChittiSection(
+    key: 'call_conversations',
+    label: 'Call Conversations',
+    description: 'What each caller said to Chitti and what Chitti replied, '
+        'with a one-line summary of what they wanted.',
+    variants: {'admin'},
+    builder: _chittiConversations,
+    screenType: ChittiConversationsScreen,
+    aliases: [
+      'conversations', 'call conversations', 'what did the caller say',
+      'call summary', 'call summaries', 'caller messages', 'screened calls',
+      'உரையாடல்', 'கால் சம்மரி',
+    ],
+  ),
+  ChittiSection(
+    key: 'dev_monitor',
+    label: 'Development Monitor',
+    description: 'Latest installable test APK, builds running now, and the '
+        'dev tasks Chitti opened for Claude — the whole pipeline in one screen.',
+    variants: {'admin'},
+    builder: _chittiDevMonitor,
+    screenType: ChittiDevMonitorScreen,
+    aliases: [
+      'dev monitor', 'development monitor', 'build status', 'builds',
+      'latest build', 'test apk', 'apk', 'github status', 'ci status',
+      'பில்ட் ஸ்டேட்டஸ்', 'டெவலப்மென்ட் மானிட்டர்',
+    ],
+  ),
   ChittiSection(
     key: 'admin_new_orders',
     label: 'New Orders',
@@ -780,6 +818,8 @@ Widget _sellerSettings(BuildContext _) => const SellerSettingsScreen();
 Widget _adminHome(BuildContext _) => const SuperAdminHomeScreen();
 Widget _adminDashboard(BuildContext _) => const AdminDashboardScreen();
 Widget _chittiDebugLogs(BuildContext _) => const ChittiDebugLogsScreen();
+Widget _chittiDevMonitor(BuildContext _) => const ChittiDevMonitorScreen();
+Widget _chittiConversations(BuildContext _) => const ChittiConversationsScreen();
 Widget _adminNewOrders(BuildContext _) => const AdminNewOrdersScreen();
 Widget _heroApprovals(BuildContext _) => const HeroApprovalsScreen();
 Widget _approvedHeroes(BuildContext _) => const ApprovedHeroesScreen();

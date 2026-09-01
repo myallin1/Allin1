@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart';
 import '../models/food_models.dart';
 import 'affiliate_service.dart';
 import 'db_usage_tracker.dart';
+import './firestore_usage_tracking.dart';
 
 class FoodSellerService {
   factory FoodSellerService() => _instance;
@@ -107,7 +108,7 @@ class FoodSellerService {
         // category_gateway_service.dart's loadCategoryData() already
         // uses for the same kind of seller-listing query.
         .limit(50)
-        .snapshots()
+        .trackedSnapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
         final data = doc.data()! as Map<String, dynamic>;
@@ -195,7 +196,7 @@ class FoodSellerService {
 
   /// Reactive stream of all menu items for a seller.
   Stream<List<MenuItemModel>> listenToMenuItems(String sellerId) {
-    return _menuItemsRef(sellerId).snapshots().map((snapshot) {
+    return _menuItemsRef(sellerId).trackedSnapshots().map((snapshot) {
       return snapshot.docs.map((doc) {
         final data = doc.data()! as Map<String, dynamic>;
         data['id'] = doc.id;

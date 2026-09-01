@@ -1724,7 +1724,26 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
         final left = service.position.dx.clamp(0.0, maxLeft);
         final top = service.position.dy.clamp(0.0, maxTop);
 
-        return Positioned(
+        // NEW (Sep 1 2026 — Nizam: "pop open la irukumbothu customer
+        // baground screen tap pannunalum chitti automatic ah minimize
+        // aidanum"). An OverlayEntry has no barrier of its own, so a tap
+        // anywhere outside the panel previously fell through to whatever
+        // screen was underneath — leaving the panel stuck open on top of
+        // the thing the admin was trying to use. This full-screen
+        // transparent layer sits BEHIND the panel (first child of the
+        // Stack) and minimises on tap. HitTestBehavior.translucent keeps
+        // it invisible; `Stack` ordering keeps the panel itself fully
+        // interactive above it.
+        return Positioned.fill(
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: service.toggleMinimized,
+                ),
+              ),
+              Positioned(
           left: left,
           top: top,
           child: GestureDetector(
@@ -1765,6 +1784,9 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
                 ),
               ),
             ),
+          ),
+              ),
+            ],
           ),
         );
       },
@@ -1873,19 +1895,22 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
           ),
-          IconButton(
-            icon: const Icon(Icons.remove, color: Colors.white, size: 16),
+          // FIX (Sep 1 2026 — Nizam: "atha minimize and close panna vali
+          // ila"). These two existed but were 16px glyphs in a 26x26 box
+          // — well under the ~44px minimum a finger can reliably hit, and
+          // sitting right at the panel's edge. Same actions, just given
+          // a real touch target and a visible circular background so
+          // they read as buttons rather than decoration.
+          _HeaderActionButton(
+            icon: Icons.remove_rounded,
             tooltip: 'Minimize',
             onPressed: service.toggleMinimized,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
           ),
-          IconButton(
-            icon: const Icon(Icons.close, color: Colors.white, size: 16),
+          const SizedBox(width: 2),
+          _HeaderActionButton(
+            icon: Icons.close_rounded,
             tooltip: 'Close',
             onPressed: () => service.requestClose(),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
           ),
         ],
       ),
@@ -2237,6 +2262,44 @@ class _GuruOverlayTypingBubbleState extends State<_GuruOverlayTypingBubble>
               }),
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+// NEW (Sep 1 2026 — Nizam: "atha minimize and close panna vali ila").
+// The panel header's minimize/close controls were 16px icons in 26x26
+// hit boxes pinned to the panel edge — technically present, practically
+// un-tappable. This gives them a 40x40 target (close to the 48dp
+// Material minimum, as large as this compact header allows) plus a
+// translucent circular background so they look pressable.
+class _HeaderActionButton extends StatelessWidget {
+  const _HeaderActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.white.withValues(alpha: 0.18),
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onPressed,
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Icon(icon, color: Colors.white, size: 20),
+          ),
         ),
       ),
     );

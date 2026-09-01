@@ -32,9 +32,11 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../services/chitti/chitti_accessibility_bridge.dart';
 import 'chitti_debug_logs_screen.dart';
+import 'chitti_dev_monitor_screen.dart';
 import '../../services/chitti/chitti_dev_task_service.dart';
 import '../../services/chitti/chitti_summarizer.dart';
 import '../../services/cloudinary_upload_service.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const String _kGroqKeyPrefsKey = 'personal_ai_api_key';
 const String _kGeminiKeyPrefsKey = 'personal_gemini_api_key';
@@ -86,6 +88,7 @@ const Color _muted = Color(0xFF7777A0);
 const Color _border = Color(0x267B6FE0);
 const Color _red = Color(0xFFE05555);
 const Color _purple = Color(0xFFB21FFF);
+const Color _amberWarn = Color(0xFFFFB020);
 
 class AdminAiSettingsScreen extends StatefulWidget {
   const AdminAiSettingsScreen({super.key});
@@ -153,6 +156,35 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
   static const String _kCallAnsweringModeKey = 'kChittiCallAnsweringMode';
   String _callAnsweringMode = 'quick_record';
 
+  // NEW (Sep 1 2026 — Nizam: "headphone jack la namma technical plan
+  // panni athukapram ithe idea va implement pannalam"). Confirmed via
+  // real testing that setAudioRoute(SPEAKER) genuinely works now (see
+  // ChittiCallScreeningService's SPEAKER ROUTE log line), but the
+  // caller still can't hear Chitti — Android's own Acoustic Echo
+  // Cancellation on the built-in speaker+mic pair is suppressing the
+  // acoustic loop. Trying a wired-headset loopback cable (audio-out
+  // wired to mic-in) instead, on the theory that AEC may not scrub a
+  // headset's electrical path as aggressively as the speakerphone
+  // acoustic one. This toggle is read natively by PhoneCallService.
+  // enableSpeakerphone() (key: flutter.kChittiPreferWiredHeadsetRoute)
+  // — off by default so nothing changes for admins not running this
+  // experiment.
+  // UPDATED (Sep 1 2026 — CTO's Bluetooth acoustic-bridge proposal):
+  // widened from a wired-only boolean to a three-way route choice, so
+  // the neckband experiment is actually testable. Without this the call
+  // stays pinned to the phone's own speaker and pairing a headset
+  // changes nothing — the test would fail for the wrong reason.
+  static const String _kCallAudioRouteKey = 'kChittiCallAudioRoute';
+  String _callAudioRoute = 'speaker';
+
+  // NEW (Sep 1 2026 — mic-isolation lever). MediaRecorder with
+  // AudioSource.MIC holds the microphone exclusively on many devices,
+  // which makes it a suspect in "the caller hears nothing" alongside
+  // the audio-mode bug fixed this round. On by default (recording is a
+  // real feature); switching it off is a diagnostic step.
+  static const String _kCallRecordingEnabledKey = 'kChittiCallRecordingEnabled';
+  bool _callRecordingEnabled = true;
+
   // NEW (Aug 12 2026 — per-key model selection): each provider's
   // currently-selected model, defaulting to that provider's first
   // (fastest/default) hardcoded model until the CTO picks otherwise.
@@ -187,6 +219,12 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
     _load();
     _checkAccessibilityService();
     _checkDefaultDialer();
+  }
+
+  Future<void> _setCallAudioRoute(String route) async {
+    setState(() => _callAudioRoute = route);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kCallAudioRouteKey, route);
   }
 
   Future<void> _checkDefaultDialer() async {
@@ -268,6 +306,8 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
       _callAssistantEnabled = prefs.getBool(_kCallAssistantEnabledKey) ?? true;
       _morningBriefingEnabled = prefs.getBool(_kMorningBriefingEnabledKey) ?? true;
       _callAnsweringMode = prefs.getString(_kCallAnsweringModeKey) ?? 'quick_record';
+      _callAudioRoute = prefs.getString(_kCallAudioRouteKey) ?? 'speaker';
+      _callRecordingEnabled = prefs.getBool(_kCallRecordingEnabledKey) ?? true;
     });
 
     final statuses = await ChittiAccessibilityBridge.instance.checkCallPermissions();
@@ -335,6 +375,8 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
       await prefs.setBool(_kCallAssistantEnabledKey, _callAssistantEnabled);
       await prefs.setBool(_kMorningBriefingEnabledKey, _morningBriefingEnabled);
       await prefs.setString(_kCallAnsweringModeKey, _callAnsweringMode);
+      await prefs.setString(_kCallAudioRouteKey, _callAudioRoute);
+      await prefs.setBool(_kCallRecordingEnabledKey, _callRecordingEnabled);
       await ChittiDevTaskService.saveToken(_githubTokenCtrl.text);
       await ChittiDevTaskService.saveRepo(
         owner: _githubOwnerCtrl.text,
@@ -686,6 +728,77 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
           },
         ),
         const SizedBox(height: 12),
+        // NEW (Sep 1 2026 — acoustic-bridge experiments). Confirmed via
+        // this session's logs that setAudioRoute(SPEAKER)=true genuinely
+        // works, yet the caller still hears nothing: Android gives no
+        // app any way to inject audio into the cellular UPLINK (that
+        // path belongs to the baseband processor). The remaining ideas
+        // are all acoustic — get Chitti's voice out of one device and
+        // back into the call's microphone, outside the phone's own echo
+        // cancellation. This picker only chooses which route Chitti
+        // REQUESTS; the device still has to actually be connected, and
+        // the SPEAKER ROUTE debug line reports which route really got
+        // used (including "requested=X, not available").
+        Text(
+          "Call audio route (acoustic bridge tests)",
+          style: GoogleFonts.outfit(color: _text, fontSize: 13.5, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        _AnsweringModeOption(
+          selected: _callAudioRoute == 'speaker',
+          title: 'Phone speaker (default)',
+          subtitle: "Normal loudspeaker. Works as a route, but the phone's own "
+              'echo cancellation stops the caller hearing Chitti.',
+          onTap: () => _setCallAudioRoute('speaker'),
+        ),
+        const SizedBox(height: 8),
+        _AnsweringModeOption(
+          selected: _callAudioRoute == 'bluetooth',
+          title: 'Bluetooth headset (neckband bridge test)',
+          subtitle: 'Routes the call to a paired Bluetooth headset. Hold its '
+              'earbud against its own mic. Use a plain neckband — one with '
+              'ENC / noise cancelling will cancel the loop itself.',
+          onTap: () => _setCallAudioRoute('bluetooth'),
+        ),
+        const SizedBox(height: 8),
+        _AnsweringModeOption(
+          selected: _callAudioRoute == 'wired',
+          title: 'Wired headset (loopback cable test)',
+          subtitle: 'Routes to a plugged-in wired headset — for the '
+              'audio-out-to-mic-in loopback cable idea.',
+          onTap: () => _setCallAudioRoute('wired'),
+        ),
+        const SizedBox(height: 12),
+        // NEW (Sep 1 2026 — mic-isolation lever, see the key constant's
+        // comment). Turning this OFF frees the microphone entirely, so
+        // a test call can show whether call recording was competing
+        // with the cellular uplink.
+        SwitchListTile(
+          title: Text(
+            'Record screened calls',
+            style: GoogleFonts.outfit(color: _text, fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            _callRecordingEnabled
+                ? 'On — saves an .m4a of each screened call'
+                : 'Off — microphone left completely free (mic-isolation test)',
+            style: GoogleFonts.outfit(
+              color: _callRecordingEnabled ? Colors.green : _amberWarn,
+              fontSize: 11,
+            ),
+          ),
+          value: _callRecordingEnabled,
+          activeColor: _red,
+          activeTrackColor: _red.withValues(alpha: 0.3),
+          inactiveThumbColor: _muted,
+          contentPadding: EdgeInsets.zero,
+          onChanged: (val) async {
+            setState(() => _callRecordingEnabled = val);
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool(_kCallRecordingEnabledKey, val);
+          },
+        ),
+        const SizedBox(height: 12),
         SwitchListTile(
           title: Text(
             "Enable Morning Briefing",
@@ -798,6 +911,30 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
             ),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: _red),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        // NEW (Sep 1 2026 — Nizam: "as a ceo and admin other nan
+        // oruthane pakkurathunala athuku thani monitoring ui namma
+        // admin app la irukanum"). One screen showing where every
+        // change is: latest installable APK, builds running, and the
+        // dev tasks Chitti opened — see chitti_dev_monitor_screen.dart.
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const ChittiDevMonitorScreen()),
+            ),
+            icon: const Icon(Icons.monitor_heart_rounded, color: _purple, size: 18),
+            label: Text(
+              'Development Monitor (builds & test APK)',
+              style: GoogleFonts.outfit(color: _purple, fontWeight: FontWeight.w600, fontSize: 12.5),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: _purple),
               padding: const EdgeInsets.symmetric(vertical: 10),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
@@ -924,7 +1061,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
           .collection('chitti_appointments')
           .orderBy('timestamp', descending: true)
           .limit(10)
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Padding(

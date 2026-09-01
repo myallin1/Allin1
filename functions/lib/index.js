@@ -4,7 +4,7 @@
  * Entry Point
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifyAdminOnNewServiceRequest = exports.notifyAdminOnNewRide = exports.notifyHeroOnServicePing = exports.notifyHeroOnPing = exports.notifyHeroOnRideAssigned = exports.manageHeroApproval = exports.redeemGiftCoupon = exports.checkDeviceFingerprint = exports.checkPhonePeOrderStatus = exports.phonepeWebhook = exports.createPhonePeOrder = exports.verifyAndProcessPayment = exports.affiliatePostbackWebhook = void 0;
+exports.notifyAdminOnNewServiceRequest = exports.notifyAdminOnNewRide = exports.notifyHeroOnServicePing = exports.notifyHeroOnPing = exports.notifyHeroOnRideAssigned = exports.manageHeroApproval = exports.notifyCustomerOnCouponReady = exports.armStaleGiftCoupons = exports.revokeCouponOnServiceDeleted = exports.redeemGiftCoupon = exports.scratchGiftCoupon = exports.onServiceRequestUpdated = exports.checkDeviceFingerprint = exports.checkPhonePeOrderStatus = exports.phonepeWebhook = exports.createPhonePeOrder = exports.verifyAndProcessPayment = exports.affiliatePostbackWebhook = void 0;
 var affiliatePostbackWebhook_1 = require("./affiliatePostbackWebhook");
 Object.defineProperty(exports, "affiliatePostbackWebhook", { enumerable: true, get: function () { return affiliatePostbackWebhook_1.affiliatePostbackWebhook; } });
 var verifyAndProcessPayment_1 = require("./verifyAndProcessPayment");
@@ -27,8 +27,34 @@ Object.defineProperty(exports, "checkDeviceFingerprint", { enumerable: true, get
 // Nizam's request). Server-authoritative redemption — see
 // redeemGiftCoupon.ts for why this can't be a client-side Firestore
 // transaction for a discount that moves real money.
+//
+// onServiceRequestUpdated mints a locked coupon the moment ANY service
+// is marked paid, and revokes an unspent one if the service is
+// cancelled before payment — MERGED into one onUpdate trigger per CTO
+// audit v2 (§8.2), since service_requests is the highest-write
+// collection in the app and two separate onUpdate triggers on it meant
+// double the invocations on every write. scratchGiftCoupon enforces
+// the unlock timer against the SERVER clock and is the only thing that
+// reveals the gift; redeemGiftCoupon spends a scratched discount on a
+// bill.
+var onServiceRequestUpdated_1 = require("./onServiceRequestUpdated");
+Object.defineProperty(exports, "onServiceRequestUpdated", { enumerable: true, get: function () { return onServiceRequestUpdated_1.onServiceRequestUpdated; } });
+var scratchGiftCoupon_1 = require("./scratchGiftCoupon");
+Object.defineProperty(exports, "scratchGiftCoupon", { enumerable: true, get: function () { return scratchGiftCoupon_1.scratchGiftCoupon; } });
 var redeemGiftCoupon_1 = require("./redeemGiftCoupon");
 Object.defineProperty(exports, "redeemGiftCoupon", { enumerable: true, get: function () { return redeemGiftCoupon_1.redeemGiftCoupon; } });
+// CTO-audit lifecycle gaps: revoke a coupon whose service was deleted
+// (the customer's own cancel path deletes the doc rather than setting
+// a status, so this needs its own onDelete trigger — see
+// giftCouponMaintenance.ts for why it isn't merged into the onUpdate
+// trigger above), and auto-arm coupons an admin never got to so a
+// customer is never stuck on "preparing your gift" forever.
+var giftCouponMaintenance_1 = require("./giftCouponMaintenance");
+Object.defineProperty(exports, "revokeCouponOnServiceDeleted", { enumerable: true, get: function () { return giftCouponMaintenance_1.revokeCouponOnServiceDeleted; } });
+Object.defineProperty(exports, "armStaleGiftCoupons", { enumerable: true, get: function () { return giftCouponMaintenance_1.armStaleGiftCoupons; } });
+// Brings the customer back into the app the moment their card is armed.
+var notifyCustomerOnCouponReady_1 = require("./notifyCustomerOnCouponReady");
+Object.defineProperty(exports, "notifyCustomerOnCouponReady", { enumerable: true, get: function () { return notifyCustomerOnCouponReady_1.notifyCustomerOnCouponReady; } });
 var manageHeroApproval_1 = require("./manageHeroApproval");
 Object.defineProperty(exports, "manageHeroApproval", { enumerable: true, get: function () { return manageHeroApproval_1.manageHeroApproval; } });
 var notifyHeroOnRideAssigned_1 = require("./notifyHeroOnRideAssigned");

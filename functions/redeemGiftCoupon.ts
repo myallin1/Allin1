@@ -28,21 +28,22 @@ const db = admin.firestore();
 
 interface RedeemGiftCouponRequest {
   couponId: string;
-  // Case A — Heroes bill: an EXISTING service_requests doc whose
-  // finalAmount/estimatedAmount is the authoritative bill amount. The
-  // function reads that amount itself; it never trusts a client-passed
-  // number for this case.
-  requestId?: string;
-  // Case B — Hotel checkout: the order doesn't exist yet (it's created
-  // right after this call succeeds, using the returned payableAmount),
-  // so there is no Firestore doc to read the bill amount from. The
-  // client's own cart subtotal is passed as orderAmount — this is the
-  // SAME trust level the app already gives the client for the
-  // undiscounted order total (custom_hotel_view_screen.dart has always
-  // written its own computed totalAmount when creating an order; this
-  // does not weaken that).
-  orderAmount?: number;
-  requestType?: string;
+  /**
+   * The service_requests doc being discounted. ALWAYS required.
+   *
+   * FIX (CTO audit — Weakness 1 + Weakness 2, HIGH): there used to be a
+   * second mode where the Hotel checkout passed its own `orderAmount`
+   * for an order that did not exist yet, and redeemed BEFORE creating
+   * it. That had two problems: the amount was client-authored, and a
+   * failure during order creation burned the coupon for nothing.
+   *
+   * Both are gone. The Hotel flow now creates its order first and
+   * redeems against the resulting service_requests doc, exactly like
+   * the Heroes bill flow — so the amount is always read from Firestore,
+   * and a redemption failure leaves an un-burned coupon the customer
+   * can still apply later at the bill screen.
+   */
+  requestId: string;
 }
 
 interface RedeemGiftCouponResponse {
@@ -68,15 +69,8 @@ export const redeemGiftCoupon = functions.https.onCall(
       throw new functions.https.HttpsError('invalid-argument', 'couponId is required');
     }
     const requestId = data.requestId;
-    const orderAmount = data.orderAmount;
-    if (!requestId && (orderAmount === undefined || orderAmount === null)) {
-      throw new functions.https.HttpsError(
-        'invalid-argument',
-        'Either requestId (existing bill) or orderAmount (new order) is required',
-      );
-    }
-    if (orderAmount !== undefined && (typeof orderAmount !== 'number' || orderAmount < 0)) {
-      throw new functions.https.HttpsError('invalid-argument', 'orderAmount must be a non-negative number');
+    if (!requestId || typeof requestId !== 'string') {
+      throw new functions.https.HttpsError('invalid-argument', 'requestId is required');
     }
 
     try {
@@ -113,43 +107,49 @@ export const redeemGiftCoupon = functions.https.onCall(
         }
         const value: number = typeof coupon.value === 'number' ? coupon.value : 0;
 
-        let baseAmount: number;
-        let requestRef: admin.firestore.DocumentReference | null = null;
-        let resolvedRequestType = data.requestType ?? null;
+        // The bill is ALWAYS read off the doc — never client-supplied.
+        const requestRef = db.collection('service_requests').doc(requestId);
+        const requestSnap = await tx.get(requestRef);
+        if (!requestSnap.exists) {
+          throw new Error('REQUEST_NOT_FOUND');
+        }
+        const request = requestSnap.data() as FirebaseFirestore.DocumentData;
+        if (request.customerId !== uid) {
+          throw new Error('NOT_OWNER');
+        }
 
-        if (requestId) {
-          // Case A — Heroes bill: read the REAL bill off the doc, never
-          // trust a client-passed amount here.
-          requestRef = db.collection('service_requests').doc(requestId);
-          const requestSnap = await tx.get(requestRef);
-          if (!requestSnap.exists) {
-            throw new Error('REQUEST_NOT_FOUND');
-          }
-          const request = requestSnap.data()!;
-          if (request.customerId !== uid) {
-            throw new Error('NOT_OWNER');
-          }
-          baseAmount =
-            (typeof request.finalAmount === 'number' && request.finalAmount) ||
-            (typeof request.estimatedAmount === 'number' && request.estimatedAmount) ||
-            0;
-          resolvedRequestType = request.requestType ?? resolvedRequestType;
-        } else {
-          // Case B — Hotel checkout: no bill doc exists yet.
-          baseAmount = orderAmount as number;
+        // Where the amount lives depends on requestType, so check every
+        // place this codebase writes one, most-authoritative first:
+        //   finalAmount     — set by completeWithFinalAmount() (hero tasks)
+        //   estimatedAmount — set by setEstimatedAmount()
+        //   details.totalAmount — written at creation by the priced-cart
+        //                     order types (custom_hotel_order,
+        //                     catalog_food_order); this is the one the
+        //                     Hotel flow relies on, since its order is
+        //                     created before any hero has billed it.
+        const details = (request.details ?? {}) as FirebaseFirestore.DocumentData;
+        const candidates = [
+          request.finalAmount,
+          request.estimatedAmount,
+          details.totalAmount,
+          details.subtotal,
+        ];
+        const baseAmount =
+          candidates.find((c) => typeof c === 'number' && c > 0) ?? 0;
+
+        if (baseAmount <= 0) {
+          throw new Error('NO_BILL_AMOUNT');
         }
 
         const discount = Math.min(value, baseAmount);
         const payableAmount = Math.max(baseAmount - discount, 0);
 
-        if (requestRef) {
-          tx.update(requestRef, { finalAmount: payableAmount });
-        }
+        tx.update(requestRef, { finalAmount: payableAmount });
         tx.update(couponRef, {
           status: 'redeemed',
           redeemedAt: admin.firestore.FieldValue.serverTimestamp(),
-          redeemedOnRequestId: requestId ?? null,
-          redeemedOnRequestType: resolvedRequestType,
+          redeemedOnRequestId: requestId,
+          redeemedOnRequestType: request.requestType ?? null,
         });
 
         return { success: true, discount, payableAmount };
@@ -172,6 +172,8 @@ export const redeemGiftCoupon = functions.https.onCall(
           throw new functions.https.HttpsError('failed-precondition', 'This coupon has expired.');
         case 'REQUEST_NOT_FOUND':
           throw new functions.https.HttpsError('not-found', 'The bill for this order could not be found.');
+        case 'NO_BILL_AMOUNT':
+          throw new functions.https.HttpsError('failed-precondition', 'This order has no bill amount to discount yet.');
         default:
           if (error instanceof functions.https.HttpsError) throw error;
           throw new functions.https.HttpsError('internal', 'Could not redeem this coupon. Please try again.');

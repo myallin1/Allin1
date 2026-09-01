@@ -22,6 +22,15 @@ class ChittiAccessibilityBridge {
   /// Callback when a new SMS arrives via SmsReceiver
   void Function(String sender, String body)? onSmsReceived;
 
+  /// NEW (Sep 1 2026 — in-call screen): fires when the admin taps the
+  /// ongoing-call notification, so the app can open the live call UI.
+  void Function()? onOpenInCallScreen;
+
+  /// NEW (Sep 1 2026 — native call-voice TTS): fires with "START",
+  /// "DONE", or "ERROR..." as ChittiCallVoice's native TextToSpeech
+  /// instance progresses through speaking — see [speakOnCallStream].
+  void Function(String event)? onCallVoiceEvent;
+
   void initialize() {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'onVoiceCommand') {
@@ -37,6 +46,12 @@ class ChittiAccessibilityBridge {
         final sender = args?['sender'] as String? ?? 'Unknown';
         final body = args?['body'] as String? ?? '';
         onSmsReceived?.call(sender, body);
+      } else if (call.method == 'onOpenInCallScreen') {
+        onOpenInCallScreen?.call();
+      } else if (call.method == 'onCallVoiceEvent') {
+        final args = call.arguments as Map?;
+        final event = args?['event'] as String? ?? 'unknown';
+        onCallVoiceEvent?.call(event);
       } else if (call.method == 'onCallStateChanged') {
         final args = call.arguments as Map?;
         final event = args?['event'] as String?;
@@ -243,6 +258,83 @@ class ChittiAccessibilityBridge {
     try {
       await _channel.invokeMethod<void>('resetAudioMode');
     } catch (_) {}
+  }
+
+  /// NEW (Sep 1 2026 — CTO/Gemini diagnosis): speaks [text] through a
+  /// native TextToSpeech instance with AudioAttributes.
+  /// USAGE_VOICE_COMMUNICATION (ChittiCallVoice.kt on the native side)
+  /// instead of flutter_tts's hardcoded media-usage attributes, which
+  /// Android's Acoustic Echo Cancellation was silencing before it
+  /// reached the caller. Fire-and-forget on this call — the actual
+  /// START/DONE/ERROR progress arrives via [onCallVoiceEvent].
+  Future<bool> speakOnCallStream(String text, String locale) async {
+    try {
+      final res = await _channel.invokeMethod<bool>('speakOnCallStream', {'text': text, 'locale': locale});
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> stopCallVoice() async {
+    try {
+      await _channel.invokeMethod<void>('stopCallVoice');
+    } catch (_) {}
+  }
+
+  // ── Minimal dialer (Sep 1 2026) ────────────────────────────────────
+  // Needed because holding ROLE_DIALER makes Android stop showing its
+  // own phone UI — see admin_dialer_screen.dart's header.
+
+  /// Places a call via TelecomManager. Returns a human-readable outcome
+  /// (the same "say what happened" convention as
+  /// [requestDefaultDialerRole]) rather than a bare bool, so a refused
+  /// permission shows up as a message instead of silence.
+  Future<String> placeCall(String number) async {
+    try {
+      final res = await _channel.invokeMethod<String>('placeCall', {'number': number});
+      return res ?? 'No response from the dialer.';
+    } catch (e) {
+      return 'Could not place the call: $e';
+    }
+  }
+
+  Future<void> hangUpCall() async {
+    try {
+      await _channel.invokeMethod<void>('hangUpCall');
+    } catch (_) {}
+  }
+
+  /// Starts or stops call recording mid-call. Returns whether recording
+  /// is actually running afterwards — not just what was requested, so
+  /// the in-call screen can't show "recording" when the recorder failed
+  /// to start (the microphone may already be held by speech
+  /// recognition in full-conversation mode).
+  Future<bool> setCallRecording(bool enabled) async {
+    try {
+      final res = await _channel.invokeMethod<bool>('setCallRecording', {'enabled': enabled});
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> toggleSpeaker() async {
+    try {
+      await _channel.invokeMethod<void>('toggleSpeaker');
+    } catch (_) {}
+  }
+
+  /// The live Telecom call (number/state/speakerOn), or null when there
+  /// is none — distinct from [getActiveCallState], which reports the
+  /// screening pipeline's own cached state.
+  Future<Map<String, dynamic>?> getActiveCallInfo() async {
+    try {
+      final res = await _channel.invokeMapMethod<String, dynamic>('getActiveCallInfo');
+      return res;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<bool> sendSms(String number, String message) async {

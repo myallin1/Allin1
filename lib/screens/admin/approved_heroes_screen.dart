@@ -14,6 +14,7 @@ import '../../config/city_config.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'admin_hero_details_screen.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 // ── Theme (matches admin dashboard) ────────────────────────────
 const Color _bg = Color(0xFF0A0A1A);
@@ -135,7 +136,7 @@ class _ApprovedHeroesScreenState extends State<ApprovedHeroesScreen> {
               stream: FirebaseFirestore.instance
                   .collection('heroes')
                   .where('approvalStatus', isEqualTo: 'approved')
-                  .snapshots(),
+                  .trackedSnapshots(),
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(

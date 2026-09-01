@@ -27,6 +27,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/service_request_service.dart';
 import '../services/theme_context_extensions.dart';
 import 'hero_booking_tracking_screen.dart';
+import '../services/firestore_usage_tracking.dart';
 
 class HeroSearchRadarScreen extends StatefulWidget {
   final String requestId;
@@ -93,7 +94,7 @@ class _HeroSearchRadarScreenState extends State<HeroSearchRadarScreen>
     _sub = FirebaseFirestore.instance
         .collection('service_requests')
         .doc(widget.requestId)
-        .snapshots()
+        .trackedSnapshots()
         .listen((doc) {
       if (!mounted || _handled) return;
       final status = doc.data()?['status'] as String? ?? '';

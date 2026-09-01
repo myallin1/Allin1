@@ -20,6 +20,7 @@ import 'config/app_variant.dart';
 import 'config/web_push_config.dart';
 import 'firebase_options.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
+import 'screens/admin/admin_in_call_screen.dart';
 import 'screens/admin/ads_management_screen.dart';
 import 'screens/admin/credentials_admin_screen.dart';
 import 'screens/admin/fare_management_screen.dart';
@@ -341,6 +342,17 @@ void main() {
       ChittiAccessibilityBridge.instance.onAssistTriggered = () {
         GuruOverlayService.instance.show(autoStartMic: true);
       };
+      // NEW (Sep 1 2026 — in-call screen): tapping the ongoing-call
+      // notification opens the live call UI. Routed through the shared
+      // navigatorKey because this fires from a native intent, with no
+      // BuildContext of its own.
+      ChittiAccessibilityBridge.instance.onOpenInCallScreen = () {
+        final nav = navigatorKey.currentState;
+        if (nav == null) return;
+        nav.push(MaterialPageRoute<void>(
+          builder: (_) => const AdminInCallScreen(),
+        ));
+      };
       if (!hasSeenSplashVideoEver) {
         await FirebaseMessaging.instance.requestPermission(
           alert: true,
@@ -355,6 +367,13 @@ void main() {
         ));
       }
       _initAdminFcmAuthListener();
+      // NEW (Sep 1 2026 — automation pipeline notification): CI sends a
+      // push to this topic when a new test APK finishes building
+      // (.github/workflows/ci-cd.yml's publish_admin_test_build job),
+      // so the admin doesn't have to keep opening Development Monitor
+      // to find out. Uses the SAME foreground-alert path as every other
+      // admin notification above/below — no new UI needed.
+      unawaited(FirebaseMessaging.instance.subscribeToTopic('chitti_dev_builds'));
       // Foreground messages are NOT auto-displayed by Android/FCM (only
       // background/killed states get that for free from the
       // `notification` block) — this is the foreground-only path.

@@ -28,6 +28,7 @@ import '../widgets/cached_cloud_image.dart';
 import '../widgets/location_capture_field.dart';
 import 'hero_search_radar_screen.dart';
 import 'service_request_tracking_screen.dart';
+import '../services/firestore_usage_tracking.dart';
 
 // ── Brand Colors (matches dashboard theme) ───────────────────────
 const Color _kPink     = Color(0xFFFF4FA3);
@@ -1517,7 +1518,7 @@ class _LiveEnquiryCardState extends State<_LiveEnquiryCard> {
       stream: FirebaseFirestore.instance
           .collection('service_requests')
           .doc(widget.requestId)
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (context, snapshot) {
         final data = snapshot.data?.data() ?? widget.initialData;
         final status = data['status'] as String? ?? 'pending';

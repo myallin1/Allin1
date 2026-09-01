@@ -16,6 +16,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import '../../services/chitti/chitti_voice_service.dart';
 
 import '../../config/city_config.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -83,7 +84,7 @@ class _AdminSellerApprovalScreenState extends State<AdminSellerApprovalScreen> {
         stream: FirebaseFirestore.instance
             .collection('sellers')
             .where('status', isEqualTo: 'pending')
-            .snapshots(),
+            .trackedSnapshots(),
         builder: (context, snap) {
           if (snap.hasError) {
             return Center(

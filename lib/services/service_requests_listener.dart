@@ -21,6 +21,7 @@
 // client-side on the docs they receive, instead of opening another
 // server-side listener.
 import 'package:cloud_firestore/cloud_firestore.dart';
+import './firestore_usage_tracking.dart';
 
 class ServiceRequestsListener {
   ServiceRequestsListener._();
@@ -37,7 +38,7 @@ class ServiceRequestsListener {
     return _waitingAndReviewStream ??= FirebaseFirestore.instance
         .collection('service_requests')
         .where('status', whereIn: ['pending', 'admin_review'])
-        .snapshots()
+        .trackedSnapshots()
         .asBroadcastStream();
   }
 }

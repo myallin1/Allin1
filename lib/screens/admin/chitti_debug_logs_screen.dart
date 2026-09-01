@@ -18,6 +18,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _card = Color(0xFF141420);
@@ -62,7 +63,7 @@ class _ChittiDebugLogsScreenState extends State<ChittiDebugLogsScreen> {
             .collection('chitti_screening_debug_logs')
             .orderBy('timestamp', descending: true)
             .limit(_pageSize)
-            .snapshots(),
+            .trackedSnapshots(),
         builder: (context, snap) {
           if (snap.hasError) {
             return Center(

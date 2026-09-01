@@ -22,6 +22,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
+import './firestore_usage_tracking.dart';
 
 enum PhonePeOrderStatus { created, paid, failed }
 
@@ -72,7 +73,7 @@ class PhonePePaymentService {
     return _db
         .collection('payment_orders')
         .doc(merchantTransactionId)
-        .snapshots()
+        .trackedSnapshots()
         .map((snap) {
       final status = snap.data()?['status'] as String?;
       switch (status) {

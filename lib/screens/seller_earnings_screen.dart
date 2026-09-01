@@ -17,6 +17,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../models/food_models.dart';
+import '../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFFF7FAF8);
 const Color _card = Color(0xFFFFFFFF);
@@ -87,11 +88,11 @@ class _SellerEarningsScreenState extends State<SellerEarningsScreen> {
     _sellerStream = FirebaseFirestore.instance
         .collection('sellers')
         .doc(widget.seller.id)
-        .snapshots();
+        .trackedSnapshots();
     _ledgerStream = _ledgerRef
         .orderBy('createdAt', descending: true)
         .limit(_pageSize)
-        .snapshots();
+        .trackedSnapshots();
   }
 
   Future<void> _loadMore(

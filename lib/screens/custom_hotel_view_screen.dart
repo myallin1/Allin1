@@ -449,7 +449,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
         padding: const EdgeInsets.all(20),
         child: SafeArea(
           child: StreamBuilder<List<GiftCouponModel>>(
-            stream: _giftCouponService.streamActiveCouponsForCurrentUser(),
+            stream: _giftCouponService.streamSpendableDiscounts(),
             builder: (context, snapshot) {
               final coupons = snapshot.data ?? const [];
               return Column(
@@ -458,6 +458,13 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                 children: [
                   Text('Apply a Gift Coupon',
                       style: GoogleFonts.outfit(color: _kText, fontSize: 17, fontWeight: FontWeight.w800),),
+                  const SizedBox(height: 4),
+                  // CTO audit: make the no-rollover rule explicit up
+                  // front. A ₹50 coupon on a ₹30 bill loses the ₹20 —
+                  // standard voucher behaviour, but only fair if it's
+                  // said before they pick, not after.
+                  Text('One coupon per order. Any unused value is not carried over.',
+                      style: GoogleFonts.outfit(color: _kMuted, fontSize: 11.5),),
                   const SizedBox(height: 12),
                   if (snapshot.connectionState == ConnectionState.waiting)
                     const Padding(
@@ -467,7 +474,10 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                   else if (coupons.isEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Text("You don't have any active gift coupons.",
+                      child: Text(
+                          'No gift coupons ready to use. Scratch one open in '
+                          'Rewards first — you earn one each time you pay for '
+                          'a service.',
                           style: GoogleFonts.outfit(color: _kMuted, fontSize: 13),),
                     )
                   else
@@ -490,7 +500,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                                 const Icon(Icons.card_giftcard_rounded, color: Color(0xFFFF8F00)),
                                 const SizedBox(width: 10),
                                 Expanded(
-                                  child: Text('₹${c.value.toStringAsFixed(0)} OFF'
+                                  child: Text('${c.giftDescription}'
                                       '${c.sourceSummary.isNotEmpty ? ' — ${c.sourceSummary}' : ''}',
                                       style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w700, fontSize: 13),),
                                 ),
@@ -543,23 +553,6 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
 
     setState(() => _placing = true);
     try {
-      // Gift Coupons: redeem FIRST, at the live cart total, right
-      // before either order write — this is the single source of
-      // truth for the discount (server-authoritative, per Nizam's
-      // explicit call), not the client-side _payableTotal estimate the
-      // sheet displays. A failed redemption aborts the whole order
-      // rather than silently placing it undiscounted.
-      var payableTotal = _total;
-      final appliedCoupon = _appliedCoupon;
-      if (appliedCoupon != null) {
-        final redemption = await _giftCouponService.redeemForNewOrder(
-          couponId: appliedCoupon.id,
-          orderAmount: _total,
-          requestType: 'custom_hotel_order',
-        );
-        payableTotal = redemption.payableAmount.toDouble();
-      }
-
       final itemsPayload = activeItems
           .map((i) => {
                 'itemId': i.id,
@@ -579,7 +572,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
         sellerId: widget.hotelId,
         hotelName: widget.hotelName,
         items: itemsPayload,
-        totalAmount: payableTotal,
+        totalAmount: _total,
         customerId: user.uid,
         customerName: customerName,
         customerPhone: customerPhone,
@@ -614,14 +607,49 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
           'customHotelOrderId': orderId,
           'items': itemsPayload,
           'deliveryAddress': address,
-          'totalAmount': payableTotal,
+          'totalAmount': _total,
         },
       );
       await widget.service.linkServiceRequest(orderId: orderId, serviceRequestId: requestId);
 
+      // ── Gift Coupon: redeem LAST, against the order that now exists ──
+      //
+      // FIX (CTO audit — Weakness 2, HIGH). This used to redeem BEFORE
+      // creating anything, using the client's own cart total. If order
+      // creation then failed, the coupon was already burned and the
+      // customer got nothing for it.
+      //
+      // Now the order is created at full price first, and the coupon is
+      // applied to the resulting service_requests doc through the exact
+      // same server path the Heroes bill uses — the function reads the
+      // real amount from Firestore and writes back the discounted
+      // finalAmount. If THIS step fails, the order still stands and the
+      // coupon is still unspent: the customer simply applies it at the
+      // bill screen instead. No state where money is lost either way.
+      var couponNote = '';
+      final appliedCoupon = _appliedCoupon;
+      if (appliedCoupon != null) {
+        try {
+          final redemption = await _giftCouponService.redeemOnServiceRequest(
+            couponId: appliedCoupon.id,
+            requestId: requestId,
+          );
+          couponNote =
+              ' ₹${redemption.discount.toStringAsFixed(0)} coupon applied.';
+        } catch (e) {
+          debugPrint('[CustomHotelView] coupon redemption failed: $e');
+          couponNote = ' Your coupon could not be applied automatically — '
+              'you can still use it on this bill.';
+        }
+      }
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Order placed! The hotel and a delivery hero will be notified.')),
+        SnackBar(
+          content: Text(
+            'Order placed! The hotel and a delivery hero will be notified.$couponNote',
+          ),
+        ),
       );
       Navigator.pop(context, true);
     } catch (e) {

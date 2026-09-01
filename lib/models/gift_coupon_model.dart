@@ -3,7 +3,7 @@
 //
 // LIFECYCLE (per Nizam's design):
 //   1. A customer completes ANY service in the app and pays for it.
-//      A Cloud Function (functions/onServicePaidCreateCoupon.ts) fires
+//      A Cloud Function (functions/onServiceRequestUpdated.ts) fires
 //      on that paymentStatus -> 'paid' write and auto-creates a coupon
 //      in status 'awaiting_gift', with an `unlockAt` timer.
 //   2. Admin opens the Gift Coupons section (Overview > Manage) and
@@ -42,6 +42,14 @@ class GiftCouponStatus {
 
   /// An 'item' gift that has been handed over offline.
   static const String claimed = 'claimed';
+
+  /// The service that earned this coupon was cancelled or refunded
+  /// before the customer spent it (the revoke branch of
+  /// onServiceRequestUpdated, or revokeCouponOnServiceDeleted for the
+  /// customer's delete-based cancel path). Only ever applied to an UNSCRATCHED
+  /// coupon — once a customer has seen their gift we don't claw it back
+  /// automatically.
+  static const String cancelled = 'cancelled';
 }
 
 class GiftCouponModel {
@@ -50,14 +58,21 @@ class GiftCouponModel {
   final String customerName;
   final String status;
 
-  /// [GiftCouponType.discount] or [GiftCouponType.item]; null while the
-  /// coupon is still in 'awaiting_gift'.
+  /// [GiftCouponType.discount] or [GiftCouponType.item].
+  ///
+  /// NULL UNTIL THE CARD IS SCRATCHED — and so are [value] and
+  /// [giftLabel]. While a coupon is 'awaiting_gift' or 'ready' the gift
+  /// is sealed in the admin-only `gift_coupon_gifts` collection, which
+  /// the customer cannot read; scratchGiftCoupon copies it onto this
+  /// doc at the moment of the reveal. That's what stops a patched
+  /// client from reading the prize early. See firestore.rules.
   final String? giftType;
 
-  /// Rupee value for a `discount` gift.
+  /// Rupee value for a `discount` gift. 0 until scratched.
   final num value;
 
   /// Human-readable gift for an `item` gift ("Free mobile cover").
+  /// Empty until scratched.
   final String giftLabel;
 
   /// The paid service that earned this coupon.

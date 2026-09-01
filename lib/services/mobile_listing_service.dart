@@ -34,6 +34,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/mobile_models.dart';
 import 'db_usage_tracker.dart';
+import './firestore_usage_tracking.dart';
 
 class MobileListingService {
   MobileListingService({FirebaseFirestore? firestore})
@@ -58,7 +59,7 @@ class MobileListingService {
   /// Live list of one seller's own listings, for their dashboard.
   /// Scoped to a single seller's subcollection, so this is cheap.
   Stream<List<MobileListing>> streamSellerListings(String sellerId) {
-    return _refFor(sellerId).snapshots().map((snap) {
+    return _refFor(sellerId).trackedSnapshots().map((snap) {
       DbUsageTracker.instance
           .recordRead(snap.docs.length, 'seller_mobile_dashboard', 'my_listings');
       final items = snap.docs

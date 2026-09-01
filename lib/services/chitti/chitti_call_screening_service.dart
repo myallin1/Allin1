@@ -2,10 +2,9 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:flutter_tts/flutter_tts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'chitti_voice_service.dart';
 import 'chitti_accessibility_bridge.dart';
 import 'chitti_summarizer.dart';
 import '../guru_admin_api_service.dart';
@@ -15,7 +14,6 @@ class ChittiCallScreeningService {
   static final ChittiCallScreeningService instance = ChittiCallScreeningService._();
 
   final stt.SpeechToText _speech = stt.SpeechToText();
-  final FlutterTts _tts = FlutterTts();
   final GuruAdminApiService _api = GuruAdminApiService();
 
   bool _isScreening = false;
@@ -35,8 +33,6 @@ class ChittiCallScreeningService {
 
   Timer? _screeningTimeoutTimer;
   int _errorRetryCount = 0;
-
-  bool _ttsHandlersWired = false;
 
   // NEW (Aug 31 2026 — Nizam: "oru time nadakura process oru name la
   // irukanum, antha time la yenna nadanthuchu-nu antha log paatha
@@ -88,28 +84,22 @@ class ChittiCallScreeningService {
     } catch (_) {}
   }
 
-  void _wireTtsDebugHandlers() {
-    if (_ttsHandlersWired) return;
-    _ttsHandlersWired = true;
-    _tts.setStartHandler(() {
-      _log('[ChittiCallScreeningService] TTS engine reported START (it began speaking).');
-    });
-    _tts.setCompletionHandler(() {
-      _log('[ChittiCallScreeningService] TTS engine reported COMPLETE.');
-    });
-    _tts.setErrorHandler((msg) {
-      _log('[ChittiCallScreeningService] TTS engine reported ERROR: $msg');
-    });
-    _tts.setCancelHandler(() {
-      _log('[ChittiCallScreeningService] TTS engine reported CANCEL.');
-    });
-  }
-
   Future<void> startScreening(String callerNumber) async {
     if (_isScreening) return;
     _isScreening = true;
     _callerNumber = callerNumber;
-    beginSession(callerNumber);
+    // FIX (Sep 1 2026 — Nizam: "oru call la nadantha yella log um orey
+    // section la iruntha namma monitor panna easy"). This used to call
+    // beginSession() unconditionally, overwriting the session the
+    // Bridge had ALREADY opened on the 'connected' event moments
+    // earlier — so the Bridge's own two connected lines ended up in one
+    // orphan "2 steps" group and everything after them in a second
+    // group, splitting a single call across two cards in the debug
+    // screen (visible in the 14:02:20 / 14:02:21 pair). Only start a
+    // session here if one isn't already open for this call.
+    if (currentSessionId == null) {
+      beginSession(callerNumber);
+    }
     _conversation.clear();
     _turnCount = 0;
     _errorRetryCount = 0;
@@ -118,7 +108,6 @@ class ChittiCallScreeningService {
       _log('[ChittiCallScreeningService] Auto-stopping screening after 45s inactivity.');
       stopScreening();
     });
-    _wireTtsDebugHandlers();
 
     // NEW (per Nizam's request, Aug 31 2026): "chitti pesurathuku late
     // aguthu" — full-conversation mode's STT init + live AI network
@@ -214,16 +203,66 @@ class ChittiCallScreeningService {
         'the native call recorder is now the only thing capturing the rest of this call.');
   }
 
+  /// True when an AI reply is really a developer/config message rather
+  /// than something a customer should ever hear. Deliberately broad —
+  /// on a live call, wrongly falling back to a warm generic line costs
+  /// nothing, while wrongly reading out an API-key error (which is what
+  /// happened on the 16:03 call) is a real business embarrassment.
+  static bool _looksLikeSystemError(String reply) {
+    final r = reply.trim();
+    if (r.isEmpty) return true;
+    final lower = r.toLowerCase();
+    const markers = [
+      'api_key',
+      'api key',
+      'not configured',
+      'not switched on',
+      'could not reach',
+      'full ai',
+      'unauthorized',
+      'quota',
+      'rate limit',
+      'exception',
+      'error:',
+      'failed',
+      'null',
+    ];
+    return markers.any(lower.contains);
+  }
+
   Future<void> _speak(String text) async {
     try {
       final speakerDiag = await ChittiAccessibilityBridge.instance.enableSpeakerphone();
       await _log('[ChittiCallScreeningService] SPEAKER ROUTE: $speakerDiag');
-      await ChittiVoiceService.apply(_tts, _locale, forceGoogleTts: true);
-      await _log('[ChittiCallScreeningService] Calling tts.speak() now, locale=$_locale, textLen=${text.length}');
-      final result = await _tts.speak(text);
-      await _log('[ChittiCallScreeningService] tts.speak() returned: $result (1 = engine accepted it)');
-      await _tts.awaitSpeakCompletion(true);
-      await _log('[ChittiCallScreeningService] awaitSpeakCompletion finished.');
+
+      // NEW (Sep 1 2026 — CTO/Gemini diagnosis, confirmed logically
+      // sound): switched from flutter_tts to a native TTS instance
+      // configured with AudioAttributes.USAGE_VOICE_COMMUNICATION (see
+      // ChittiCallVoice.kt) instead of flutter_tts's hardcoded
+      // USAGE_ASSISTANCE_NAVIGATION_GUIDANCE — the earlier attribute
+      // plays through the ordinary media/speaker path, which this
+      // session confirmed Android's own Acoustic Echo Cancellation
+      // silences before it reaches the caller even though
+      // setAudioRoute(SPEAKER) itself genuinely succeeds.
+      final completer = Completer<void>();
+      ChittiAccessibilityBridge.instance.onCallVoiceEvent = (event) {
+        _log('[ChittiCallScreeningService] Native call-voice TTS event: $event');
+        if ((event == 'DONE' || event.startsWith('ERROR')) && !completer.isCompleted) {
+          completer.complete();
+        }
+      };
+
+      await _log('[ChittiCallScreeningService] Calling speakOnCallStream() now, locale=$_locale, textLen=${text.length}');
+      final accepted = await ChittiAccessibilityBridge.instance.speakOnCallStream(text, _locale);
+      await _log('[ChittiCallScreeningService] speakOnCallStream() accepted: $accepted');
+
+      if (accepted) {
+        await completer.future.timeout(
+          const Duration(seconds: 15),
+          onTimeout: () => _log('[ChittiCallScreeningService] Native call-voice TTS timed out waiting for DONE.'),
+        );
+      }
+      ChittiAccessibilityBridge.instance.onCallVoiceEvent = null;
     } catch (e) {
       await _log('[ChittiCallScreeningService] speak failed: $e');
     }
@@ -245,9 +284,23 @@ class ChittiCallScreeningService {
             }
           }
         },
-        listenFor: const Duration(seconds: 8),
-        pauseFor: const Duration(seconds: 3),
+        // ROOT-CAUSE FIX (Sep 1 2026 — Nizam: "namma soldrattha avan
+        // purinjukuramari therila"). localeId was never passed, so the
+        // recognizer always listened in the DEVICE's default language
+        // (English here) while the caller speaks Tamil — producing
+        // error_speech_timeout / error_no_match over and over, exactly
+        // the "mic turns on but Chitti doesn't understand" symptom. The
+        // TTS side was already given ta-IN (see _locale, used by
+        // speakOnCallStream); the listening side simply never was.
+        localeId: _locale,
+        // Also lengthened: 8s/3s cut a caller off mid-sentence, and a
+        // truncated phrase is another way to get no_match. A real
+        // caller answering "what do you need?" usually needs longer.
+        listenFor: const Duration(seconds: 20),
+        pauseFor: const Duration(seconds: 5),
       );
+      await _log('[ChittiCallScreeningService] Listening for caller speech '
+          '(localeId=$_locale, listenFor=20s, pauseFor=5s)');
     } catch (e) {
       _log('[ChittiCallScreeningService] listenLoop error: $e');
       _errorRetryCount++;
@@ -291,7 +344,19 @@ class ChittiCallScreeningService {
           "and ask if they want to leave a message or book an appointment.";
 
       var reply = await _api.sendMessage(message: prompt);
-      if (reply.contains('not switched on') || reply.contains('could not reach') || reply.contains('Full AI') || reply.trim().isEmpty) {
+      // FIX (Sep 1 2026 — found in the call logs, not guessed): this
+      // guard used to match four hardcoded fragments ('not switched
+      // on', 'could not reach', 'Full AI', empty). The real message the
+      // API layer returns when no key is set is "Admin AI is not
+      // configured yet — add GROQ_API_KEY before this can respond." —
+      // which matches NONE of them, so a raw English developer error
+      // was read aloud to a customer verbatim (visible at 16:03:34 in
+      // the debug logs). Matching on the shape of a config/error
+      // message instead of four exact phrases keeps the next such
+      // message from leaking the same way.
+      if (_looksLikeSystemError(reply)) {
+        await _log('[ChittiCallScreeningService] AI reply looked like a system/config '
+            'error — substituting the natural fallback. Raw was: $reply');
         reply = _languageCode == 'ta'
             ? "சரிங்க பாஸ், உங்க செய்தியை நான் குறித்துக்கொண்டேன். பாஸ் உங்களை உடனே தொடர்புகொள்வார்."
             : "Alright, I've noted down your message. Nizam will call you back soon.";
@@ -325,51 +390,106 @@ class ChittiCallScreeningService {
     }
   }
 
+  /// Asks the AI for a short, admin-readable summary of what the caller
+  /// actually wanted. Falls back to the offline heuristic summarizer
+  /// whenever the AI is unreachable or answers with a config/system
+  /// error — the transcript is worth saving either way, and a call
+  /// summary that says "add GROQ_API_KEY" would be worse than useless.
+  Future<String> _buildConversationSummary(String transcript) async {
+    final heuristic = ChittiSummarizer.heuristicSummary(
+      sender: _callerNumber,
+      message: transcript,
+      isTamil: _languageCode == 'ta',
+    );
+    if (_conversation.length < 2) return heuristic;
+
+    try {
+      final languageName = _languageCode == 'ta' ? 'Tamil' : 'English';
+      final prompt = 'Summarize this phone call for the business owner in '
+          'ONE short $languageName sentence. Say what the caller wanted and '
+          'anything they need done. Do not add greetings or commentary.\n\n'
+          '$transcript';
+      final aiSummary = await _api.sendMessage(message: prompt);
+      if (_looksLikeSystemError(aiSummary)) {
+        await _log('[ChittiCallScreeningService] AI summary unavailable — using offline summary.');
+        return heuristic;
+      }
+      return aiSummary.trim();
+    } catch (e) {
+      await _log('[ChittiCallScreeningService] AI summary failed ($e) — using offline summary.');
+      return heuristic;
+    }
+  }
+
   Future<void> _saveAppointment({String? recordingPath}) async {
     try {
-      final summary = _conversation.join('\n');
+      final transcript = _conversation.join('\n');
+      final summary = await _buildConversationSummary(transcript);
       String? localTranscriptPath;
 
-      // 1. Create a clean .txt transcript file alongside the recording
-      if (recordingPath != null && recordingPath.isNotEmpty) {
-        try {
-          final transcriptPath = recordingPath.replaceAll(
+      // NEW (Sep 1 2026 — Nizam: "conversation end la customer and
+      // chitti yenna pandrangalo atha summerize panni admin phone la
+      // text ah store pannirlam").
+      //
+      // The transcript file used to be written ONLY when a recording
+      // existed, because its path was derived from the .m4a filename.
+      // Full-conversation mode now deliberately runs WITHOUT the
+      // recorder (SpeechRecognizer needs the microphone — see
+      // PhoneCallService.onCallConnected), so that condition would have
+      // meant the one mode that actually produces a conversation saves
+      // no local text at all. The file now always gets written, using
+      // the recording's name when there is one and its own timestamped
+      // name when there isn't.
+      try {
+        String transcriptPath;
+        if (recordingPath != null && recordingPath.isNotEmpty) {
+          transcriptPath = recordingPath.replaceAll(
             RegExp(r'\.m4a$', caseSensitive: false),
             '_transcript.txt',
           );
-          final transcriptFile = File(transcriptPath);
+        } else {
+          final dir = await _transcriptDirectory();
           final now = DateTime.now();
-          final oneLine = ChittiSummarizer.heuristicSummary(
-            sender: _callerNumber,
-            message: summary,
-            isTamil: _languageCode == 'ta',
-          );
-
-          final content = StringBuffer()
-            ..writeln('==================================================')
-            ..writeln('Allin1 AI Call Assistant Transcript')
-            ..writeln('==================================================')
-            ..writeln('Caller: $_callerNumber')
-            ..writeln('Date: ${now.toIso8601String()}')
-            ..writeln('Summary: $oneLine')
-            ..writeln('Audio File: $recordingPath')
-            ..writeln('--------------------------------------------------')
-            ..writeln('Full Conversation:')
-            ..writeln(summary)
-            ..writeln('==================================================');
-
-          await transcriptFile.writeAsString(content.toString());
-          localTranscriptPath = transcriptPath;
-          await _log('[ChittiCallScreeningService] Saved transcript to: $transcriptPath');
-        } catch (e) {
-          await _log('[ChittiCallScreeningService] Failed to write transcript file: $e');
+          String two(int n) => n.toString().padLeft(2, '0');
+          final stamp = '${now.year}${two(now.month)}${two(now.day)}_'
+              '${two(now.hour)}${two(now.minute)}${two(now.second)}';
+          final who = _callerNumber.replaceAll(RegExp('[^0-9+]'), '');
+          transcriptPath = '$dir/Call_${who.isEmpty ? 'unknown' : who}_${stamp}_transcript.txt';
         }
+
+        final transcriptFile = File(transcriptPath);
+        await transcriptFile.parent.create(recursive: true);
+        final now = DateTime.now();
+
+        final content = StringBuffer()
+          ..writeln('==================================================')
+          ..writeln('Allin1 AI Call Assistant Transcript')
+          ..writeln('==================================================')
+          ..writeln('Caller: ${_callerNumber.isEmpty ? 'Unknown' : _callerNumber}')
+          ..writeln('Date: ${now.toIso8601String()}')
+          ..writeln('Summary: $summary')
+          ..writeln('Audio File: ${recordingPath ?? '(not recorded — conversation mode)'}')
+          ..writeln('--------------------------------------------------')
+          ..writeln('Full Conversation:')
+          ..writeln(transcript.isEmpty ? '(no speech captured)' : transcript)
+          ..writeln('==================================================');
+
+        await transcriptFile.writeAsString(content.toString());
+        localTranscriptPath = transcriptPath;
+        await _log('[ChittiCallScreeningService] Saved transcript to: $transcriptPath');
+      } catch (e) {
+        await _log('[ChittiCallScreeningService] Failed to write transcript file: $e');
       }
 
       await FirebaseFirestore.instance.collection('chitti_appointments').add({
         'name': 'Phone Caller',
         'phone': _callerNumber,
+        // `summary` is now the one-line AI/heuristic summary an admin can
+        // scan; the raw back-and-forth moved to its own field so the
+        // Conversations screen can show both without re-parsing.
         'summary': summary,
+        'transcript': transcript,
+        'turnCount': _conversation.length,
         'localAudioPath': recordingPath,
         'localTranscriptPath': localTranscriptPath,
         'isRecorded': recordingPath != null,
@@ -379,6 +499,17 @@ class ChittiCallScreeningService {
     } catch (e) {
       await _log('[ChittiCallScreeningService] Failed to save appointment: $e');
     }
+  }
+
+  /// Same Allin1_Calls/yyyy/MM folder the native recorder writes into,
+  /// so transcripts and recordings stay together in the file manager.
+  Future<String> _transcriptDirectory() async {
+    final now = DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    final base = Platform.isAndroid
+        ? '/storage/emulated/0/Android/data/com.njtech.admininallin1/files'
+        : (await getApplicationDocumentsDirectory()).path;
+    return '$base/Allin1_Calls/${now.year}/${two(now.month)}';
   }
 
   void stopScreening({String? recordingPath}) {
@@ -391,7 +522,7 @@ class ChittiCallScreeningService {
         _speech.stop();
       }
       _speech.cancel();
-      _tts.stop();
+      ChittiAccessibilityBridge.instance.stopCallVoice();
       ChittiAccessibilityBridge.instance.resetAudioMode();
     } catch (_) {}
     if (_conversation.isNotEmpty) {

@@ -22,6 +22,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/cloudinary_upload_service.dart';
 import 'package:erode_superapp/widgets/cached_cloud_image.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -83,7 +84,7 @@ class _AdminSosKycApprovalsScreenState extends State<AdminSosKycApprovalsScreen>
         stream: FirebaseFirestore.instance
             .collection('sos_kyc_requests')
             .where('status', isEqualTo: 'pending')
-            .snapshots(),
+            .trackedSnapshots(),
         builder: (context, snap) {
           if (snap.hasError) {
             return Center(

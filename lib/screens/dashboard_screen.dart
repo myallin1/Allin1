@@ -87,6 +87,7 @@ import 'hero_promo_screen.dart';
 import 'invite_friends_screen.dart';
 import 'settings_screen.dart';
 import 'sos_screen.dart';
+import '../services/firestore_usage_tracking.dart';
 
 // ── Brand Colors ─────────────────────────────────────────────────
 // NOTE: these used to be `const` — hardcoded to the pink&white palette no
@@ -3639,7 +3640,7 @@ class _ProfileDrawer extends StatelessWidget {
                     stream: FirebaseFirestore.instance
                         .collection('users')
                         .doc(user!.uid)
-                        .snapshots(),
+                        .trackedSnapshots(),
                     builder: (context, snap) {
                       final data = snap.data?.data();
                       final resolvedPhone =

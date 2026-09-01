@@ -31,6 +31,7 @@ import '../../widgets/allin1_map_widget.dart';
 import '../payment_screen.dart';
 import 'bike_booking_screen.dart';
 import '../location_picker_screen.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 class RideTrackingScreen extends StatefulWidget {
   final RideModel ride;
@@ -818,7 +819,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     _rideDocSubscription = FirebaseFirestore.instance
         .collection('rides')
         .doc(widget.rideDocId)
-        .snapshots()
+        .trackedSnapshots()
         .listen(
       _handleRideDocument,
       onError: (Object error) {

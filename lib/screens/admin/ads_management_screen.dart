@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:erode_superapp/models/mobile_models.dart' show isValidYoutubeUrl;
 import 'package:erode_superapp/widgets/cached_cloud_image.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 class AdsManagementScreen extends StatefulWidget {
   const AdsManagementScreen({super.key});
@@ -581,7 +582,7 @@ class _AdsManagementScreenState extends State<AdsManagementScreen> {
 
   Widget _buildStatsRow() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('ads').snapshots(),
+      stream: FirebaseFirestore.instance.collection('ads').trackedSnapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -645,7 +646,7 @@ class _AdsManagementScreenState extends State<AdsManagementScreen> {
       stream: FirebaseFirestore.instance
           .collection('ads')
           .orderBy('createdAt', descending: true)
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());

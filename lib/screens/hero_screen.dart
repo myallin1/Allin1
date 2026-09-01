@@ -12,6 +12,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/firestore_usage_tracking.dart';
 
 const Color kBg = Color(0xFF0A0A1A);
 const Color kSurface = Color(0xFF0D0D18);
@@ -357,7 +358,7 @@ class _CaptainScreenState extends State<CaptainScreen>
           .where('heroId', isEqualTo: 'captain_nizam_001')
           .orderBy('completedAt', descending: true)
           .limit(20)
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (ctx, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -539,7 +540,7 @@ class _CaptainScreenState extends State<CaptainScreen>
             stream: FirebaseFirestore.instance
                 .collection('notifications')
                 .where('read', isEqualTo: false)
-                .snapshots(),
+                .trackedSnapshots(),
             builder: (context, snap) {
               final int count = snap.data?.docs.length ?? 0;
               return Stack(
@@ -648,7 +649,7 @@ class _CaptainScreenState extends State<CaptainScreen>
           .collection('rides')
           .where('status', isEqualTo: 'pending')
           .orderBy('createdAt', descending: true)
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: kGold));

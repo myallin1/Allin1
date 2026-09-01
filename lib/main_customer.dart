@@ -27,6 +27,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'app_navigator.dart';
 import 'config/api_config.dart';
 import 'config/app_variant.dart';
+import 'config/web_push_config.dart';
 import 'firebase_options.dart';
 import 'screens/ai_settings_screen.dart';
 import 'screens/checkout_screen.dart';
@@ -77,6 +78,7 @@ import 'services/map_simulation_service.dart';
 import 'services/chitti/chitti_screen_tracker.dart';
 import 'widgets/chitti_first_touch_greeter.dart';
 import 'widgets/migration_notice_overlay.dart';
+import './services/firestore_usage_tracking.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -555,6 +557,66 @@ Future<void> _warmCustomerServices() async {
     _warmDeferredCaches(),
     _warmMapStack(),
   ]);
+  _syncCustomerFcmToken();
+}
+
+StreamSubscription<User?>? _customerFcmAuthSub;
+StreamSubscription<String>? _customerFcmRefreshSub;
+
+// NEW (CTO audit — gift coupon push): the customer app set up a
+// BACKGROUND HANDLER (see FirebaseMessaging.onBackgroundMessage above)
+// but never registered a token anywhere, so `users/{uid}.fcmToken` did
+// not exist and there was no address to push a customer notification
+// to. notifyCustomerOnCouponReady reads exactly that field.
+//
+// Mirrors main_hero.dart's _syncFcmTokenForHero: capture once per auth
+// session, keep current via onTokenRefresh, and never let a failure
+// here block boot — a missing token degrades to "no push", which the
+// Cloud Function already handles by logging and returning.
+void _syncCustomerFcmToken() {
+  _customerFcmAuthSub?.cancel();
+  _customerFcmAuthSub =
+      FirebaseAuth.instance.authStateChanges().listen((user) async {
+    _customerFcmRefreshSub?.cancel();
+    _customerFcmRefreshSub = null;
+    // Guests are anonymous and have no users/{uid} doc worth writing to.
+    if (user == null || user.isAnonymous) return;
+
+    final uid = user.uid;
+    try {
+      // getToken() on web REQUIRES a vapidKey or it throws outright;
+      // native platforms ignore the parameter. Same call shape as the
+      // hero app — see web_push_config.dart.
+      final token = await FirebaseMessaging.instance.getToken(
+        vapidKey: kIsWeb ? WebPushConfig.vapidKey : null,
+      );
+      if (token != null && token.trim().isNotEmpty) {
+        // merge:true — a customer mid-signup may not have a users/{uid}
+        // doc yet, and a not-found update would silently lose the token.
+        await FirebaseFirestore.instance.collection('users').doc(uid).set({
+          'fcmToken': token,
+          'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        debugPrint('[FCM] Token synced for customer $uid');
+      }
+    } catch (e) {
+      debugPrint('[FCM] Customer token sync failed for $uid: $e');
+    }
+
+    _customerFcmRefreshSub =
+        FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+      unawaited(
+        FirebaseFirestore.instance.collection('users').doc(uid).set({
+          'fcmToken': newToken,
+          'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true)).catchError((Object e) {
+          debugPrint('[FCM] Customer token refresh write failed for $uid: $e');
+        }),
+      );
+    }, onError: (Object e) {
+      debugPrint('[FCM] Customer onTokenRefresh listener error: $e');
+    });
+  });
 }
 
 Future<void> _warmAnalytics() async {
@@ -655,7 +717,7 @@ Future<void> _warmMapStack() async {
     // back on the customer app to make the map look active, driven by the
     // Admin Drawer's 3-mode selector (Normal/Busy/Peak/Off) in Firestore.
     // They now use the same strict road-snapping logic (no more ghosts).
-    FirebaseFirestore.instance.collection('system_settings').doc('app_status').snapshots().listen((snapshot) {
+    FirebaseFirestore.instance.collection('system_settings').doc('app_status').trackedSnapshots().listen((snapshot) {
       final data = snapshot.data();
       final mode = data?['simulation_mode'] as String? ?? 'off';
       if (mode == 'off') {

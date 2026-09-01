@@ -18,6 +18,7 @@ import '../config/app_variant.dart';
 import '../services/theme_service.dart';
 import '../services/update_service.dart';
 import 'package:erode_superapp/widgets/cached_cloud_image.dart';
+import '../services/firestore_usage_tracking.dart';
 
 // NOTE (Nizam's full Option 2 rollout): kPurple here is this screen's
 // PRIMARY brand color (not a decorative accent), so it gets its own
@@ -124,7 +125,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   .where('userId', isEqualTo: user.uid)
                   .orderBy('createdAt', descending: true)
                   .limit(50)
-                  .snapshots(),
+                  .trackedSnapshots(),
               builder: (ctx, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(

@@ -50,7 +50,7 @@ object PhoneCallService {
     // Reports the four things that decide whether a real call can be put
     // on speaker at all — each one a yes/no the admin (and Chitti) can
     // act on, instead of a single opaque "it didn't work".
-    private fun buildSpeakerDiagnostics(context: Context, routedViaTelecom: Boolean): String {
+    private fun buildSpeakerDiagnostics(context: Context, routedViaTelecom: Boolean, routeLabel: String): String {
         val isDefaultDialer = try {
             val tm = context.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
             tm.defaultDialerPackage == context.packageName
@@ -59,8 +59,25 @@ object PhoneCallService {
         }
         val serviceBound = ChittiInCallService.instance != null
         val hasTelecomCall = activeTelecomCall != null
+        // audioMode is reported because setting it to
+        // MODE_IN_COMMUNICATION (3) during a real cellular call is what
+        // was silently killing the uplink — see forceSpeakerRoute's
+        // header. On a healthy screened call this should now read 2
+        // (MODE_IN_CALL), set by Telecom, not by this app.
+        val audioMode = try {
+            val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            when (am.mode) {
+                AudioManager.MODE_NORMAL -> "NORMAL(0)"
+                AudioManager.MODE_IN_CALL -> "IN_CALL(2)"
+                AudioManager.MODE_IN_COMMUNICATION -> "IN_COMMUNICATION(3)"
+                else -> "mode=${am.mode}"
+            }
+        } catch (e: Exception) {
+            "unknown"
+        }
         return "isDefaultDialer=$isDefaultDialer, inCallServiceBound=$serviceBound, " +
-            "hasLiveTelecomCall=$hasTelecomCall, setAudioRoute(SPEAKER)=$routedViaTelecom"
+            "hasLiveTelecomCall=$hasTelecomCall, setAudioRoute($routeLabel)=$routedViaTelecom, " +
+            "audioMode=$audioMode"
     }
     private var isRinging = false
     private var incomingNumber = ""
@@ -70,6 +87,11 @@ object PhoneCallService {
     private var wasAutoAnswered = false
 
     private var mediaRecorder: MediaRecorder? = null
+
+    // Wall-clock time the current call became active, so the in-call
+    // screen can render a running duration. Null between calls.
+    @Volatile
+    private var callConnectedAtMillis: Long? = null
     private var currentRecordingPath: String? = null
 
     private const val PREFS_NAME = "FlutterSharedPreferences"
@@ -125,8 +147,53 @@ object PhoneCallService {
             // the communication device.
             enableSpeakerphone(context)
 
-            // Start native call recording (now after the route is set)
-            startRecording(context, number)
+            // Start native call recording (now after the route is set).
+            // NEW (Sep 1 2026 — mic-isolation lever): MediaRecorder with
+            // AudioSource.MIC takes an exclusive hold on the microphone
+            // on many devices. While diagnosing "the caller hears
+            // nothing", that makes it a second suspect alongside the
+            // audio-mode bug fixed in forceSpeakerRoute — so it can now
+            // be switched off from Admin AI Settings to isolate the two
+            // instead of guessing which one matters.
+            val prefs = try {
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            } catch (e: Exception) {
+                null
+            }
+            val recordingEnabled = try {
+                prefs?.getBoolean("flutter.kChittiCallRecordingEnabled", true) ?: true
+            } catch (e: Exception) {
+                true
+            }
+            // ROOT-CAUSE FIX (Sep 1 2026 — Nizam: "customer pesurathu and
+            // avanga yena sollavaranganu chitti ku therila").
+            //
+            // MediaRecorder(AudioSource.MIC) and SpeechRecognizer cannot
+            // both hold the microphone: whichever grabs it first wins and
+            // the other gets silence. Recording starts here, at call
+            // connect — seconds before the conversation loop asks to
+            // listen — so in full-conversation mode the recorder was
+            // always winning and STT was guaranteed to return
+            // error_speech_timeout. That is exactly the repeating error
+            // in the logs, on every single screened call.
+            //
+            // The two modes want opposite things, so they now get them:
+            //   full         -> STT owns the mic (no recorder)
+            //   quick_record -> recorder owns the mic (no STT anyway)
+            val answeringMode = try {
+                prefs?.getString("flutter.kChittiCallAnsweringMode", "quick_record") ?: "quick_record"
+            } catch (e: Exception) {
+                "quick_record"
+            }
+            val fullConversationMode = answeringMode == "full"
+
+            when {
+                fullConversationMode -> Log.d("PhoneCallService", "Full-conversation mode — " +
+                    "NOT starting the recorder so SpeechRecognizer can hold the microphone.")
+                recordingEnabled -> startRecording(context, number)
+                else -> Log.d("PhoneCallService", "Call recording DISABLED by setting — " +
+                    "leaving the microphone free for the cellular uplink.")
+            }
 
             // Wake up MainActivity to ensure Flutter Engine is running
             launchMainActivity(context)
@@ -184,11 +251,45 @@ object PhoneCallService {
             recorder.setOutputFile(file.absolutePath)
             recorder.prepare()
             recorder.start()
+            // BUG FIX (Sep 1 2026): the started recorder was never stored
+            // in `mediaRecorder`, so stopRecording()'s `mediaRecorder?.`
+            // was always null — stop()/release() never ran and the .m4a
+            // was left un-finalized (and the mic held) until the process
+            // happened to tear it down. Without this line the whole
+            // stop/toggle path below is dead code.
+            mediaRecorder = recorder
             Log.d("PhoneCallService", "Call recording started at: ${file.absolutePath}")
         } catch (e: Exception) {
             Log.e("PhoneCallService", "Failed to start call recording: ${e.message}")
             mediaRecorder = null
             currentRecordingPath = null
+        }
+    }
+
+    // NEW (Sep 1 2026 — Nizam: "anga venumna call record pandra option
+    // vachuklam... antha screeen la call recording on,off option").
+    // Lets the in-call screen start/stop recording mid-call instead of
+    // the decision being fixed at call-connect time.
+    @JvmStatic
+    fun isRecordingActive(): Boolean = mediaRecorder != null
+
+    @JvmStatic
+    fun setRecordingActive(context: Context, enabled: Boolean): Boolean {
+        return try {
+            if (enabled) {
+                if (mediaRecorder != null) return true
+                val number = activeTelecomCall?.details?.handle?.schemeSpecificPart
+                    ?: incomingNumber
+                startRecording(context, number)
+                mediaRecorder != null
+            } else {
+                if (mediaRecorder == null) return false
+                stopRecording(context)
+                false
+            }
+        } catch (e: Exception) {
+            Log.e("PhoneCallService", "setRecordingActive($enabled) failed: ${e.message}")
+            mediaRecorder != null
         }
     }
 
@@ -343,32 +444,85 @@ object PhoneCallService {
     // the built-in speaker picked out of the available devices list.
     // The legacy path is kept for older phones (the Lenovo K9 class of
     // device), where setSpeakerphoneOn genuinely does work.
+    // FIX (Sep 1 2026 — wired-headset loopback experiment): this used
+    // to unconditionally hunt for TYPE_BUILTIN_SPEAKER and force
+    // isSpeakerphoneOn=true — which would silently override a plugged-
+    // in headset back to the phone's own speaker, defeating the cable
+    // test even with correct wiring. Now honors the same
+    // "flutter.kChittiPreferWiredHeadsetRoute" toggle
+    // enableSpeakerphone() reads for the real Telecom route above, so
+    // this AudioManager-level fallback path picks the same device.
+    // ROOT-CAUSE FIX (Sep 1 2026 — Nizam: "mic line on agave ila pola
+    // Athan customer ku onnume kekkala"). That observation was right,
+    // and this line was the cause.
+    //
+    // MODE_IN_COMMUNICATION is the mode for VOIP audio a third-party
+    // app owns (WhatsApp/Meet style). Setting it during a REAL cellular
+    // call tells the audio policy manager that an app has taken over
+    // the voice path — which tears down the telephony uplink route the
+    // caller's audio actually travels on. That is exactly the reported
+    // symptom across all three route tests (speaker, Bluetooth, wired):
+    // Chitti is audible locally every time, and the caller hears
+    // nothing on any of them. It was never an echo-cancellation wall on
+    // three different audio paths; it was this app switching the phone
+    // out of cellular-call mode on every one of them.
+    //
+    // The correct mode for a live cellular call is MODE_IN_CALL, and
+    // when this app is the default dialer, Telecom already sets and
+    // owns it — so the right move is to not touch `mode` at all while a
+    // Telecom call is live, and let setAudioRoute() (the supported API
+    // for exactly this) do the routing on its own.
     @Suppress("DEPRECATION")
-    private fun forceSpeakerRoute(audioManager: AudioManager) {
-        try {
-            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-        } catch (e: Exception) {
+    private fun forceSpeakerRoute(audioManager: AudioManager, preferHeadset: Boolean = false) {
+        val telecomCallLive = activeTelecomCall != null && ChittiInCallService.instance != null
+        if (telecomCallLive) {
+            Log.d("PhoneCallService", "Live Telecom call — NOT touching audioManager.mode " +
+                "(currently ${audioManager.mode}); Telecom owns it. Routing via setAudioRoute only.")
+        } else {
+            // No Telecom call (e.g. the role isn't granted): fall back
+            // to the legacy path, but prefer MODE_IN_CALL over
+            // MODE_IN_COMMUNICATION for the same reason as above.
             try {
                 audioManager.mode = AudioManager.MODE_IN_CALL
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                try {
+                    audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+                } catch (_: Exception) {}
+            }
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (!telecomCallLive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             try {
-                val speaker = audioManager.availableCommunicationDevices
-                    .firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
-                if (speaker != null) {
-                    val ok = audioManager.setCommunicationDevice(speaker)
-                    Log.d("PhoneCallService", "setCommunicationDevice(builtin speaker) = $ok")
+                val devices = audioManager.availableCommunicationDevices
+                val externalDevice = devices.firstOrNull {
+                    it.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                        it.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+                        it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+                }
+                val target = if (preferHeadset && externalDevice != null) {
+                    externalDevice
+                } else {
+                    devices.firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                }
+                if (target != null) {
+                    val ok = audioManager.setCommunicationDevice(target)
+                    Log.d("PhoneCallService", "setCommunicationDevice(type=${target.type}) = $ok")
                 }
             } catch (e: Exception) {
                 Log.e("PhoneCallService", "setCommunicationDevice failed: ${e.message}")
             }
         }
 
+        // Also skipped while Telecom owns the call: this is the same
+        // deprecated VoIP-era API as `mode` above, and forcing it
+        // against a live Telecom call fights setAudioRoute() rather
+        // than helping it. (When there is no Telecom call it still
+        // matters, and must stay false when a headset route is wanted
+        // or this line alone undoes everything above it.)
+        if (telecomCallLive) return
         try {
-            audioManager.isSpeakerphoneOn = true
-            Log.d("PhoneCallService", "isSpeakerphoneOn set to true")
+            audioManager.isSpeakerphoneOn = !preferHeadset
+            Log.d("PhoneCallService", "isSpeakerphoneOn set to ${!preferHeadset}")
         } catch (e: Exception) {
             Log.e("PhoneCallService", "isSpeakerphoneOn failed: ${e.message}")
         }
@@ -390,42 +544,126 @@ object PhoneCallService {
     // on a real device. Not an OEM/Oppo/Lenovo issue at all.
     @JvmStatic
     fun enableSpeakerphone(context: Context) {
-        // NEW (Aug 31 2026 — Option A): the REAL fix, tried first. This
-        // only does anything once Chitti holds the Phone role and
-        // ChittiInCallService is actually bound to this call — confirmed
-        // by testing that the AudioManager path below has zero effect on
-        // a real SIM call's route on either Oppo or Lenovo. Kept both:
-        // this one is the fix, the AudioManager one below is a harmless
-        // no-op fallback for whatever it's worth on devices/paths where
-        // the role hasn't been granted yet.
-        val routedViaTelecom = ChittiInCallService.instance?.routeToSpeaker() ?: false
+        // NEW (Sep 1 2026 — Nizam: "headphone jack la namma technical
+        // plan panni athukapram ithe idea va implement pannalam").
+        // Confirmed working: setAudioRoute(SPEAKER)=true really routes
+        // the real call now (Option A). The NEW problem discovered is
+        // Android's own Acoustic Echo Cancellation on the built-in
+        // speaker+mic pair silently killing the acoustic loop this
+        // whole feature depends on — a wired-headset loopback cable
+        // (audio-out wired to mic-in) is being tried as a path AEC may
+        // not scrub as aggressively. Reads a toggle from Admin AI
+        // Settings so the admin controls which route Chitti tries,
+        // instead of this always forcing BUILTIN_SPEAKER regardless of
+        // whether a headset is plugged in (which would have silently
+        // defeated the cable test even if wired correctly).
+        // UPDATED (Sep 1 2026 — CTO's Bluetooth acoustic-bridge idea):
+        // widened from a wired-only boolean to a three-way route choice
+        // ("speaker" | "wired" | "bluetooth"), because the neckband test
+        // hits the exact same trap the cable test did — with the call
+        // pinned to ROUTE_SPEAKER, pairing a headset changes nothing and
+        // the experiment fails for the wrong reason. Falls back to the
+        // speaker whenever the requested route isn't actually available,
+        // and the chosen route is recorded in the diagnostics line so
+        // the debug log always says which one was really used.
+        val prefs = try {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        } catch (e: Exception) {
+            null
+        }
+        var requestedRoute = try {
+            prefs?.getString("flutter.kChittiCallAudioRoute", "speaker") ?: "speaker"
+        } catch (e: Exception) {
+            "speaker"
+        }
+        // Back-compat with the earlier boolean-only wired-headset flag,
+        // so an admin who had it switched on doesn't silently lose it.
+        if (requestedRoute == "speaker") {
+            val legacyWired = try {
+                prefs?.getBoolean("flutter.kChittiPreferWiredHeadsetRoute", false) ?: false
+            } catch (e: Exception) {
+                false
+            }
+            if (legacyWired) requestedRoute = "wired"
+        }
+
+        val service = ChittiInCallService.instance
+        val wiredOk = requestedRoute == "wired" && (service?.isWiredHeadsetRouteAvailable() ?: false)
+        val btOk = requestedRoute == "bluetooth" && (service?.isBluetoothRouteAvailable() ?: false)
+
+        val routedViaTelecom = when {
+            wiredOk -> service?.routeToWiredHeadset() ?: false
+            btOk -> service?.routeToBluetooth() ?: false
+            else -> service?.routeToSpeaker() ?: false
+        }
+        val actualRoute = when {
+            wiredOk -> "WIRED_HEADSET"
+            btOk -> "BLUETOOTH"
+            else -> "SPEAKER"
+        }
+        // Not the same as requestedRoute: says so explicitly when the
+        // requested device simply wasn't connected, which is the single
+        // most likely reason one of these experiments "doesn't work".
+        val routeNote = if (requestedRoute != actualRoute.lowercase().replace("_headset", "")
+            .replace("wired_headset", "wired")) {
+            " (requested=$requestedRoute, not available — used $actualRoute)"
+        } else {
+            ""
+        }
+        // True when Telecom actually accepted the route — used below to
+        // skip the legacy re-force timers that would otherwise cut
+        // speech a second in.
+        val telecomRouteHeld = routedViaTelecom && service != null
         speakerOnViaTelecom = routedViaTelecom
-        Log.d("PhoneCallService", "Telecom-level speaker route attempt: $routedViaTelecom")
+        Log.d("PhoneCallService", "Telecom route attempt -> $actualRoute$routeNote: $routedViaTelecom")
 
         try {
-            lastSpeakerDiagnostics = buildSpeakerDiagnostics(context, routedViaTelecom)
+            lastSpeakerDiagnostics =
+                buildSpeakerDiagnostics(context, routedViaTelecom, actualRoute) + routeNote
         } catch (_: Exception) {}
+
+        val headsetAvailable = wiredOk || btOk
 
         try {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            forceSpeakerRoute(audioManager)
-            Log.d("PhoneCallService", "Speakerphone routing enabled successfully")
+            forceSpeakerRoute(audioManager, headsetAvailable)
+            Log.d("PhoneCallService", "Audio routing enabled successfully (headset=$headsetAvailable)")
 
-            // Re-force speakerphone after 1s and 2s delays to override OS connection overrides
+            // ROOT-CAUSE FIX (Sep 1 2026 — Nizam: "wired headphones la
+            // vanakkam mattum kettuchu athukapram... full continuous ah
+            // customer ku anupala").
+            //
+            // These 1s and 2s re-forces were written back when NO route
+            // call worked at all, as a blind "try again in case the OS
+            // overrode us" defence. Now that setAudioRoute() genuinely
+            // works (logs show it true, with audioMode=IN_CALL(2)), they
+            // are actively harmful: each one TEARS DOWN AND REBUILDS the
+            // audio path — one second into Chitti's greeting, which is
+            // exactly one word in. That is the reported symptom, and it
+            // explains why it reproduced identically on wired AND
+            // Bluetooth: the interruption is ours, not the accessory's.
+            //
+            // With a live Telecom call the route is set once and left
+            // alone. The retries are kept only for the no-Telecom-call
+            // fallback path, where nothing is speaking yet anyway.
+            if (telecomRouteHeld) {
+                Log.d("PhoneCallService", "Telecom route set once — skipping the 1s/2s " +
+                    "re-forces so they cannot interrupt speech mid-sentence.")
+                return
+            }
+
             val handler = Handler(Looper.getMainLooper())
             handler.postDelayed({
                 try {
-                    ChittiInCallService.instance?.routeToSpeaker()
-                    forceSpeakerRoute(audioManager)
-                    Log.d("PhoneCallService", "Speakerphone routing re-forced (1s delay)")
+                    forceSpeakerRoute(audioManager, headsetAvailable)
+                    Log.d("PhoneCallService", "Audio routing re-forced (1s delay, no Telecom call)")
                 } catch (e: Exception) {}
             }, 1000)
 
             handler.postDelayed({
                 try {
-                    ChittiInCallService.instance?.routeToSpeaker()
-                    forceSpeakerRoute(audioManager)
-                    Log.d("PhoneCallService", "Speakerphone routing re-forced (2s delay)")
+                    forceSpeakerRoute(audioManager, headsetAvailable)
+                    Log.d("PhoneCallService", "Audio routing re-forced (2s delay, no Telecom call)")
                 } catch (e: Exception) {}
             }, 2000)
         } catch (e: Exception) {
@@ -443,6 +681,7 @@ object PhoneCallService {
     // own in-call screen for calls this app is the default Phone app for.
     fun onTelecomCallAdded(context: Context, call: Call) {
         activeTelecomCall = call
+        callConnectedAtMillis = System.currentTimeMillis()
         showInCallNotification(context, call)
     }
 
@@ -451,9 +690,43 @@ object PhoneCallService {
             activeTelecomCall = null
         }
         speakerOnViaTelecom = false
+        callConnectedAtMillis = null
         cancelInCallNotification(context)
     }
 
+    // NEW (Sep 1 2026 — minimal dialer). Reports the live Telecom call
+    // so the in-app dialer can show "call in progress" and offer hang
+    // up / speaker. Returns null when there is no call, which the UI
+    // uses to hide the card entirely.
+    @JvmStatic
+    fun activeCallInfo(): Map<String, Any?>? {
+        val call = activeTelecomCall ?: return null
+        return try {
+            val number = call.details?.handle?.schemeSpecificPart
+            val stateLabel = when (call.state) {
+                Call.STATE_RINGING -> "ringing"
+                Call.STATE_DIALING -> "dialing"
+                Call.STATE_ACTIVE -> "active"
+                Call.STATE_HOLDING -> "on hold"
+                Call.STATE_CONNECTING -> "connecting"
+                Call.STATE_DISCONNECTED -> "ended"
+                else -> "active"
+            }
+            mapOf(
+                "number" to number,
+                "state" to stateLabel,
+                "speakerOn" to speakerOnViaTelecom,
+                "recording" to (mediaRecorder != null),
+                // Lets the in-call screen show a live duration without
+                // having to guess when the call actually connected.
+                "connectedAt" to callConnectedAtMillis,
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    @JvmStatic
     fun hangUpActiveCall(context: Context) {
         try {
             activeTelecomCall?.disconnect()
@@ -464,6 +737,7 @@ object PhoneCallService {
         cancelInCallNotification(context)
     }
 
+    @JvmStatic
     fun toggleSpeakerOnActiveCall(context: Context) {
         val service = ChittiInCallService.instance ?: return
         if (speakerOnViaTelecom) {
@@ -514,12 +788,33 @@ object PhoneCallService {
             val number = call.details?.handle?.schemeSpecificPart ?: "Unknown"
             val speakerLabel = if (speakerOnViaTelecom) "Speaker: ON (tap for Earpiece)" else "Speaker: OFF (tap for Speaker)"
 
+            // NEW (Sep 1 2026 — Nizam: "notification... atha thottu ulla
+            // pona curren calling screene ila"). Tapping the
+            // notification now opens the real in-call screen, carrying
+            // the extra MainActivity forwards to Flutter so it routes
+            // straight there instead of the app's home screen.
+            val openIntent = context.packageManager
+                .getLaunchIntentForPackage(context.packageName)
+                ?.apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    putExtra("open_in_call_screen", true)
+                }
+            val contentIntent = if (openIntent != null) {
+                PendingIntent.getActivity(
+                    context, 2, openIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            } else {
+                null
+            }
+
             val notification = NotificationCompat.Builder(context, IN_CALL_NOTIFICATION_CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.sym_call_incoming)
                 .setContentTitle("Chitti call in progress")
                 .setContentText(number)
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .apply { if (contentIntent != null) setContentIntent(contentIntent) }
                 .addAction(0, speakerLabel, speakerIntent)
                 .addAction(0, "Hang Up", hangupIntent)
                 .build()
@@ -543,6 +838,15 @@ object PhoneCallService {
     // — @JvmStatic is required or this silently never runs either.
     @JvmStatic
     fun resetAudioMode(context: Context) {
+        // Put the voice-call stream volume back where the admin had it —
+        // ChittiCallVoice raises it to maximum so the acoustic bridge
+        // carries a strong enough signal, and leaving it pinned there
+        // would ambush the next ordinary call.
+        try {
+            ChittiCallVoice.restoreCallVolume(context)
+        } catch (e: Exception) {
+            Log.e("PhoneCallService", "restoreCallVolume failed: ${e.message}")
+        }
         try {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             // Must release the communication device explicitly on API

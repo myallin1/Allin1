@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'rewards_hub_screen.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 // ── Theme ─────────────────────────────────────────────────────
 const Color _bg = Color(0xFF0A0A12);
@@ -798,7 +799,7 @@ class _EarnDashboardScreenState extends State<EarnDashboardScreen>
           .where('userId', isEqualTo: _user!.uid)
           .orderBy('createdAt', descending: true)
           .limit(50)
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (_, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: _gold));

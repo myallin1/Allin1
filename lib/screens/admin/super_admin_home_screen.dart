@@ -24,6 +24,10 @@ import '../../widgets/download_app_banner.dart';
 import 'admin_ai_settings_screen.dart';
 import 'admin_cloudinary_dashboard_screen.dart';
 import 'admin_dashboard_screen.dart';
+import 'admin_dialer_screen.dart';
+import 'chitti_conversations_screen.dart';
+import 'chitti_debug_logs_screen.dart';
+import 'chitti_dev_monitor_screen.dart';
 import 'admin_food_orders_screen.dart';
 import 'admin_gift_coupons_screen.dart';
 import 'admin_orders_cleanup_screen.dart';
@@ -43,6 +47,7 @@ import 'payments_received_screen.dart';
 import 'usage_fee_ledger_screen.dart';
 import 'erode_offers_management_screen.dart';
 import 'admin_home_banner_screen.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 class SuperAdminHomeScreen extends StatefulWidget {
   const SuperAdminHomeScreen({super.key});
@@ -125,7 +130,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
     _sosKycWaitingStream = FirebaseFirestore.instance
         .collection('sos_kyc_requests')
         .where('status', isEqualTo: 'pending')
-        .snapshots();
+        .trackedSnapshots();
     _alertSub = _waitingRequestsStream.listen(_onWaitingRequestsChanged,
         onError: (Object e) {
       debugPrint('[SuperAdminHome] Alert listener error: $e');
@@ -143,7 +148,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
           SosAlertStatus.claimed,
           SosAlertStatus.escalated,
         ])
-        .snapshots();
+        .trackedSnapshots();
 
     // DB usage monitor — side-channel count, shares the same
     // broadcast stream StreamBuilder already listens to, no extra reads.
@@ -350,6 +355,17 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
             // get to it instantly). Same lazy-mount-once-visited pattern
             // as the old per-type tabs above.
             if (_visitedTabs.contains(2)) const AdminAiSettingsScreen(key: ValueKey('chitti_ai_tab')) else const SizedBox.shrink(),
+            // NEW (per Nizam's request, Sep 1 2026): a 4th tab holding
+            // the two development-automation screens together. Both
+            // already existed and were reachable only by scrolling deep
+            // inside Chitti AI Configuration ("2 options ah iruku... 4th
+            // optiona intha development section 2um intha section kulla
+            // inner la 2screen optiona set panni"). This tab only
+            // NAVIGATES to them — neither screen's own logic, service,
+            // or backend wiring is touched, and their existing buttons
+            // in AI Settings keep working, so nothing that already
+            // depended on them can break.
+            _buildDevelopmentTab(context),
           ],
         ),
       ),
@@ -497,6 +513,90 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
     );
   }
 
+  // NEW (per Nizam's request, Sep 1 2026): the Development section —
+  // the two automation screens in one place, plus the dialer the app
+  // now needs as default phone app. Pure navigation: every screen here
+  // is pushed exactly as its existing entry point pushes it, so no
+  // service, listener, or backend path changes.
+  Widget _buildDevelopmentTab(BuildContext context) {
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+            child: Text(
+              'DEVELOPMENT & AUTOMATION',
+              style: TextStyle(
+                color: _text.withValues(alpha: 0.5),
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+          sliver: SliverList.list(
+            children: [
+              _ManageTile(
+                label: 'Development Monitor',
+                subtitle: 'Latest test APK, builds running, dev tasks',
+                iconSvg: FluentEmojiFlat.laptop,
+                color: _purple,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const ChittiDevMonitorScreen()),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // NEW (Sep 1 2026): the business-facing half of the call
+              // data — what the caller wanted, in plain words. Kept
+              // separate from Debug Logs below, which is the engineering
+              // view of the same calls and is not readable as business
+              // information.
+              _ManageTile(
+                label: 'Call Conversations',
+                subtitle: 'What each caller said, with a summary',
+                iconSvg: FluentEmojiFlat.speech_balloon,
+                color: _purple,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const ChittiConversationsScreen()),
+                ),
+              ),
+              const SizedBox(height: 10),
+              _ManageTile(
+                label: 'Chitti Call Debug Logs',
+                subtitle: 'Step-by-step logs of each screened call',
+                iconSvg: FluentEmojiFlat.bug,
+                color: _orange,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const ChittiDebugLogsScreen()),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Grouped here because it exists for the same reason the
+              // rest of this tab does — the app became the device's
+              // phone app, so it has to provide these controls itself.
+              _ManageTile(
+                label: 'Dialer',
+                subtitle: 'Make a call, see the live call, hang up',
+                iconSvg: FluentEmojiFlat.telephone,
+                color: _orange,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const AdminDialerScreen()),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildOverviewTab(BuildContext context) {
     // FIX (per Nizam's request): removed the Rides Today/Active Heroes/
     // Revenue stat row from this outer page — it duplicated what's
@@ -530,6 +630,10 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
       (icon: FluentEmojiFlat.bar_chart, label: 'Overview', isServicesAggregate: false, materialIcon: null),
       (icon: '', label: 'Services', isServicesAggregate: true, materialIcon: Icons.apps_rounded),
       (icon: '', label: 'Chitti AI', isServicesAggregate: false, materialIcon: Icons.smart_toy_rounded),
+      // NEW (Sep 1 2026): Development & Automation — see
+      // _buildDevelopmentTab. No badge stream: nothing here is a queue
+      // waiting on the admin, so a dot would be noise.
+      (icon: '', label: 'Dev', isServicesAggregate: false, materialIcon: Icons.terminal_rounded),
     ];
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -846,7 +950,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
           const SizedBox(height: 10),
           // NEW (per Nizam's placement choice): Gift Coupons. A coupon
           // is minted automatically every time a customer pays for a
-          // service (onServicePaidCreateCoupon), and stays sealed until
+          // service (onServiceRequestUpdated), and stays sealed until
           // an admin decides what's inside — so this is a queue that
           // needs working daily, which is why it sits on Overview
           // rather than being buried in the drawer.
@@ -1225,7 +1329,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
               },
             ),
             StreamBuilder<DocumentSnapshot>(
-              stream: FirebaseFirestore.instance.collection('system_settings').doc('app_status').snapshots(),
+              stream: FirebaseFirestore.instance.collection('system_settings').doc('app_status').trackedSnapshots(),
               builder: (context, snapshot) {
                 final data = snapshot.data?.data() as Map<String, dynamic>?;
                 final simMode = data?['simulation_mode'] as String? ?? 'off';
@@ -1571,7 +1675,7 @@ class _WaitingBadge extends StatelessWidget {
           .collection('service_requests')
           .where('requestType', isEqualTo: requestType)
           .where('status', whereIn: ['pending', 'admin_review'])
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (context, snapshot) {
         final waitingCount = snapshot.data?.docs.length ?? 0;
         if (waitingCount == 0) return const SizedBox.shrink();

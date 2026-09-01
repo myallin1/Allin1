@@ -29,6 +29,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../auth_service.dart';
+import '../firestore_usage_tracking.dart';
 
 /// How filing an enquiry ended.
 ///
@@ -124,7 +125,7 @@ class ChittiEnquiryService {
         .collection(collectionPath)
         .where('status', isEqualTo: 'open')
         .limit(limit)
-        .snapshots()
+        .trackedSnapshots()
         .map((snap) {
       final items = snap.docs.map(ChittiEnquiry.fromDoc).toList()
         ..sort((a, b) {

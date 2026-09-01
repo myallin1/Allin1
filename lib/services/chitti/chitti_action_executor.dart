@@ -56,6 +56,7 @@ import '../service_request_service.dart';
 import '../voice_booking_intent_service.dart';
 import 'chitti_screen_guide.dart';
 import 'chitti_hero_voice.dart';
+import 'hero_memory_service.dart';
 import 'chitti_host_bridge.dart';
 import 'chitti_role_lookup_service.dart';
 import 'chitti_section_registry.dart';
@@ -292,8 +293,16 @@ class ChittiActionExecutor {
         case 'hero_set_online_status':
           return await _heroSetOnline(args);
         case 'hero_today_earnings':
+          final earnings = await ChittiRoleLookupService.heroTodayEarningsSummary();
+          // NEW (Sep 1 2026 — Hero Memory offline fallback): a real,
+          // personalized comparison against yesterday when the local
+          // memory has enough data (see HeroMemoryService.offlineInsight
+          // header for why this works with zero connectivity) — falls
+          // back to nothing extra for a brand-new hero rather than a
+          // generic quip that doesn't fit an earnings question.
+          final insight = HeroMemoryService.offlineInsight();
           return ChittiActionResult(
-            text: await ChittiRoleLookupService.heroTodayEarningsSummary(),
+            text: insight == null ? earnings : '$earnings\n\n$insight',
             suggestions: const <String>[
               'Open Earnings',
               'My wallet balance',
@@ -302,13 +311,15 @@ class ChittiActionExecutor {
           );
         case 'hero_active_job_status':
           final job = await ChittiRoleLookupService.heroActiveJobSummary();
+          // "Boss, naan unga dude iruken." Prefer a line grounded in
+          // this hero's actual recent numbers/mood when memory has
+          // enough to say something specific; the generic pep list is
+          // the floor for a brand-new hero, not the default for everyone.
+          final personalized = HeroMemoryService.offlineInsight();
+          final pep = personalized ??
+              ChittiHeroVoice.heroPep(languageCode, seed: DateTime.now().day);
           return ChittiActionResult(
-            // "Boss, naan unga dude iruken." The pep line rides along
-            // with the facts rather than replacing them — a rider asking
-            // about their job wants the job, and encouragement instead
-            // of an answer is the fastest way to make them stop asking.
-            text: '$job\n\n'
-                '${ChittiHeroVoice.heroPep(languageCode, seed: DateTime.now().day)}',
+            text: '$job\n\n$pep',
             suggestions: const <String>[
               'Show incomplete tasks',
               'Today earnings',

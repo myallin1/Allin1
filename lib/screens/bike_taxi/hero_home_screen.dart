@@ -68,6 +68,7 @@ import '../../services/app_update_gate_service.dart';
 import '../../services/pwa_cache_platform_stub.dart'
     if (dart.library.html) '../../services/pwa_cache_platform_web.dart';
 import '../../widgets/cached_tile_provider.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 class HeroHomeScreen extends StatefulWidget {
   const HeroHomeScreen({
@@ -787,7 +788,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               'completed',
             ],
           )
-          .snapshots();
+          .trackedSnapshots();
       // DB usage monitor — side-channel .listen() on this already-hoisted,
       // broadcast .snapshots() stream to count docs per snapshot; the
       // stream already has _serviceRequestBusySub as a listener below, so
@@ -878,7 +879,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           SosAlertStatus.claimed,
           SosAlertStatus.escalated,
         ])
-        .snapshots();
+        .trackedSnapshots();
     _pulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
@@ -1760,7 +1761,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     _serviceAccessSub = FirebaseFirestore.instance
         .collection('heroes')
         .doc(uid)
-        .snapshots()
+        .trackedSnapshots()
         .listen((snap) {
       final data = snap.data();
       if (data == null) return;
@@ -2823,7 +2824,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     staleSub = FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
-        .snapshots()
+        .trackedSnapshots()
         .listen((doc) {
       // FIX (CTO mandate — Final UI Migration Sweep): only the status
       // is needed here, so build a model just to read `.status` rather
@@ -5381,7 +5382,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       stream: FirebaseFirestore.instance
           .collection('rides')
           .doc(_activeRideId)
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const SizedBox.shrink();
@@ -6158,7 +6159,7 @@ class HeroTaskDetailScreen extends StatelessWidget {
         centerTitle: true,
       ),
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance.collection('service_requests').doc(requestId).snapshots(),
+        stream: FirebaseFirestore.instance.collection('service_requests').doc(requestId).trackedSnapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator(color: Color(0xFFFF4FA3)));
@@ -6519,6 +6520,16 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
       case 'custom_order':
         return 'Custom Order';
       case 'custom_food_order':
+        return 'Food Order';
+      // FIX (food-order flow audit): these are the TWO request types the
+      // whole seller->hero food pipeline actually uses — a shop-menu
+      // order (seller_detail_screen.dart) and a Custom Hotel order
+      // (custom_hotel_view_screen.dart) — and neither was listed here,
+      // so both fell through to the generic 'Service Request' default.
+      // A hero collecting food from a hotel was shown the one label that
+      // tells them nothing about what the job is.
+      case 'catalog_food_order':
+      case 'custom_hotel_order':
         return 'Food Order';
       case 'grocery_order':
         return 'Grocery Order';

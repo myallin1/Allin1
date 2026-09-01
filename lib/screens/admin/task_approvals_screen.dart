@@ -8,6 +8,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_palette.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 class TaskApprovalsScreen extends StatefulWidget {
   const TaskApprovalsScreen({super.key});
@@ -122,7 +123,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
           .collection('task_completions')
           .where('status', isEqualTo: 'pending')
           .orderBy('submittedAt', descending: true)
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(
@@ -460,7 +461,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
       stream: FirebaseFirestore.instance
           .collection('rides')
           .orderBy('createdAt', descending: true)
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(

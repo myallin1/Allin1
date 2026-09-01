@@ -47,6 +47,7 @@
 // anywhere in this file, so the existing seller flow cannot be
 // affected even by a bug in this new one.
 import 'package:cloud_firestore/cloud_firestore.dart';
+import './firestore_usage_tracking.dart';
 
 class CustomHotelItem {
   const CustomHotelItem({
@@ -193,11 +194,11 @@ class CustomHotelService {
   /// Seller's own management view — ALL items regardless of visibility
   /// (they need to see and re-enable hidden items too).
   Stream<QuerySnapshot<Map<String, dynamic>>> sellerItemsStream(String sellerId) {
-    return _itemsRef(sellerId).orderBy('createdAt', descending: true).snapshots();
+    return _itemsRef(sellerId).orderBy('createdAt', descending: true).trackedSnapshots();
   }
 
   Stream<DocumentSnapshot<Map<String, dynamic>>> hotelStream(String sellerId) {
-    return _hotelDoc(sellerId).snapshots();
+    return _hotelDoc(sellerId).trackedSnapshots();
   }
 
   // ---- Customer-side (read-only) -------------------------------------
@@ -207,14 +208,14 @@ class CustomHotelService {
   /// very next snapshot — no polling, no manual refresh needed by the
   /// customer screen.
   Stream<QuerySnapshot<Map<String, dynamic>>> openHotelsStream() {
-    return _hotelsRef.where('isOpen', isEqualTo: true).snapshots();
+    return _hotelsRef.where('isOpen', isEqualTo: true).trackedSnapshots();
   }
 
   /// Every item with isVisible == true for one hotel, live — same
   /// instant-disappear guarantee per item as openHotelsStream gives per
   /// hotel.
   Stream<QuerySnapshot<Map<String, dynamic>>> visibleItemsStream(String sellerId) {
-    return _itemsRef(sellerId).where('isVisible', isEqualTo: true).orderBy('createdAt', descending: true).snapshots();
+    return _itemsRef(sellerId).where('isVisible', isEqualTo: true).orderBy('createdAt', descending: true).trackedSnapshots();
   }
 
   // ---- Ordering & Checkout (CTO mandate — Custom Hotel Ordering &

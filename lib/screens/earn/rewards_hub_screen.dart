@@ -14,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/video_warmup_service.dart';
 import '../../models/mobile_models.dart' show youtubeVideoId;
 import '../mobiles/listing_video_player.dart'
+import '../../services/firestore_usage_tracking.dart';
     show showPremiumVideoModal, VideoThumbnail;
 
 // ── Theme ─────────────────────────────────────────────────────
@@ -1648,7 +1649,7 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
           .where('isActive', isEqualTo: true)
           .orderBy('createdAt', descending: true)
           .limit(10)
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (context, snap) {
         // Loading
         if (snap.connectionState == ConnectionState.waiting) {

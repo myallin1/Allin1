@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/firestore_usage_tracking.dart';
 
 // ── Theme tokens (Aug 20 2026 — Global Food Theme Overhaul) ─────
 // Recolored from the old dark navy palette to the brand's pure
@@ -90,7 +91,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
       setState(() {
         _orderId = ref.id;
         _uploading = false;
-        _orderStream = ref.snapshots();
+        _orderStream = ref.trackedSnapshots();
       });
     } catch (e) {
       if (!mounted) return;

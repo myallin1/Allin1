@@ -12,6 +12,7 @@ import '../config/app_knowledge_briefing.dart';
 import '../config/app_variant.dart';
 import 'chitti/chitti_model_provider.dart';
 import 'chitti/chitti_tool_registry.dart';
+import 'chitti/hero_memory_service.dart';
 import 'chitti_memory_service.dart';
 import 'chitti_order_memory_service.dart';
 
@@ -247,6 +248,13 @@ class GuruApiService {
     final input = message.trim();
     if (input.isEmpty && imageBytes == null) {
       return 'Tell me what you need, and I will guide you quickly.';
+    }
+
+    // NEW (Sep 1 2026 — Hero Memory): cheap, fully-offline keyword scan
+    // of what the hero just said, feeding HeroMemoryService's mood log.
+    // Fire-and-forget — a memory write must never delay the real reply.
+    if (currentAppVariant == 'hero' && input.isNotEmpty) {
+      unawaited(HeroMemoryService.maybeInferMood(input));
     }
 
     // FIX (per Nizam's explicit request): this used to literally tell
@@ -951,6 +959,19 @@ class GuruApiService {
       prompt = '$prompt\n\n$liveContext';
     }
 
+    // NEW (Sep 1 2026 — Hero Memory / token-optimized prompt injection):
+    // hero-only, and always this one compressed block — see
+    // HeroMemoryService.heroProfileForPrompt() for why the full local
+    // history never reaches this string. Gated to 'hero' the same way
+    // ChittiOrderMemoryService's block is implicitly customer-only (it
+    // is only ever recorded from customer completion flows).
+    if (currentAppVariant == 'hero') {
+      final heroProfile = HeroMemoryService.heroProfileForPrompt();
+      if (heroProfile.trim().isNotEmpty) {
+        prompt = '$prompt\n\n$heroProfile';
+      }
+    }
+
     final persona = _personaOverrideFor(currentAppVariant);
     if (persona.isNotEmpty) {
       prompt = '$prompt\n\n'
@@ -1021,7 +1042,13 @@ class GuruApiService {
             'Route, pickup, drop, customer handling, safety.\n'
             'Speak in short energetic Tamil-English lines. This person '
             'is working, often riding, often tired — every extra '
-            'sentence costs them attention they need on the road.';
+            'sentence costs them attention they need on the road.\n'
+            'If a "Hero Profile" block appears above with real numbers '
+            'or mood for THIS hero, use it to sound like someone who '
+            'actually remembers them — compare today to yesterday, '
+            'acknowledge a rough patch — instead of a generic motivational '
+            'line. Never invent a number that is not in that block or in '
+            'a tool result.';
 
       // ── SELLER: manager + guide + order follow-up + accountant ───
       case 'seller':

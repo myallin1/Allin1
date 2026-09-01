@@ -22,6 +22,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/admin_deletion_service.dart';
 import '../../widgets/admin/admin_selection_mixin.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 // Ride statuses that mean "no hero has accepted yet" -- these are the
 // only ones that show the "Assign Hero Manually (VIP Booking)" action.
@@ -102,7 +103,7 @@ class _AdminTaxiRidesScreenState extends State<AdminTaxiRidesScreen>
           .collection('rides')
           .orderBy('createdAt', descending: true)
           .limit(100)
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: _gold));
