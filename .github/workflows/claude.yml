@@ -34,7 +34,14 @@ jobs:
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # FIX (Sep 2 2026): was `anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}`
+          # -- that's a separate, pay-per-token key from console.anthropic.com,
+          # which this account never had (only a Claude.ai Pro subscription,
+          # not API billing) -- so every run of this workflow failed.
+          # claude_code_oauth_token authenticates with that Pro/Max subscription
+          # instead: run `claude setup-token` locally while logged in, then save
+          # the printed token as the CLAUDE_CODE_OAUTH_TOKEN repo secret.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
           # This is an optional setting that allows Claude to read CI results on PRs
           additional_permissions: |
