@@ -26,9 +26,17 @@ name: Gemini Feature Proposal
 #     overnight.
 #   - schedule + workflow_dispatch: runs on its own, but can also be
 #     fired by hand from the Actions tab without waiting for the clock.
+#
+# UPDATED (Sep 2 2026 — Nizam: "ipove pesa arambichu, udanukkudane
+# check panni work pannanum... satisfied aguravarayum panite
+# irukanum" — wants this running continuously overnight, not once
+# every 3 hours). Every 15 minutes is the shortest interval GitHub
+# schedules reliably; this stays safe at that pace only because of the
+# 3-open-proposal cap below — once 3 are waiting on Claude, every run
+# in between is a no-op check, not a new issue.
 on:
   schedule:
-    - cron: '0 */3 * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 jobs:
