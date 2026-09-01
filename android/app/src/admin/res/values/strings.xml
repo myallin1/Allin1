@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- NEW (Sep 2 2026 — launcher "Dialer" shortcut, see
+         AdminDialerShortcutActivity and xml/shortcuts.xml). -->
+    <string name="shortcut_dialer_short">Dialer</string>
+    <string name="shortcut_dialer_long">Open Allin1 Dialer</string>
+</resources>

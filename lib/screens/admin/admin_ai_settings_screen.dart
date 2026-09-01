@@ -33,7 +33,6 @@ import 'package:share_plus/share_plus.dart';
 import '../../services/chitti/chitti_accessibility_bridge.dart';
 import 'chitti_debug_logs_screen.dart';
 import 'chitti_dev_monitor_screen.dart';
-import '../../services/chitti/chitti_dev_task_service.dart';
 import '../../services/chitti/chitti_summarizer.dart';
 import '../../services/cloudinary_upload_service.dart';
 import '../../services/firestore_usage_tracking.dart';
@@ -103,13 +102,6 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
   final TextEditingController _geminiCtrl = TextEditingController();
   final TextEditingController _deepseekCtrl = TextEditingController();
 
-  // NEW (Aug 31 2026 — Developer Automation / create_dev_task). Stored
-  // via ChittiDevTaskService (flutter_secure_storage), never
-  // SharedPreferences — see that file's header for why this one starts
-  // secure instead of migrating later.
-  final TextEditingController _githubTokenCtrl = TextEditingController();
-  final TextEditingController _githubOwnerCtrl = TextEditingController();
-  final TextEditingController _githubRepoCtrl = TextEditingController();
   bool _loading = true;
   bool _saving = false;
 
@@ -320,15 +312,6 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
       });
     }
 
-    final githubToken = await ChittiDevTaskService.readToken();
-    final githubRepo = await ChittiDevTaskService.readRepo();
-    if (mounted) {
-      setState(() {
-        _githubTokenCtrl.text = githubToken ?? '';
-        _githubOwnerCtrl.text = githubRepo.owner;
-        _githubRepoCtrl.text = githubRepo.name;
-      });
-    }
   }
 
   @override
@@ -337,9 +320,6 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
     _groqCtrl.dispose();
     _geminiCtrl.dispose();
     _deepseekCtrl.dispose();
-    _githubTokenCtrl.dispose();
-    _githubOwnerCtrl.dispose();
-    _githubRepoCtrl.dispose();
     super.dispose();
   }
 
@@ -377,11 +357,6 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
       await prefs.setString(_kCallAnsweringModeKey, _callAnsweringMode);
       await prefs.setString(_kCallAudioRouteKey, _callAudioRoute);
       await prefs.setBool(_kCallRecordingEnabledKey, _callRecordingEnabled);
-      await ChittiDevTaskService.saveToken(_githubTokenCtrl.text);
-      await ChittiDevTaskService.saveRepo(
-        owner: _githubOwnerCtrl.text,
-        name: _githubRepoCtrl.text,
-      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Admin AI Co-Pilot keys saved on this device.')),
@@ -977,84 +952,6 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
     );
   }
 
-  // NEW (Aug 31 2026 — create_dev_task). Lets Chitti place a GitHub
-  // issue tagging @claude on Nizam's behalf, once he's confirmed the
-  // request — see chitti_dev_task_service.dart for why the token is
-  // secure-storage-only and the security note about scoping it to a
-  // fine-grained, repo-limited, Issues-only PAT.
-  Widget _buildDevAutomationSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Divider(color: _border, height: 32),
-        Row(
-          children: [
-            const Icon(Icons.rocket_launch_rounded, color: _red, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              'Developer Automation',
-              style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          "Lets Chitti open a GitHub issue tagging @claude when you ask it "
-          "to build or fix something — the Claude Code GitHub App picks it "
-          "up automatically. Use a fine-grained token scoped to ONLY this "
-          "repo, with ONLY 'Issues: Write' permission.",
-          style: GoogleFonts.outfit(color: _muted, fontSize: 11.5, height: 1.35),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _githubOwnerCtrl,
-                style: const TextStyle(color: _text),
-                decoration: InputDecoration(
-                  hintText: 'Repo owner (e.g. myallin1)',
-                  hintStyle: const TextStyle(color: _muted),
-                  filled: true,
-                  fillColor: _bg,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: TextField(
-                controller: _githubRepoCtrl,
-                style: const TextStyle(color: _text),
-                decoration: InputDecoration(
-                  hintText: 'Repo name (e.g. Allin1)',
-                  hintStyle: const TextStyle(color: _muted),
-                  filled: true,
-                  fillColor: _bg,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _githubTokenCtrl,
-          obscureText: true,
-          style: const TextStyle(color: _text),
-          decoration: InputDecoration(
-            hintText: 'Paste your GitHub fine-grained token',
-            hintStyle: const TextStyle(color: _muted),
-            prefixIcon: const Icon(Icons.key_rounded, color: _red),
-            filled: true,
-            fillColor: _bg,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildAppointmentsList() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -1254,7 +1151,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                                 await FirebaseFirestore.instance
                                     .collection('chitti_appointments')
                                     .doc(docId)
-                                    .update({'audioUrl': url});
+                                    .trackedUpdate({'audioUrl': url});
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(content: Text('Audio successfully backed up to Cloud!')),
@@ -1388,7 +1285,6 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                     const SizedBox(height: 20),
                     _buildChittiVoiceSection(),
                     _buildCallAssistantSection(),
-                    _buildDevAutomationSection(),
                     const SizedBox(height: 20),
                     Text('Groq API Key', style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13)),
                     const SizedBox(height: 8),

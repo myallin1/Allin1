@@ -14,8 +14,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/video_warmup_service.dart';
 import '../../models/mobile_models.dart' show youtubeVideoId;
 import '../mobiles/listing_video_player.dart'
-import '../../services/firestore_usage_tracking.dart';
     show showPremiumVideoModal, VideoThumbnail;
+import '../../services/firestore_usage_tracking.dart';
 
 // ── Theme ─────────────────────────────────────────────────────
 const Color _bg = Color(0xFF0A0A12);
@@ -369,7 +369,7 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
     final query = await FirebaseFirestore.instance
         .collection('task_completions')
         .where('userId', isEqualTo: uid)
-        .get();
+        .trackedGet();
 
     final Map<String, String> statuses = {};
     for (final doc in query.docs) {

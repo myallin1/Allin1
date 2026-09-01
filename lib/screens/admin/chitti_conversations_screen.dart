@@ -17,12 +17,16 @@
 // _saveAppointment() already writes at the end of every screened call;
 // the `summary` field is the AI (or offline-heuristic) one-liner and
 // `transcript` the full back-and-forth.
+import 'dart:io';
+
+import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../services/firestore_usage_tracking.dart';
+import '../../services/guru_admin_api_service.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _card = Color(0xFF141420);
@@ -87,7 +91,7 @@ class ChittiConversationsScreen extends StatelessWidget {
           return ListView.builder(
             padding: const EdgeInsets.all(14),
             itemCount: docs.length,
-            itemBuilder: (context, i) => _ConversationCard(data: docs[i].data()),
+            itemBuilder: (context, i) => _ConversationCard(data: docs[i].data(), docRef: docs[i].reference),
           );
         },
       ),
@@ -96,8 +100,9 @@ class ChittiConversationsScreen extends StatelessWidget {
 }
 
 class _ConversationCard extends StatefulWidget {
-  const _ConversationCard({required this.data});
+  const _ConversationCard({required this.data, required this.docRef});
   final Map<String, dynamic> data;
+  final DocumentReference<Map<String, dynamic>> docRef;
 
   @override
   State<_ConversationCard> createState() => _ConversationCardState();
@@ -105,6 +110,78 @@ class _ConversationCard extends StatefulWidget {
 
 class _ConversationCardState extends State<_ConversationCard> {
   bool _expanded = false;
+  final AudioPlayer _player = AudioPlayer();
+  bool _playing = false;
+  final TextEditingController _noteCtrl = TextEditingController();
+  bool _generatingPlan = false;
+
+  @override
+  void dispose() {
+    _player.dispose();
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _togglePlay(String audioPath) async {
+    if (_playing) {
+      await _player.stop();
+      if (mounted) setState(() => _playing = false);
+      return;
+    }
+    if (!File(audioPath).existsSync()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Recording file not found on this device.')),
+        );
+      }
+      return;
+    }
+    try {
+      setState(() => _playing = true);
+      await _player.play(DeviceFileSource(audioPath));
+      _player.onPlayerComplete.first.then((_) {
+        if (mounted) setState(() => _playing = false);
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _playing = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not play recording: $e')));
+      }
+    }
+  }
+
+  // NEW (Sep 2 2026 — Nizam: "chitti admin ku antha audio kekumbothu
+  // note pannuna text input ah vachu customer intent and next work
+  // plan pannanum"). Admin listens to the recording, types a short
+  // note in their own words, and Chitti turns that into a structured
+  // "what the customer wants + what to do next" plan — reusing the
+  // same Groq-backed admin AI already configured for chat, rather than
+  // adding a second AI integration for this one screen.
+  Future<void> _generatePlan(String caller, String transcript) async {
+    final note = _noteCtrl.text.trim();
+    if (note.isEmpty) return;
+    setState(() => _generatingPlan = true);
+    try {
+      final prompt = 'A customer called our business ($caller). Here is what was said on '
+          'the call (may be empty if only a recording exists):\n$transcript\n\n'
+          'Here is the admin\'s note after listening to the recording:\n$note\n\n'
+          'In under 80 words, write: 1) what the customer wants (one line), '
+          '2) the concrete next step to do for this customer. Plain text, no '
+          'markdown, no preamble.';
+      final plan = await GuruAdminApiService().sendMessage(message: prompt);
+      await widget.docRef.set({'followupNote': note, 'followupPlan': plan}, SetOptions(merge: true));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Follow-up plan saved.')),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not generate plan: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _generatingPlan = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -217,12 +294,81 @@ class _ConversationCardState extends State<_ConversationCard> {
                     ...body.split('\n').where((l) => l.trim().isNotEmpty).map(_speechLine),
                   if (audioPath != null && audioPath.isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    _pathRow(context, 'Recording', audioPath),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _togglePlay(audioPath),
+                        icon: Icon(_playing ? Icons.stop_rounded : Icons.play_arrow_rounded, size: 18),
+                        label: Text(_playing ? 'Stop playback' : 'Play recording'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _green,
+                          side: const BorderSide(color: _green),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    _pathRow(context, 'Recording file', audioPath),
                   ],
                   if (transcriptPath != null && transcriptPath.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     _pathRow(context, 'Text file', transcriptPath),
                   ],
+                  const SizedBox(height: 14),
+                  Text(
+                    'FOLLOW-UP',
+                    style: GoogleFonts.outfit(
+                      color: _muted, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if ((d['followupPlan'] as String?)?.trim().isNotEmpty ?? false)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: _purple.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: _purple.withValues(alpha: 0.4)),
+                      ),
+                      child: Text(
+                        (d['followupPlan'] as String).trim(),
+                        style: GoogleFonts.outfit(color: _text, fontSize: 12, height: 1.4),
+                      ),
+                    ),
+                  TextField(
+                    controller: _noteCtrl,
+                    minLines: 2,
+                    maxLines: 4,
+                    style: const TextStyle(color: _text, fontSize: 12.5),
+                    decoration: InputDecoration(
+                      hintText: 'What did the customer say? (your note after listening)',
+                      hintStyle: const TextStyle(color: _muted, fontSize: 12),
+                      filled: true,
+                      fillColor: _bg,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _generatingPlan ? null : () => _generatePlan(caller, body),
+                      icon: _generatingPlan
+                          ? const SizedBox(
+                              width: 14, height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                          : const Icon(Icons.auto_awesome_rounded, size: 16),
+                      label: const Text('Ask Chitti for next-step plan'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _purple,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,

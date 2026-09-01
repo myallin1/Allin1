@@ -10,17 +10,23 @@
 // This is a real gap, not a nicety: taking RoleManager.ROLE_DIALER
 // makes Android stop showing the stock phone UI for this device, so
 // without this screen the business phone has no way to place a call at
-// all. Scope is deliberately the three things that were lost —
-// dial/place, see the live call, hang up — and nothing more. Contacts,
-// call log, and the full in-call surface stay with the OS's own apps.
+// all. Scope was originally just dial/place, see the live call, hang
+// up — but Nizam flagged that as incomplete on Sep 2 2026: without
+// call history and contacts, this dialer can't do what the stock
+// Oppo/Samsung dialer it replaced could, so those are now here too.
 //
 // Placing the call goes through TelecomManager.placeCall(), the same
 // system entry point ChittiDialerActivity already uses for taps on a
 // tel: link, so there is exactly one calling path in this app rather
 // than a second one that can drift.
+import 'dart:async';
+
+import 'package:call_log/call_log.dart' as android_call_log;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../services/chitti/chitti_accessibility_bridge.dart';
 import 'admin_in_call_screen.dart';
@@ -32,6 +38,7 @@ const Color _muted = Color(0xFF7777A0);
 const Color _border = Color(0x267B6FE0);
 const Color _red = Color(0xFFE05555);
 const Color _green = Color(0xFF4ADE80);
+const Color _purple = Color(0xFFB21FFF);
 
 class AdminDialerScreen extends StatefulWidget {
   const AdminDialerScreen({super.key});
@@ -40,7 +47,9 @@ class AdminDialerScreen extends StatefulWidget {
   State<AdminDialerScreen> createState() => _AdminDialerScreenState();
 }
 
-class _AdminDialerScreenState extends State<AdminDialerScreen> {
+class _AdminDialerScreenState extends State<AdminDialerScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
   String _number = '';
   Map<String, dynamic>? _activeCall;
   bool _busy = false;
@@ -48,7 +57,14 @@ class _AdminDialerScreenState extends State<AdminDialerScreen> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _refreshActiveCall();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _refreshActiveCall() async {
@@ -60,12 +76,18 @@ class _AdminDialerScreenState extends State<AdminDialerScreen> {
   void _tap(String digit) {
     HapticFeedback.selectionClick();
     setState(() => _number += digit);
+    _tabController.animateTo(0);
   }
 
   void _backspace() {
     if (_number.isEmpty) return;
     HapticFeedback.selectionClick();
     setState(() => _number = _number.substring(0, _number.length - 1));
+  }
+
+  void _dialNumber(String number) {
+    setState(() => _number = number);
+    _tabController.animateTo(0);
   }
 
   Future<void> _place() async {
@@ -110,61 +132,31 @@ class _AdminDialerScreenState extends State<AdminDialerScreen> {
             onPressed: _refreshActiveCall,
           ),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: _purple,
+          labelColor: _purple,
+          unselectedLabelColor: _muted,
+          labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 12.5),
+          tabs: const [
+            Tab(text: 'Keypad'),
+            Tab(text: 'Recents'),
+            Tab(text: 'Contacts'),
+          ],
+        ),
       ),
       body: SafeArea(
         child: Column(
           children: [
             _buildActiveCallCard(),
-            const SizedBox(height: 4),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              child: Row(
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
                 children: [
-                  Expanded(
-                    child: Text(
-                      _number.isEmpty ? 'Enter a number' : _number,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.outfit(
-                        color: _number.isEmpty ? _muted : _text,
-                        fontSize: _number.isEmpty ? 16 : 26,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                  ),
-                  if (_number.isNotEmpty)
-                    IconButton(
-                      icon: const Icon(Icons.backspace_outlined, color: _muted),
-                      onPressed: _backspace,
-                    ),
+                  _buildKeypadTab(),
+                  _RecentsTab(onCall: _dialNumber),
+                  _ContactsTab(onCall: _dialNumber),
                 ],
-              ),
-            ),
-            const Divider(color: _border, height: 1),
-            Expanded(child: _buildKeypad()),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
-              child: SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton.icon(
-                  onPressed: (_number.isEmpty || _busy) ? null : _place,
-                  icon: _busy
-                      ? const SizedBox(
-                          width: 18, height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.call_rounded),
-                  label: Text(_busy ? 'Calling…' : 'Call',
-                      style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 15)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _green,
-                    foregroundColor: Colors.black,
-                    disabledBackgroundColor: _card,
-                    disabledForegroundColor: _muted,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                ),
               ),
             ),
           ],
@@ -173,7 +165,65 @@ class _AdminDialerScreenState extends State<AdminDialerScreen> {
     );
   }
 
-  // Shows only while a call actually exists, so the keypad isn't
+  Widget _buildKeypadTab() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _number.isEmpty ? 'Enter a number' : _number,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(
+                    color: _number.isEmpty ? _muted : _text,
+                    fontSize: _number.isEmpty ? 16 : 26,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+              if (_number.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.backspace_outlined, color: _muted),
+                  onPressed: _backspace,
+                ),
+            ],
+          ),
+        ),
+        const Divider(color: _border, height: 1),
+        Expanded(child: _buildKeypad()),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
+          child: SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: ElevatedButton.icon(
+              onPressed: (_number.isEmpty || _busy) ? null : _place,
+              icon: _busy
+                  ? const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.call_rounded),
+              label: Text(_busy ? 'Calling…' : 'Call',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 15)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _green,
+                foregroundColor: Colors.black,
+                disabledBackgroundColor: _card,
+                disabledForegroundColor: _muted,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Shows only while a call actually exists, so the tabs below aren't
   // permanently pushed down by an empty placeholder.
   Widget _buildActiveCallCard() {
     final call = _activeCall;
@@ -189,63 +239,63 @@ class _AdminDialerScreenState extends State<AdminDialerScreen> {
         MaterialPageRoute<void>(builder: (_) => const AdminInCallScreen()),
       ),
       child: Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _green.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _green.withValues(alpha: 0.5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.phone_in_talk_rounded, color: _green, size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  (number == null || number.isEmpty) ? 'Call in progress' : number,
-                  style: GoogleFonts.outfit(color: _text, fontSize: 15, fontWeight: FontWeight.w700),
-                ),
-              ),
-              Text(state,
-                  style: GoogleFonts.outfit(color: _green, fontSize: 11, fontWeight: FontWeight.w700)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _toggleSpeaker,
-                  icon: const Icon(Icons.volume_up_rounded, size: 17),
-                  label: const Text('Speaker'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _text,
-                    side: const BorderSide(color: _border),
-                    padding: const EdgeInsets.symmetric(vertical: 11),
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: _green.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _green.withValues(alpha: 0.5)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.phone_in_talk_rounded, color: _green, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    (number == null || number.isEmpty) ? 'Call in progress' : number,
+                    style: GoogleFonts.outfit(color: _text, fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _hangUp,
-                  icon: const Icon(Icons.call_end_rounded, size: 18),
-                  label: const Text('Hang Up'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _red,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 11),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                Text(state,
+                    style: GoogleFonts.outfit(color: _green, fontSize: 11, fontWeight: FontWeight.w700)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _toggleSpeaker,
+                    icon: const Icon(Icons.volume_up_rounded, size: 17),
+                    label: const Text('Speaker'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _text,
+                      side: const BorderSide(color: _border),
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ],
-      ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _hangUp,
+                    icon: const Icon(Icons.call_end_rounded, size: 18),
+                    label: const Text('Hang Up'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _red,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -289,4 +339,239 @@ class _AdminDialerScreenState extends State<AdminDialerScreen> {
       ),
     );
   }
+}
+
+// NEW (Sep 2 2026 — Nizam: "antha cal history and contacts implement
+// panniru athu enaku important"). Read-only mirror of the OS call log,
+// same as what the stock dialer showed before this app took over the
+// Phone role. Tapping a row fills the keypad rather than calling
+// straight away, matching how the stock dialer's recents tab behaves.
+class _RecentsTab extends StatefulWidget {
+  const _RecentsTab({required this.onCall});
+  final void Function(String number) onCall;
+
+  @override
+  State<_RecentsTab> createState() => _RecentsTabState();
+}
+
+class _RecentsTabState extends State<_RecentsTab> {
+  List<android_call_log.CallLogEntry>? _entries;
+  bool _denied = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final status = await Permission.phone.request();
+    if (!status.isGranted) {
+      if (mounted) setState(() => _denied = true);
+      return;
+    }
+    try {
+      final entries = await android_call_log.CallLog.get();
+      if (!mounted) return;
+      setState(() => _entries = entries.take(100).toList());
+    } catch (e) {
+      if (mounted) setState(() => _entries = []);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_denied) {
+      return _permissionMessage('Call log permission was denied. Grant "Phone" '
+          'permission to see recent calls here.');
+    }
+    final entries = _entries;
+    if (entries == null) {
+      return const Center(child: CircularProgressIndicator(color: _purple));
+    }
+    if (entries.isEmpty) {
+      return _permissionMessage('No recent calls found.');
+    }
+    return RefreshIndicator(
+      onRefresh: _load,
+      color: _purple,
+      backgroundColor: _card,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        itemCount: entries.length,
+        itemBuilder: (context, i) {
+          final e = entries[i];
+          final number = e.number ?? '';
+          final (IconData icon, Color color) = switch (e.callType) {
+            android_call_log.CallType.incoming => (Icons.call_received_rounded, _green),
+            android_call_log.CallType.outgoing => (Icons.call_made_rounded, _purple),
+            android_call_log.CallType.missed => (Icons.call_missed_rounded, _red),
+            android_call_log.CallType.rejected => (Icons.call_end_rounded, _red),
+            _ => (Icons.call_rounded, _muted),
+          };
+          final when = e.timestamp != null
+              ? DateTime.fromMillisecondsSinceEpoch(e.timestamp!)
+              : null;
+          return ListTile(
+            leading: Icon(icon, color: color, size: 22),
+            title: Text(
+              (e.name != null && e.name!.isNotEmpty) ? e.name! : (number.isEmpty ? 'Unknown' : number),
+              style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w600, fontSize: 14),
+            ),
+            subtitle: when != null
+                ? Text(_formatWhen(when), style: GoogleFonts.outfit(color: _muted, fontSize: 11.5))
+                : null,
+            trailing: IconButton(
+              icon: const Icon(Icons.call_rounded, color: _green),
+              onPressed: number.isEmpty ? null : () => widget.onCall(number),
+            ),
+            onTap: number.isEmpty ? null : () => widget.onCall(number),
+          );
+        },
+      ),
+    );
+  }
+
+  static String _formatWhen(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${dt.day}/${dt.month}/${dt.year}';
+  }
+}
+
+// NEW (Sep 2 2026 — same request as _RecentsTab). Reads the device's
+// existing contacts (Google account contacts sync to this the same
+// way they do for any other dialer app) — read-only, this screen
+// never edits or creates a contact.
+class _ContactsTab extends StatefulWidget {
+  const _ContactsTab({required this.onCall});
+  final void Function(String number) onCall;
+
+  @override
+  State<_ContactsTab> createState() => _ContactsTabState();
+}
+
+class _ContactsTabState extends State<_ContactsTab> {
+  List<Contact>? _contacts;
+  bool _denied = false;
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final granted = await FlutterContacts.requestPermission(readonly: true);
+    if (!granted) {
+      if (mounted) setState(() => _denied = true);
+      return;
+    }
+    try {
+      final contacts = await FlutterContacts.getContacts(withProperties: true);
+      contacts.sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+      if (!mounted) return;
+      setState(() => _contacts = contacts);
+    } catch (e) {
+      if (mounted) setState(() => _contacts = []);
+    }
+  }
+
+  List<Contact> get _filtered {
+    final all = _contacts ?? [];
+    if (_query.isEmpty) return all;
+    final q = _query.toLowerCase();
+    return all.where((c) {
+      if (c.displayName.toLowerCase().contains(q)) return true;
+      return c.phones.any((p) => p.number.replaceAll(RegExp(r'[^0-9]'), '').contains(q));
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_denied) {
+      return _permissionMessage('Contacts permission was denied. Grant "Contacts" '
+          'permission to search contacts here.');
+    }
+    if (_contacts == null) {
+      return const Center(child: CircularProgressIndicator(color: _purple));
+    }
+    final filtered = _filtered;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
+          child: TextField(
+            controller: _searchCtrl,
+            onChanged: (v) => setState(() => _query = v),
+            style: const TextStyle(color: _text),
+            decoration: InputDecoration(
+              hintText: 'Search contacts',
+              hintStyle: const TextStyle(color: _muted),
+              prefixIcon: const Icon(Icons.search_rounded, color: _muted),
+              filled: true,
+              fillColor: _card,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            ),
+          ),
+        ),
+        Expanded(
+          child: filtered.isEmpty
+              ? _permissionMessage('No contacts found.')
+              : ListView.builder(
+                  itemCount: filtered.length,
+                  itemBuilder: (context, i) {
+                    final c = filtered[i];
+                    final phone = c.phones.isNotEmpty ? c.phones.first.number : null;
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: _purple.withValues(alpha: 0.15),
+                        child: Text(
+                          c.displayName.isNotEmpty ? c.displayName[0].toUpperCase() : '?',
+                          style: const TextStyle(color: _purple, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      title: Text(c.displayName,
+                          style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w600, fontSize: 14)),
+                      subtitle: phone != null
+                          ? Text(phone, style: GoogleFonts.outfit(color: _muted, fontSize: 11.5))
+                          : null,
+                      trailing: phone != null
+                          ? IconButton(
+                              icon: const Icon(Icons.call_rounded, color: _green),
+                              onPressed: () => widget.onCall(phone),
+                            )
+                          : null,
+                      onTap: phone != null ? () => widget.onCall(phone) : null,
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+Widget _permissionMessage(String message) {
+  return Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: GoogleFonts.outfit(color: _muted, fontSize: 13),
+      ),
+    ),
+  );
 }

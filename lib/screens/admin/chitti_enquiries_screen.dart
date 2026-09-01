@@ -225,6 +225,85 @@ class _EnquiryCard extends StatelessWidget {
     }
   }
 
+  // NEW (Sep 2 2026 — Nizam: "chitti udane athuku enaku venungra records
+  // ilana whatsapp la pricing send pannunu sonan antha product ku yenna
+  // quality yevlo rate podanumnu enkita kettu udane customer ku
+  // anupum"). Admin types the actual quote here — never Chitti's
+  // scraped marketReference verbatim, matching this whole screen's
+  // rule that NJ Tech's own number is the one thing customer-facing.
+  // Opens WhatsApp with the message pre-filled; NJ Tech still taps
+  // Send themselves, so a wrong number or a typo is caught before
+  // anything goes out.
+  Future<void> _quoteViaWhatsApp(BuildContext context) async {
+    final phone = enquiry.customerPhone.trim();
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No phone number on this enquiry.')),
+      );
+      return;
+    }
+    final rateCtrl = TextEditingController();
+    final rate = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Quote for ${enquiry.customerName.trim().isEmpty ? "this customer" : enquiry.customerName.trim()}',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.w800)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(enquiry.question, style: GoogleFonts.outfit(fontSize: 12.5, color: palette.muted)),
+            if (enquiry.marketReference.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text('Chitti showed: ${enquiry.marketReference}',
+                  style: GoogleFonts.outfit(fontSize: 11, fontStyle: FontStyle.italic, color: palette.muted)),
+            ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: rateCtrl,
+              autofocus: true,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                hintText: 'e.g. Original display, ₹1200, fitted same day',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(rateCtrl.text.trim()),
+            child: const Text('Open WhatsApp'),
+          ),
+        ],
+      ),
+    );
+    if (rate == null || rate.isEmpty) return;
+
+    var digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length == 10) digits = '91$digits';
+    final message = 'Hi${enquiry.customerName.trim().isEmpty ? '' : ' ${enquiry.customerName.trim()}'}, '
+        'this is NJ Tech, Erode. Regarding your enquiry — "${enquiry.question}":\n\n$rate\n\n'
+        'Let us know if you would like to go ahead.';
+    final uri = Uri.parse('https://wa.me/$digits?text=${Uri.encodeComponent(message)}');
+    if (!context.mounted) return;
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open WhatsApp.')),
+      );
+      return;
+    }
+    // The quote is now in NJ Tech's own hands to actually send inside
+    // WhatsApp, but the lead itself is answered from this screen's
+    // point of view — leaving it open would mean someone else re-quotes
+    // the same customer later.
+    await ChittiEnquiryService.markAnswered(enquiry.id);
+  }
+
   Future<void> _markAnswered(BuildContext context) async {
     // Confirmed, because this is the only way a lead leaves the list
     // and there is no undo — a mis-tap would silently drop a customer
@@ -357,21 +436,34 @@ class _EnquiryCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _quoteViaWhatsApp(context),
+              icon: const Icon(Icons.chat_rounded, size: 17),
+              label: Text('Quote via WhatsApp', style: GoogleFonts.outfit(fontWeight: FontWeight.w800)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF25D366),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
-                flex: 2,
-                child: ElevatedButton.icon(
+                child: OutlinedButton.icon(
                   onPressed: () => _call(context),
-                  icon: const Icon(Icons.call, size: 17),
+                  icon: Icon(Icons.call, size: 16, color: p.accent),
                   label: Text(
                     'Call',
-                    style: GoogleFonts.outfit(fontWeight: FontWeight.w800),
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: p.accent),
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: p.accent,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                    side: BorderSide(color: p.accent),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -383,7 +475,7 @@ class _EnquiryCard extends StatelessWidget {
                 child: OutlinedButton(
                   onPressed: () => _markAnswered(context),
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(vertical: 11),
                     side: BorderSide(color: p.border),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
