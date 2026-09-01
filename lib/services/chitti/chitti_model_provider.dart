@@ -101,13 +101,13 @@ const List<ChittiModel> kChittiModels = <ChittiModel>[
     id: 'groq',
     label: 'Groq (fastest)',
     endpoint: 'https://api.groq.com/openai/v1/chat/completions',
-    textModel: 'llama-3.1-8b-instant',
+    textModel: 'llama-3.3-70b-versatile',
     // Maverick was deprecated Feb 2026; Scout is the current vision
     // model — see the note in guru_api_service.dart.
     visionModel: 'meta-llama/llama-4-scout-17b-16e-instruct',
     envKeyName: 'GROQ_API_KEY',
     prefsKeyName: 'personal_ai_api_key',
-    modelPrefsKeyName: 'personal_ai_model',
+    modelPrefsKeyName: 'personal_groq_model',
   ),
   ChittiModel(
     id: 'gemini',

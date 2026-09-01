@@ -286,6 +286,15 @@ class AdminHeroDetailsScreen extends StatelessWidget {
                 children: [
                   _buildFieldRow('Email', _val('email')),
                   const Divider(color: Colors.black26),
+                  // FIX (Aug 29 2026 — Nizam: "admin ku send pannavendiya
+                  // proof and needed column mis aagirukku"). dob and
+                  // address are mandatory on the registration form — a
+                  // hero cannot submit without them — but this, admin's
+                  // own full-KYC review screen, never showed either.
+                  _buildFieldRow('Date of Birth', _val('dob')),
+                  const Divider(color: Colors.black26),
+                  _buildFieldRow('Address', _val('address')),
+                  const Divider(color: Colors.black26),
                   _buildFieldRow('City', getCityLabel(_val('city', 'erode'))),
                   const Divider(color: Colors.black26),
                   _buildFieldRow('Preferred Area', _val('preferredWorkLocation', 'Anywhere')),
@@ -331,49 +340,51 @@ class AdminHeroDetailsScreen extends StatelessWidget {
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: _bg,
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 10, offset: const Offset(0, -5)),
-          ],
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  onReject();
-                },
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: _red, width: 2),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: Text('Reject', style: GoogleFonts.outfit(color: _red, fontSize: 16, fontWeight: FontWeight.bold)),
+      floatingActionButton: (data['approvalStatus'] == 'pending')
+          ? Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _bg,
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 10, offset: const Offset(0, -5)),
+                ],
               ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  onApprove();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _green,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
-                ),
-                child: Text('Approve', style: GoogleFonts.outfit(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        onReject();
+                      },
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: _red, width: 2),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text('Reject', style: GoogleFonts.outfit(color: _red, fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        onApprove();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _green,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                      ),
+                      child: Text('Approve', style: GoogleFonts.outfit(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
-      ),
+            )
+          : null,
     );
   }
 }

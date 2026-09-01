@@ -29,10 +29,11 @@ import 'screens/login_screen.dart';
 import 'services/admin_alert_notification_service.dart';
 import 'services/admin_foreground_service.dart';
 import 'services/admin_live_alert_service.dart';
-import 'services/admin_quick_task_service.dart';
+import 'services/guru_overlay_service.dart';
 import 'services/db_usage_tracker.dart';
 import 'services/localization_service.dart';
 import 'services/migration_gate_service.dart';
+import 'services/chitti/chitti_accessibility_bridge.dart';
 import 'services/session_service.dart';
 import 'services/theme_service.dart';
 import 'widgets/branded_loading_screen.dart';
@@ -261,9 +262,16 @@ void main() {
 
       try {
         if (Firebase.apps.isEmpty) {
-          await Firebase.initializeApp(
-            options: DefaultFirebaseOptions.currentPlatform,
-          );
+          try {
+            await Firebase.initializeApp(
+              options: DefaultFirebaseOptions.currentPlatform,
+            );
+          } catch (initErr) {
+            debugPrint('[main_admin] Options init error: $initErr, attempting native fallback');
+            if (Firebase.apps.isEmpty) {
+              await Firebase.initializeApp();
+            }
+          }
         }
         // Enable Firestore offline persistence on web (PWA). Mobile
         // (Android/iOS) already has persistence on by default, so this
@@ -273,28 +281,32 @@ void main() {
           FirebaseFirestore.instance.settings = const Settings(
             persistenceEnabled: true,
             cacheSizeBytes: 52428800, // 50MB
-            // FIX (Aug 10 2026, UPDATED Aug 11 2026 — same QUIC/
-            // Firestore-Listen-channel fix applied to main_customer.dart/
-            // main_hero.dart, for consistency across all 4 apps; switched
-            // from auto-detect to forced long-polling since auto-detect
-            // proved unreliable): see main_hero.dart for the full
-            // explanation.
             webExperimentalForceLongPolling: true,
           );
         }
-        await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+        if (kIsWeb) {
+          try {
+            await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+          } catch (e) {
+            debugPrint('[main_admin] setPersistence(LOCAL) failed: $e');
+          }
+        }
       } on FirebaseException catch (e, stack) {
         if (e.code == 'duplicate-app') {
           debugPrint('[main_admin] Firebase already initialized, continuing.');
         } else {
           debugPrint('[main_admin] Firebase init failed: $e\n$stack');
-          runApp(_InitErrorApp('Firebase initialization failed:\n$e'));
-          return;
+          if (Firebase.apps.isEmpty) {
+            runApp(_InitErrorApp('[BUILD-FINGERPRINT-31AUG-1348] Firebase initialization failed:\n$e\n\nSTACK:\n$stack'));
+            return;
+          }
         }
       } catch (e, stack) {
         debugPrint('[main_admin] Firebase init failed: $e\n$stack');
-        runApp(_InitErrorApp('Firebase initialization failed:\n$e'));
-        return;
+        if (Firebase.apps.isEmpty) {
+          runApp(_InitErrorApp('[BUILD-FINGERPRINT-31AUG-1348] Firebase initialization failed:\n$e\n\nSTACK:\n$stack'));
+          return;
+        }
       }
       DbUsageTracker.instance.init('admin');
 
@@ -316,6 +328,19 @@ void main() {
         unawaited(AdminAlertNotificationService.initialize());
       }
       AdminForegroundService.initialize();
+      ChittiAccessibilityBridge.instance.initialize();
+      ChittiAccessibilityBridge.instance.onVoiceCommandReceived = (command) {
+        if (!GuruOverlayService.instance.isShowing) {
+          GuruOverlayService.instance.show();
+        }
+        unawaited(GuruOverlayService.instance.sendMessage(command));
+      };
+      // Assistant-gesture path (power button / home swipe, ChittiVoiceInteractionSession) —
+      // no spoken text yet, just open the panel with the mic already
+      // listening, same as tapping the FAB with voice intent.
+      ChittiAccessibilityBridge.instance.onAssistTriggered = () {
+        GuruOverlayService.instance.show(autoStartMic: true);
+      };
       if (!hasSeenSplashVideoEver) {
         await FirebaseMessaging.instance.requestPermission(
           alert: true,
@@ -382,13 +407,20 @@ class _InitErrorApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       home: Scaffold(
         backgroundColor: const Color(0xFF0A0A1A),
-        body: Center(
+        // NEW (Aug 31 2026): scrollable + selectable, and the caller now
+        // passes the STACK TRACE too. A boot failure that only shows its
+        // message ("RangeError 0..13: 14") gives nothing to act on — it
+        // cost three rebuild-and-guess cycles on a real device before
+        // this was added. One screenshot of the frame below names the
+        // exact package and line instead.
+        body: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              message,
-              style: const TextStyle(color: Colors.white, fontSize: 16),
-              textAlign: TextAlign.center,
+            padding: const EdgeInsets.all(20),
+            child: SingleChildScrollView(
+              child: SelectableText(
+                message,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
             ),
           ),
         ),
@@ -506,7 +538,7 @@ class AdminApp extends StatelessWidget {
         child: Stack(
           children: [
             if (child != null) child,
-            const AdminQuickTaskFab(),
+            const GlobalGuruFab(),
           ],
         ),
       ),

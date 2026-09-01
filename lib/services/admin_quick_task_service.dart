@@ -40,6 +40,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../app_navigator.dart';
@@ -66,6 +67,12 @@ class AdminChatTurn {
   final List<String> suggestions;
 }
 
+enum AdminChatSize {
+  small,
+  medium,
+  fullscreen,
+}
+
 class AdminQuickTaskService extends ChangeNotifier {
   AdminQuickTaskService._();
   static final AdminQuickTaskService instance = AdminQuickTaskService._();
@@ -88,11 +95,47 @@ class AdminQuickTaskService extends ChangeNotifier {
   // not just a chat window.
   String activeAgent = 'groq';
 
+  // Customizable chatbox size (Small, Medium, Fullscreen)
+  AdminChatSize chatSize = AdminChatSize.small;
+
+  Future<void> loadSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedAgent = prefs.getString('chitti_model_id');
+      if (savedAgent != null && (savedAgent == 'groq' || savedAgent == 'gemini' || savedAgent == 'deepseek')) {
+        activeAgent = savedAgent;
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[AdminQuickTaskService] loadSettings failed: $e');
+    }
+  }
+
+  void cycleChatSize() {
+    switch (chatSize) {
+      case AdminChatSize.small:
+        chatSize = AdminChatSize.medium;
+        break;
+      case AdminChatSize.medium:
+        chatSize = AdminChatSize.fullscreen;
+        break;
+      case AdminChatSize.fullscreen:
+        chatSize = AdminChatSize.small;
+        break;
+    }
+    notifyListeners();
+  }
+
   void setActiveAgent(String agent) {
     if (agent != 'groq' && agent != 'gemini' && agent != 'deepseek') return;
     if (activeAgent == agent) return;
     activeAgent = agent;
     notifyListeners();
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('chitti_model_id', agent);
+    }).catchError((e) {
+      debugPrint('[AdminQuickTaskService] setActiveAgent save failed: $e');
+    });
   }
   // NEW (CTO mandate — Voice & Speech Fix for Quick Task): the CTO's
   // explicit complaint was the Quick Task chatbox "going silent" —
@@ -197,6 +240,7 @@ class AdminQuickTaskService extends ChangeNotifier {
   }
 
   void show({bool startListening = false}) {
+    unawaited(loadSettings());
     if (_entry != null) {
       if (_minimized) {
         _minimized = false;
@@ -1025,19 +1069,65 @@ class _AdminQuickTaskPanelState extends State<_AdminQuickTaskPanel> {
             ),
           );
         }
+        final mediaQuery = MediaQuery.of(context);
+        final screenWidth = mediaQuery.size.width;
+        final screenHeight = mediaQuery.size.height;
+
         return ValueListenableBuilder<Offset>(
           valueListenable: service.positionNotifier,
-          builder: (context, pos, child) => Positioned(left: pos.dx, top: pos.dy, child: child!),
+          builder: (context, pos, child) {
+            double width;
+            double height;
+            Offset currentPos = pos;
+
+            switch (service.chatSize) {
+              case AdminChatSize.small:
+                width = 320;
+                height = 420;
+                break;
+              case AdminChatSize.medium:
+                width = screenWidth < 480 ? screenWidth - 32 : 480;
+                height = screenHeight < 650 ? screenHeight - 120 : 650;
+                break;
+              case AdminChatSize.fullscreen:
+                width = screenWidth - 32;
+                height = screenHeight - 120;
+                currentPos = const Offset(16, 60);
+                break;
+            }
+
+            if (service.chatSize != AdminChatSize.fullscreen) {
+              final maxLeft = screenWidth - width - 8;
+              final maxTop = screenHeight - height - 8;
+              final clampedX = currentPos.dx.clamp(8.0, maxLeft > 8.0 ? maxLeft : 8.0);
+              final clampedY = currentPos.dy.clamp(8.0, maxTop > 8.0 ? maxTop : 8.0);
+              if (clampedX != currentPos.dx || clampedY != currentPos.dy) {
+                currentPos = Offset(clampedX, clampedY);
+              }
+            }
+
+            return Positioned(
+              left: currentPos.dx,
+              top: currentPos.dy,
+              child: SizedBox(
+                width: width,
+                height: height,
+                child: child!,
+              ),
+            );
+          },
           child: SafeArea(
             child: GestureDetector(
               onPanUpdate: (details) {
-                service.setPosition(service.position + details.delta);
+                if (service.chatSize != AdminChatSize.fullscreen) {
+                  service.setPosition(service.position + details.delta);
+                }
               },
               child: Material(
                 color: Colors.transparent,
                 child: Container(
-                  width: 320,
-                  height: 420,
+                  width: double.infinity,
+                  height: double.infinity,
                   decoration: BoxDecoration(
                     color: const Color(0xFF14141F),
                     borderRadius: BorderRadius.circular(18),
@@ -1076,11 +1166,28 @@ class _AdminQuickTaskPanelState extends State<_AdminQuickTaskPanel> {
                               onPressed: service.toggleAutoSpeak,
                               tooltip: service.autoSpeak ? 'Mute voice' : 'Unmute voice',
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.remove, color: Colors.white54, size: 18),
-                              onPressed: service.toggleMinimized,
-                              tooltip: 'Minimize',
-                            ),
+                             IconButton(
+                               icon: Icon(
+                                 service.chatSize == AdminChatSize.small
+                                     ? Icons.open_in_full_rounded
+                                     : service.chatSize == AdminChatSize.medium
+                                         ? Icons.fullscreen_rounded
+                                         : Icons.close_fullscreen_rounded,
+                                 color: Colors.white54,
+                                 size: 18,
+                               ),
+                               onPressed: service.cycleChatSize,
+                               tooltip: service.chatSize == AdminChatSize.small
+                                   ? 'Expand to Medium'
+                                   : service.chatSize == AdminChatSize.medium
+                                       ? 'Make Fullscreen'
+                                       : 'Shrink to Small',
+                             ),
+                             IconButton(
+                               icon: const Icon(Icons.remove, color: Colors.white54, size: 18),
+                               onPressed: service.toggleMinimized,
+                               tooltip: 'Minimize',
+                             ),
                             IconButton(
                               icon: const Icon(Icons.close, color: Colors.white54, size: 18),
                               onPressed: service.requestClose,

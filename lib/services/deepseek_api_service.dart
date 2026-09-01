@@ -235,11 +235,14 @@ class DeepSeekApiService {
   }
 
   Future<String> resolveApiKey() async {
-    if (_apiKey.trim().isNotEmpty && _apiKey != 'DEEPSEEK_API_KEY_HERE') {
-      return _apiKey.trim();
+    final baked = _apiKey.trim();
+    if (baked.isNotEmpty && baked != 'DEEPSEEK_API_KEY_HERE' && baked != 'DEEPSEEK_API_KEY') {
+      return baked;
     }
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_savedApiKeyPrefsKey)?.trim() ?? '';
+    final stored = prefs.getString(_savedApiKeyPrefsKey)?.trim() ?? '';
+    debugPrint('[DeepSeekApiService] resolved DeepSeek key length: ${stored.length}');
+    return stored;
   }
 
   void dispose() {

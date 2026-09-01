@@ -1,0 +1,1129 @@
+/* ==========================================================================
+   COMPONENTS - LUXURY PINK & BERRY CRO DESIGN SYSTEM
+   ========================================================================== */
+
+/* ---------- 1. Eyebrows & Status Pills ---------- */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.95rem;
+  border-radius: var(--radius-pill);
+  background: #FFFFFF;
+  border: 1px solid var(--line-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--brand-berry);
+  box-shadow: var(--shadow-xs);
+  width: fit-content;
+}
+
+.eyebrow-dark {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #FFFFFF;
+}
+
+.eyebrow .pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand-pink);
+  box-shadow: 0 0 0 0 rgba(252, 74, 159, 0.7);
+  animation: pulse-pink 2s infinite cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+.eyebrow .pulse-green {
+  background: var(--emerald-green);
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: pulse-green 2s infinite cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+/* ---------- 2. Buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.45rem 0.6rem 0.45rem 1.45rem;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.96rem;
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+  transition: transform var(--duration-fast) var(--ease-smooth),
+              box-shadow var(--duration-normal) var(--ease-smooth),
+              background-color var(--duration-fast) var(--ease-smooth),
+              border-color var(--duration-fast) var(--ease-smooth);
+}
+
+.btn .btn-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.22;
+}
+
+.btn .btn-sub {
+  font-size: 0.72rem;
+  font-weight: 600;
+  opacity: 0.88;
+}
+
+.btn .btn-icon {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform var(--duration-normal) var(--ease-smooth),
+              background-color var(--duration-fast) var(--ease-smooth);
+}
+
+.btn .btn-icon svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.btn:hover .btn-icon {
+  transform: scale(1.1) translate(1px, -1px);
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+/* Primary Vibrant Pink Button */
+.btn-primary {
+  background: linear-gradient(135deg, var(--brand-pink), var(--brand-berry));
+  color: #FFFFFF;
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: var(--shadow-glow-pink);
+}
+.btn-primary .btn-icon {
+  background: rgba(255, 255, 255, 0.22);
+  color: #FFFFFF;
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--brand-pink-hover), var(--brand-berry-dark));
+  box-shadow: 0 16px 36px -4px rgba(252, 74, 159, 0.65);
+}
+
+/* Berry Secondary Button */
+.btn-berry {
+  background: linear-gradient(135deg, var(--brand-berry), var(--brand-berry-dark));
+  color: #FFFFFF;
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: var(--shadow-glow-berry);
+}
+.btn-berry .btn-icon {
+  background: rgba(255, 255, 255, 0.2);
+  color: #FFFFFF;
+}
+.btn-berry:hover {
+  box-shadow: 0 16px 36px -4px rgba(194, 53, 124, 0.65);
+}
+
+/* Ghost White Card Button */
+.btn-ghost {
+  background: #FFFFFF;
+  color: var(--brand-berry);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-xs);
+}
+.btn-ghost .btn-icon {
+  background: var(--brand-pink-light);
+  color: var(--brand-berry);
+}
+.btn-ghost:hover {
+  border-color: var(--brand-pink);
+  box-shadow: var(--shadow-sm);
+  color: var(--brand-pink);
+}
+
+/* QR Modal Trigger Button */
+.btn-qr {
+  background: var(--brand-pink-light);
+  color: var(--brand-berry);
+  border: 1px solid var(--line-strong);
+  padding-left: 1.1rem;
+}
+.btn-qr .btn-icon {
+  background: #FFFFFF;
+  color: var(--brand-pink);
+}
+.btn-qr:hover {
+  background: #FFFFFF;
+  border-color: var(--brand-pink);
+}
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+/* ---------- 3. Trust Bar ---------- */
+.trust-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.4rem;
+  font-size: 0.84rem;
+  color: var(--ink-secondary);
+  font-weight: 700;
+  margin-top: 1.25rem;
+}
+
+.trust-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.trust-item svg {
+  width: 16px;
+  height: 16px;
+  color: var(--brand-pink);
+  flex-shrink: 0;
+}
+
+/* ---------- 4. Horizontal Category Feature Strip (Ref: Image 2) ---------- */
+.category-ticker-strip {
+  background: #FFFFFF;
+  border-top: 1px solid var(--line-regular);
+  border-bottom: 1px solid var(--line-regular);
+  padding: 0.85rem 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  box-shadow: var(--shadow-xs);
+}
+.category-ticker-strip::-webkit-scrollbar { display: none; }
+
+.category-ticker-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(1rem, 3vw, 2.5rem);
+  min-width: max-content;
+  padding: 0 1rem;
+}
+
+.category-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ink-primary);
+  padding: 0.4rem 0.9rem;
+  border-radius: var(--radius-pill);
+  background: var(--brand-pink-light);
+  border: 1px solid var(--line-regular);
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+.category-pill:hover {
+  background: var(--brand-pink);
+  color: #FFFFFF;
+  transform: translateY(-2px);
+}
+.category-pill .pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand-pink);
+}
+.category-pill:hover .pill-dot {
+  background: #FFFFFF;
+}
+
+/* ---------- 5. 4-Corner Feature Cards Layout (Ref: Image 1 & 2) ---------- */
+.diet-hero-showcase {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  align-items: center;
+  margin-top: 1.5rem;
+}
+
+@media (min-width: 980px) {
+  .diet-hero-showcase {
+    grid-template-columns: 1fr 1.15fr 1fr;
+    gap: 2rem;
+  }
+}
+
+.feature-cards-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.floating-feature-card {
+  background: #FFFFFF;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  padding: 1.4rem;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  transition: transform var(--duration-normal) var(--ease-smooth),
+              box-shadow var(--duration-normal) var(--ease-smooth),
+              border-color var(--duration-fast) var(--ease-smooth);
+}
+
+.floating-feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--brand-pink);
+}
+
+.feature-icon-bubble {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--brand-pink), var(--brand-berry));
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(252, 74, 159, 0.35);
+}
+
+.feature-icon-bubble svg {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+.feature-card-content h4 {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: var(--ink-primary);
+  margin-bottom: 0.25rem;
+}
+
+.feature-card-content p {
+  font-size: 0.85rem;
+  color: var(--ink-secondary);
+  line-height: 1.48;
+}
+
+/* ---------- 6. Interactive Phone Simulator (Ref: Authentic App Screenshots) ---------- */
+.phone-center-stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.phone-hardware-pink {
+  position: relative;
+  width: 300px;
+  height: 610px;
+  background: #1c0813;
+  border-radius: 44px;
+  padding: 10px;
+  box-shadow: 0 35px 85px -20px rgba(128, 28, 78, 0.45),
+              0 0 0 2px rgba(252, 74, 159, 0.3) inset,
+              0 1px 4px rgba(255, 255, 255, 0.3) inset;
+  transition: transform var(--duration-normal) var(--ease-smooth);
+}
+
+.phone-hardware-pink:hover {
+  transform: scale(1.02);
+}
+
+.phone-screen-pink {
+  width: 100%;
+  height: 100%;
+  background: #FFFFFF;
+  border-radius: 36px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.phone-dynamic-notch {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90px;
+  height: 20px;
+  background: #1c0813;
+  border-radius: 12px;
+  z-index: 30;
+}
+
+.phone-app-bar {
+  padding: 32px 14px 10px;
+  background: linear-gradient(135deg, #ffffff 0%, var(--brand-pink-light) 100%);
+  border-bottom: 1px solid var(--line-regular);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.phone-app-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.85rem;
+  color: var(--brand-berry);
+}
+
+.phone-app-logo-mark {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 0.4rem;
+  background: var(--brand-pink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.phone-app-location {
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: var(--brand-pink-light);
+  color: var(--brand-berry);
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* Phone Selector Tabs */
+.mockup-tabs {
+  display: flex;
+  background: #FFFFFF;
+  padding: 6px 8px;
+  gap: 5px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line-faint);
+  scrollbar-width: none;
+}
+.mockup-tabs::-webkit-scrollbar { display: none; }
+
+.mockup-tab-btn {
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--ink-secondary);
+  background: var(--bg-canvas);
+  white-space: nowrap;
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+
+.mockup-tab-btn.active {
+  background: var(--brand-pink);
+  color: #FFFFFF;
+  box-shadow: 0 2px 8px rgba(252, 74, 159, 0.4);
+}
+
+/* Phone Screen Scrollable Body */
+.mockup-body {
+  flex: 1;
+  padding: 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #faf8fa;
+}
+
+.mockup-view {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+.mockup-view.active {
+  display: flex;
+}
+
+/* Authentic UI Grid Cards Inside Phone */
+.app-service-row {
+  background: #FFFFFF;
+  border: 1px solid var(--line-regular);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-service-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--brand-berry);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-service-sub {
+  font-size: 0.6rem;
+  color: var(--ink-muted);
+}
+
+.app-mini-icons-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.app-mini-pill-btn {
+  flex: 1;
+  background: var(--brand-pink-light);
+  border: 1px solid var(--line-faint);
+  border-radius: 8px;
+  padding: 6px 2px;
+  text-align: center;
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: var(--ink-primary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.app-mini-pill-btn span.emoji {
+  font-size: 1rem;
+}
+
+/* Chitti AI Chat View Inside Phone */
+.chitti-bubble-chat {
+  background: linear-gradient(135deg, var(--brand-pink-light), #FFFFFF);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chitti-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--brand-pink);
+}
+
+.chitti-message {
+  font-size: 0.66rem;
+  color: var(--ink-primary);
+  line-height: 1.4;
+  background: #FFFFFF;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line-faint);
+}
+
+.chitti-prompts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chitti-prompt-chip {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--brand-berry);
+  background: #FFFFFF;
+  border: 1px solid var(--brand-pink-soft);
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  text-align: left;
+}
+
+/* Phone Bottom Launcher */
+.mockup-footer {
+  padding: 8px 10px 14px;
+  background: #FFFFFF;
+  border-top: 1px solid var(--line-regular);
+}
+
+.mockup-action-btn {
+  width: 100%;
+  padding: 9px 0;
+  background: linear-gradient(135deg, var(--brand-pink), var(--brand-berry));
+  color: #FFFFFF;
+  border-radius: var(--radius-pill);
+  font-size: 0.74rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  box-shadow: 0 4px 12px rgba(252, 74, 159, 0.4);
+}
+
+/* ---------- 7. Flash Deal Bar (Ref: Image 4) ---------- */
+.flash-deal-banner {
+  background: linear-gradient(135deg, var(--brand-berry), var(--brand-berry-dark));
+  color: #FFFFFF;
+  border-radius: var(--radius-md);
+  padding: 1.25rem 1.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.2rem;
+  box-shadow: var(--shadow-glow-berry);
+  margin-top: 1.5rem;
+}
+
+.flash-deal-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.flash-deal-icon {
+  font-size: 2rem;
+}
+
+.flash-deal-text h4 {
+  font-size: 1.15rem;
+  color: #FFFFFF;
+}
+
+.flash-deal-text p {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.flash-countdown {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.countdown-box {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-xs);
+  padding: 0.4rem 0.65rem;
+  text-align: center;
+  min-width: 44px;
+}
+
+.countdown-num {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #FFFFFF;
+  line-height: 1;
+}
+
+.countdown-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--brand-pink-soft);
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+/* ---------- 8. Interactive Savings Calculator (Pink Edition) ---------- */
+.calculator-card {
+  background: #FFFFFF;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  padding: clamp(1.8rem, 4vw, 2.75rem);
+  box-shadow: var(--shadow-md);
+  position: relative;
+  overflow: hidden;
+}
+
+.calculator-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--brand-pink), var(--brand-berry), var(--marigold-gold));
+}
+
+.calc-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2.2rem;
+}
+
+@media (min-width: 860px) {
+  .calc-grid {
+    grid-template-columns: 1.15fr 0.85fr;
+    align-items: center;
+  }
+}
+
+.calc-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.calc-slider-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.calc-slider-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.calc-slider-val {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: var(--brand-berry);
+  background: var(--brand-pink-light);
+  padding: 0.2rem 0.75rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+}
+
+.calc-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg-canvas);
+  outline: none;
+}
+
+.calc-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--brand-pink);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(252, 74, 159, 0.5);
+  border: 3px solid #FFFFFF;
+  transition: transform var(--duration-fast) var(--ease-smooth);
+}
+
+.calc-range::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.calc-result-box {
+  background: linear-gradient(135deg, var(--brand-berry), var(--brand-berry-dark));
+  color: #FFFFFF;
+  border-radius: var(--radius-md);
+  padding: 2rem 1.8rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-glow-berry);
+}
+
+.calc-result-box::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 80% 20%, rgba(252, 74, 159, 0.3), transparent 60%);
+  pointer-events: none;
+}
+
+.calc-result-label {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+
+.calc-result-amount {
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 4vw, 3.4rem);
+  font-weight: 800;
+  color: #FFFFFF;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  line-height: 1.1;
+  margin-bottom: 0.4rem;
+}
+
+.calc-result-sub {
+  font-size: 0.85rem;
+  color: var(--brand-pink-soft);
+  font-weight: 600;
+  margin-bottom: 1.4rem;
+}
+
+/* ---------- 9. Live Social Proof Toast ---------- */
+.toast-container {
+  position: fixed;
+  bottom: 5.5rem;
+  left: 1.5rem;
+  z-index: 80;
+  pointer-events: none;
+}
+
+@media (max-width: 899px) {
+  .toast-container {
+    bottom: calc(var(--mobile-bar-height) + 1.2rem);
+    left: 1rem;
+    right: 1rem;
+  }
+}
+
+.live-toast {
+  pointer-events: auto;
+  background: rgba(77, 13, 45, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: #FFFFFF;
+  border: 1px solid rgba(252, 74, 159, 0.35);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.4);
+  max-width: 360px;
+  transform: translateY(30px);
+  opacity: 0;
+  transition: transform 0.4s var(--ease-spring), opacity 0.3s ease;
+}
+
+.live-toast.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.toast-icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: var(--brand-pink);
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(252, 74, 159, 0.4);
+}
+
+.toast-title {
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: #FFFFFF;
+}
+
+.toast-meta {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* ---------- 10. Sticky Mobile Conversion Bar ---------- */
+.mobile-sticky-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 75;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-top: 1px solid var(--line-strong);
+  padding: 0.65rem 1rem calc(0.65rem + env(safe-area-inset-bottom, 0px));
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  box-shadow: 0 -8px 24px rgba(194, 53, 124, 0.15);
+}
+
+@media (max-width: 899px) {
+  .mobile-sticky-bar {
+    display: flex;
+  }
+}
+
+.mobile-sticky-info {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.mobile-sticky-logo {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 0.6rem;
+  background: linear-gradient(135deg, var(--brand-pink), var(--brand-berry));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.mobile-sticky-title {
+  font-family: var(--font-display);
+  font-size: 0.86rem;
+  font-weight: 800;
+  color: var(--brand-berry);
+  line-height: 1.1;
+}
+
+.mobile-sticky-sub {
+  font-size: 0.68rem;
+  color: var(--ink-secondary);
+  font-weight: 600;
+}
+
+.mobile-sticky-btn {
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.82rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+/* ---------- 11. Modals (QR Code & PWA Tutorial) ---------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgba(56, 13, 34, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-normal) var(--ease-smooth);
+}
+
+.modal-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-dialog {
+  background: #FFFFFF;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: var(--shadow-xl);
+  position: relative;
+  transform: scale(0.94) translateY(16px);
+  transition: transform var(--duration-normal) var(--ease-spring);
+}
+
+.modal-overlay.active .modal-dialog {
+  transform: scale(1) translateY(0);
+}
+
+.modal-close {
+  position: absolute;
+  top: 1.2rem;
+  right: 1.2rem;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--bg-canvas);
+  color: var(--brand-berry);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-smooth);
+}
+
+.modal-close:hover {
+  background: var(--brand-pink);
+  color: #FFFFFF;
+}
+
+.qr-box {
+  background: var(--bg-canvas);
+  border: 2px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 1.5rem 0;
+}
+
+.qr-code-img {
+  width: 180px;
+  height: 180px;
+  border-radius: var(--radius-sm);
+  background: #FFFFFF;
+  padding: 8px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---------- 12. Testimonial Card ---------- */
+.testimonial-card {
+  background: #FFFFFF;
+  border: 1px solid var(--line-regular);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  box-shadow: var(--shadow-xs);
+  transition: transform var(--duration-normal) var(--ease-smooth),
+              box-shadow var(--duration-normal) var(--ease-smooth);
+}
+
+.testimonial-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--brand-pink);
+}
+
+.test-stars {
+  display: flex;
+  gap: 3px;
+  color: var(--brand-pink);
+  font-size: 1.1rem;
+}
+
+.test-quote {
+  font-size: 0.92rem;
+  color: var(--ink-primary);
+  line-height: 1.55;
+}
+
+.test-author {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: auto;
+}
+
+.test-avatar {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--brand-pink), var(--brand-berry));
+  color: #FFFFFF;
+  font-weight: 800;
+  font-size: 0.88rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.test-name {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--ink-primary);
+}
+
+.test-loc {
+  font-size: 0.74rem;
+  color: var(--ink-muted);
+}
+
+/* ---------- 13. FAQ Accordion ---------- */
+.faq-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.faq-item {
+  background: #FFFFFF;
+  border: 1px solid var(--line-regular);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: border-color var(--duration-fast) var(--ease-smooth);
+}
+
+.faq-item.open {
+  border-color: var(--brand-pink);
+  box-shadow: var(--shadow-sm);
+}
+
+.faq-question {
+  width: 100%;
+  padding: 1.25rem 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-family: var(--font-display);
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--ink-primary);
+  text-align: left;
+}
+
+.faq-icon {
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 50%;
+  background: var(--bg-canvas);
+  color: var(--brand-berry);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform var(--duration-normal) var(--ease-smooth);
+}
+
+.faq-item.open .faq-icon {
+  transform: rotate(180deg);
+  background: var(--brand-pink);
+  color: #FFFFFF;
+}
+
+.faq-answer {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.35s var(--ease-smooth), padding 0.35s var(--ease-smooth);
+  padding: 0 1.4rem;
+}
+
+.faq-item.open .faq-answer {
+  max-height: 250px;
+  padding: 0 1.4rem 1.4rem;
+}

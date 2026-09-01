@@ -561,35 +561,36 @@ class ServiceRequestService {
           : kDefaultCity;
       if (heroCity != requestCity) return;
 
-      // ── PER-HERO SERVICE ACCESS (Aug 17 2026) ────────────────────
-      // This method's own doc comment above used to state, accurately,
-      // that it did "no category filtering" — every online hero in the
-      // city was pinged for hero bookings, grocery runs, food orders and
-      // custom orders alike, with no way for an admin to say a
-      // particular hero should not be getting a particular kind of job.
-      // That is exactly what Nizam asked for control over.
-      //
-      // serviceKeyForRequestType() returns null for any requestType we
-      // do not gate, and in that case we deliberately do NOT filter —
-      // an unrecognised type must never be silently treated as denied,
-      // or adding a new requestType later would quietly stop dispatching
-      // to everyone.
-      final serviceKey = serviceKeyForRequestType(requestType);
-      if (serviceKey != null && !isServiceAllowed(heroData, serviceKey)) {
-        return;
-      }
-
       // ── SKILL MATCH + 5 KM RADIUS (Aug 29 2026) ──────────────────
-      // Guarded by isSkillDispatch, so this whole block is inert for
-      // every requestType that existed before skill heroes — rides,
-      // food, grocery, parcel and custom orders reach exactly the same
-      // heroes they reached yesterday.
+      // Checked BEFORE the coarse per-service toggle below, and when it
+      // applies it is the ONLY gate — see the bug this fixes, below.
       //
-      // The skill test uses heroHasSkill(), which defaults to FALSE for
-      // a hero with no skills recorded. That is the point: a plumbing
-      // job must reach plumbers, not every hero who happens to be
-      // online. See hero_skill_catalog.dart for why this default is the
-      // opposite of isServiceAllowed's.
+      // Guarded by isSkillDispatch, so this block is inert for every
+      // requestType that existed before skill heroes — rides, food,
+      // grocery, parcel and custom orders are untouched, and fall
+      // through to the exact same isServiceAllowed() check they always
+      // used.
+      //
+      // BUG FOUND ON RE-AUDIT (Aug 29 2026): `electronics_service` is
+      // not exclusive to skill bookings — Mobile Hub repairs, "sell your
+      // phone" and general NJ Tech enquiries (mobile_service_sheet.dart,
+      // sell_your_phone_sheet.dart, etc.) create the SAME requestType
+      // with no requiredSkill at all. Those calls hit the OLD code path
+      // below, which only ever checked the coarse `electronicsService`
+      // bucket — and skillHeroServiceAccess() used to set that bucket to
+      // an explicit TRUE. Net effect: every electrician, plumber and TV
+      // technician would have been pinged for every mobile-phone repair
+      // and buy/sell enquiry in the city, on top of their own trade
+      // jobs — exactly the ping-stream noise a specialist onboarding
+      // flow exists to prevent.
+      //
+      // Fixed on both ends: skillHeroServiceAccess() now denies the
+      // coarse electronicsService bucket (so a skill hero is excluded
+      // from generic NJ Tech/Mobile Hub jobs, which is what admin's
+      // "Electronics service" toggle now actually means for them), and
+      // a SKILL-PARAMETRIZED request bypasses that bucket entirely —
+      // heroHasSkill() is the sole, more specific authority once a
+      // requiredSkill is present.
       if (isSkillDispatch) {
         if (!heroHasSkill(heroData, skillKey)) return;
 
@@ -609,6 +610,22 @@ class ServiceRequestService {
               ) /
               1000.0;
           if (distanceKm > kSkillDispatchRadiusKm) return;
+        }
+      } else {
+        // Every requestType this codebase had before skill heroes,
+        // PLUS a non-skill electronics_service booking (Mobile Hub,
+        // sell-your-phone, a general NJ Tech enquiry with no
+        // requiredSkill) — all still go through the coarse per-service
+        // toggle exactly as before.
+        //
+        // serviceKeyForRequestType() returns null for any requestType
+        // this codebase doesn't gate, and in that case we deliberately
+        // do NOT filter — an unrecognised type must never be silently
+        // treated as denied, or adding a new requestType later would
+        // quietly stop dispatching to everyone.
+        final serviceKey = serviceKeyForRequestType(requestType);
+        if (serviceKey != null && !isServiceAllowed(heroData, serviceKey)) {
+          return;
         }
       }
 

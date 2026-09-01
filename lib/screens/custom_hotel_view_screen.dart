@@ -31,10 +31,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 // GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../models/gift_coupon_model.dart';
 import '../services/auth_prompt_service.dart';
 import '../services/auth_service.dart';
 import '../services/cloudinary_upload_service.dart';
 import '../services/custom_hotel_service.dart';
+import '../services/gift_coupon_service.dart';
 import '../services/service_request_service.dart';
 import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
@@ -394,6 +396,13 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   final TextEditingController _addressCtrl = TextEditingController();
   bool _placing = false;
 
+  // Gift Coupons: flat ₹ discount applied before this order is created —
+  // there's no separate "bill" step for a hotel order the way there is
+  // for a Hero task, so the discount just gets baked into totalAmount
+  // at creation time (see _placeOrder below).
+  final GiftCouponService _giftCouponService = GiftCouponService();
+  GiftCouponModel? _appliedCoupon;
+
   @override
   void initState() {
     super.initState();
@@ -426,6 +435,82 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   }
 
   double get _total => widget.cartItems.fold<double>(0, (sum, i) => sum + i.price * (_qty[i.id] ?? 0));
+  num get _discount => _appliedCoupon?.value ?? 0;
+  double get _payableTotal => (_total - _discount) < 0 ? 0 : _total - _discount;
+
+  Future<void> _showApplyCouponSheet() async {
+    final coupon = await showModalBottomSheet<GiftCouponModel>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: SafeArea(
+          child: StreamBuilder<List<GiftCouponModel>>(
+            stream: _giftCouponService.streamActiveCouponsForCurrentUser(),
+            builder: (context, snapshot) {
+              final coupons = snapshot.data ?? const [];
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Apply a Gift Coupon',
+                      style: GoogleFonts.outfit(color: _kText, fontSize: 17, fontWeight: FontWeight.w800),),
+                  const SizedBox(height: 12),
+                  if (snapshot.connectionState == ConnectionState.waiting)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Center(child: CircularProgressIndicator(color: _kPink)),
+                    )
+                  else if (coupons.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Text("You don't have any active gift coupons.",
+                          style: GoogleFonts.outfit(color: _kMuted, fontSize: 13),),
+                    )
+                  else
+                    ...coupons.map(
+                      (c) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () => Navigator.pop(sheetContext, c),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8F8FF),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: const Color(0xFFEEEEF5)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.card_giftcard_rounded, color: Color(0xFFFF8F00)),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text('₹${c.value.toStringAsFixed(0)} OFF'
+                                      '${c.sourceSummary.isNotEmpty ? ' — ${c.sourceSummary}' : ''}',
+                                      style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w700, fontSize: 13),),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    if (coupon != null && mounted) {
+      setState(() => _appliedCoupon = coupon);
+    }
+  }
 
   Future<void> _placeOrder() async {
     final address = _addressCtrl.text.trim();
@@ -458,6 +543,23 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
 
     setState(() => _placing = true);
     try {
+      // Gift Coupons: redeem FIRST, at the live cart total, right
+      // before either order write — this is the single source of
+      // truth for the discount (server-authoritative, per Nizam's
+      // explicit call), not the client-side _payableTotal estimate the
+      // sheet displays. A failed redemption aborts the whole order
+      // rather than silently placing it undiscounted.
+      var payableTotal = _total;
+      final appliedCoupon = _appliedCoupon;
+      if (appliedCoupon != null) {
+        final redemption = await _giftCouponService.redeemForNewOrder(
+          couponId: appliedCoupon.id,
+          orderAmount: _total,
+          requestType: 'custom_hotel_order',
+        );
+        payableTotal = redemption.payableAmount.toDouble();
+      }
+
       final itemsPayload = activeItems
           .map((i) => {
                 'itemId': i.id,
@@ -477,7 +579,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
         sellerId: widget.hotelId,
         hotelName: widget.hotelName,
         items: itemsPayload,
-        totalAmount: _total,
+        totalAmount: payableTotal,
         customerId: user.uid,
         customerName: customerName,
         customerPhone: customerPhone,
@@ -512,7 +614,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
           'customHotelOrderId': orderId,
           'items': itemsPayload,
           'deliveryAddress': address,
-          'totalAmount': _total,
+          'totalAmount': payableTotal,
         },
       );
       await widget.service.linkServiceRequest(orderId: orderId, serviceRequestId: requestId);
@@ -576,11 +678,50 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
               );
             }),
             const Divider(),
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => unawaited(_showApplyCouponSheet()),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    const Icon(Icons.card_giftcard_rounded, color: Color(0xFFFF8F00), size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _appliedCoupon == null
+                            ? 'Apply a Gift Coupon'
+                            : '₹${_discount.toStringAsFixed(0)} coupon applied',
+                        style: GoogleFonts.outfit(color: const Color(0xFFFF8F00), fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                    ),
+                    if (_appliedCoupon != null)
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 16, color: _kMuted),
+                        onPressed: () => setState(() => _appliedCoupon = null),
+                      )
+                    else
+                      const Icon(Icons.chevron_right_rounded, color: _kMuted),
+                  ],
+                ),
+              ),
+            ),
+            if (_appliedCoupon != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Subtotal', style: GoogleFonts.outfit(color: _kMuted, fontSize: 13)),
+                    Text('₹${_total.toStringAsFixed(0)}', style: GoogleFonts.outfit(color: _kMuted, fontSize: 13)),
+                  ],
+                ),
+              ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Total', style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 15)),
-                Text('₹${_total.toStringAsFixed(0)}', style: GoogleFonts.outfit(color: _kPinkDark, fontWeight: FontWeight.w800, fontSize: 15)),
+                Text('₹${_payableTotal.toStringAsFixed(0)}', style: GoogleFonts.outfit(color: _kPinkDark, fontWeight: FontWeight.w800, fontSize: 15)),
               ],
             ),
             const SizedBox(height: 14),

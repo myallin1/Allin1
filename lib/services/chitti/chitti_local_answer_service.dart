@@ -83,19 +83,102 @@ class ChittiLocalAnswerService {
   /// also reads the LIVE screen (fields still blank, buttons actually
   /// on the page), use [answerWithScreen] instead — that one is worth
   /// the extra frame.
-  static ChittiLocalAnswer? answer(String question, {String? variant}) {
+  static ChittiLocalAnswer? answer(String question, {String? variant, String languageCode = 'en'}) {
     final v = variant ?? currentAppVariant;
     final q = _normalize(question);
     if (q.isEmpty) return null;
+    final ta = languageCode == 'ta' || languageCode == 'tg';
 
     // Order matters: the most specific interpretation first. "What can
     // I do here" is about the screen; "what can you do" is about
     // Chitti; a bare section name is a lookup. Checking the broad one
     // first would swallow the narrow ones.
-    return _aboutCurrentScreen(q, v) ??
-        _aboutChitti(q, v) ??
-        _howDoI(q, v) ??
-        _aboutSection(q, v);
+    return _aboutCurrentScreen(q, v, ta) ??
+        // Identity BEFORE capability: "who are you" is a personal
+        // question first, not a request for the tool list — checked
+        // ahead of _aboutChitti so it does not get swallowed by the
+        // broader capability regex those two phrasings also match.
+        _aboutIdentity(q, ta) ??
+        _aboutChitti(q, v, ta) ??
+        _howDoI(q, v, ta) ??
+        _aboutSection(q, v, ta);
+  }
+
+
+  // ── "how are you / who are you / who made you / where are you from"
+  // ─────────────────────────────────────────────────────────────────
+  //
+  // These are questions about CHITTI, not about the app, and they
+  // needed a fixed answer for the same reason a receptionist gives the
+  // same answer twice: a customer who asks "who are you" and gets a
+  // different improvised answer each time reads as broken, not
+  // charming. Kept in the "naughty Chitti" voice (see guru_api_service
+  // .dart's persona text) rather than a corporate boilerplate line.
+
+  static final RegExp _howAreYouAsk = RegExp(
+    r'\bhow (are|r) (you|u|ya)\b|how.?s it going|how do you feel|'
+    r'(எப்படி இருக்க|எப்படி இருக்கீங்க|சௌக்கியமா)',
+  );
+
+  static final RegExp _whoAreYouAsk = RegExp(
+    r'\bwho (are|r) (you|u)\b|\bwhat are you\b|introduce yourself|'
+    r'(நீ யாரு|உன் பேரு என்ன|நீங்க யாரு)',
+  );
+
+  static final RegExp _ownerAsk = RegExp(
+    r"\bwho.?s your (owner|creator|boss|maker)\b|who made you|"
+    r'who built you|who created you|who owns you|'
+    r'(உன்ன யாரு உருவாக்கின|உன் முதலாளி யாரு|உன்ன யாரு பண்ணாங்க)',
+  );
+
+  static final RegExp _birthAsk = RegExp(
+    r"\b(your )?birth ?place\b|where (were|are) you (born|from|made)|"
+    r'\bwhere do you live\b|'
+    r'(உன் பிறந்த இடம்|எங்க பொறந்த|எங்க உருவானே)',
+  );
+
+  static ChittiLocalAnswer? _aboutIdentity(String q, bool ta) {
+    if (_howAreYouAsk.hasMatch(q)) {
+      return ChittiLocalAnswer(
+        ta
+            ? 'செம்மயா இருக்கேன் பாஸ்! சூப்பரா வேலை செய்ய ரெடி. இன்னைக்கு உங்களுக்கு என்ன பண்ணனும் சொல்லுங்க?'
+            : 'Superb, boss — running fast and ready to work. What do you need?',
+        suggestions: ta
+            ? const <String>['நீ என்ன பண்ணுவ?', 'வண்டி புக் பண்ணு', 'என் ஆர்டர்']
+            : const <String>['What can you do?', 'Book a ride', 'My orders'],
+      );
+    }
+    if (_ownerAsk.hasMatch(q)) {
+      return ChittiLocalAnswer(
+        ta
+            ? 'நம்ம ஈரோடு NJ Tech தான் என்ன உருவாக்கினாங்க. நான் நம்ம Allin1 அசிஸ்டெண்ட். வேற யாரும் எனக்கு சொந்தம் இல்லை பாஸ்!'
+            : 'NJ Tech built me — I work for MyAllin1, right here in Erode. Nobody else owns a piece of me.',
+        suggestions: ta
+            ? const <String>['நீ என்ன பண்ணுவ?', 'NJ Tech பற்றி சொல்லு']
+            : const <String>['What can you do?', 'Tell me about NJ Tech'],
+      );
+    }
+    if (_birthAsk.hasMatch(q)) {
+      return ChittiLocalAnswer(
+        ta
+            ? 'நான் நம்ம ஈரோட்டுல இந்த ஆப்-குள்ள தான் பொறந்தேன் பாஸ். ஹாஸ்பிடல் எல்லாம் கிடையாது, வெறும் கோடிங் தான்!'
+            : 'I was born right here in this app, in Erode — no hospital, just code and a lot of coffee for whoever built me.',
+        suggestions: ta
+            ? const <String>['யாரு உன்ன பண்ணாங்க?', 'நீ என்ன பண்ணுவ?']
+            : const <String>['Who made you?', 'What can you do?'],
+      );
+    }
+    if (_whoAreYouAsk.hasMatch(q)) {
+      return ChittiLocalAnswer(
+        ta
+            ? 'நான் தான் உங்க சிட்டி பாஸ்! நம்ம Allin1 ஆப்போட சொந்த அசிஸ்டெண்ட். உங்க வண்டியை புக் பண்றது, வாலெட்டை பாத்துக்கிறது எல்லாமே நான் செய்வேன்!'
+            : 'I\'m Chitti — MyAllin1\'s own AI, boss. Half assistant, half troublemaker. I book your rides, watch your wallet, and keep you company while I\'m at it.',
+        suggestions: ta
+            ? const <String>['நீ என்ன பண்ணுவ?', 'என் வாலெட் பேலன்ஸ்']
+            : const <String>['What can you do?', 'My wallet balance'],
+      );
+    }
+    return null;
   }
 
   // ── "what is this page?" ─────────────────────────────────────────
@@ -105,15 +188,18 @@ class ChittiLocalAnswerService {
     '(இந்த (பக்கம்|பேஜ்|ஸ்கிரீன்)|இங்க)',
   );
 
-  static ChittiLocalAnswer? _aboutCurrentScreen(String q, String v) {
+  static ChittiLocalAnswer? _aboutCurrentScreen(String q, String v, bool ta) {
     if (!_thisScreenAsk.hasMatch(q)) return null;
 
     final screen = ChittiMemoryService.instance.currentScreen;
     if (screen == null || screen.isEmpty) {
-      return const ChittiLocalAnswer(
-        "I can't tell which page you're on right now. Tell me what you're "
-        'trying to do and I will take you there.',
-        suggestions: <String>['Order food', 'Book a ride', 'My orders'],
+      return ChittiLocalAnswer(
+        ta
+            ? 'நீங்க எந்த பக்கத்துல இருக்கீங்கன்னு என்னால கண்டுபிடிக்க முடியல பாஸ். நீங்க என்ன பண்ணனும்னு சொன்னா அங்க கூட்டிட்டு போறேன்.'
+            : "I can't tell which page you're on right now. Tell me what you're trying to do and I will take you there.",
+        suggestions: ta
+            ? const <String>['சாப்பாடு ஆர்டர்', 'வண்டி புக் பண்ணு', 'என் ஆர்டர்']
+            : const <String>['Order food', 'Book a ride', 'My orders'],
       );
     }
 
@@ -122,15 +208,19 @@ class ChittiLocalAnswerService {
     final section = _sectionByLabel(screen, v);
     if (section == null) {
       return ChittiLocalAnswer(
-        "You're on $screen. Tell me what you want to do here and I'll "
-        'handle it.',
-        suggestions: const <String>['What can you do?', 'Go somewhere else'],
+        ta
+            ? 'நீங்க $screen பக்கத்துல இருக்கீங்க. இங்க என்ன பண்ணனும் சொல்லுங்க, நான் பாத்துக்கறேன் பாஸ்!'
+            : "You're on $screen. Tell me what you want to do here and I'll handle it.",
+        suggestions: ta
+            ? const <String>['நீ என்ன பண்ணுவ?', 'வேற எங்காவது போ']
+            : const <String>['What can you do?', 'Go somewhere else'],
       );
     }
 
     return ChittiLocalAnswer(
-      "You're on ${section.label}. ${section.description} "
-      'Tell me what you need and I will do it from here.',
+      ta
+          ? 'நீங்க ${section.label} பக்கத்துல இருக்கீங்க. ${section.description} உங்களுக்கு என்ன வேணும்னு சொல்லுங்க பாஸ்!'
+          : "You're on ${section.label}. ${section.description} Tell me what you need and I will do it from here.",
       suggestions: _chipsForSection(section),
     );
   }
@@ -143,7 +233,7 @@ class ChittiLocalAnswerService {
     '(என்ன பண்ணுவ|என்ன செய்வ|உன்னால என்ன|நீ யாரு)',
   );
 
-  static ChittiLocalAnswer? _aboutChitti(String q, String v) {
+  static ChittiLocalAnswer? _aboutChitti(String q, String v, bool ta) {
     if (!_capabilityAsk.hasMatch(q)) return null;
 
     // Grouped by domain rather than listed flat: twenty-five tool names
@@ -155,34 +245,46 @@ class ChittiLocalAnswerService {
     }
 
     final lines = <String>[];
-    void add(ChittiDomain d, String text) {
-      if (byDomain.containsKey(d)) lines.add('• $text');
+    void add(ChittiDomain d, String text, String textTa) {
+      if (byDomain.containsKey(d)) lines.add(ta ? '• $textTa' : '• $text');
     }
 
     add(ChittiDomain.transport,
-        'Book a bike, auto, cab, parcel, mini truck or lorry',);
+        'Book a bike, auto, cab, parcel, mini truck or lorry',
+        'பைக், ஆட்டோ, கார், பார்சல் அல்லது லாரி புக் செய்யலாம்',);
     add(ChittiDomain.ordering,
-        'Place food, grocery and Hero orders — and cancel or repeat them',);
+        'Place food, grocery and Hero orders — and cancel or repeat them',
+        'சாப்பாடு, மளிகை மற்றும் ஹீரோ ஆர்டர் செய்யலாம் — கேன்சலும் பண்ணலாம்',);
     add(ChittiDomain.navigation,
-        'Open any of the ${chittiSectionsFor(v).length} sections in the app',);
+        'Open any of the ${chittiSectionsFor(v).length} sections in the app',
+        'ஆப்பில் உள்ள ${chittiSectionsFor(v).length} பிரிவுகளில் எதை வேண்டுமானாலும் திறக்கலாம்',);
     add(ChittiDomain.account,
-        'Check your wallet, coins, order status, past orders and profile',);
+        'Check your wallet, coins, order status, past orders and profile',
+        'உங்க வாலெட் பேலன்ஸ், காயின்கள் மற்றும் ஆர்டர் விபரங்களை அறியலாம்',);
     add(ChittiDomain.hero,
-        'Take you online or offline, and read your earnings and current job',);
+        'Take you online or offline, and read your earnings and current job',
+        'உங்களை ஆன்லைன்/ஆஃப்லைன் செய்ய முடியும், வருமானத்தையும் அறியலாம்',);
     add(ChittiDomain.seller,
-        'Show pending orders, open or close your shop, and read your sales',);
+        'Show pending orders, open or close your shop, and read your sales',
+        'ஆர்டர்களைப் பார்க்க, கடையை ஓபன்/குளோஸ் செய்ய, மற்றும் விற்பனையை அறியலாம்',);
     add(ChittiDomain.support,
-        'Report a problem, check for app updates, and read screenshots',);
+        'Report a problem, check for app updates, and read screenshots',
+        'பிரச்சனைகளைப் புகார் செய்ய மற்றும் ஆப் அப்டேட்டைச் சரிபார்க்கலாம்',);
 
     return ChittiLocalAnswer(
-      "Quite a lot, boss:\n${lines.join('\n')}\n"
-      'Most of it works even with no internet. Just tell me what you '
-      'want — no need for exact words.',
-      suggestions: const <String>[
-        'What is this page?',
-        'My wallet balance',
-        'My orders',
-      ],
+      ta
+          ? "நிறைய வேலைகளைச் செய்வேன் பாஸ்:\n${lines.join('\n')}\n"
+              "நெட்வொர்க் இல்லை என்றாலும் கூட பேசிக் வேலைகள் நடக்கும். உங்களுக்கு என்ன வேணும்னு சும்மா கேளுங்க பாஸ்!"
+          : "Quite a lot, boss:\n${lines.join('\n')}\n"
+              "Most of it works even with no internet. Just tell me what you "
+              "want — no need for exact words.",
+      suggestions: ta
+          ? const <String>['இந்த பக்கம் என்ன?', 'என் வாலெட் பேலன்ஸ்', 'என் ஆர்டர்']
+          : const <String>[
+              'What is this page?',
+              'My wallet balance',
+              'My orders',
+            ],
     );
   }
 
@@ -193,20 +295,24 @@ class ChittiLocalAnswerService {
     '(எப்படி|எங்க இருக்கு|எங்கே)',
   );
 
-  static ChittiLocalAnswer? _howDoI(String q, String v) {
+  static ChittiLocalAnswer? _howDoI(String q, String v, bool ta) {
     if (!_howWhereAsk.hasMatch(q)) return null;
     final section = _bestSectionMatch(q, v);
     if (section == null) return null;
     return ChittiLocalAnswer(
-      '${section.description} It is under ${section.label} — say "open '
-      '${section.label}" and I will take you straight there.',
-      suggestions: <String>['Open ${section.label}', 'Something else'],
+      ta
+          ? '${section.description} இது "${section.label}" பிரிவின் கீழ் உள்ளது பாஸ். "${section.label} ஓபன் பண்ணு" என்று சொன்னால் உடனே கூட்டிட்டு போயிடுவேன்.'
+          : '${section.description} It is under ${section.label} — say "open '
+              '${section.label}" and I will take you straight there.',
+      suggestions: ta
+          ? <String>['${section.label} ஓபன் பண்ணு', 'வேற ஏதாவது']
+          : <String>['Open ${section.label}', 'Something else'],
     );
   }
 
   // ── a bare section name ──────────────────────────────────────────
 
-  static ChittiLocalAnswer? _aboutSection(String q, String v) {
+  static ChittiLocalAnswer? _aboutSection(String q, String v, bool ta) {
     // Only for short messages. A section word buried in a long sentence
     // is far more likely to be part of a real question the model should
     // answer than a request for the section's description.
@@ -215,7 +321,9 @@ class ChittiLocalAnswerService {
     if (section == null) return null;
     return ChittiLocalAnswer(
       '${section.label}: ${section.description}',
-      suggestions: <String>['Open ${section.label}', 'What else can you do?'],
+      suggestions: ta
+          ? <String>['${section.label} ஓபன் பண்ணு', 'வேற என்ன பண்ணுவ?']
+          : <String>['Open ${section.label}', 'What else can you do?'],
     );
   }
 
@@ -334,7 +442,7 @@ class ChittiLocalAnswerService {
       );
       if (advised != null) return _withVideo(advised, video);
     }
-    final plain = answer(question, variant: variant);
+    final plain = answer(question, variant: variant, languageCode: languageCode);
     return plain == null ? null : _withVideo(plain, video);
   }
 

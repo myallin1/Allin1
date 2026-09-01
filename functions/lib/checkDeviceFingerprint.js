@@ -37,7 +37,9 @@ exports.registerDevice = exports.checkDeviceFingerprint = void 0;
 const functions = __importStar(require("firebase-functions"));
 const firebase_functions_1 = require("firebase-functions");
 const admin = __importStar(require("firebase-admin"));
-admin.initializeApp();
+if (admin.apps.length === 0) {
+    admin.initializeApp();
+}
 const db = admin.firestore();
 exports.checkDeviceFingerprint = functions.https.onCall(async (data, context) => {
     // ── AUTH CHECK ──────────────────────────────────────────────

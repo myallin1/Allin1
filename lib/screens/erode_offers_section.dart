@@ -12,6 +12,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/services.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -21,7 +23,7 @@ import '../models/mobile_models.dart' show youtubeVideoId;
 import '../services/migration_gate_service.dart';
 import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 import '../widgets/premium_theme.dart';
-import 'mobiles/listing_video_player.dart' show showPremiumVideoModal;
+import 'mobiles/listing_video_player.dart' show ListingVideoPlayer;
 
 const Color _offerInk = Color(0xFF121A3D);
 const Color _offerPink = Color(0xFFFF4FA3);
@@ -77,6 +79,12 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
   Future<List<_OfferRecord>?>? _future;
   int _lastAppliedVersion = -1;
 
+  // Active inline video controllers, keyed by offerId. Capped at 3 to prevent OOM crashes on budget devices.
+  final Map<String, YoutubePlayerController> _inlineControllers = {};
+  // Tracks access order for Least Recently Used (LRU) eviction
+  final List<String> _controllerAccessOrder = [];
+  String? _currentlyPlayingId;
+
   @override
   void initState() {
     super.initState();
@@ -90,7 +98,157 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
   @override
   void dispose() {
     MigrationGateService.instance.removeListener(_onGateChanged);
+    for (final controller in _inlineControllers.values) {
+      try {
+        controller.close();
+      } catch (e) {
+        debugPrint('Dispose pool controller failed: $e');
+      }
+    }
+    _inlineControllers.clear();
+    _controllerAccessOrder.clear();
+    // Safety net (Aug 29 2026 review): if the customer leaves this whole
+    // screen (back button, switch tabs) while a video was mid-fullscreen,
+    // the exit-fullscreen branch of that controller's own listener never
+    // gets a chance to run — it was still fullscreen when we just closed
+    // it above. Without this, the rest of the app would stay stuck with
+    // hidden system bars and a landscape-only preference forever.
+    SystemChrome.setPreferredOrientations(
+      const [DeviceOrientation.portraitUp],
+    );
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
+  }
+
+  /// Pauses one card's controller without evicting it from the pool —
+  /// used when a card scrolls off-screen (see [_OfferCardState.dispose]
+  /// in _OfferCard below). Scrolling away should silence the video, not
+  /// throw away the instant-replay cache the pool exists for.
+  void _pauseInline(String offerId) {
+    final controller = _inlineControllers[offerId];
+    if (controller == null) return;
+    try {
+      controller.pauseVideo();
+    } catch (e) {
+      debugPrint('Scroll-away pause failed: $e');
+    }
+    if (_currentlyPlayingId == offerId) _currentlyPlayingId = null;
+  }
+
+  /// The close (X) button on an active inline player: pause and collapse
+  /// back to the poster, but keep the controller warm in the pool so
+  /// tapping play again is instant rather than a cold reload.
+  void _closeInline(String offerId) {
+    final controller = _inlineControllers[offerId];
+    if (controller != null) {
+      try {
+        controller.pauseVideo();
+      } catch (e) {
+        debugPrint('Close-inline pause failed: $e');
+      }
+    }
+    if (_currentlyPlayingId == offerId) _currentlyPlayingId = null;
+    setState(() {});
+  }
+
+  void _playInline(String offerId, String videoId) {
+    // 1. Auto-Pause (Single Sound Source): pause previously playing video
+    if (_currentlyPlayingId != null && _currentlyPlayingId != offerId) {
+      final activeController = _inlineControllers[_currentlyPlayingId];
+      if (activeController != null) {
+        try {
+          activeController.pauseVideo();
+        } catch (e) {
+          debugPrint('Auto-pause failed: $e');
+        }
+      }
+    }
+
+    _currentlyPlayingId = offerId;
+
+    // 2. Play immediately if already in cache pool
+    if (_inlineControllers.containsKey(offerId)) {
+      _controllerAccessOrder.remove(offerId);
+      _controllerAccessOrder.add(offerId);
+      final controller = _inlineControllers[offerId]!;
+      try {
+        controller.playVideo();
+      } catch (e) {
+        debugPrint('Resume video failed: $e');
+      }
+      setState(() {});
+      return;
+    }
+
+    // 3. LRU Eviction: keep pool size capped at 3
+    if (_inlineControllers.length >= 3) {
+      final lruKey = _controllerAccessOrder.removeAt(0);
+      final lruController = _inlineControllers.remove(lruKey);
+      if (lruController != null) {
+        try {
+          lruController.close();
+        } catch (e) {
+          debugPrint('LRU controller eviction failed: $e');
+        }
+      }
+    }
+
+    // 4. Create new controller PAUSED, set portrait lock on fullscreen,
+    // and start playback only once the modal/card has actually settled.
+    //
+    // FIX (Aug 29 2026 re-audit): this used to pass autoPlay: true, which
+    // reintroduced a bug already found and fixed elsewhere in this same
+    // codebase (see the Aug 28 2026 note in listing_video_player.dart) —
+    // starting playback the instant the controller is created races the
+    // platform view's surface attachment. YouTube's audio track needs no
+    // surface and starts immediately; the video does, doesn't have one
+    // yet, and arrives late — "audio plays before picture". Creating it
+    // paused and starting after a settle delay is the same fix applied
+    // here.
+    final newController = YoutubePlayerController.fromVideoId(
+      videoId: videoId,
+      // ignore: avoid_redundant_argument_values
+      autoPlay: false,
+      params: const YoutubePlayerParams(
+        showFullscreenButton: true,
+        strictRelatedVideos: true,
+        enableCaption: false,
+      ),
+    );
+
+    newController.setFullScreenListener((isFullscreen) {
+      SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.portraitUp,
+      ]);
+      SystemChrome.setEnabledSystemUIMode(
+        isFullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+      );
+    });
+
+    _inlineControllers[offerId] = newController;
+    _controllerAccessOrder.add(offerId);
+    setState(() {});
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      // FIX (Aug 29 2026 re-re-audit): also bail if the customer closed
+      // or switched away from this card within the 120ms settle delay.
+      // The pool slot check alone wasn't enough — Close deliberately
+      // leaves the controller in the pool (same object) so resuming it
+      // later is instant, so "still the same controller" stays true even
+      // after Close. Without this, tapping Close right after tapping
+      // play made the video start itself back up a moment later.
+      if (!mounted ||
+          _inlineControllers[offerId] != newController ||
+          _currentlyPlayingId != offerId) {
+        return;
+      }
+      try {
+        await newController.playVideo();
+      } catch (e) {
+        debugPrint('Inline autostart failed: $e');
+      }
+    });
   }
 
   void _onGateChanged() {
@@ -272,9 +430,35 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
             itemBuilder: (context, index) {
               if (index == 0) return _buildBanner();
               final doc = docs[index - 1];
+              final videoId = youtubeVideoId(doc.data['videoUrl'] as String?);
               return Padding(
+                key: ValueKey(doc.id),
                 padding: const EdgeInsets.only(bottom: 14),
-                child: _OfferCard(offerId: doc.id, data: doc.data),
+                child: _OfferCard(
+                  offerId: doc.id,
+                  data: doc.data,
+                  // FIX (Aug 29 2026 re-re-audit): must gate on
+                  // "this offer is the one actively shown", not merely
+                  // "a warm controller exists for it somewhere in the
+                  // pool" — those are different things by design. Close
+                  // (X) deliberately keeps the controller warm in
+                  // _inlineControllers for instant resume rather than
+                  // disposing it, so checking pool membership alone
+                  // meant the poster could never come back after Close
+                  // was tapped: the card kept rendering the (now paused)
+                  // YoutubePlayer forever. Gating on _currentlyPlayingId
+                  // instead means Close only stops SHOWING the player;
+                  // the pool entry it leaves behind is exactly what
+                  // makes reopening the same video instant.
+                  inlineController: _currentlyPlayingId == doc.id
+                      ? _inlineControllers[doc.id]
+                      : null,
+                  onPlayTapped: videoId == null
+                      ? null
+                      : () => _playInline(doc.id, videoId),
+                  onClosePlayer: () => _closeInline(doc.id),
+                  onScrolledAway: () => _pauseInline(doc.id),
+                ),
               );
             },
           ),
@@ -352,14 +536,54 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
   }
 }
 
-class _OfferCard extends StatelessWidget {
+class _OfferCard extends StatefulWidget {
   final String offerId;
   final Map<String, dynamic> data;
+  final YoutubePlayerController? inlineController;
+  final VoidCallback? onPlayTapped;
+  final VoidCallback? onClosePlayer;
+  final VoidCallback? onScrolledAway;
 
-  const _OfferCard({required this.offerId, required this.data});
+  const _OfferCard({
+    required this.offerId,
+    required this.data,
+    this.inlineController,
+    this.onPlayTapped,
+    this.onClosePlayer,
+    this.onScrolledAway,
+    super.key,
+  });
+
+  @override
+  State<_OfferCard> createState() => _OfferCardState();
+}
+
+class _OfferCardState extends State<_OfferCard> {
+  @override
+  void dispose() {
+    // FIX (Aug 29 2026 re-audit — "ghost audio" when a card scrolls off
+    // screen): ListView.builder disposes an item's Element once it moves
+    // far enough outside the cache extent, but the underlying
+    // YoutubePlayerController lives one level up in the pool, deliberately
+    // kept alive for instant replay. Nothing was telling THAT controller
+    // to stop when THIS widget went away, so a playing video kept
+    // making sound long after it scrolled out of sight. This is called
+    // with the [key]'d offerId still correctly attached to this element
+    // (see the ValueKey on each list item) so scroll reordering can never
+    // pause the wrong card.
+    if (widget.inlineController != null) {
+      widget.onScrolledAway?.call();
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final offerId = widget.offerId;
+    final data = widget.data;
+    final inlineController = widget.inlineController;
+    final onPlayTapped = widget.onPlayTapped;
+    final onClosePlayer = widget.onClosePlayer;
     final shopName = (data['shopName'] as String?) ?? 'Shop';
     final offerPercent = data['offerPercent'];
     final validTill = data['validTill'];
@@ -400,188 +624,260 @@ class _OfferCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-          SizedBox(
-            height: 140,
-            width: double.infinity,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (hasImage)
-                  Container(
-                    color: const Color(0xFFF3E7EF), // Neutral backing for letterbox bars
-                    child: Image(
-                      image: CachedNetworkImageProvider(
-                        CloudinaryUploadService.optimizedUrl(imageUrl,
-                            width: 720),
-                      ),
-                      fit: BoxFit.contain, // Changed to contain to show full image
-                      errorBuilder: (_, __, ___) => _posterFallback(offerPercent),
-                    ),
-                  )
-                else
-                  _posterFallback(offerPercent),
+              SizedBox(
+                height: 140,
+                width: double.infinity,
+                // When playing, this box stays an EMPTY placeholder — a
+                // spacer reserving the layout height the video needs.
+                // The real YoutubePlayer is painted separately, outside
+                // PremiumCard's clip (see the Positioned sibling in the
+                // outer Stack below and the note next to it for why.
+                child: inlineController != null
+                    ? const SizedBox.shrink()
+                    : Stack(
+                  fit: StackFit.expand,
+                  children: [
+                      if (hasImage)
+                        Container(
+                          color: const Color(0xFFF3E7EF), // Neutral backing for letterbox bars
+                          child: Image(
+                            image: CachedNetworkImageProvider(
+                              CloudinaryUploadService.optimizedUrl(imageUrl,
+                                  width: 720),
+                            ),
+                            fit: BoxFit.contain, // Changed to contain to show full image
+                            errorBuilder: (_, __, ___) => _posterFallback(offerPercent),
+                          ),
+                        )
+                      else
+                        _posterFallback(offerPercent),
 
-                // Scrim so white text stays readable over any photo.
-                const DecoratedBox(
-                  decoration: BoxDecoration(gradient: kImageScrim),
-                  child: SizedBox.expand(),
-                ),
-
-                if (offerPercent != null)
-                  Positioned(
-                    top: 12,
-                    left: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 7),
-                      decoration: BoxDecoration(
-                        gradient: kBrandGradient,
-                        borderRadius: BorderRadius.circular(kRadiusSm),
-                        boxShadow: glowShadow(kPremiumPink, strength: 0.7),
+                      // Scrim so white text stays readable over any photo.
+                      const DecoratedBox(
+                        decoration: BoxDecoration(gradient: kImageScrim),
+                        child: SizedBox.expand(),
                       ),
-                      child: Text(
-                        '$offerPercent% OFF',
-                        style: GoogleFonts.outfit(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.2,
-                        ),
-                      ),
-                    ),
-                  ),
 
-                // WATCH OFFER badge display ONLY here — the real tap
-                // target for it lives in the outer Stack below (see the
-                // "Aug 29 2026" note above _OfferCard.build), painted on
-                // top of the whole-card InkWell so it wins that corner
-                // without any Text in this box being able to swallow it.
-                if (videoId != null)
-                  const Positioned(
-                    top: 12,
-                    right: 12,
-                    child: IgnorePointer(
-                      child: VideoGlowBadge(
-                          label: 'WATCH OFFER', compact: false),
-                    ),
-                  ),
-
-                Positioned(
-                  left: 16,
-                  right: 16,
-                  bottom: 14,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        shopName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.outfit(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.3,
-                          shadows: const [
-                            Shadow(color: Colors.black54, blurRadius: 8),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      GlassChip(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.schedule_rounded,
-                                color: Colors.white, size: 12),
-                            const SizedBox(width: 5),
-                            Text(
-                              _formatValidTill(validTill),
+                      if (offerPercent != null)
+                        Positioned(
+                          top: 12,
+                          left: 12,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 7),
+                            decoration: BoxDecoration(
+                              gradient: kBrandGradient,
+                              borderRadius: BorderRadius.circular(kRadiusSm),
+                              boxShadow: glowShadow(kPremiumPink, strength: 0.7),
+                            ),
+                            child: Text(
+                              '$offerPercent% OFF',
                               style: GoogleFonts.outfit(
                                 color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      // WATCH OFFER badge display ONLY here — the real tap
+                      // target for it lives in the outer Stack below (see the
+                      // "Aug 29 2026" note above _OfferCard.build), painted on
+                      // top of the whole-card InkWell so it wins that corner
+                      // without any Text in this box being able to swallow it.
+                      if (videoId != null)
+                        const Positioned(
+                          top: 12,
+                          right: 12,
+                          child: IgnorePointer(
+                            child: VideoGlowBadge(
+                                label: 'WATCH OFFER', compact: false),
+                          ),
+                        ),
+
+                      Positioned(
+                        left: 16,
+                        right: 16,
+                        bottom: 14,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              shopName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -0.3,
+                                shadows: const [
+                                  Shadow(color: Colors.black54, blurRadius: 8),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            GlassChip(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.schedule_rounded,
+                                      color: Colors.white, size: 12),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    _formatValidTill(validTill),
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
                       ),
+                  ],
+                ),
+              ),
+
+              // Footer strip — the "pass" tear-off edge.
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                        builder: (_) =>
+                            OfferDetailScreen(offerId: offerId, data: data)),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 26,
+                        height: 26,
+                        decoration: BoxDecoration(
+                          color: kPremiumPink.withValues(alpha: 0.10),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.local_offer_rounded,
+                            color: kPremiumPink, size: 13),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          // While playing inline, the poster (with the
+                          // shop name overlay) is replaced by the raw
+                          // YouTube iframe \u2014 this line becomes the only
+                          // place left showing WHICH shop's offer is
+                          // playing, so it needs to actually say so.
+                          inlineController != null
+                              ? '$shopName \u00b7 ${_formatValidTill(validTill)}'
+                              : videoId != null
+                                  ? 'Tap to view details \u00b7 video available'
+                                  : 'Tap to view shop details',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: premiumBody(size: 9.5),
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios_rounded,
+                          color: kPremiumMuted, size: 11),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-
-          // Footer strip — the "pass" tear-off edge.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    color: kPremiumPink.withValues(alpha: 0.10),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.local_offer_rounded,
-                      color: kPremiumPink, size: 13),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    videoId != null
-                        ? 'Tap to view details \u00b7 video available'
-                        : 'Tap to view shop details',
-                    style: premiumBody(size: 9.5),
-                  ),
-                ),
-                const Icon(Icons.arrow_forward_ios_rounded,
-                    color: kPremiumMuted, size: 11),
-              ],
-            ),
-          ),
+              ),
             ],
           ),
         ),
         // Whole-card tap target, ABOVE the (non-interactive) content so no
         // Text inside it can ever swallow the tap before this sees it.
-        Positioned.fill(
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(kRadiusLg),
-              splashColor: kPremiumPink.withValues(alpha: 0.08),
-              highlightColor: kPremiumPink.withValues(alpha: 0.04),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                      builder: (_) =>
-                          OfferDetailScreen(offerId: offerId, data: data)),
-                );
-              },
+        // Disabled when playing inline to allow player controls interaction.
+        if (inlineController == null)
+          Positioned.fill(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(kRadiusLg),
+                splashColor: kPremiumPink.withValues(alpha: 0.08),
+                highlightColor: kPremiumPink.withValues(alpha: 0.04),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                        builder: (_) =>
+                            OfferDetailScreen(offerId: offerId, data: data)),
+                  );
+                },
+              ),
             ),
           ),
-        ),
         // The REAL WATCH OFFER tap target — opaque so its whole padded
         // area (not just the icon/text glyphs) is tappable, and on top
         // of the whole-card InkWell so it wins in this corner only.
-        if (videoId != null)
+        if (videoId != null && inlineController == null)
           Positioned(
             top: 12,
             right: 12,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () => showPremiumVideoModal(
-                context,
-                videoId: videoId,
-                title: shopName,
-                subtitle: _formatValidTill(validTill),
-              ),
+              onTap: onPlayTapped,
               child: const VideoGlowBadge(
                   label: 'WATCH OFFER', compact: false),
+            ),
+          ),
+        // FIX (Aug 31 2026 re-audit): the YoutubePlayer must NOT sit
+        // inside PremiumCard's Container — that Container clips with
+        // Clip.antiAlias, and on Flutter Web the player is a real DOM
+        // iframe (a platform view). A clip ancestor forces a platform
+        // view onto its own composited layer, which is the exact same
+        // "player fails to render under CanvasKit" bug already found and
+        // fixed once in listing_video_player.dart's fullscreen sheet —
+        // reusing the fix here rather than rediscovering it the hard way
+        // on web. Painting it as a sibling here, above PremiumCard but
+        // below nothing else, means it overlaps exactly the 140px
+        // placeholder box left empty above — square top corners instead
+        // of rounded ones, the same trade-off that earlier fix accepted.
+        if (inlineController != null)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 140,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                YoutubePlayer(
+                  controller: inlineController,
+                  aspectRatio: 16 / 9,
+                ),
+                // Close (X) — collapses back to the poster without
+                // throwing the controller out of the pool, so reopening
+                // this same video is instant.
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onClosePlayer,
+                    child: Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close_rounded,
+                          color: Colors.white, size: 16),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
       ],
@@ -617,13 +913,6 @@ class _OfferCard extends StatelessWidget {
     }
     return 'Limited period offer';
   }
-
-  @override
-  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
-    super.debugFillProperties(properties);
-    properties.add(StringProperty('offerId', offerId));
-    properties.add(DiagnosticsProperty<Map<String, dynamic>>('data', data));
-  }
 }
 
 class OfferDetailScreen extends StatelessWidget {
@@ -657,6 +946,18 @@ class OfferDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // EMBEDDED at the top, not a pop-up (Aug 29 2026 — CTO
+            // review, "video player directly at the top of the screen
+            // instead of a pop-up bottom sheet, shop details below it").
+            // ListingVideoPlayer is the same lazy widget the Mobile Hub
+            // uses: a thumbnail until tapped, one real player built only
+            // then, closed on dispose — one detail screen open at a
+            // time, so this never risks the "N players alive" memory
+            // problem a scrolling list of these would.
+            if (videoId != null) ...[
+              ListingVideoPlayer(videoId: videoId),
+              const SizedBox(height: 16),
+            ],
             // NEW (CTO mandate — Erode Offers image + map pin): shows
             // the shop photo admin uploaded, so the customer can
             // recognise the shop's storefront on sight. Only rendered
@@ -726,42 +1027,6 @@ class OfferDetailScreen extends StatelessWidget {
                 ],
               ),
             ),
-            if (videoId != null) ...[
-              const SizedBox(height: 14),
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => showPremiumVideoModal(
-                  context,
-                  videoId: videoId,
-                  title: shopName,
-                  subtitle: _formatValidTillFull(validTill),
-                ),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [Color(0xFFFF2D2D), Color(0xFFE60000)]),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.play_circle_fill_rounded,
-                          color: Colors.white, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Watch Offer Video',
-                        style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
             const SizedBox(height: 20),
             _detailTile(
               icon: Icons.event_available_rounded,

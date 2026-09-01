@@ -5,7 +5,29 @@
 
 export { affiliatePostbackWebhook } from './affiliatePostbackWebhook';
 export { verifyAndProcessPayment } from './verifyAndProcessPayment';
+
+// PhonePe Payment Gateway (0% commission UPI collection) — replaces
+// trusting the client's own UPI intent result. createPhonePeOrder asks
+// PhonePe for a checkout URL; phonepeWebhook is the ONLY thing allowed
+// to mark a payment_orders doc 'paid' (server-to-server, checksum-
+// verified); checkPhonePeOrderStatus is a belt-and-braces reconciliation
+// call for when the app returns from checkout before the webhook lands.
+export { createPhonePeOrder } from './phonepeCreateOrder';
+export { phonepeWebhook } from './phonepeWebhook';
+export { checkPhonePeOrderStatus } from './phonepeCheckStatus';
 export { checkDeviceFingerprint } from './checkDeviceFingerprint';
+// Gift Coupons (repair/replacement -> Hero/Hotel bill discount, per
+// Nizam's request). Server-authoritative redemption — see
+// redeemGiftCoupon.ts for why this can't be a client-side Firestore
+// transaction for a discount that moves real money.
+// onServicePaidCreateCoupon mints a locked coupon the moment ANY
+// service is marked paid (client can never mint one); scratchGiftCoupon
+// enforces the unlock timer against the SERVER clock and is the only
+// thing that reveals the gift; redeemGiftCoupon spends a scratched
+// discount on a bill.
+export { onServicePaidCreateCoupon } from './onServicePaidCreateCoupon';
+export { scratchGiftCoupon } from './scratchGiftCoupon';
+export { redeemGiftCoupon } from './redeemGiftCoupon';
 export { manageHeroApproval } from './manageHeroApproval';
 export { notifyHeroOnRideAssigned } from './notifyHeroOnRideAssigned';
 // FCM Data Push Layer 2 (CTO mandate). Unlike notifyHeroOnRideAssigned

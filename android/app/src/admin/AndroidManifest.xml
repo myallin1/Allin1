@@ -1,0 +1,130 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS"/>
+    <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
+    <uses-permission android:name="android.permission.READ_CALL_LOG"/>
+    <uses-permission android:name="android.permission.WRITE_CALL_LOG"/>
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <uses-permission android:name="android.permission.RECEIVE_SMS"/>
+    <uses-permission android:name="android.permission.READ_SMS"/>
+    <uses-permission android:name="android.permission.SEND_SMS"/>
+    <!-- NEW (Aug 31 2026 — Option A, default-dialer role): required to
+         hold RoleManager.ROLE_DIALER and to relay ACTION_DIAL taps to
+         TelecomManager.placeCall() from ChittiDialerActivity. -->
+    <uses-permission android:name="android.permission.CALL_PHONE"/>
+
+    <application>
+        <!-- Chitti System-Wide Autonomous Assistant Service -->
+        <service
+            android:name=".ChittiAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- Broadcast Receiver for Call screening state updates (Securely not exported) -->
+        <receiver android:name=".CallReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.PHONE_STATE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- NEW (Aug 31 2026 — Option A): the real, permanent speaker-
+             route fix. Only receives real calls once Chitti holds
+             RoleManager.ROLE_DIALER (requested from Admin AI Settings) —
+             see ChittiInCallService's own header for the full root-cause
+             reasoning ("Chitti loud speaker on agala" on both Oppo and
+             Lenovo). android:exported="true" + BIND_INCALL_SERVICE is
+             the standard, required declaration for any InCallService;
+             the permission itself restricts binding to the OS. -->
+        <service
+            android:name=".ChittiInCallService"
+            android:permission="android.permission.BIND_INCALL_SERVICE"
+            android:exported="true">
+            <meta-data android:name="android.telecom.IN_CALL_SERVICE_UI" android:value="true" />
+            <intent-filter>
+                <action android:name="android.telecom.InCallService" />
+            </intent-filter>
+        </service>
+
+        <!-- NEW (Aug 31 2026 — Option A): required for a default-dialer
+             app — handles a tap on a phone number from Contacts/Recents/
+             anywhere else on the phone by relaying it straight to
+             TelecomManager.placeCall(), so outgoing calling keeps
+             working exactly as before once Chitti holds the Phone role.
+             No visible UI (see ChittiDialerActivity's header). -->
+        <activity
+            android:name=".ChittiDialerActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true">
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="tel" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="tel" />
+            </intent-filter>
+        </activity>
+
+        <!-- NEW (Aug 31 2026 — Option A): handles the Hang Up / Speaker
+             buttons on the in-call notification (PhoneCallService.
+             showInCallNotification) — the admin's manual controls now
+             that Android no longer shows its own in-call screen for
+             this app's calls. Not exported: only this app's own
+             notification ever sends these actions. -->
+        <receiver android:name=".ChittiCallNotificationActionReceiver" android:exported="false" />
+
+        <!-- Broadcast Receiver for incoming SMS messages -->
+        <receiver android:name=".SmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Step 1 (Aug 30 2026) — registers Chitti as a selectable
+             Default Digital Assistant app. android:exported="true" is
+             required here: the system itself must be able to bind this
+             service regardless of which app the user currently has set
+             as their assistant, so it can be offered/selected in
+             Settings > Apps > Default apps > Digital assistant app. The
+             BIND_VOICE_INTERACTION permission is what actually restricts
+             binding to the OS, not third-party apps. -->
+        <service
+            android:name=".ChittiVoiceInteractionService"
+            android:permission="android.permission.BIND_VOICE_INTERACTION"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.voice_interaction"
+                android:resource="@xml/voice_interaction_service" />
+        </service>
+        <service
+            android:name=".ChittiVoiceInteractionSessionService"
+            android:permission="android.permission.BIND_VOICE_INTERACTION"
+            android:exported="true" />
+        <service
+            android:name=".ChittiRecognitionService"
+            android:permission="android.permission.BIND_VOICE_RECOGNITION_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

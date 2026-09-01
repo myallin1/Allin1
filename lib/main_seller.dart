@@ -302,9 +302,13 @@ void main() async {
       // (web), the options path runs exactly as before.
       try {
         if (Firebase.apps.isEmpty) {
-          await Firebase.initializeApp(
-            options: DefaultFirebaseOptions.currentPlatform,
-          );
+          if (kIsWeb) {
+            await Firebase.initializeApp(
+              options: DefaultFirebaseOptions.web,
+            );
+          } else {
+            await Firebase.initializeApp();
+          }
         }
       } catch (e) {
         // Never fatal: a seller staring at a splash screen forever is

@@ -28,6 +28,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart' as rtdb;
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -36,6 +37,7 @@ import '../services/auth_prompt_service.dart';
 import '../services/location_service.dart';
 import '../services/service_request_service.dart';
 import '../widgets/location_capture_field.dart';
+import 'hero_search_radar_screen.dart';
 import 'service_request_tracking_screen.dart';
 
 const Color _bg = Color(0xFF0E0B12);
@@ -240,7 +242,10 @@ class _SkillCard extends StatelessWidget {
                 color: skill.color.withValues(alpha: 0.16),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(skill.icon, color: skill.color, size: 26),
+              // Full-color illustrated icon, not the flat Material glyph
+              // — see HeroSkill.svgIcon's doc comment for why a
+              // customer needs to tell these apart at a glance too.
+              child: SvgPicture.string(skill.svgIcon, width: 30, height: 30),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -461,9 +466,13 @@ class _SkillBookingSheetState extends State<_SkillBookingSheet> {
       await Navigator.push(
         context,
         MaterialPageRoute<void>(
-          builder: (_) => ServiceRequestTrackingScreen(
+          builder: (_) => HeroSearchRadarScreen(
             requestId: requestId,
-            requestType: 'electronics_service',
+            serviceLabel: widget.skill.title,
+            matchedScreenBuilder: (id) => ServiceRequestTrackingScreen(
+              requestId: id,
+              requestType: 'electronics_service',
+            ),
           ),
         ),
       );
@@ -567,8 +576,11 @@ class _SkillBookingSheetState extends State<_SkillBookingSheet> {
                               color: skill.color.withValues(alpha: 0.16),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Icon(skill.icon,
-                                color: skill.color, size: 22,),
+                            child: SvgPicture.string(
+                              skill.svgIcon,
+                              width: 24,
+                              height: 24,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(

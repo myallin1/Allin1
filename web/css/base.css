@@ -1,0 +1,152 @@
+/* ==========================================================================
+   BASE & RESET STYLES - PINK LUXURY THEME
+   ========================================================================== */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-canvas);
+  color: var(--ink-primary);
+  font-family: var(--font-body);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  line-height: 1.6;
+  overflow-x: hidden;
+  position: relative;
+  background: radial-gradient(120% 80% at 50% -10%, #ffffff 0%, var(--bg-canvas) 50%, #ffd9ec 100%);
+  background-attachment: fixed;
+}
+
+@media (max-width: 899px) {
+  body {
+    padding-bottom: calc(var(--mobile-bar-height) + 1.2rem);
+  }
+}
+
+img, svg, video, picture {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+  transition: color var(--duration-fast) var(--ease-smooth);
+}
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+button {
+  cursor: pointer;
+  user-select: none;
+}
+
+::selection {
+  background: var(--brand-pink);
+  color: #ffffff;
+}
+
+/* Typography Base */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  line-height: 1.18;
+  color: var(--ink-primary);
+  text-wrap: balance;
+  letter-spacing: -0.02em;
+}
+
+h1 {
+  font-size: clamp(2.4rem, 5.2vw, 4.35rem);
+}
+
+h2 {
+  font-size: clamp(1.9rem, 3.5vw, 2.85rem);
+}
+
+h3 {
+  font-size: clamp(1.25rem, 2.2vw, 1.55rem);
+}
+
+h4 {
+  font-size: 1.1rem;
+}
+
+p {
+  text-wrap: pretty;
+  font-size: clamp(0.98rem, 1.1vw, 1.12rem);
+  color: var(--ink-secondary);
+  line-height: 1.64;
+}
+
+.tamil-text {
+  font-family: var(--font-tamil);
+  line-height: 1.7;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Accessibility Focus */
+:focus-visible {
+  outline: 2px solid var(--brand-pink);
+  outline-offset: 3px;
+  border-radius: var(--radius-xs);
+}
+
+/* Layout Utilities */
+.wrap {
+  width: 100%;
+  max-width: var(--max-content);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: clamp(1.25rem, 4vw, 2.5rem);
+  padding-right: clamp(1.25rem, 4vw, 2.5rem);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 1.5rem;
+  background: var(--brand-berry);
+  color: #fff;
+  padding: 0.75rem 1.25rem;
+  border-radius: var(--radius-pill);
+  font-weight: 700;
+  z-index: 999;
+  transition: top var(--duration-fast) var(--ease-smooth);
+}
+.skip-link:focus {
+  top: 1.5rem;
+}

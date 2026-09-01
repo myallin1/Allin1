@@ -62,7 +62,17 @@ class AdminKycWriteService {
     if (empty('selfieUrl')) missing.add('Selfie photo');
     if (empty('aadhaarDocUrl')) missing.add('Aadhaar document');
     if (empty('panDocUrl')) missing.add('PAN document');
-    if (empty('licenseDocUrl')) missing.add('License document');
+    
+    final isSkillHero = data['vehicleType'] == 'skill_worker';
+    if (!isSkillHero && empty('licenseDocUrl')) {
+      missing.add('License document');
+    }
+    // Mirrors hero_approvals_screen.dart's identical addition — see
+    // that file's comment for why (Aug 29 2026 KYC-column audit).
+    if (!isSkillHero && empty('vehicleNumber')) {
+      missing.add('Vehicle number');
+    }
+
     if (empty('name')) missing.add('Name');
     if (empty('phone')) missing.add('Phone number');
     return missing;

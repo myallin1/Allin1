@@ -152,6 +152,84 @@ class ChittiBuddy {
     }
   }
 
+  /// Topics serious enough that even WARMTH is the wrong response --
+  /// only a straight, calm answer helps here. A "so sorry to hear
+  /// that" bolted onto an SOS alert or a hospital run reads as the app
+  /// not taking it seriously.
+  static final RegExp _emergencyTopic = RegExp(
+    r'\b(sos|emergency|accident|police|hospital|ambulance|kyc|verify|'
+    r'verification)\b|'
+    '(அவசர|விபத்து|காவல்|மருத்துவ)',
+    caseSensitive: false,
+  );
+
+  /// A short, genuine line of comfort for a setback that is real but
+  /// not an emergency -- a cancelled order, a failed payment, a
+  /// complaint, something that went wrong.
+  ///
+  /// This is the other half of [isSafeMoment]: that gate correctly
+  /// turns the JOKE layer off here, because rule 2 in this file's
+  /// header is "never at the customer's expense". But going quiet is
+  /// not the same as sounding like someone who noticed. This fills
+  /// that gap -- offline, no API key needed, same as the rest of this
+  /// file.
+  ///
+  /// Returns null for anything that is not actually a setback (a
+  /// plain factual reply needs no comfort bolted onto it) and for true
+  /// emergencies (see [_emergencyTopic]), where a canned warm line
+  /// would be the wrong tone entirely.
+  /// Genuinely negative-outcome language -- narrower than
+  /// [_seriousTopic] on purpose. That gate also matches plain money
+  /// words ("balance", "due") so the JOKE layer stays off near
+  /// anything financial; reusing it here would make a completely
+  /// ordinary "your wallet balance is 250 rupees" reply get a
+  /// "that's frustrating" line stapled onto it, which is worse than
+  /// no comfort layer at all.
+  static final RegExp _setbackTopic = RegExp(
+    r'\b(cancel|cancelled|refund|failed|error|complaint|missing|lost|'
+    r"wrong|couldn't|could not|cannot|can't|unable|sorry|didn't|"
+    r'did not|went wrong|try again|no luck)\b|'
+    '(ரத்து|தவறு|புகார்|கிடைக்கல)',
+    caseSensitive: false,
+  );
+
+  static String? comfortAfterSetback({
+    required String languageCode,
+    String? saying,
+    String? userSaid,
+  }) {
+    final text = '${saying ?? ''} ${userSaid ?? ''}';
+    if (_emergencyTopic.hasMatch(text)) return null;
+    if (!_setbackTopic.hasMatch(text)) return null;
+
+    final pool = _comfortLinesFor(languageCode);
+    if (pool.isEmpty) return null;
+    final choices = pool.length > 1
+        ? pool.where((q) => q != _lastComfort).toList(growable: false)
+        : pool;
+    final pick = choices[_random.nextInt(choices.length)];
+    _lastComfort = pick;
+    return pick;
+  }
+
+  static String? _lastComfort;
+
+  // Deliberately plain, not jokey -- this is the ONE place in the file
+  // that is not supposed to be funny. Short, because it is read aloud
+  // too.
+  static List<String> _comfortLinesFor(String code) => switch (code) {
+        'ta' || 'tg' => const <String>[
+            'கவலைப்படாதீங்க, நான் இருக்கேன் — சரி பண்றோம்.',
+            'இது நடந்ததுக்கு வருத்தம். உடனே பாத்துக்கறேன்.',
+            'புரியுது, சரிசெய்ய பாக்கிறேன் — நீங்க தனியா இல்ல.',
+          ],
+        _ => const <String>[
+            "That's frustrating, I know. Let's sort it out.",
+            "Sorry this happened — I'm on it with you.",
+            "I hear you. You're not alone in this, let's fix it.",
+          ],
+      };
+
   // Short on purpose. These are spoken aloud as well as shown, and a
   // long joke read by a TTS engine at 0.5x rate is not funny.
   static List<String> _quipsFor(String code) => switch (code) {

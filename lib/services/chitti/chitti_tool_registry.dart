@@ -451,6 +451,60 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'they can send it to a friend.',
     keywords: ['invite', 'refer', 'share app', 'friend', 'referral code'],
   ),
+  // NEW (Aug 29 2026 — Nizam: system-wide agent request, scoped down to
+  // the Play-Store-safe version after the Accessibility Service option
+  // was ruled out). Chitti can hand a task OFF to another app — open it
+  // ready to go — but never taps a button inside it. That distinction
+  // is the whole feature: url_launcher intents only, same as the
+  // existing Call/WhatsApp buttons on car_wash_screen.dart and
+  // biriyani_menu_screen.dart, nothing that reads or controls another
+  // app's screen.
+  ChittiTool(
+    name: 'open_external_app',
+    domain: ChittiDomain.support,
+    variants: {'customer', 'hero', 'seller', 'admin'},
+    description:
+        'Open WhatsApp with a message pre-filled, Google Maps with '
+        'directions set, or the phone dialer with a number ready. Only '
+        'OPENS the app for the user to review and send/call themselves — '
+        'never sends a message or places a call on its own.',
+    keywords: [
+      'whatsapp', 'message him', 'message her', 'text him', 'text her',
+      'directions', 'maps', 'navigate to', 'call him', 'call her',
+      'phone number', 'dial',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'target': <String, dynamic>{
+          'type': 'string',
+          'enum': ['whatsapp', 'maps', 'call'],
+          'description':
+              'whatsapp = open WhatsApp with a message pre-filled. '
+              'maps = open Google Maps with directions to a place. '
+              'call = open the phone dialer with a number ready.',
+        },
+        'phone': <String, dynamic>{
+          'type': 'string',
+          'description':
+              'Phone number for whatsapp/call, in the customer own words '
+              '(digits, may include +country code). Omit for maps.',
+        },
+        'message': <String, dynamic>{
+          'type': 'string',
+          'description':
+              'Message text to pre-fill in WhatsApp. Omit for maps/call.',
+        },
+        'destination': <String, dynamic>{
+          'type': 'string',
+          'description':
+              'Place name or address for Maps directions. Omit for '
+              'whatsapp/call.',
+        },
+      },
+      'required': ['target'],
+    },
+  ),
 
   // ── HERO ────────────────────────────────────────────────────────
   ChittiTool(
@@ -647,6 +701,335 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
       'enquiry', 'enquiries', 'inquiry', 'lead', 'price question',
       'customer asking', 'rate kekuranga', 'quote',
     ],
+  ),
+  ChittiTool(
+    name: 'system_perform_action',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        'Perform an autonomous system or phone action on the users device. '
+        'Used for voice control assistant commands to click elements, type text, '
+        'scroll, go back, go home, read screen, or launch an app.',
+    keywords: [
+      'click', 'type', 'scroll', 'go back', 'go home', 'home screen',
+      'launch app', 'open whatsapp', 'whatsapp reply', 'read screen', 'system control',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'actionType': <String, dynamic>{
+          'type': 'string',
+          'enum': ['click', 'type', 'scroll', 'go_back', 'go_home', 'read_screen', 'launch_app'],
+          'description': 'The type of automation action to execute.',
+        },
+        'targetText': <String, dynamic>{
+          'type': 'string',
+          'description': 'The label, text, button name, or app name to target (for click, type, launch_app).',
+        },
+        'inputValue': <String, dynamic>{
+          'type': 'string',
+          'description': 'The text value to type into the input field (for type).',
+        },
+        'scrollDirection': <String, dynamic>{
+          'type': 'string',
+          'enum': ['up', 'down'],
+          'description': 'The direction to scroll (for scroll).',
+        },
+      },
+      'required': ['actionType'],
+    },
+    requiresConfirmation: true,
+  ),
+
+  ChittiTool(
+    name: 'search_order',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description: 'Search for a customer service request or taxi order by its ID or keyword in the Admin Panel.',
+    keywords: [
+      'search order', 'find order', 'order search', 'order details', 'find ride',
+      'search ride', 'request search', 'request details', 'order pathu',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'query': <String, dynamic>{
+          'type': 'string',
+          'description': 'The order ID or search keyword.',
+        },
+      },
+      'required': ['query'],
+    },
+  ),
+  ChittiTool(
+    name: 'search_customer',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description: 'Search for a customer or user profile by name, phone number, or ID in the Admin Panel.',
+    keywords: [
+      'search customer', 'find customer', 'customer details', 'search user', 'find user',
+      'user details', 'customer profile', 'user profile', 'customer pathu',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'query': <String, dynamic>{
+          'type': 'string',
+          'description': 'The customer name, phone number, or user ID to search for.',
+        },
+      },
+      'required': ['query'],
+    },
+  ),
+
+  ChittiTool(
+    name: 'audit_ui_sections',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        'Read-only audit comparing what each admin UI screen shows '
+        'against the full database, to surface DB leakage, unused '
+        'nodes, or storage wastage. No arguments.',
+    keywords: [
+      'audit', 'db audit', 'leakage', 'unused node', 'database check',
+      'audit database', 'db check', 'wastage',
+    ],
+  ),
+  ChittiTool(
+    name: 'generate_kyc_report',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        'Read-only: fetch a pending Hero or Seller registration, '
+        'cross-verify their submitted details/photos with OCR & facial verification, '
+        'and produce a concise KYC verification report with approve/reject recommendations.',
+    keywords: [
+      'kyc report', 'verify hero', 'check kyc', 'check seller kyc',
+      'verify documents', 'kyc check', 'aadhaar check', 'pan check',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'type': <String, dynamic>{
+          'type': 'string',
+          'enum': ['hero', 'seller', 'sos'],
+          'description': 'Which registration type to check (hero, seller, or sos).',
+        },
+        'targetUid': <String, dynamic>{
+          'type': 'string',
+          'description':
+              'Optional specific uid to check. Omit to check the '
+              'oldest pending submission of that type.',
+        },
+      },
+      'required': ['type'],
+    },
+  ),
+  ChittiTool(
+    name: 'run_ux_audit',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        'Read-only: fetch a short summary of the Synthetic QA test '
+        "bot's most recent findings from the ux_audit_reports collection.",
+    keywords: [
+      'ux audit', 'qa audit', 'test bot', 'qa report', 'test results',
+      'synthetic qa', 'bugs found by bot',
+    ],
+  ),
+  ChittiTool(
+    name: 'propose_write_action',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        'Execute or record a proposed approval or rejection for a Hero, Seller, or SOS KYC request. '
+        'Requires explicit human confirmation before updating the database.',
+    requiresConfirmation: true,
+    keywords: [
+      'approve hero', 'reject hero', 'approve seller', 'reject seller',
+      'approve kyc', 'reject kyc', 'approve', 'reject',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'actionType': <String, dynamic>{
+          'type': 'string',
+          'description':
+              "Action kind, e.g. 'approve_hero', 'reject_hero', 'approve_seller', 'reject_seller', 'approve_sos', 'reject_sos'.",
+        },
+        'targetUid': <String, dynamic>{
+          'type': 'string',
+          'description': 'The UID of the hero, seller, or user to approve/reject.',
+        },
+        'targetType': <String, dynamic>{
+          'type': 'string',
+          'enum': ['hero', 'seller', 'sos'],
+          'description': 'Target category: hero, seller, or sos.',
+        },
+        'targetLabel': <String, dynamic>{
+          'type': 'string',
+          'description': 'Human-readable name of the person/shop.',
+        },
+        'reason': <String, dynamic>{
+          'type': 'string',
+          'description': 'Optional reason for rejection or approval notes.',
+        },
+      },
+      'required': ['actionType'],
+    },
+  ),
+  ChittiTool(
+    name: 'send_sms',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        'Send an official text message (SMS) to a customer, hero, or phone number. '
+        'Requires explicit human confirmation before sending.',
+    requiresConfirmation: true,
+    keywords: [
+      'sms', 'send sms', 'text message', 'send message', 'sms anupu', 'message anupu',
+      'send text', 'text',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'phoneNumber': <String, dynamic>{
+          'type': 'string',
+          'description': 'The target phone number to send the SMS to.',
+        },
+        'message': <String, dynamic>{
+          'type': 'string',
+          'description': 'The text message content to send.',
+        },
+      },
+      'required': ['phoneNumber', 'message'],
+    },
+  ),
+
+  ChittiTool(
+    name: 'read_recent_sms',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        'Read recent incoming SMS messages received on this device. Read-only.',
+    keywords: [
+      'read sms', 'check sms', 'recent sms', 'incoming sms', 'sms paaru', 'messages', 'new sms',
+    ],
+  ),
+  ChittiTool(
+    name: 'summarize_last_call',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        'Summarize the most recent customer phone call screened by Chitti and fetch the call recording link. Read-only.',
+    keywords: [
+      'last call', 'kadasia vantha call', 'call summary', 'who called', 'screened call',
+      'call transcript', 'call audio', 'call recording', 'caller enna sonnanga', 'call enna sonnanga',
+      'recent call', 'கால் சம்மரி', 'கடைசி கால்',
+    ],
+  ),
+
+  // NEW (Aug 31 2026 — Nizam: "namma chitty AI valiyavum develop panna
+  // structure build pannamudiyuma"). Bridges Chitti to the Claude Code
+  // GitHub App already installed on this repo — see
+  // chitti_dev_task_service.dart for the full why/how. Confirm-gated
+  // like every other write: this creates a real, visible GitHub issue
+  // that kicks off an automated coding run, so a hallucinated call is
+  // not something to risk running unconfirmed.
+  ChittiTool(
+    name: 'create_dev_task',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        'Create a GitHub issue describing a new feature or bug fix, tagged '
+        'for Claude Code to pick up and implement automatically. Use when '
+        'the admin asks to build/add/fix something in the app itself. '
+        'Requires explicit human confirmation before creating.',
+    requiresConfirmation: true,
+    keywords: [
+      'develop', 'build feature', 'add feature', 'fix bug', 'code panu',
+      'feature venum', 'github issue', 'create task', 'dev task',
+      'claude panu', 'app la add pannu', 'new feature',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'title': <String, dynamic>{
+          'type': 'string',
+          'description':
+              'Short title summarizing the requested feature or fix.',
+        },
+        'description': <String, dynamic>{
+          'type': 'string',
+          'description':
+              "Detailed description of what's needed, in the admin's own "
+              'words — this becomes the GitHub issue body Claude Code '
+              'reads to do the work.',
+        },
+      },
+      'required': ['title', 'description'],
+    },
+  ),
+  ChittiTool(
+    name: 'google_search',
+    domain: ChittiDomain.support,
+    variants: {'customer', 'hero', 'seller', 'admin'},
+    description:
+        'Perform a live Google AI Web Search to get up-to-date real-world facts, news, prices, weather, technical info, or general knowledge. Read-only.',
+    keywords: [
+      'google search', 'search google', 'net la thedu', 'google la paaru',
+      'weather', 'petrol price', 'gold rate', 'market price', 'news', 'live search',
+      'கூகுள்', 'தேடு', 'கூகுள்ல பாரு', 'லைவ் சர்ச்',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'query': <String, dynamic>{
+          'type': 'string',
+          'description': 'The search query or question to search on Google.',
+        },
+      },
+      'required': ['query'],
+    },
+  ),
+
+  // NEW (Aug 31 2026 — the generic screen loop; CTO-approved 8-step
+  // cap, Groq primary). This is the tool that replaces "add a function
+  // call for every feature": it reads whatever is on screen and works
+  // toward a goal on pages nobody described to Chitti in advance.
+  //
+  // requiresConfirmation is deliberately FALSE, and that is not an
+  // oversight. Per Nizam's explicit choice of "act freely, confirm
+  // only risky taps", the gate lives per-STEP inside the loop
+  // (ChittiScreenAgent), not on starting it — gating both would mean
+  // approving twice for the same job, which is the friction this whole
+  // change exists to remove. Opening an app or scrolling needs no
+  // ceremony; the pay/delete/approve button inside it still stops.
+  ChittiTool(
+    name: 'control_screen',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        'Work toward a goal on the phone by reading the current screen and '
+        'acting on it step by step — for anything that is NOT already a '
+        'dedicated tool. Use for opening other apps, finding a setting, or '
+        'navigating a page Chitti has no specific tool for.',
+    keywords: [
+      'open gallery', 'open settings', 'open app', 'go to', 'find setting',
+      'phone la', 'screen la', 'navigate', 'take me to', 'thora',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'goal': <String, dynamic>{
+          'type': 'string',
+          'description':
+              "What the admin wants done, in their own words — e.g. 'open "
+              "the gallery and show recent photos'.",
+        },
+      },
+      'required': ['goal'],
+    },
   ),
 
   // ── SCREEN GUIDANCE (Aug 28 2026) ───────────────────────────────

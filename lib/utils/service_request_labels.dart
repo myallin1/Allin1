@@ -109,6 +109,8 @@ const List<Map<String, String>> kHeroBookingCategories = [
   {'key': 'errand', 'label': 'Errand / Shopping'},
   {'key': 'paperwork', 'label': 'Paperwork / Documents'},
   {'key': 'custom_order', 'label': 'Custom Order'},
+  {'key': 'electrician', 'label': 'Electrician'},
+  {'key': 'puncture', 'label': 'Puncture / Tyre'},
   {'key': 'other', 'label': 'Other'},
 ];
 

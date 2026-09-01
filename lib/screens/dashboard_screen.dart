@@ -69,6 +69,7 @@ import 'construction_screen.dart';
 import 'eseva_service_screen.dart';
 import 'custom_food_order_screen.dart';
 import 'grocery_order_screen.dart';
+import '../services/guru_overlay_service.dart';
 import 'guru_chat_screen.dart';
 import 'hero_booking_screen.dart';
 import 'mobiles/mobile_hub_screen.dart';
@@ -397,12 +398,15 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (!mounted) return;
       ChittiOverlayService.instance.show(
         context,
-        onTapChitti: () {
-          if (!mounted) return;
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const GuruChatScreen()),
-          );
-        },
+        // FIX (Aug 29 2026 - Nizam: "chittya thotta neraa chitu screen
+        // ku kutitu poguthu, popup yen open agalainu pathu open aga
+        // vei"). This used to push the FULL chat page straight away,
+        // so the floating mascot's tap never showed the popup at all -
+        // GlobalGuruFab (the other Chitti icon, used on web/hero/
+        // seller/admin) already opens the popup correctly via
+        // GuruOverlayService.show(); the mascot just wasn't wired to
+        // the same thing.
+        onTapChitti: () => GuruOverlayService.instance.show(autoStartMic: true),
       );
     });
 
@@ -883,16 +887,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     _navigate(const NjTechBroadbandWebView());
   }
 
-  // FIX (per Nizam/CTO's approved feature batch): Puncture Service direct
-  // contact number set to the CTO-provided number (was a different,
-  // incorrect number before this).
-  Future<void> _callPuncture() async {
-    final uri = Uri.parse('tel:+919843262951');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
-
   void _showScratchCardModal() {
     // Mark as seen forever so the card auto-shows at most ONCE per
     // customer, ever — whether or not they fully scratch it.
@@ -915,7 +909,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       case 'grocery':     _navigate(const GroceryOrderScreen()); break;
       case 'njtech':      _navigate(const NJTechStoreScreen()); break;
       case 'carwash':     _navigate(const CarWashScreen()); break;
-      case 'puncture':    _callPuncture(); break;
+      case 'puncture':    Navigator.push<void>(context, MaterialPageRoute<void>(builder: (_) => const HeroBookingScreen(initialCategory: 'puncture'))); break;
+      case 'electrician': Navigator.push<void>(context, MaterialPageRoute<void>(builder: (_) => const HeroBookingScreen(initialCategory: 'electrician'))); break;
       case 'construction':_navigate(const ConstructionScreen()); break;
       case 'homeservices': _navigate(const SkilledServicesScreen()); break;
       case 'custom':      _navigate(const HeroBookingScreen(initialCategory: 'custom_order')); break;
@@ -1862,6 +1857,24 @@ const Map<String, String> kSlotPhotoUrl = {
   'hero_3': 'https://images.unsplash.com/photo-1595246140625-573b715d11dc?w=200&q=80',
   'hero_4': 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&q=80',
   'hero_5': 'https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=200&q=80',
+  // Electrician: wiring/outlet work, hardhat electrician, switch box wiring, panel repair, circuit breaker panel
+  'electrician_1': 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=200&q=80',
+  'electrician_2': 'https://images.unsplash.com/photo-1682345262055-8f95f3c513ea?w=200&q=80',
+  'electrician_3': 'https://images.unsplash.com/photo-1555963966-b7ae5404b6ed?w=200&q=80',
+  'electrician_4': 'https://images.unsplash.com/photo-1635335874521-7987db781153?w=200&q=80',
+  'electrician_5': 'https://images.unsplash.com/photo-1660330589693-99889d60181e?w=200&q=80',
+  // Puncture / Tyre: flat tyre closeup, mechanic changing tyre, worn tyre, wrench beside tyre, flat tyre roadside
+  'puncture_1': 'https://images.unsplash.com/photo-1449426468159-d96dbf08f19f?w=200&q=80',
+  'puncture_2': 'https://images.unsplash.com/photo-1601739722627-f00a99138ea1?w=200&q=80',
+  'puncture_3': 'https://images.unsplash.com/photo-1596383765797-8e10e88d1590?w=200&q=80',
+  'puncture_4': 'https://images.unsplash.com/photo-1647292882945-d5c839432d7e?w=200&q=80',
+  'puncture_5': 'https://images.unsplash.com/photo-1568775376697-e16970e74861?w=200&q=80',
+  // Internet / Broadband: antenna signal bars, wifi router, network modem, router+switch, close-up wireless router
+  'internet_1': 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=200&q=80',
+  'internet_2': 'https://images.unsplash.com/photo-1645725677294-ed0843b97d5c?w=200&q=80',
+  'internet_3': 'https://images.unsplash.com/photo-1606904825846-647eb07f5be2?w=200&q=80',
+  'internet_4': 'https://images.unsplash.com/photo-1516044734145-07ca8eef8731?w=200&q=80',
+  'internet_5': 'https://images.unsplash.com/photo-1681383064412-171e5bee5f6e?w=200&q=80',
 };
 
 // ================================================================
@@ -1930,6 +1943,12 @@ class _HomeTab extends StatelessWidget {
         _buildCarServiceMegaCard(context),
         const SizedBox(height: 12),
         _buildConstructionMegaCard(context),
+        const SizedBox(height: 12),
+        _buildElectricianMegaCard(context),
+        const SizedBox(height: 12),
+        _buildPunctureMegaCard(context),
+        const SizedBox(height: 12),
+        _buildInternetMegaCard(context),
         const SizedBox(height: 12),
         _buildPrintingMegaCard(context),
         const SizedBox(height: 12),
@@ -2016,17 +2035,6 @@ class _HomeTab extends StatelessWidget {
               gradient: const [Color(0xFF2D9CDB), Color(0xFF56CCF2)],
               icon: Icons.handyman_rounded,
               onTap: () => onTileTap('homeservices'),
-            ),
-            BannerTextSlide(
-              title: 'Internet Offers 🌐',
-              subtitle: 'Fast recharge plans & broadband deals — tap to explore',
-              gradient: const [Color(0xFFFF4FA3), Color(0xFF7B2FF7)],
-              icon: Icons.wifi_rounded,
-              // FIX (per Nizam's request — "internet offer option thotta
-              // nammaloda internet option kulla poganum"): reuses the
-              // exact same _launchBroadband() flow the "Other Services"
-              // mega card's own Internet tile already calls.
-              onTap: () => onTileTap('broadband'),
             ),
             BannerTextSlide(
               title: 'Electronic Services 🔌',
@@ -2313,6 +2321,11 @@ class _HomeTab extends StatelessWidget {
         height: 44,
         fit: BoxFit.contain,
         duration: duration,
+        // FIX: categories with no dedicated 3D render yet (Electrician,
+        // Puncture, Internet as of this change) used to show a blank
+        // slot in this theme instead of the flat icon every other theme
+        // already shows — now degrades to the same defaultSlot instead.
+        fallback: defaultSlot,
       );
     }
     return defaultSlot;
@@ -2721,6 +2734,235 @@ class _HomeTab extends StatelessWidget {
                   _themedSlot(context, 'carwash', 3, const Duration(milliseconds: 2800), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.gear), SvgPicture.string(FluentEmojiFlat.nut_and_bolt)]))),
                   _themedSlot(context, 'carwash', 4, const Duration(milliseconds: 3500), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.hammer_and_wrench), SvgPicture.string(FluentEmojiFlat.wrench)]))),
                   _themedSlot(context, 'carwash', 5, const Duration(milliseconds: 3100), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.sport_utility_vehicle), SvgPicture.string(FluentEmojiFlat.oncoming_automobile)]))),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── ELECTRICIAN MEGA CARD (own standalone button, same shell as
+  // every other mega card — was previously only a small tile shared
+  // inside Other Services' row + a banner slide; promoted per Nizam's
+  // "adhukum oru main button set pannirlam, other buttons yepdi
+  // irukanumo apdi same style la" request) ──────────────────────────
+  Widget _buildElectricianMegaCard(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.push<void>(context, MaterialPageRoute<void>(builder: (_) => const HeroBookingScreen(initialCategory: 'electrician'))),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        _themedHeaderIcon(context, 'electrician', '1', SvgPicture.string(FluentEmojiFlat.high_voltage, width: 20, height: 20)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(
+                                text: context.watch<LocalizationService>().t('electrician_mega_title'),
+                                style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w800),
+                              ),
+                              TextSpan(
+                                text: ' - ${context.watch<LocalizationService>().t('electrician_mega_subtitle')}',
+                                style: GoogleFonts.outfit(color: kMuted, fontSize: 11, fontWeight: FontWeight.w500),
+                              ),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => Navigator.push<void>(context, MaterialPageRoute<void>(builder: (_) => const HeroBookingScreen(initialCategory: 'electrician'))),
+            child: Container(
+              width: double.infinity,
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _themedSlot(context, 'electrician', 1, const Duration(seconds: 3), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.high_voltage), SvgPicture.string(FluentEmojiFlat.electric_plug)]))),
+                  _themedSlot(context, 'electrician', 2, const Duration(milliseconds: 3200), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.light_bulb), SvgPicture.string(FluentEmojiFlat.electric_plug)]))),
+                  _themedSlot(context, 'electrician', 3, const Duration(milliseconds: 2800), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.gear), SvgPicture.string(FluentEmojiFlat.nut_and_bolt)]))),
+                  _themedSlot(context, 'electrician', 4, const Duration(milliseconds: 3500), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.hammer_and_wrench), SvgPicture.string(FluentEmojiFlat.wrench)]))),
+                  _themedSlot(context, 'electrician', 5, const Duration(milliseconds: 3100), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.high_voltage), SvgPicture.string(FluentEmojiFlat.light_bulb)]))),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── PUNCTURE / TYRE MEGA CARD (own standalone button) ─────────────
+  Widget _buildPunctureMegaCard(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.push<void>(context, MaterialPageRoute<void>(builder: (_) => const HeroBookingScreen(initialCategory: 'puncture'))),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        _themedHeaderIcon(context, 'puncture', '1', SvgPicture.string(FluentEmojiFlat.motorcycle, width: 20, height: 20)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(
+                                text: context.watch<LocalizationService>().t('puncture_mega_title'),
+                                style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w800),
+                              ),
+                              TextSpan(
+                                text: ' - ${context.watch<LocalizationService>().t('puncture_mega_subtitle')}',
+                                style: GoogleFonts.outfit(color: kMuted, fontSize: 11, fontWeight: FontWeight.w500),
+                              ),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => Navigator.push<void>(context, MaterialPageRoute<void>(builder: (_) => const HeroBookingScreen(initialCategory: 'puncture'))),
+            child: Container(
+              width: double.infinity,
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _themedSlot(context, 'puncture', 1, const Duration(seconds: 3), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.motorcycle), SvgPicture.string(FluentEmojiFlat.wrench)]))),
+                  _themedSlot(context, 'puncture', 2, const Duration(milliseconds: 3200), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.gear), SvgPicture.string(FluentEmojiFlat.nut_and_bolt)]))),
+                  _themedSlot(context, 'puncture', 3, const Duration(milliseconds: 2800), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.hammer_and_wrench), SvgPicture.string(FluentEmojiFlat.wrench)]))),
+                  _themedSlot(context, 'puncture', 4, const Duration(milliseconds: 3500), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.oncoming_automobile), SvgPicture.string(FluentEmojiFlat.motorcycle)]))),
+                  _themedSlot(context, 'puncture', 5, const Duration(milliseconds: 3100), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.motorcycle), SvgPicture.string(FluentEmojiFlat.gear)]))),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── INTERNET / BROADBAND MEGA CARD (own standalone button) ────────
+  Widget _buildInternetMegaCard(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const NjTechBroadbandWebView()),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        _themedHeaderIcon(context, 'internet', '1', SvgPicture.string(FluentEmojiFlat.antenna_bars, width: 20, height: 20)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(
+                                text: context.watch<LocalizationService>().t('internet_mega_title'),
+                                style: GoogleFonts.outfit(color: kText, fontSize: 13, fontWeight: FontWeight.w800),
+                              ),
+                              TextSpan(
+                                text: ' - ${context.watch<LocalizationService>().t('internet_mega_subtitle')}',
+                                style: GoogleFonts.outfit(color: kMuted, fontSize: 11, fontWeight: FontWeight.w500),
+                              ),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const NjTechBroadbandWebView()),
+            ),
+            child: Container(
+              width: double.infinity,
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kPink.withValues(alpha: 0.2), width: 1.5),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _themedSlot(context, 'internet', 1, const Duration(seconds: 3), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(seconds: 3), children: [SvgPicture.string(FluentEmojiFlat.antenna_bars), SvgPicture.string(FluentEmojiFlat.satellite_antenna)]))),
+                  _themedSlot(context, 'internet', 2, const Duration(milliseconds: 3200), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3200), children: [SvgPicture.string(FluentEmojiFlat.globe_with_meridians), SvgPicture.string(FluentEmojiFlat.satellite)]))),
+                  _themedSlot(context, 'internet', 3, const Duration(milliseconds: 2800), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 2800), children: [SvgPicture.string(FluentEmojiFlat.satellite_antenna), SvgPicture.string(FluentEmojiFlat.antenna_bars)]))),
+                  _themedSlot(context, 'internet', 4, const Duration(milliseconds: 3500), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3500), children: [SvgPicture.string(FluentEmojiFlat.globe_with_meridians), SvgPicture.string(FluentEmojiFlat.antenna_bars)]))),
+                  _themedSlot(context, 'internet', 5, const Duration(milliseconds: 3100), ClipOval(child: AutoWidgetSlider(width: 34, height: 34, duration: const Duration(milliseconds: 3100), children: [SvgPicture.string(FluentEmojiFlat.satellite), SvgPicture.string(FluentEmojiFlat.globe_with_meridians)]))),
                 ],
               ),
             ),
@@ -3144,10 +3386,12 @@ class _HomeTab extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildSmallActionTile(context, FluentEmojiFlat.antenna_bars, context.watch<LocalizationService>().t('other_internet_label'), () => onTileTap('broadband'), photoUrl: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=200&q=80'),
-                _buildSmallActionTile(context, FluentEmojiFlat.motorcycle, context.watch<LocalizationService>().t('other_puncture_label'), () => onTileTap('puncture'), photoUrl: 'https://images.unsplash.com/photo-1449426468159-d96dbf08f19f?w=200&q=80'),
+                // Electrician, Puncture & Internet used to share this
+                // row too — per Nizam's request they're now their own
+                // standalone mega-card buttons (_buildElectricianMegaCard
+                // / _buildPunctureMegaCard / _buildInternetMegaCard),
+                // same shell as every other main service button.
                 _buildSmallActionTile(context, FluentEmojiFlat.broom, context.watch<LocalizationService>().t('other_cleaning_label'), () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ComingSoonScreen(role: 'Home Cleaning'))), photoUrl: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=200&q=80'),
-                _buildSmallActionTile(context, FluentEmojiFlat.high_voltage, context.watch<LocalizationService>().t('other_electrician_label'), () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ComingSoonScreen(role: 'Electrician'))), photoUrl: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=200&q=80'),
               ],
             ),
           ),
@@ -4098,6 +4342,27 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
   @override
   void initState() {
     super.initState();
+    // FIX (Nizam: "browser link open embedded system mobile app la nalla
+    // work aguthu but pwa la page open agama error varuthu") — ROOT
+    // CAUSE: erodefiber.net's own server sends X-Frame-Options / CSP
+    // frame-ancestors headers (same caveat already documented in
+    // dmart_embedded_view_web.dart's header). Android/iOS WebView
+    // (dmart_embedded_view_native.dart) is NOT bound by those headers —
+    // that's exactly why "mobile app la nalla work aguthu" — but the
+    // PWA's <iframe> genuinely is, since it's the browser itself
+    // enforcing the site's own anti-clickjacking policy. No client-side
+    // fix can embed a page that refuses to be framed. So on web this
+    // skips the doomed iframe attempt entirely and opens the real site
+    // in a new browser tab instead — the same escape hatch
+    // dmart_screen.dart already offers as a manual button, just
+    // automatic here since the embed was never going to succeed.
+    if (kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _loading = false);
+        unawaited(_openInBrowser());
+      });
+      return;
+    }
     // The embedded view loads itself; there is no launch step to await
     // any more. The brief _loading flash is kept so the AppBar doesn't
     // pop in against an empty white frame on a slow connection.
@@ -4107,12 +4372,26 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
   }
 
   Future<void> _openInApp() async {
+    if (kIsWeb) {
+      unawaited(_openInBrowser());
+      return;
+    }
     // Reload: rebuild the embedded view from scratch by flipping back
     // to the loading state. A key change on the child forces a fresh
     // WebView/iframe rather than a same-page no-op.
     setState(() { _loading = true; _launched = false; _reloadToken++; });
     await Future<void>.delayed(const Duration(milliseconds: 120));
     if (mounted) setState(() { _loading = false; _launched = true; });
+  }
+
+  Future<void> _openInBrowser() async {
+    final uri = Uri.parse(_kBroadbandUrl);
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open Erode Fiber. Check your connection.')),
+      );
+    }
   }
 
   @override
@@ -4147,10 +4426,16 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
         ],),
         actions: [
           IconButton(
-            icon: Icon(Icons.refresh_rounded, color: kPink),
-            onPressed: _openInApp,
-            tooltip: t('reload_tooltip'),
+            icon: const Icon(Icons.open_in_new_rounded, color: Colors.white70, size: 20),
+            tooltip: 'Open in browser',
+            onPressed: _openInBrowser,
           ),
+          if (!kIsWeb)
+            IconButton(
+              icon: Icon(Icons.refresh_rounded, color: kPink),
+              onPressed: _openInApp,
+              tooltip: t('reload_tooltip'),
+            ),
         ],
       ),
       body: Center(
@@ -4162,7 +4447,45 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
                     style: GoogleFonts.outfit(
                         color: Colors.white70, fontSize: 14,),),
               ],)
-            : _launched
+            : kIsWeb
+                // erodefiber.net's own headers block being framed by any
+                // other site — see the _openInBrowser fallback in
+                // initState — so on web there is nothing to embed; this
+                // is the honest "we sent you to a new tab" state, not an
+                // error screen.
+                ? Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      const Icon(Icons.open_in_new_rounded, color: Colors.white38, size: 56),
+                      const SizedBox(height: 16),
+                      Text('Opened Erode Fiber in a new tab',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.outfit(
+                              color: Colors.white, fontSize: 18,
+                              fontWeight: FontWeight.w700,),),
+                      const SizedBox(height: 8),
+                      Text('This site can\'t be shown inside the app on web — tap below if the tab didn\'t open.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.outfit(
+                              color: Colors.white54, fontSize: 13,),),
+                      const SizedBox(height: 20),
+                      GestureDetector(
+                        onTap: _openInBrowser,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: kPink,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text('Open Erode Fiber',
+                              style: GoogleFonts.outfit(
+                                  color: Colors.white, fontSize: 14,
+                                  fontWeight: FontWeight.w700,),),
+                        ),
+                      ),
+                    ],),
+                  )
+                : _launched
                 // THE ACTUAL PAGE, in our own Scaffold.
                 //
                 // This branch used to be a dead-end placeholder — a 🌐

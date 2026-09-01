@@ -47,7 +47,7 @@
 // this file (how it sounds) and the persona text in guru_api_service
 // (what it says). Neither alone is convincing.
 import 'package:flutter/foundation.dart'
-    show debugPrint, immutable, kIsWeb, visibleForTesting;
+    show debugPrint, immutable, kIsWeb, visibleForTesting, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -301,9 +301,16 @@ class ChittiVoiceService {
   /// Configures [tts] for [locale]. Call before every `speak()` — the
   /// engine can reset between utterances on web, and on Android a
   /// language switch silently drops the selected voice.
-  static Future<void> apply(FlutterTts tts, String locale) async {
+  static Future<void> apply(FlutterTts tts, String locale, {bool forceGoogleTts = false}) async {
     await _ensureLoaded();
     await _claimSpeechChannel(tts);
+    try {
+      if (forceGoogleTts && !kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+        await tts.setEngine('com.google.android.tts');
+      }
+    } catch (e) {
+      debugPrint('[ChittiVoiceService] setEngine Google TTS failed: $e');
+    }
     final profile = _profiles[_tone] ?? _profiles[ChittiVoiceTone.chitti]!;
 
     try {
@@ -430,6 +437,10 @@ class ChittiVoiceService {
     // iOS is the one platform that reports gender honestly.
     if (gender.toLowerCase() == 'male') return true;
     if (gender.toLowerCase() == 'female') return false;
+
+    // Samsung TTS checks: 'smtf' is female, 'smtm' is male.
+    if (lower.contains('smtf')) return false;
+    if (lower.contains('smtm')) return true;
 
     // Vetoes first — see the comment on _knownFemaleCodes.
     for (final code in _knownFemaleCodes) {

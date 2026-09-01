@@ -152,7 +152,32 @@ class _TutorialVideosSectionState extends State<TutorialVideosSection> {
   /// does. Without the flag this fires on every rebuild of the stream.
   bool _warmed = false;
 
-  Query<Map<String, dynamic>> _query() {
+  /// The live query subscription, created exactly ONCE in [initState].
+  ///
+  /// BUG FOUND WHILE INVESTIGATING "hero registration screen goes blank
+  /// after filling basic details" (Aug 2026). This used to be built
+  /// inline as `stream: _query().snapshots()` directly in [build] — a
+  /// BRAND NEW Query object and a BRAND NEW Firestore listener
+  /// subscription on every single rebuild of this widget.
+  ///
+  /// hero_register_screen.dart, where this section is embedded, rebuilds
+  /// constantly and for reasons that have nothing to do with videos: GPS
+  /// position updates, the draft-save timer, the city picker, the
+  /// vehicle/skill kind toggle, checkbox taps, the "How to register"
+  /// guide's expand animation. Every one of those rebuilds was tearing
+  /// down this section's Firestore listener and opening a fresh one from
+  /// scratch — a query-and-resubscribe loop running on a hot path,
+  /// fighting the rest of the page for every frame. That is more than
+  /// enough to stall Flutter's frame pipeline on a real phone, which is
+  /// exactly the "screen shows nothing" symptom this was found from.
+  ///
+  /// A [StreamBuilder] is only safe when the `stream:` argument is
+  /// STABLE across rebuilds — building it inline is a well-known trap.
+  /// Creating the query once here and reusing the same `Stream` object
+  /// on every subsequent build is the fix.
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _stream = _query();
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _query() {
     var q = FirebaseFirestore.instance
         .collection('tutorial_videos')
         .where('audience', isEqualTo: widget.audience)
@@ -167,7 +192,7 @@ class _TutorialVideosSectionState extends State<TutorialVideosSection> {
     // permanently empty section that looks exactly like "no videos yet".
     // These lists are a handful of documents; sorting them client-side
     // below is free and cannot fail that way.
-    return q.limit(20);
+    return q.limit(20).snapshots();
   }
 
   void _warmFirst(List<TutorialVideo> videos) {
@@ -193,7 +218,9 @@ class _TutorialVideosSectionState extends State<TutorialVideosSection> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _query().snapshots(),
+      // The SAME stream instance every rebuild — see [_stream]'s doc
+      // comment for why building it inline here was the bug.
+      stream: _stream,
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox.shrink();
 

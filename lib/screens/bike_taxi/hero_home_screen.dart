@@ -37,6 +37,7 @@ import '../../services/daily_quote_service.dart';
 import '../../services/localization_service.dart';
 import '../../services/location_service.dart';
 import '../../services/service_request_service.dart';
+import '../../services/sos_dispatch_service.dart';
 import '../../services/update_service.dart';
 import '../../utils/daily_boost_messages.dart';
 import '../../widgets/stranded_orders_banner.dart';
@@ -860,9 +861,23 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         }
       });
     }
+    // FIX (Aug 29 2026 — Emergency Responder dispatch). This was
+    // `.where('status', isEqualTo: 'active')` only. Once
+    // sos_dispatch_service.dart existed and could move a doc to
+    // 'claimed' or 'escalated', that single-value filter would drop the
+    // document out of THIS SNAPSHOT ENTIRELY the moment a hero claimed
+    // it — including for the hero who just claimed it, who would lose
+    // the call/resolve/escalate UI the instant they tapped "I'm
+    // Responding". whereIn keeps every non-final state in the stream;
+    // 'resolved' is deliberately excluded — nobody needs a closed alert
+    // pushed to their client forever.
     _activeSosAlertsStream = FirebaseFirestore.instance
         .collection('sos_alerts')
-        .where('status', isEqualTo: 'active')
+        .where('status', whereIn: [
+          SosAlertStatus.active,
+          SosAlertStatus.claimed,
+          SosAlertStatus.escalated,
+        ])
         .snapshots();
     _pulseCtrl = AnimationController(
       vsync: this,
@@ -3973,7 +3988,32 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   }
 
   // ── HEADER ───────────────────────────────────────────────────
+  // EMERGENCY RESPONDER SOS DISPATCH (Aug 29 2026 — Nizam's full spec).
+  //
+  // This whole overlay used to fire for EVERY hero — bike, auto, car,
+  // any skill — the instant they were within 2km of any active SOS,
+  // with a single "Navigate to Help" button and nothing else. Nizam
+  // asked for something more specific: SOS should be the ONE thing that
+  // reaches a hero who registered specifically as "Only Emergency
+  // Manpower" (they now get NO other job pings at all — see
+  // hero_register_screen.dart's isEmergencyOnly), it should reach every
+  // one of them within 5km carrying the customer's location and phone
+  // number, the responding hero should CALL the customer to check, and
+  // if that call goes unanswered every nearby responder should be told
+  // to go and check in person.
+  //
+  // See sos_dispatch_service.dart for the claim/resolve/escalate state
+  // machine this UI drives.
   Widget _buildNearbySosOverlay() {
+    // Gate #1: only heroes who registered as Only Emergency Manpower see
+    // this at all. Every other hero type keeps working exactly as
+    // before this change — no SOS overlay, no distraction — which is
+    // the literal ask ("vera yentha disturb-um pannathu" for everyone
+    // else, not just the emergency responders).
+    if (_vehicleType != 'emergency_manpower') {
+      return const SizedBox.shrink();
+    }
+
     final heroPosition = _latestPosition;
     if (heroPosition == null) {
       return const SizedBox.shrink();
@@ -3987,8 +4027,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           return const SizedBox.shrink();
         }
 
+        final myUid = _user?.uid;
         double? nearestMeters;
-        GeoPoint? nearestLocation;
+        Map<String, dynamic>? nearestData;
         String? nearestDocId;
         final cutoff = DateTime.now().subtract(_sosAlertMaxAge);
 
@@ -3997,18 +4038,39 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             continue;
           }
 
+          final data = doc.data();
+
+          // Gate #2: which lifecycle states this hero may see this
+          // alert in. 'active' and 'escalated' are broadcast to every
+          // responder — that is the whole "yella emergency responder-
+          // kkum poganum" ask. 'resolved' is done, nobody needs it.
+          // 'claimed' is the tricky one: once ANOTHER hero has it,
+          // showing this same full-screen takeover to every other
+          // responder would have two (or ten) heroes converging on one
+          // customer while everyone assumes someone else has it
+          // covered — exactly the diffusion-of-responsibility failure a
+          // single-claim model exists to prevent. A hero only keeps
+          // seeing 'claimed' if the claim is THEIRS, so they can reach
+          // the call/resolve/escalate step below.
+          final status = data['status'] as String? ?? SosAlertStatus.active;
+          final claimedBy = data['claimedByHeroId'] as String?;
+          final visibleToMe = status == SosAlertStatus.active ||
+              status == SosAlertStatus.escalated ||
+              (status == SosAlertStatus.claimed && claimedBy == myUid);
+          if (!visibleToMe) continue;
+
           // 15-minute auto-expiry safety net (creation writes use either
           // 'timestamp' or 'createdAt' depending on which screen sent the
           // alert — read side handles both without touching the writers).
           // A still-pending serverTimestamp() resolves to null locally
           // until the server acks it — treat null as "just created" so a
           // brand-new alert never briefly vanishes from this check.
-          final rawTs = doc.data()['timestamp'] ?? doc.data()['createdAt'];
+          final rawTs = data['timestamp'] ?? data['createdAt'];
           if (rawTs is Timestamp && rawTs.toDate().isBefore(cutoff)) {
             continue;
           }
 
-          final location = doc.data()['location'];
+          final location = data['location'];
           if (location is! GeoPoint) {
             continue;
           }
@@ -4018,20 +4080,33 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             location.latitude,
             location.longitude,
           );
-          if (distanceMeters <= 2000 &&
+          // 5km, per Nizam's explicit "nearbyla 5kms kulla irukka yella
+          // emergency responder kum poganum" — widened from the old 2km
+          // that applied when every hero type shared this one overlay.
+          if (distanceMeters <= 5000 &&
               (nearestMeters == null || distanceMeters < nearestMeters)) {
             nearestMeters = distanceMeters;
-            nearestLocation = location;
+            nearestData = data;
             nearestDocId = doc.id;
           }
         }
 
-        if (nearestMeters == null || nearestLocation == null || nearestDocId == null) {
+        if (nearestMeters == null || nearestData == null || nearestDocId == null) {
           return const SizedBox.shrink();
         }
 
         final distanceKm = nearestMeters / 1000;
-        final dismissId = nearestDocId;
+        final alertId = nearestDocId;
+        final location = nearestData['location'] as GeoPoint;
+        final status =
+            nearestData['status'] as String? ?? SosAlertStatus.active;
+        final isMine =
+            status == SosAlertStatus.claimed &&
+                nearestData['claimedByHeroId'] == myUid;
+        final customerName = (nearestData['userName'] as String?)?.trim();
+        final customerPhone = (nearestData['userPhone'] as String?)?.trim();
+        final escalatedCount = (nearestData['escalatedCount'] as num?)?.toInt() ?? 0;
+
         return Positioned.fill(
           child: ColoredBox(
             color: const Color(0xE6B00020),
@@ -4048,7 +4123,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                     ),
                     const SizedBox(height: 18),
                     Text(
-                      'EMERGENCY SOS NEARBY!',
+                      isMine
+                          ? "YOU'RE RESPONDING"
+                          : 'EMERGENCY SOS NEARBY!',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.outfit(
                         color: Colors.white,
@@ -4059,7 +4136,11 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'A user needs immediate help!',
+                      isMine
+                          ? 'Call ${customerName?.isNotEmpty == true ? customerName : 'the customer'} to check what happened.'
+                          : (escalatedCount > 0
+                              ? "Previous responder couldn't reach them — please help."
+                              : 'A user needs immediate help!'),
                       textAlign: TextAlign.center,
                       style: GoogleFonts.outfit(
                         color: Colors.white,
@@ -4087,47 +4168,147 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                       ),
                     ),
                     const SizedBox(height: 24),
-                    FilledButton.icon(
-                      onPressed: () =>
-                          unawaited(_navigateToSosLocation(nearestLocation!)),
-                      icon: const Icon(Icons.navigation_rounded),
-                      label: const Text('Navigate to Help'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: const Color(0xFFB00020),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 28,
-                          vertical: 16,
+                    if (isMine) ...[
+                      // CLAIMED BY ME — call the customer, then say what
+                      // happened. No dismiss button here: this hero
+                      // committed to this one by claiming it, so the
+                      // only ways out are actually resolving it.
+                      FilledButton.icon(
+                        onPressed: (customerPhone == null || customerPhone.isEmpty)
+                            ? null
+                            : () => unawaited(_callSosCustomer(customerPhone)),
+                        icon: const Icon(Icons.call_rounded),
+                        label: Text(
+                          customerPhone == null || customerPhone.isEmpty
+                              ? 'No phone number on file'
+                              : 'Call $customerPhone',
                         ),
-                        textStyle: GoogleFonts.outfit(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextButton(
-                      onPressed: () {
-                        if (mounted) {
-                          setState(() => _dismissedSosIds.add(dismissId));
-                        }
-                      },
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 10,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFFB00020),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 28,
+                            vertical: 16,
+                          ),
+                          textStyle: GoogleFonts.outfit(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
                       ),
-                      child: Text(
-                        "OK, I've seen it",
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            unawaited(_navigateToSosLocation(location)),
+                        icon: const Icon(Icons.navigation_rounded, color: Colors.white),
+                        label: const Text('Navigate there'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'After you speak to them:',
                         style: GoogleFonts.outfit(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          decoration: TextDecoration.underline,
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: _sosActionBusy
+                                  ? null
+                                  : () => unawaited(_resolveSosNoProblem(alertId)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(color: Colors.white54),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              child: Text(
+                                "No problem —\nclose",
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.outfit(fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: _sosActionBusy
+                                  ? null
+                                  : () => unawaited(_escalateSosNoAnswer(alertId)),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: const Color(0xFFB00020),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              child: Text(
+                                'No answer —\nnotify others',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.outfit(fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      // NOT YET CLAIMED — first responder wins, exactly
+                      // like accepting a ride. Every other Emergency
+                      // Responder within 5km sees this identical banner
+                      // at the same time.
+                      FilledButton.icon(
+                        onPressed: _sosActionBusy
+                            ? null
+                            : () => unawaited(_claimSos(alertId)),
+                        icon: const Icon(Icons.pan_tool_alt_rounded),
+                        label: const Text("I'm Responding"),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFFB00020),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 28,
+                            vertical: 16,
+                          ),
+                          textStyle: GoogleFonts.outfit(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: () {
+                          if (mounted) {
+                            setState(() => _dismissedSosIds.add(alertId));
+                          }
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 10,
+                          ),
+                        ),
+                        child: Text(
+                          "OK, I've seen it",
+                          style: GoogleFonts.outfit(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     Text(
                       'Stay safe. Call police/100 if required.',
@@ -4145,6 +4326,74 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         );
       },
     );
+  }
+
+  /// Guards the claim/resolve/escalate buttons against a double-tap
+  /// firing two transactions/writes for the same alert.
+  bool _sosActionBusy = false;
+
+  Future<void> _claimSos(String alertId) async {
+    final user = _user;
+    if (user == null || _sosActionBusy) return;
+    setState(() => _sosActionBusy = true);
+    try {
+      final phone = await _resolveHeroPhone(user);
+      final won = await SosDispatchService.instance.claim(
+        alertId: alertId,
+        heroId: user.uid,
+        heroName: _captainName,
+        heroPhone: phone,
+      );
+      if (!won && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Another responder already has this one.'),
+            backgroundColor: Color(0xFFB00020),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sosActionBusy = false);
+    }
+  }
+
+  Future<void> _callSosCustomer(String phone) async {
+    final uri = Uri.parse('tel:$phone');
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      debugPrint('[HeroHome] SOS call launch failed: $phone');
+    }
+  }
+
+  Future<void> _resolveSosNoProblem(String alertId) async {
+    final user = _user;
+    if (user == null || _sosActionBusy) return;
+    setState(() => _sosActionBusy = true);
+    try {
+      await SosDispatchService.instance.resolveNoProblem(
+        alertId: alertId,
+        heroId: user.uid,
+      );
+    } finally {
+      if (mounted) setState(() => _sosActionBusy = false);
+    }
+  }
+
+  Future<void> _escalateSosNoAnswer(String alertId) async {
+    if (_sosActionBusy) return;
+    setState(() => _sosActionBusy = true);
+    try {
+      await SosDispatchService.instance.escalateNoAnswer(alertId: alertId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Notified every nearby Emergency Responder.'),
+            backgroundColor: Color(0xFFB00020),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sosActionBusy = false);
+    }
   }
 
   Widget _buildHeroSosButton() {
@@ -5025,9 +5274,36 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                                 Positioned.fill(
                                   child: LayoutBuilder(
                                     builder: (_, constraints) {
-                                      final diameter = constraints.maxWidth < constraints.maxHeight
+                                      final rawDiameter = constraints.maxWidth < constraints.maxHeight
                                           ? constraints.maxWidth
                                           : constraints.maxHeight;
+                                      // FIX (Aug 31 2026 — "hero main
+                                      // screen blank, radar animation
+                                      // doesn't show"). Same root cause
+                                      // already found and fixed on the
+                                      // registration form's category
+                                      // grid: a LayoutBuilder nested this
+                                      // deep (Positioned.fill inside a
+                                      // Stack inside a StreamBuilder) can
+                                      // report a transient zero (or
+                                      // NaN/negative) constraint before
+                                      // its ancestors have finished
+                                      // sizing. _RadarPainter builds a
+                                      // SweepGradient shader sized off
+                                      // this exact diameter — CanvasKit
+                                      // throws "Null check operator used
+                                      // on a null value" out of its own
+                                      // gradient-shader code for a
+                                      // degenerate (zero-area) rect, on
+                                      // every repaint attempt, which is
+                                      // what turns one bad frame into a
+                                      // permanently blank, unresponsive
+                                      // screen rather than a one-frame
+                                      // glitch. A floor identical in
+                                      // spirit to the one on the
+                                      // registration screen closes it.
+                                      final diameter =
+                                          rawDiameter < 40.0 ? 40.0 : rawDiameter;
                                       return Center(
                                         child: SizedBox(
                                           width: diameter,
@@ -6837,6 +7113,23 @@ class _RadarPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // FIX (Aug 31 2026 — "hero main screen blank"). Second, independent
+    // layer of the same fix as the LayoutBuilder floor above this
+    // painter's caller: whatever upstream widget sizing produced this
+    // `size`, if it is degenerate (zero or negative on either axis) the
+    // SweepGradient shader built below would get an equally degenerate
+    // bounding Rect, and CanvasKit's gradient-shader code throws a raw
+    // "Null check operator used on a null value" for that — inside the
+    // rendering engine's own paint call, not catchable Dart code, and
+    // it refires on every single repaint attempt. That turned one bad
+    // frame into a permanently blank, unresponsive screen once before
+    // (the registration form's category grid); skipping the paint
+    // entirely for a canvas that isn't a real size closes the same
+    // failure mode here, independent of whether the LayoutBuilder floor
+    // above ever gets bypassed by some layout path this painter can't
+    // see.
+    if (size.width <= 0 || size.height <= 0) return;
+
     final center = Offset(size.width / 2, size.height / 2);
     final maxRadius = math.min(size.width, size.height) * 0.42;
 

@@ -24,6 +24,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
@@ -152,6 +153,32 @@ class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
       }
     });
 
+    // FIX (Aug 29 2026 — Nizam: "youtube reels ooduramari full screen la
+    // play pannamudiyuma"). "Reels-style" means portrait fullscreen —
+    // the video fills the vertical screen in place, no device rotation.
+    // An earlier pass here mistakenly rotated to landscape instead (that
+    // is classic-YouTube fullscreen, not Reels/Shorts), which is also
+    // exactly what produced the broken floating-video glitch: the app's
+    // Activity is portrait-locked in AndroidManifest.xml, and fighting
+    // that lock mid-transition is what left the player stuck in a
+    // half-resized state instead of properly filling the screen.
+    //
+    // The player's own fullscreen sizing already reads
+    // MediaQuery.sizeOf(context) (see youtube_player_iframe's
+    // youtube_player.dart), so it fills whatever the CURRENT screen size
+    // is — portrait included. No orientation change is needed at all;
+    // only the system status/nav bars are hidden for the immersive
+    // Reels look, exactly like the else-branch's portrait but with
+    // system chrome tucked away.
+    _controller.setFullScreenListener((isFullscreen) {
+      SystemChrome.setPreferredOrientations(
+        const [DeviceOrientation.portraitUp],
+      );
+      SystemChrome.setEnabledSystemUIMode(
+        isFullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+      );
+    });
+
     // One frame after the modal has settled, not during its entrance
     // animation. Starting mid-animation is the thing being fixed.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -174,6 +201,14 @@ class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
   @override
   void dispose() {
     unawaited(_stateSub?.cancel());
+    // Safety net: if the sheet is dismissed (back gesture, swipe) while
+    // still in fullscreen, the exit-fullscreen branch of the listener
+    // above never runs. Without this the app would be stuck accepting
+    // landscape and hiding system bars on every OTHER screen too.
+    SystemChrome.setPreferredOrientations(
+      const [DeviceOrientation.portraitUp],
+    );
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     // release(), not close(): a borrowed player is paused and kept so
     // reopening the same video costs nothing. A player we built
     // ourselves is closed by release() on our behalf.

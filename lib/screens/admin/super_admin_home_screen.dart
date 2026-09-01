@@ -15,13 +15,17 @@ import '../../services/db_usage_tracker.dart';
 import '../../services/pwa_cache_platform_stub.dart'
     if (dart.library.html) '../../services/pwa_cache_platform_web.dart';
 import '../../services/service_requests_listener.dart';
+import '../../services/sos_dispatch_service.dart';
 import '../../services/web_version_checker.dart';
+import '../../services/chitti_overlay_service.dart';
+import '../../services/guru_overlay_service.dart';
 import '../../services/map_simulation_service.dart';
 import '../../widgets/download_app_banner.dart';
 import 'admin_ai_settings_screen.dart';
 import 'admin_cloudinary_dashboard_screen.dart';
 import 'admin_dashboard_screen.dart';
 import 'admin_food_orders_screen.dart';
+import 'admin_gift_coupons_screen.dart';
 import 'admin_orders_cleanup_screen.dart';
 import 'admin_affiliate_leads_screen.dart';
 import 'admin_affiliate_qr_screen.dart';
@@ -126,9 +130,19 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
         onError: (Object e) {
       debugPrint('[SuperAdminHome] Alert listener error: $e');
     },);
+    // FIX (Aug 29 2026 — Emergency Responder dispatch): matches the
+    // identical fix on hero_home_screen.dart's own SOS stream. An
+    // emergency that a hero has claimed and is actively calling the
+    // customer about is not resolved — admin's live SOS badge should
+    // keep counting it, not drop it the instant a hero says "I'm
+    // Responding".
     _sosAlertsStream = FirebaseFirestore.instance
         .collection('sos_alerts')
-        .where('status', isEqualTo: 'active')
+        .where('status', whereIn: [
+          SosAlertStatus.active,
+          SosAlertStatus.claimed,
+          SosAlertStatus.escalated,
+        ])
         .snapshots();
 
     // DB usage monitor — side-channel count, shares the same
@@ -137,6 +151,14 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
         .recordRead(s.docs.length, 'admin_home_waiting_requests'));
     _sosAlertsStream.listen((s) => DbUsageTracker.instance
         .recordRead(s.docs.length, 'admin_home_sos_alerts'));
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ChittiOverlayService.instance.show(
+        context,
+        onTapChitti: () => GuruOverlayService.instance.show(autoStartMic: true),
+      );
+    });
   }
 
   @override
@@ -312,50 +334,166 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
           index: _tabIndex,
           children: [
             _buildOverviewTab(context),
-            if (_visitedTabs.contains(1)) const AdminServiceRequestsScreen(
-                    key: ValueKey('hero_tab'),
-                    requestType: 'hero_booking',
-                    title: 'Hero Booking Status',
-                  ) else const SizedBox.shrink(),
-            if (_visitedTabs.contains(2)) const AdminServiceRequestsScreen(
-                    key: ValueKey('electronics_tab'),
-                    requestType: 'electronics_service',
-                    title: 'Electronics Booking',
-                  ) else const SizedBox.shrink(),
-            // NEW (per Nizam's request): 4th tab — one-time customer SOS
-            // KYC verification queue. Same lazy-mount pattern as Hero/
-            // Electronics above (only mounts, and only starts its
-            // listener, once the admin actually taps this tab).
-            if (_visitedTabs.contains(3)) const AdminSosKycApprovalsScreen(key: ValueKey('cus_sos_tab')) else const SizedBox.shrink(),
-            // NEW (per Nizam's request): 5th tab — Food Orders. Same
-            // lazy-mount pattern as every other tab here (only builds,
-            // and only fires its first manual fetch, once the admin
-            // actually taps this tab).
-            if (_visitedTabs.contains(4)) const AdminFoodOrdersScreen(key: ValueKey('food_orders_tab')) else const SizedBox.shrink(),
-            // FIX (pipeline audit, per Nizam's request): custom_order and
-            // grocery_order service_requests had NO live admin tab at
-            // all -- unlike hero_booking/electronics_service above, a
-            // normal accepted/in-progress/completed request of these two
-            // types was invisible to admin oversight; it only ever
-            // surfaced via admin_new_orders_screen.dart's escalation
-            // queue (timed-out or manually-assigned requests only). Same
-            // lazy-mount pattern, same reused AdminServiceRequestsScreen
-            // widget as the Hero/Electronics tabs -- no new plumbing.
-            if (_visitedTabs.contains(5)) const AdminServiceRequestsScreen(
-                    key: ValueKey('custom_order_tab'),
-                    requestType: 'custom_order',
-                    title: 'Custom Orders',
-                  ) else const SizedBox.shrink(),
-            if (_visitedTabs.contains(6)) const AdminServiceRequestsScreen(
-                    key: ValueKey('grocery_order_tab'),
-                    requestType: 'grocery_order',
-                    title: 'Grocery Orders',
-                  ) else const SizedBox.shrink(),
+            // UI REORG (per Nizam's request, Aug 31 2026): Hero,
+            // Electronics, SOS Verify, Food Orders, Custom and Grocery
+            // used to each be their own always-mounted bottom-nav tab —
+            // 7 tabs total made the bar cramped and buried the thing
+            // admin actually wanted one tap away (Chitti AI Config).
+            // They're now reached via tiles on this single "Services"
+            // tab (pushed on tap, not tabbed) — same screens, same
+            // badges, zero backend/data changes, just a navigation
+            // reshuffle. See _buildServicesTab below.
+            _buildServicesTab(context),
+            // NEW (per Nizam's request): Chitti AI Configuration is now
+            // a direct bottom-nav tab instead of a Drawer -> AI Settings
+            // scroll-down button — "udane access pannamudila" (couldn't
+            // get to it instantly). Same lazy-mount-once-visited pattern
+            // as the old per-type tabs above.
+            if (_visitedTabs.contains(2)) const AdminAiSettingsScreen(key: ValueKey('chitti_ai_tab')) else const SizedBox.shrink(),
           ],
         ),
       ),
       bottomNavigationBar: _buildBottomNav(),
       ),
+    );
+  }
+
+  // NEW (per Nizam's request, Aug 31 2026): "Services" tab — Hero,
+  // Electronics, SOS Verify, Food Orders, Custom and Grocery tiles in
+  // one place, one tap off the bottom nav (index 1). Reuses the exact
+  // same screens and live waiting-count badges the old per-type tabs
+  // used, just pushed via Navigator instead of kept always-mounted in
+  // the IndexedStack — pure navigation change, no backend/data touched.
+  Widget _buildServicesTab(BuildContext context) {
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+            child: Text(
+              'SERVICES',
+              style: TextStyle(
+                color: _text.withValues(alpha: 0.5),
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+          sliver: SliverList.list(
+            children: [
+              _AdminReviewBadgeWrapper(
+                waitingStream: _waitingRequestsStream,
+                child: _ManageTile(
+                  label: 'Hero Booking Status',
+                  subtitle: 'Every Hero Booking request',
+                  iconSvg: FluentEmojiFlat.man_superhero,
+                  color: _orange,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AdminServiceRequestsScreen(
+                        requestType: 'hero_booking',
+                        title: 'Hero Booking Status',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              _AdminReviewBadgeWrapper(
+                waitingStream: _waitingRequestsStream,
+                child: _ManageTile(
+                  label: 'Electronics Booking',
+                  subtitle: 'Every electronics enquiry',
+                  iconSvg: FluentEmojiFlat.mobile_phone,
+                  color: _orange,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AdminServiceRequestsScreen(
+                        requestType: 'electronics_service',
+                        title: 'Electronics Booking',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // FIX (UI reorg, Aug 31 2026): was wrapped in
+              // _AdminReviewBadgeWrapper, which only counts docs with
+              // status=='admin_review' — but _sosKycWaitingStream
+              // already queries status=='pending' (see initState), so
+              // that wrapper's count was silently always 0 and this
+              // tile's badge could never show. _SosKycTile counts the
+              // stream's docs directly instead.
+              _SosKycTile(
+                waitingStream: _sosKycWaitingStream,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AdminSosKycApprovalsScreen(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              _ManageTile(
+                label: 'Food Orders',
+                subtitle: 'Review and manage food orders',
+                iconSvg: FluentEmojiFlat.takeout_box,
+                color: _orange,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AdminFoodOrdersScreen(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              _AdminReviewBadgeWrapper(
+                waitingStream: _waitingRequestsStream,
+                child: _ManageTile(
+                  label: 'Custom Orders',
+                  subtitle: 'Review custom order requests',
+                  iconSvg: FluentEmojiFlat.shopping_bags,
+                  color: _orange,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AdminServiceRequestsScreen(
+                        requestType: 'custom_order',
+                        title: 'Custom Orders',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              _AdminReviewBadgeWrapper(
+                waitingStream: _waitingRequestsStream,
+                child: _ManageTile(
+                  label: 'Grocery Orders',
+                  subtitle: 'Review DMart cart screenshots, assign heroes',
+                  iconSvg: FluentEmojiFlat.shopping_cart,
+                  color: _orange,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AdminServiceRequestsScreen(
+                        requestType: 'grocery_order',
+                        title: 'Grocery Orders',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -380,78 +518,18 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
   // Same visual convention as dashboard_screen.dart's _buildBottomNav:
   // Row of InkWell icon+label items, active one highlighted.
   Widget _buildBottomNav() {
-    // FIX (pipeline audit): added `materialIcon` so the two new tabs
-    // below don't have to fake an SvgPicture.string('') (which would
-    // render nothing/error) just to reuse this record shape. Existing
-    // items are untouched functionally -- materialIcon: null on all of
-    // them just means "fall through to the old isSos/isFoodOrders/svg
-    // chain", exactly as before.
-    final List<({String icon, String label, String? requestType, bool isSos, bool isFoodOrders, IconData? materialIcon})> items = [
-      (icon: FluentEmojiFlat.bar_chart, label: 'Overview', requestType: null, isSos: false, isFoodOrders: false, materialIcon: null),
-      (
-        icon: FluentEmojiFlat.man_superhero,
-        label: 'Hero',
-        requestType: 'hero_booking',
-        isSos: false,
-        isFoodOrders: false,
-        materialIcon: null,
-      ),
-      (
-        icon: FluentEmojiFlat.mobile_phone,
-        label: 'Electronics',
-        requestType: 'electronics_service',
-        isSos: false,
-        isFoodOrders: false,
-        materialIcon: null,
-      ),
-      // NEW (per Nizam's request): 4th tab for one-time customer SOS
-      // KYC verification. Separate badge source (sos_kyc_requests, not
-      // service_requests) — see isSos branch below. Uses a plain
-      // Material icon (not FluentEmojiFlat) below since this is the
-      // only tab whose icon isn't a pre-existing, already-confirmed-
-      // valid FluentEmojiFlat SVG string constant.
-      (
-        icon: '',
-        label: 'SOS Verify',
-        requestType: null,
-        isSos: true,
-        isFoodOrders: false,
-        materialIcon: null,
-      ),
-      // NEW (per Nizam's request): 5th tab — Food Orders management.
-      // Deliberately requestType: null (no live "new booking" badge
-      // stream attached) — AdminFoodOrdersScreen itself is a manual
-      // "tap refresh" report, not a live listener, per the explicit
-      // "auto listener oodama reload button vacharlam" instruction, so
-      // this tab shouldn't imply live push notifications either.
-      (
-        icon: '',
-        label: 'Food Orders',
-        requestType: null,
-        isSos: false,
-        isFoodOrders: true,
-        materialIcon: null,
-      ),
-      // NEW (pipeline audit fix): 6th/7th tabs -- custom_order and
-      // grocery_order previously had no live badge/oversight anywhere in
-      // admin. requestType set (not null) so the same _NavWaitingDot
-      // badge stream used by Hero/Electronics above applies here too.
-      (
-        icon: '',
-        label: 'Custom',
-        requestType: 'custom_order',
-        isSos: false,
-        isFoodOrders: false,
-        materialIcon: Icons.shopping_bag_rounded,
-      ),
-      (
-        icon: '',
-        label: 'Grocery',
-        requestType: 'grocery_order',
-        isSos: false,
-        isFoodOrders: false,
-        materialIcon: Icons.local_grocery_store_rounded,
-      ),
+    // UI REORG (per Nizam's request, Aug 31 2026): "backend maarama quick
+    // access pandratha" — collapsed the old 7-tab bar (Overview, Hero,
+    // Electronics, SOS Verify, Food Orders, Custom, Grocery) down to 3:
+    // Overview, Services (tiles for those 6, see _buildServicesTab) and
+    // Chitti AI Config (one tap, was buried in AI Settings scroll
+    // before). isServicesAggregate replaces the old per-type
+    // requestType/isSos/isFoodOrders dots with one combined "something
+    // needs review" dot on the Services tab itself.
+    final List<({String icon, String label, bool isServicesAggregate, IconData? materialIcon})> items = [
+      (icon: FluentEmojiFlat.bar_chart, label: 'Overview', isServicesAggregate: false, materialIcon: null),
+      (icon: '', label: 'Services', isServicesAggregate: true, materialIcon: Icons.apps_rounded),
+      (icon: '', label: 'Chitti AI', isServicesAggregate: false, materialIcon: Icons.smart_toy_rounded),
     ];
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -487,29 +565,16 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                             child: item.materialIcon != null
                                 ? Icon(item.materialIcon,
                                     color: active ? _gold : _text.withValues(alpha: 0.55), size: 22,)
-                                : item.isSos
-                                    ? Icon(Icons.sos_rounded,
-                                        color: active ? _gold : _text.withValues(alpha: 0.55), size: 22,)
-                                    : item.isFoodOrders
-                                        ? Icon(Icons.restaurant_menu_rounded,
-                                            color: active ? _gold : _text.withValues(alpha: 0.55), size: 22,)
-                                        : SvgPicture.string(item.icon),
+                                : SvgPicture.string(item.icon),
                           ),
                         ),
-                        if (item.requestType != null)
+                        if (item.isServicesAggregate)
                           Positioned(
                             top: -4,
                             right: -8,
-                            child: _NavWaitingDot(
-                                requestType: item.requestType!,
-                                waitingStream: _waitingRequestsStream,),
-                          ),
-                        if (item.isSos)
-                          Positioned(
-                            top: -4,
-                            right: -8,
-                            child: _SosKycWaitingDot(
-                                waitingStream: _sosKycWaitingStream,),
+                            child: _ServicesAggregateWaitingDot(
+                                waitingStream: _waitingRequestsStream,
+                                sosKycWaitingStream: _sosKycWaitingStream,),
                           ),
                       ],
                     ),
@@ -748,16 +813,18 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
           // this Manage section now holds only Taxi & Transportation.
           const SizedBox(height: 10),
           // NEW (per Nizam's request): a direct "Grocery Orders" entry
-          // point right on the Overview page, on top of the existing
-          // Grocery bottom-nav tab (index 6) — this is the tab admins
-          // need most now that the DMart-screenshot workflow depends on
-          // them reviewing uploaded cart photos quickly, so it shouldn't
-          // require hunting through the bottom bar. Jumps to the SAME
-          // already-mounted AdminServiceRequestsScreen tab via _goToTab
-          // rather than pushing a second copy of it. Uses the confirmed-
-          // safe FluentEmojiFlat.shopping_cart constant (already in use
-          // elsewhere in this codebase, see dashboard_screen.dart) since
-          // _ManageTile only renders an SVG string icon.
+          // point right on the Overview page, on top of the Grocery tile
+          // on the Services tab — this is the screen admins need most
+          // now that the DMart-screenshot workflow depends on them
+          // reviewing uploaded cart photos quickly, so it shouldn't
+          // require hunting through Services first.
+          // FIX (UI reorg, Aug 31 2026): was `_goToTab(6)`, jumping to a
+          // fixed IndexedStack slot that held the always-mounted Grocery
+          // tab. That slot no longer exists (bottom nav collapsed to 3
+          // tabs — Overview/Services/Chitti AI, see _buildBottomNav) so
+          // this would have thrown a RangeError the first time an admin
+          // tapped it. Pushes the same screen the Services tab's Grocery
+          // tile pushes instead.
           _AdminReviewBadgeWrapper(
             waitingStream: _waitingRequestsStream,
             child: _ManageTile(
@@ -765,7 +832,34 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
               subtitle: 'Review DMart cart screenshots, assign heroes',
               iconSvg: FluentEmojiFlat.shopping_cart,
               color: _orange,
-              onTap: () => _goToTab(6),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => const AdminServiceRequestsScreen(
+                    requestType: 'grocery_order',
+                    title: 'Grocery Orders',
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          // NEW (per Nizam's placement choice): Gift Coupons. A coupon
+          // is minted automatically every time a customer pays for a
+          // service (onServicePaidCreateCoupon), and stays sealed until
+          // an admin decides what's inside — so this is a queue that
+          // needs working daily, which is why it sits on Overview
+          // rather than being buried in the drawer.
+          _ManageTile(
+            label: 'Gift Coupons',
+            subtitle: 'Set the gift inside customers’ scratch cards',
+            iconSvg: FluentEmojiFlat.wrapped_gift,
+            color: const Color(0xFFFFC107),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminGiftCouponsScreen(),
+              ),
             ),
           ),
         ],
@@ -1367,61 +1461,14 @@ class _ManageTile extends StatelessWidget {
   }
 }
 
-// Small red dot for the bottom-nav Hero/Electronics tabs — same
-// waiting-count query as _WaitingBadge, but rendered as a compact dot
-// (no room for "N waiting" text at nav-bar icon size).
-class _NavWaitingDot extends StatelessWidget {
-  final String requestType;
+// NEW (UI reorg, Aug 31 2026): "SOS Verify" tile for the Services tab
+// — same _ManageTile visual, but with its own badge source
+// (sos_kyc_requests, not service_requests), so it can't reuse
+// _AdminReviewBadgeWrapper (which reads a different field/collection).
+class _SosKycTile extends StatelessWidget {
   final Stream<QuerySnapshot<Map<String, dynamic>>> waitingStream;
-  const _NavWaitingDot({required this.requestType, required this.waitingStream});
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: waitingStream,
-      builder: (context, snapshot) {
-        final count = snapshot.data?.docs
-                .where((d) => d.data()['requestType'] == requestType)
-                .length ??
-            0;
-        if (count == 0) return const SizedBox.shrink();
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-          constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFF1744),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: const Color(0xFF12121E), width: 1.5),
-          ),
-          child: Text(
-            count > 9 ? '9+' : '$count',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800,),
-          ),
-        );
-      },
-    );
-  }
-
-  @override
-  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
-    super.debugFillProperties(properties);
-    properties.add(StringProperty('requestType', requestType));
-    properties.add(DiagnosticsProperty<Stream<QuerySnapshot<Map<String, dynamic>>>>('waitingStream', waitingStream));
-  }
-}
-
-// Live pending-count dot for the Cus SOS tab — separate collection
-// (sos_kyc_requests) from the service_requests-based badges above.
-// Stream is sourced from the parent's cached _sosKycWaitingStream field
-// (created once in initState()), same pattern as _NavWaitingDot /
-// _AdminReviewBadgeWrapper, so this widget no longer opens its own
-// listener on every parent rebuild.
-class _SosKycWaitingDot extends StatelessWidget {
-  final Stream<QuerySnapshot<Map<String, dynamic>>> waitingStream;
-
-  const _SosKycWaitingDot({required this.waitingStream});
+  final VoidCallback onTap;
+  const _SosKycTile({required this.waitingStream, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1429,20 +1476,80 @@ class _SosKycWaitingDot extends StatelessWidget {
       stream: waitingStream,
       builder: (context, snapshot) {
         final count = snapshot.data?.docs.length ?? 0;
-        if (count == 0) return const SizedBox.shrink();
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-          constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFF1744),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: const Color(0xFF12121E), width: 1.5),
-          ),
-          child: Text(
-            count > 9 ? '9+' : '$count',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800),
-          ),
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            _ManageTile(
+              label: 'SOS Verify',
+              subtitle: 'One-time customer SOS KYC verification',
+              iconSvg: FluentEmojiFlat.police_car_light,
+              color: const Color(0xFFFF1744),
+              onTap: onTap,
+            ),
+            if (count > 0)
+              Positioned(
+                top: -6,
+                right: -6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF1744),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: const Color(0xFF0A0A12), width: 2),
+                  ),
+                  constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+                  child: Text(
+                    count > 9 ? '9+' : '$count',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// NEW (UI reorg, Aug 31 2026): one combined nav-bar dot for the
+// "Services" tab, replacing the old per-tab _NavWaitingDot/
+// _SosKycWaitingDot dots that used to sit on 6 separate tabs. Lights
+// up if EITHER stream has anything waiting, so admin still gets the
+// "something needs a look" signal without those tabs being visible on
+// the bottom bar any more.
+class _ServicesAggregateWaitingDot extends StatelessWidget {
+  final Stream<QuerySnapshot<Map<String, dynamic>>> waitingStream;
+  final Stream<QuerySnapshot<Map<String, dynamic>>> sosKycWaitingStream;
+  const _ServicesAggregateWaitingDot({required this.waitingStream, required this.sosKycWaitingStream});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: waitingStream,
+      builder: (context, waitingSnap) {
+        final waitingCount = waitingSnap.data?.docs.length ?? 0;
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: sosKycWaitingStream,
+          builder: (context, sosSnap) {
+            final sosCount = sosSnap.data?.docs.length ?? 0;
+            final total = waitingCount + sosCount;
+            if (total == 0) return const SizedBox.shrink();
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF1744),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: const Color(0xFF12121E), width: 1.5),
+              ),
+              child: Text(
+                total > 9 ? '9+' : '$total',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800),
+              ),
+            );
+          },
         );
       },
     );

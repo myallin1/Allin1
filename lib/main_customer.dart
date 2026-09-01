@@ -127,9 +127,13 @@ Future<void> _ensureFirebaseInitialized() async {
     return;
   }
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    if (kIsWeb) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.web,
+      );
+    } else {
+      await Firebase.initializeApp();
+    }
     // Enable Firestore offline persistence on web (PWA). Mobile
     // (Android/iOS) already has persistence on by default.
     if (kIsWeb) {

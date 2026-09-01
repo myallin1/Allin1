@@ -38,7 +38,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image/image.dart' as img;
@@ -50,6 +53,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/ai_activation_service.dart';
 import '../services/chitti_chat_history_service.dart';
 import '../services/chitti/chitti_action_executor.dart';
+import '../services/chitti/chitti_screen_advisor.dart';
 import '../services/chitti/chitti_conversation_controller.dart';
 import 'mobiles/listing_video_player.dart';
 import '../services/chitti/chitti_backup_service.dart';
@@ -67,6 +71,7 @@ import '../services/guru_api_service.dart';
 import '../services/guru_suggestion_parser.dart';
 import '../services/localization_service.dart';
 import '../widgets/chitti_history_sheet.dart';
+import '../widgets/chitti_typewriter_text.dart';
 import '../widgets/ai_loading_dialog.dart';
 // NEW (CTO mandate — AI Autonomous App Updating): reuses the exact same
 // web-only cache-clear-and-cache-busted-reload path dashboard_screen.dart's
@@ -381,6 +386,20 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
           await _tts.stop();
         }
         if (_conversation.afterSpeaking() == ChittiConversationStep.listen) {
+          if (_conversation.hasPendingTopic) {
+            final pending = _conversation.popPendingTopic();
+            if (pending != null && mounted) {
+              final isTamil = context.read<LocalizationService>().languageCode == 'ta';
+              final bridgeText = isTamil
+                  ? "பாஸ், நீங்க பேசும்போது இன்னொன்னு கேட்டீங்களே: '${pending.text}' — அதை இப்போ பார்க்கிறேன்..."
+                  : "Boss, you also asked: '${pending.text}' — checking that now...";
+              setState(() {
+                _messages.add(_GuruMessage(role: 'assistant', text: bridgeText));
+              });
+              unawaited(_sendMessage(pending.text));
+              return;
+            }
+          }
           unawaited(_resumeConversationListening());
         }
         return;
@@ -675,7 +694,17 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
         languageCode: _languageCodeOrEnglish(),
         saying: result.text,
       );
-      final text = quip == null ? result.text : '${result.text} $quip';
+      // The other half of that gate (Aug 29 2026 — Nizam:
+      // "customeroda sogam feelinglam purinjukuttu behave pandra
+      // buddy"): where the joke gate goes silent, this fills in with
+      // warmth instead — a setback still gets acknowledged, never a
+      // real emergency.
+      final comfort = quip ??
+          ChittiBuddy.comfortAfterSetback(
+            languageCode: _languageCodeOrEnglish(),
+            saying: result.text,
+          );
+      final text = comfort == null ? result.text : '${result.text} $comfort';
       setState(() {
         _messages.add(
           _GuruMessage(
@@ -725,7 +754,48 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
           ChittiNav.routeForBuilder<void>(open, result.openScreenLabel),
         ),
       );
+      // NEW (Aug 29 2026 — Nizam: "AI kita command kuduththa antha
+      // page ku konduvanthu vittaan, athukapram andha page la yenna
+      // pannanum nu next step kettu guidance pannamattranga").
+      //
+      // ChittiScreenAdvisor already existed to answer exactly this —
+      // it reads the live screen (blank fields, buttons, a "GPS slow,
+      // set pickup manually" banner) and turns it into a real next
+      // step. It was only ever wired to fire when the customer
+      // explicitly ASKED "what is this page" — never automatically
+      // after Chitti's OWN navigation, which is the one moment it
+      // matters most: Chitti put them here, so Chitti owes them the
+      // next step, not silence.
+      unawaited(_offerScreenGuidanceAfterNavigation());
     }
+  }
+
+  /// Speaks (and leaves as a chat message) a proactive next step for
+  /// whatever screen Chitti just navigated the customer to.
+  ///
+  /// Deliberately fire-and-forget and silent on null: most screens
+  /// have nothing worth remarking on, and ChittiScreenAdvisor already
+  /// returns null for those — see its own restraint reasoning.
+  Future<void> _offerScreenGuidanceAfterNavigation() async {
+    // Give the new screen a beat to finish building — and, for a
+    // screen like bike booking, for its own live state (GPS lock, a
+    // pickup banner) to settle, so what gets read is what the
+    // customer is actually looking at, not a half-built frame.
+    await Future.delayed(const Duration(milliseconds: 900));
+    if (!mounted) return;
+    final advice = await ChittiScreenAdvisor.adviseOnCurrentScreen();
+    if (advice == null || !mounted) return;
+    setState(() {
+      _messages.add(
+        _GuruMessage(
+          role: 'assistant',
+          text: advice.text,
+          suggestions: advice.suggestions,
+        ),
+      );
+    });
+    _scrollToBottom();
+    unawaited(_speak(advice.text));
   }
 
   // REMOVED (Aug 27 2026): _actOnBookingAction, _actOnNavigateAction,
@@ -891,6 +961,20 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
+      // FIX (Aug 29 2026 — Nizam: "konja chats pannita apram screen
+      // top laye iruku, chatscreen swipe pannuna mela pogala").
+      //
+      // This is called from ~25 places — every send, every reply,
+      // every suggestion tap. With no guard, ANY of those firing while
+      // someone had scrolled up to reread something yanked them back
+      // to the bottom mid-gesture, which feels exactly like "swiping
+      // up does nothing". Skipping the auto-scroll while the user's
+      // finger is actually on the list lets a real swipe finish
+      // instead of being fought by a programmatic one.
+      if (_scrollController.position.userScrollDirection !=
+          ScrollDirection.idle) {
+        return;
+      }
       unawaited(
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent + 160,
@@ -1010,8 +1094,22 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
         },
         onError: (error) {
           debugPrint('[GuruChatScreen] speech error: $error');
-          // A real error ends the whole chained session — fail safe
-          // rather than retrying indefinitely into a broken mic state.
+          final msg = (error.errorMsg).toLowerCase();
+          final isRecoverable = msg.contains('no_match') ||
+              msg.contains('timeout') ||
+              msg.contains('speech_timeout') ||
+              msg.contains('network_timeout') ||
+              msg.contains('error_audio') ||
+              msg.contains('busy');
+          if (isRecoverable && _voiceSessionActive && mounted) {
+            debugPrint('[GuruChatScreen] transient speech error "$msg" — auto-recovering listening session');
+            Future.delayed(const Duration(milliseconds: 400), () {
+              if (_voiceSessionActive && mounted) {
+                unawaited(_startVoiceSegment(_conversationLocaleId));
+              }
+            });
+            return;
+          }
           _finishVoiceInput();
         },
       );
@@ -1140,8 +1238,13 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
           // is treated as the next turn.
           if (_conversation.isSpeaking) {
             if (_conversation.isSelfEcho(words)) return;
-            unawaited(_tts.stop());
-            _conversation.markSpokenDone();
+            if (_conversation.isStopRequest(words)) {
+              unawaited(_tts.stop());
+              _conversation.markSpokenDone();
+              _finishVoiceInput();
+              return;
+            }
+            _conversation.queuePendingTopic(words);
           }
           if (words.isNotEmpty) {
             _accumulatedVoiceText =
@@ -1946,8 +2049,10 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       itemCount: _messages.length,
       itemBuilder: (context, index) => _GuruMessageBubble(
+        key: ValueKey('guru_msg_$index'),
         message: _messages[index],
         onSuggestionTap: _onSuggestionTapped,
+        animateReveal: index == _messages.length - 1 && !_isTyping,
       ),
     );
   }
@@ -2567,7 +2672,12 @@ class _VoiceMicButtonState extends State<_VoiceMicButton> with SingleTickerProvi
 // bubble chrome — matches Claude's mobile-app message style, on the
 // new dark backdrop.
 class _GuruMessageBubble extends StatelessWidget {
-  const _GuruMessageBubble({required this.message, this.onSuggestionTap});
+  const _GuruMessageBubble({
+    super.key,
+    required this.message,
+    this.onSuggestionTap,
+    this.animateReveal = false,
+  });
 
   final _GuruMessage message;
   // NEW (CTO mandate — Suggestion Chips): null for messages rendered
@@ -2575,6 +2685,13 @@ class _GuruMessageBubble extends StatelessWidget {
   // this optional avoids a required-param ripple if this widget is ever
   // reused read-only elsewhere).
   final ValueChanged<String>? onSuggestionTap;
+
+  /// True only for the reply that just arrived (Aug 29 2026 — Nizam:
+  /// "ovvoru work ah type aguramari"). Every other bubble — history
+  /// loaded on resume, older messages scrolled back to — shows its
+  /// full text immediately; nobody wants to watch yesterday's answer
+  /// "type" itself out again.
+  final bool animateReveal;
 
   @override
   Widget build(BuildContext context) {
@@ -2587,14 +2704,30 @@ class _GuruMessageBubble extends StatelessWidget {
       return Align(
         alignment: Alignment.centerRight,
         child: Padding(
-          padding: const EdgeInsets.only(bottom: 18),
+          // REDESIGNED (Aug 31 2026 — Nizam: "chitti chat section
+          // cute-a detailed-a venum", referencing the Claude mobile
+          // app's own layout).
+          //
+          // The Aug 29 pass shrank everything to fix "huge-a iruku",
+          // and overshot: 13.5px at 1.4 line-height in a 280px box is
+          // dense to read, especially in Tamil where glyphs are taller
+          // than Latin. The Claude app's chat reads well because it is
+          // ROOMY, not because it is small — generous padding, a soft
+          // radius, and type sized for actual reading. That is what
+          // these numbers copy. Still safe across mobile/web/PWA for
+          // the same reason as before: Text wraps within the available
+          // width, and maxWidth stays a constraint, so nothing here
+          // can overflow a narrow screen.
+          padding: const EdgeInsets.only(bottom: 20),
           child: Container(
-            constraints: const BoxConstraints(maxWidth: 320),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            constraints: const BoxConstraints(maxWidth: 300),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
             decoration: BoxDecoration(
               color: userBubble,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: border),
+              // Claude's user bubble is a soft pill, not a card — no
+              // hard outline competing with the text inside it.
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: border.withValues(alpha: 0.5)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -2616,7 +2749,16 @@ class _GuruMessageBubble extends StatelessWidget {
                 if (message.text.isNotEmpty)
                   Text(
                     message.text,
-                    style: GoogleFonts.notoSansTamil(color: ink, fontWeight: FontWeight.w500, fontSize: 14.5, height: 1.4),
+                    style: GoogleFonts.notoSansTamil(
+                      color: ink,
+                      // w500 rather than w600: at this size the heavier
+                      // weight reads as shouting, and Tamil glyphs are
+                      // already visually denser than Latin at the same
+                      // weight.
+                      fontWeight: FontWeight.w500,
+                      fontSize: 15,
+                      height: 1.5,
+                    ),
                   ),
               ],
             ),
@@ -2626,19 +2768,36 @@ class _GuruMessageBubble extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 22),
+      // CHANGED (Aug 29 2026 — Nizam: "fonts, text, chat box yellame
+      // huge ah iruku, cute ah ila"). Trimmed the avatar, spacing and
+      // font down a notch. Shrinking is the safe direction across
+      // mobile/web/PWA — Text already wraps within the available
+      // width, so a smaller font only ever reduces overflow risk.
+      padding: const EdgeInsets.only(bottom: 24),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _GuruAvatar(size: 26),
-          const SizedBox(width: 10),
+          const _GuruAvatar(size: 28),
+          const SizedBox(width: 11),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                // Typewriter reveal — only the reply that just
+                // arrived; see the `animateReveal` note above.
+                ChittiTypewriterText(
                   message.text,
-                  style: GoogleFonts.notoSansTamil(color: ink, fontWeight: FontWeight.w500, fontSize: 14.5, height: 1.5),
+                  animate: animateReveal,
+                  // Chitti's own replies are the longest text on this
+                  // screen and the most likely to be read while
+                  // walking or riding, so they get the roomiest
+                  // line-height of anything here.
+                  style: GoogleFonts.notoSansTamil(
+                    color: ink,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                    height: 1.6,
+                  ),
                 ),
                 // NEW (CTO mandate — Suggestion Chips): clickable quick
                 // replies parsed out of the model's [SUGGESTIONS: ...]
@@ -2661,17 +2820,26 @@ class _GuruMessageBubble extends StatelessWidget {
                   _ChittiVideoCard(videoId: message.videoId!),
                 ],
                 if (message.suggestions.isNotEmpty) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 14),
                   Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                    spacing: 9,
+                    runSpacing: 9,
                     children: message.suggestions
                         .map(
                           (s) => ActionChip(
-                            label: Text(s, style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                            label: Text(s, style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600)),
                             backgroundColor: surfaceElevated,
-                            side: BorderSide(color: border),
+                            side: BorderSide(color: border.withValues(alpha: 0.6)),
                             labelStyle: TextStyle(color: ink),
+                            // Softer pill + a real touch target: these
+                            // are tapped one-handed, often in motion.
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 8,
+                            ),
                             onPressed: onSuggestionTap == null ? null : () => onSuggestionTap!(s),
                           ),
                         )
@@ -2795,35 +2963,100 @@ class _GuruAvatar extends StatelessWidget {
 }
 
 // Soft, blurred gradient orbs behind the whole screen — the "glowing
-// gradient" backdrop Nizam asked for, Gemini/Claude-app style. Static
-// (no animation) to keep it cheap on low-end devices.
-class _GlowBackdrop extends StatelessWidget {
+// gradient" backdrop Nizam asked for, Gemini/Claude-app style.
+//
+// CHANGED (Aug 29 2026 — Nizam: "background la color animation la run
+// agitrukatum but battery waste agama cache la run pannavachuru"). This
+// used to be fully static — a deliberate choice at the time to keep it
+// cheap on low-end devices. The brief now explicitly asks for it to
+// move, WITHOUT paying for that in battery, so the shape of the fix
+// matters as much as the motion itself:
+//
+//   - ONE AnimationController for the whole backdrop — one Ticker, not
+//     three.
+//   - Each orb is built ONCE (the three `final` widgets below, built
+//     outside the animated builder) and wrapped in a RepaintBoundary.
+//     That is the actual "cache": the expensive part — a large blurred
+//     radial gradient — is rasterised to its own GPU layer a single
+//     time, and every subsequent frame only recomposites that existing
+//     layer at a new offset via Transform.translate. No gradient is
+//     ever redrawn per frame.
+//   - A slow 14s period and a small 14-20px drift radius mean each
+//     frame's real work is a sub-pixel offset change on an already-
+//     cached layer — the cheapest form of "alive" this backdrop can be.
+class _GlowBackdrop extends StatefulWidget {
   const _GlowBackdrop();
 
   @override
+  State<_GlowBackdrop> createState() => _GlowBackdropState();
+}
+
+class _GlowBackdropState extends State<_GlowBackdrop>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 14),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  static Widget _cached(Widget orb) => RepaintBoundary(child: orb);
+
+  @override
   Widget build(BuildContext context) {
-    final accentA = context.colors.accentSecondary;
-    final accentB = context.colors.accent;
-    final accentC = context.colors.accentTertiary;
+    final orbA = _cached(
+      _GlowOrb(color: context.colors.accentSecondary, size: 260, opacity: 0.22),
+    );
+    final orbB = _cached(
+      _GlowOrb(color: context.colors.accent, size: 220, opacity: 0.16),
+    );
+    final orbC = _cached(
+      _GlowOrb(color: context.colors.accentTertiary, size: 240, opacity: 0.14),
+    );
+
     return IgnorePointer(
-      child: Stack(
-        children: [
-          Positioned(
-            top: -90,
-            left: -60,
-            child: _GlowOrb(color: accentA, size: 260, opacity: 0.22),
-          ),
-          Positioned(
-            top: 120,
-            right: -80,
-            child: _GlowOrb(color: accentB, size: 220, opacity: 0.16),
-          ),
-          Positioned(
-            bottom: -100,
-            left: 40,
-            child: _GlowOrb(color: accentC, size: 240, opacity: 0.14),
-          ),
-        ],
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          // Each orb drifts on its own phase/radius so the three never
+          // move in lockstep — that is what reads as "alive" rather
+          // than as one thing sliding.
+          final t = _controller.value * 2 * math.pi;
+          Offset drift(double phase, double radius) => Offset(
+                math.cos(t + phase) * radius,
+                math.sin(t + phase) * radius * 0.6,
+              );
+
+          return Stack(
+            children: [
+              Positioned(
+                top: -90,
+                left: -60,
+                child: Transform.translate(offset: drift(0, 18), child: orbA),
+              ),
+              Positioned(
+                top: 120,
+                right: -80,
+                child: Transform.translate(offset: drift(2.1, 16), child: orbB),
+              ),
+              Positioned(
+                bottom: -100,
+                left: 40,
+                child: Transform.translate(offset: drift(4.2, 20), child: orbC),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

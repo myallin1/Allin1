@@ -30,8 +30,8 @@ android {
     // compileSdk is at least as high as every plugin's (compileSdk is
     // backward compatible, so bumping it doesn't raise the app's real
     // minSdk/targetSdk requirements for end users).
-    compileSdk = 37
-    ndkVersion = "28.2.13676358"
+    compileSdk = 36
+    ndkVersion = flutter.ndkVersion
     flavorDimensions += "app"
 
     compileOptions {
@@ -127,8 +127,22 @@ flutter {
 dependencies {
     // Task 1: Required for flutter_local_notifications (Java 8+ API desugaring)
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
-    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
-    implementation("com.google.firebase:firebase-analytics")
-    implementation("com.google.firebase:firebase-auth")
+    // REMOVED (Aug 31 2026 — "Firebase initialization failed: RangeError
+    // 0..13: 14" on device, surviving two rebuilds).
+    //
+    // This block manually pinned firebase-bom:33.7.0 plus native
+    // firebase-analytics/firebase-auth. The FlutterFire plugins already
+    // declare their own native dependencies through a BOM they choose:
+    // firebase_core 4.11.0's gradle.properties sets
+    // FirebaseSDKVersion=34.15.0. Pinning 33.7.0 here fought that,
+    // giving native SDKs older than the Dart plugin code was built
+    // against — the classic shape behind a decode/enum-index error at
+    // Firebase.initializeApp().
+    //
+    // Verified before removing: nothing in android/app/src/*/kotlin
+    // references com.google.firebase directly, so no first-party code
+    // depended on these being declared here. FlutterFire's own guidance
+    // is not to add firebase-bom or firebase-* natively alongside the
+    // plugins for exactly this reason.
     implementation("androidx.multidex:multidex:2.0.1")
 }

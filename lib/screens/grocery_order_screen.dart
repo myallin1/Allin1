@@ -26,6 +26,7 @@ import '../widgets/quick_order_line_items.dart';
 import '../widgets/server_busy_dialog.dart';
 import 'dmart_screen.dart';
 import 'grocery_order_status_screen.dart';
+import 'hero_search_radar_screen.dart';
 import 'service_request_tracking_screen.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
@@ -291,9 +292,13 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> with RouteAware
       await Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => ServiceRequestTrackingScreen(
+          builder: (_) => HeroSearchRadarScreen(
             requestId: requestId,
-            requestType: 'grocery_order',
+            serviceLabel: 'Grocery Seller',
+            matchedScreenBuilder: (id) => ServiceRequestTrackingScreen(
+              requestId: id,
+              requestType: 'grocery_order',
+            ),
           ),
         ),
       );

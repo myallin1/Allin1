@@ -39,6 +39,7 @@ import 'food_order_status_screen.dart';
 import 'location_picker_screen.dart';
 import 'partner_shop_order_screen.dart';
 import 'embedded_shop_screen.dart';
+import 'hero_search_radar_screen.dart';
 import 'service_request_tracking_screen.dart';
 
 class CustomFoodOrderScreen extends StatefulWidget {
@@ -262,9 +263,13 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => ServiceRequestTrackingScreen(
+          builder: (_) => HeroSearchRadarScreen(
             requestId: requestId,
-            requestType: 'custom_food_order',
+            serviceLabel: 'Food Seller',
+            matchedScreenBuilder: (id) => ServiceRequestTrackingScreen(
+              requestId: id,
+              requestType: 'custom_food_order',
+            ),
           ),
         ),
       );
@@ -751,15 +756,26 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
     final statusColor = serviceRequestStatusColor(status);
     final statusLabel = serviceRequestStatusLabel('custom_food_order', status);
 
+    final isStillSearching = status == 'pending' || status == 'admin_review';
+
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => ServiceRequestTrackingScreen(
-            requestId: request.requestId,
-            requestType: 'custom_food_order',
-          ),
+          builder: (_) => isStillSearching
+              ? HeroSearchRadarScreen(
+                  requestId: request.requestId,
+                  serviceLabel: 'Food Seller',
+                  matchedScreenBuilder: (id) => ServiceRequestTrackingScreen(
+                    requestId: id,
+                    requestType: 'custom_food_order',
+                  ),
+                )
+              : ServiceRequestTrackingScreen(
+                  requestId: request.requestId,
+                  requestType: 'custom_food_order',
+                ),
         ),
       ),
       child: Container(

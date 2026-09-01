@@ -40,9 +40,11 @@
 //     approvalStatus:'pending'. hero_approvals_screen.dart needs no new
 //     queue — Nizam asked for "admin same approval" and this is it.
 //   * Permissions: hero_service_access.dart already gates work per hero.
-//     A skill hero is simply a hero whose serviceAccess denies the
-//     vehicle buckets and grants electronics_service — see
-//     [skillHeroServiceAccess]. No new permission system.
+//     A skill hero is simply a hero whose serviceAccess denies every
+//     bucket, including the generic electronics_service one — their
+//     own trade jobs bypass that bucket entirely via a dedicated skill
+//     match in dispatch. See [skillHeroServiceAccess]. No new
+//     permission system.
 //   * Presence: the existing online_heroes/{uid} node carries lat/lng
 //     and city already. It gains one more mirrored field, [kHeroSkillsField],
 //     alongside the serviceAccess mirror that is already there.
@@ -57,6 +59,7 @@
 // prevent.
 // ================================================================
 
+import 'package:colorful_iconify_flutter/icons/fluent_emoji_flat.dart';
 import 'package:flutter/material.dart';
 
 import 'hero_service_access.dart';
@@ -105,6 +108,7 @@ class HeroSkill {
     required this.tamilTitle,
     required this.subtitle,
     required this.icon,
+    required this.svgIcon,
     required this.color,
   });
 
@@ -122,20 +126,43 @@ class HeroSkill {
   final String tamilTitle;
 
   final String subtitle;
+
+  /// Kept as a fallback only — nothing renders this anymore. See
+  /// [svgIcon].
   final IconData icon;
+
+  /// Full-color FluentEmojiFlat SVG markup (from
+  /// package:colorful_iconify_flutter, already bundled and used
+  /// throughout the customer dashboard — see dashboard_screen.dart),
+  /// rendered via SvgPicture.string wherever a trade's icon shows.
+  ///
+  /// NEW (Aug 29 2026 — Nizam, on seeing the rendered cards: "icons
+  /// category ku mismatch aagi irukku"). The monochrome Material glyphs
+  /// this used to carry (electrical_services, plumbing,
+  /// laptop_chromebook, tv, ac_unit) render at a small size as
+  /// near-identical grey rounded-rectangle silhouettes — exactly the
+  /// "which one is the fridge and which is the laptop" confusion a hero
+  /// glancing at this picker on a small phone screen hits. A full-color
+  /// illustrated icon per trade is unambiguous at a glance without
+  /// needing the caption at all, which is the actual goal here ("hero
+  /// paathathum identify pandramari" — identifiable the instant a hero
+  /// looks at it).
+  final String svgIcon;
+
   final Color color;
 }
 
 /// The bookable trades, in the order they appear in both the hero
 /// onboarding picker and the customer services grid.
-const List<HeroSkill> kHeroSkills = <HeroSkill>[
+final List<HeroSkill> kHeroSkills = <HeroSkill>[
   HeroSkill(
     key: 'electrician',
     title: 'Electrician',
     tamilTitle: 'மின் பணியாளர்',
     subtitle: 'Wiring, switches, fans, repairs',
     icon: Icons.electrical_services_rounded,
-    color: Color(0xFFF5A623),
+    svgIcon: FluentEmojiFlat.electric_plug,
+    color: const Color(0xFFF5A623),
   ),
   HeroSkill(
     key: 'plumber',
@@ -143,7 +170,8 @@ const List<HeroSkill> kHeroSkills = <HeroSkill>[
     tamilTitle: 'பிளம்பர்',
     subtitle: 'Taps, pipes, leaks, fittings',
     icon: Icons.plumbing_rounded,
-    color: Color(0xFF2D9CDB),
+    svgIcon: FluentEmojiFlat.wrench,
+    color: const Color(0xFF2D9CDB),
   ),
   HeroSkill(
     key: 'laptop_pc',
@@ -151,7 +179,8 @@ const List<HeroSkill> kHeroSkills = <HeroSkill>[
     tamilTitle: 'லேப்டாப் & பிசி',
     subtitle: 'Service, software, upgrades',
     icon: Icons.laptop_chromebook_rounded,
-    color: Color(0xFF9B51E0),
+    svgIcon: FluentEmojiFlat.laptop,
+    color: const Color(0xFF9B51E0),
   ),
   HeroSkill(
     key: 'tv_service',
@@ -159,7 +188,8 @@ const List<HeroSkill> kHeroSkills = <HeroSkill>[
     tamilTitle: 'டிவி சர்வீஸ்',
     subtitle: 'Panel, display, installation',
     icon: Icons.tv_rounded,
-    color: Color(0xFF27AE60),
+    svgIcon: FluentEmojiFlat.television,
+    color: const Color(0xFF27AE60),
   ),
   HeroSkill(
     key: 'fridge_ac',
@@ -167,7 +197,8 @@ const List<HeroSkill> kHeroSkills = <HeroSkill>[
     tamilTitle: 'ஃப்ரிட்ஜ் & ஏசி',
     subtitle: 'Cooling, gas filling, service',
     icon: Icons.ac_unit_rounded,
-    color: Color(0xFF56CCF2),
+    svgIcon: FluentEmojiFlat.snowflake,
+    color: const Color(0xFF56CCF2),
   ),
 ];
 
@@ -236,24 +267,37 @@ List<String> heroSkillsOf(Object? heroData) {
 
 /// The `serviceAccess` map written for a newly registered skill hero.
 ///
-/// Every vehicle/delivery bucket is set to an explicit `false`, and
-/// electronics_service to an explicit `true`.
+/// EVERY bucket, including electronics_service, is an explicit `false`.
 ///
-/// The explicit falses are the load-bearing part. hero_service_access's
-/// [isServiceAllowed] treats a MISSING key as allowed — correct for
-/// existing heroes, but it means a skill hero with no map at all would
-/// receive food, grocery, custom-order and hero-booking pings from the
-/// day they were approved. Writing the denials at registration time is
-/// what keeps an electrician's phone showing only electrical work,
-/// without one line of dispatch logic changing.
+/// That is load-bearing. hero_service_access's [isServiceAllowed] treats
+/// a MISSING key as allowed — correct for existing heroes, but it means
+/// a skill hero with no map at all would receive food, grocery,
+/// custom-order and hero-booking pings from the day they were approved.
+/// Writing the denials at registration time is what keeps an
+/// electrician's phone showing only electrical work, without one line
+/// of dispatch logic changing.
 ///
-/// The explicit `true` on electronics_service is not redundant with
-/// "missing = allowed" either: ride_search_screen uses
-/// [isServiceExplicitlyGranted] for opt-IN decisions, and an explicit
-/// true keeps a skill hero legible to that stricter test too.
+/// electronics_service being FALSE here (not true — corrected after a
+/// re-audit found the bug this comment used to gloss over) needs its
+/// own explanation, because `electronics_service` is not exclusive to
+/// skill bookings: Mobile Hub repairs and "sell your phone" enquiries
+/// (mobile_service_sheet.dart, sell_your_phone_sheet.dart) create the
+/// SAME requestType with no trade attached. This bucket therefore means
+/// "wants generic NJ Tech/Mobile Hub work", which a plumber does not.
+/// The bucket being false does NOT block a skill hero's own trade jobs —
+/// _broadcastToEligibleHeroes checks [heroHasSkill] first for any
+/// request that carries a requiredSkill, and that check is authoritative
+/// on its own; this bucket is only ever consulted for a request with NO
+/// trade attached. Admin can still flip it on for a specific hero from
+/// hero_service_access_sheet if that hero genuinely also wants generic
+/// electronics jobs — this is a starting position, not a lock.
 ///
-/// Admin can still override any of these afterwards from the existing
-/// hero_service_access_sheet — this is a starting position, not a lock.
+/// Also called for 'emergency_manpower' heroes (Aug 29 2026) — a
+/// second, unrelated caller with the same requirement: "deny every
+/// ordinary job bucket". Emergency responders aren't a trade and have
+/// no skills array, but they need the identical all-off starting
+/// position, and this map already is that. See
+/// hero_register_screen.dart's isEmergencyOnly for why.
 Map<String, bool> skillHeroServiceAccess() => <String, bool>{
       HeroServiceKeys.ride: false,
       HeroServiceKeys.parcel: false,
@@ -261,5 +305,5 @@ Map<String, bool> skillHeroServiceAccess() => <String, bool>{
       HeroServiceKeys.foodOrder: false,
       HeroServiceKeys.groceryOrder: false,
       HeroServiceKeys.customOrder: false,
-      HeroServiceKeys.electronicsService: true,
+      HeroServiceKeys.electronicsService: false,
     };

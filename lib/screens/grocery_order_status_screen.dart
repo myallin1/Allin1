@@ -16,6 +16,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/service_request_model.dart';
 import '../utils/service_request_labels.dart';
+import 'hero_search_radar_screen.dart';
 import 'service_request_tracking_screen.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
@@ -120,15 +121,26 @@ class _GroceryOrderStatusCard extends StatelessWidget {
     final title = listText.isNotEmpty ? listText : 'Grocery order';
     final subtitle = (details['deliveryAddress'] as String?)?.trim() ?? '';
 
+    final isStillSearching = status == 'pending' || status == 'admin_review';
+
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => ServiceRequestTrackingScreen(
-            requestId: request.requestId,
-            requestType: 'grocery_order',
-          ),
+          builder: (_) => isStillSearching
+              ? HeroSearchRadarScreen(
+                  requestId: request.requestId,
+                  serviceLabel: 'Grocery Seller',
+                  matchedScreenBuilder: (id) => ServiceRequestTrackingScreen(
+                    requestId: id,
+                    requestType: 'grocery_order',
+                  ),
+                )
+              : ServiceRequestTrackingScreen(
+                  requestId: request.requestId,
+                  requestType: 'grocery_order',
+                ),
         ),
       ),
       child: Container(

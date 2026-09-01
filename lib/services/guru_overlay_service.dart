@@ -34,11 +34,15 @@
 import 'dart:async' show Timer, TimeoutException, unawaited;
 
 import 'chitti_chat_history_service.dart';
+import 'chitti_overlay_service.dart';
 import '../widgets/chitti_history_sheet.dart';
+import '../widgets/chitti_typewriter_text.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
+import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -55,6 +59,7 @@ import '../config/app_variant.dart';
 import 'ai_activation_service.dart';
 import 'guru_api_service.dart';
 import 'guru_suggestion_parser.dart';
+import 'permission_service.dart';
 import 'localization_service.dart';
 // NEW (CTO mandate — Final Overlay Tool Wiring): same conditional
 // stub/web import used everywhere else in the codebase so the overlay's
@@ -68,7 +73,9 @@ import '../screens/mobiles/listing_video_player.dart';
 import '../widgets/ai_bot_avatar.dart';
 import '../widgets/chitti_companion.dart';
 import 'chitti/chitti_action_executor.dart';
+import 'chitti/chitti_screen_advisor.dart';
 import 'chitti/chitti_conversation_controller.dart';
+import 'chitti/chitti_task_chain.dart';
 import 'chitti/chitti_buddy.dart';
 import 'chitti/chitti_chat_intents.dart';
 import 'chitti/chitti_video_service.dart';
@@ -124,6 +131,12 @@ class GuruOverlayService extends ChangeNotifier {
   // State so it survives across screens like everything else here.
   Map<String, dynamic>? _pendingAgentAction;
 
+  /// A multi-step plan awaiting its ONE approval — see
+  /// chitti_task_chain.dart for why the gate moved here from
+  /// per-step. Null whenever the ordinary single-tool path is in use,
+  /// which is still the common case.
+  ChittiTaskChain? _pendingTaskChain;
+
   /// Guards against stacked close confirmations — see [requestClose].
   bool _closeDialogOpen = false;
 
@@ -144,6 +157,11 @@ class GuruOverlayService extends ChangeNotifier {
   /// to reopen, which is a normal state (bubble minimised or closed),
   /// not an error.
   VoidCallback? onConversationWantsMic;
+
+  /// Set by the panel while it is mounted. Fires when an interrupted topic
+  /// is retrieved from the queue after speech finishes.
+  void Function(String topicText)? onPendingTopicReceived;
+
   final List<GuruChatTurn> messages = [];
 
   // ── CONTINUE / NEW / HISTORY (Aug 28 2026 — Nizam: "chitti ku
@@ -330,6 +348,13 @@ class GuruOverlayService extends ChangeNotifier {
           await _tts.stop();
         }
         if (conversation.afterSpeaking() == ChittiConversationStep.listen) {
+          if (conversation.hasPendingTopic) {
+            final pending = conversation.popPendingTopic();
+            if (pending != null && onPendingTopicReceived != null) {
+              onPendingTopicReceived!(pending.text);
+              return;
+            }
+          }
           onConversationWantsMic?.call();
         }
         return;
@@ -362,6 +387,9 @@ class GuruOverlayService extends ChangeNotifier {
   /// a second call while already showing just brings it back from
   /// minimized instead of inserting a duplicate entry.
   void show({bool autoStartMic = false}) {
+    try {
+      ChittiOverlayService.instance.hide();
+    } catch (_) {}
     if (autoStartMic) _autoStartMicOnOpen = true;
     if (_entry != null) {
       if (_minimized) {
@@ -576,14 +604,21 @@ class GuruOverlayService extends ChangeNotifier {
     notifyListeners();
   }
 
-  String _resolveApiKey() {
+  Future<String> _resolveApiKey() async {
     final ctx = navigatorKey.currentContext;
-    if (ctx == null) return '';
-    try {
-      return ctx.read<AiActivationService>().apiKey;
-    } catch (_) {
-      return '';
+    if (ctx != null) {
+      try {
+        final key = ctx.read<AiActivationService>().apiKey;
+        if (key.trim().isNotEmpty) return key.trim();
+      } catch (_) {}
     }
+    try {
+      final backend = await _api.resolveBackendDirect();
+      if (backend != null && backend.key.trim().isNotEmpty) {
+        return backend.key.trim();
+      }
+    } catch (_) {}
+    return '';
   }
 
   Future<void> sendMessage(String text) async {
@@ -594,12 +629,40 @@ class GuruOverlayService extends ChangeNotifier {
     _sending = true;
     notifyListeners();
 
-    final apiKey = _resolveApiKey();
+    final apiKey = await _resolveApiKey();
 
     // NEW (CTO mandate — Final Overlay Tool Wiring): if a tool call is
     // awaiting confirmation, this message IS the yes/no answer — never
     // re-run agent-action extraction on it. Exact same gate as
     // guru_chat_screen.dart's _sendMessage.
+    // A multi-step plan waiting on its single approval. Checked BEFORE
+    // the single-action gate below because a chain, once approved,
+    // consumes this turn entirely — see chitti_task_chain.dart.
+    if (_pendingTaskChain != null) {
+      final decision = _voiceIntent.classifyYesNo(trimmed);
+      final chain = _pendingTaskChain!;
+      if (decision == VoiceYesNo.yes) {
+        _pendingTaskChain = null;
+        chain.approve();
+        await _runTaskChain(chain);
+        _sending = false;
+        notifyListeners();
+        return;
+      } else if (decision == VoiceYesNo.no) {
+        _pendingTaskChain = null;
+        chain.abort();
+        messages.add(GuruChatTurn(role: 'assistant', text: chain.summaryText()));
+        _sending = false;
+        notifyListeners();
+        unawaited(_speak(chain.summaryText()));
+        return;
+      }
+      // Unclear — drop the stale plan rather than running something
+      // the admin never actually agreed to, and treat this as a new
+      // message.
+      _pendingTaskChain = null;
+    }
+
     if (_pendingAgentAction != null) {
       final decision = _voiceIntent.classifyYesNo(trimmed);
       final pending = _pendingAgentAction!;
@@ -763,6 +826,61 @@ class GuruOverlayService extends ChangeNotifier {
   /// Whether a tool call is waiting on the customer's yes/no. The
   /// hands-free loop must never end while one is outstanding.
   bool get hasPendingAgentAction => _pendingAgentAction != null;
+
+  bool get hasPendingTaskChain => _pendingTaskChain != null;
+
+  /// Offers a multi-step plan for its single up-front approval.
+  ///
+  /// Returns false when [stepArgs] is not chain-shaped (one step, or
+  /// over the cap) so the caller falls back to the ordinary
+  /// single-tool path — see ChittiTaskChain.tryBuild.
+  bool proposeTaskChain(List<Map<String, dynamic>> stepArgs) {
+    final chain = ChittiTaskChain.tryBuild(stepArgs);
+    if (chain == null) return false;
+
+    // RULE 1 — an all-read plan has nothing to approve, so it just
+    // runs. Only a plan that touches something gated stops for a yes.
+    if (!chain.requiresConfirmation(ChittiToolRegistry.requiresConfirmation)) {
+      chain.approve();
+      unawaited(_runTaskChain(chain));
+      return true;
+    }
+
+    final preview = chain.previewText(_confirmationTextFor);
+    _pendingTaskChain = chain;
+    messages.add(
+      GuruChatTurn(
+        role: 'assistant',
+        text: preview,
+        suggestions: const ['Yes, do it all', 'No, cancel'],
+      ),
+    );
+    notifyListeners();
+    unawaited(_speak(preview));
+    return true;
+  }
+
+  /// Runs an APPROVED chain to completion, or to its first failure.
+  ///
+  /// Each step goes through the same _executePendingAction the
+  /// single-tool path uses, so a chained call behaves identically to
+  /// the same tool called alone — including its own screen pushes and
+  /// spoken replies. The only thing this adds is the sequencing and
+  /// RULE 2's hard stop.
+  Future<void> _runTaskChain(ChittiTaskChain chain) async {
+    if (!chain.isApproved) return;
+    while (!chain.isFinished) {
+      final step = chain.currentStep;
+      if (step == null) break;
+      final result = await _executePendingAction(step.args);
+      chain.completeCurrentStep(success: result);
+    }
+    final summary = chain.summaryText();
+    messages.add(GuruChatTurn(role: 'assistant', text: summary));
+    notifyListeners();
+    persist();
+    unawaited(_speak(summary));
+  }
 
   /// Cuts Chitti off mid-sentence (barge-in), and tells the controller
   /// so the echo guard stops filtering.
@@ -952,12 +1070,16 @@ class GuruOverlayService extends ChangeNotifier {
   // result into GuruChatTurns and push on navigatorKey. The single
   // exception is check_and_update_app, whose PWA-vs-native branch needs
   // this class's own message plumbing mid-flight.
-  Future<void> _executePendingAction(Map<String, dynamic> args) async {
+  /// Returns whether the tool actually succeeded.
+  ///
+  /// The single-tool callers ignore this (a human reads the reply); a
+  /// chain needs it for RULE 2 — see chitti_task_chain.dart.
+  Future<bool> _executePendingAction(Map<String, dynamic> args) async {
     final action = args['action'] as String?;
 
     if (action == 'check_and_update_app') {
       await _actOnUpdateAction();
-      return;
+      return true;
     }
 
     final context = navigatorKey.currentContext;
@@ -965,7 +1087,7 @@ class GuruOverlayService extends ChangeNotifier {
       // No mounted Navigator (very early cold boot). Saying nothing is
       // right here — the overlay is not visible yet either.
       debugPrint('[GuruOverlayService] no context for "$action"');
-      return;
+      return false;
     }
 
     final result = await ChittiActionExecutor.execute(args, context: context);
@@ -975,7 +1097,14 @@ class GuruOverlayService extends ChangeNotifier {
         languageCode: _languageInfo().label == 'Tamil' ? 'ta' : 'en',
         saying: result.text,
       );
-      final text = quip == null ? result.text : '${result.text} $quip';
+      // Same comfort layer as the full chat screen — a setback still
+      // gets acknowledged when the joke gate silences itself.
+      final comfort = quip ??
+          ChittiBuddy.comfortAfterSetback(
+            languageCode: _languageInfo().label == 'Tamil' ? 'ta' : 'en',
+            saying: result.text,
+          );
+      final text = comfort == null ? result.text : '${result.text} $comfort';
       messages.add(
         GuruChatTurn(
           role: 'assistant',
@@ -1007,7 +1136,7 @@ class GuruOverlayService extends ChangeNotifier {
       );
       notifyListeners();
       unawaited(_speak(_confirmationTextFor(pending)));
-      return;
+      return result.success;
     }
 
     final open = result.openScreen;
@@ -1017,8 +1146,33 @@ class GuruOverlayService extends ChangeNotifier {
         unawaited(navState.push(
           ChittiNav.routeForBuilder<void>(open, result.openScreenLabel),
         ),);
+        // Same proactive follow-up as the full chat screen — see the
+        // note there. This is the surface hero/seller/admin actually
+        // use, so it needs the fix at least as much.
+        unawaited(_offerScreenGuidanceAfterNavigation());
       }
     }
+    return result.success;
+  }
+
+  /// Speaks (and leaves as a message in the panel) a proactive next
+  /// step for whatever screen Chitti just navigated to.
+  ///
+  /// See guru_chat_screen.dart's twin for the full reasoning. Silent
+  /// on null — most screens have nothing worth remarking on.
+  Future<void> _offerScreenGuidanceAfterNavigation() async {
+    await Future.delayed(const Duration(milliseconds: 900));
+    final advice = await ChittiScreenAdvisor.adviseOnCurrentScreen();
+    if (advice == null) return;
+    messages.add(
+      GuruChatTurn(
+        role: 'assistant',
+        text: advice.text,
+        suggestions: advice.suggestions,
+      ),
+    );
+    notifyListeners();
+    unawaited(_speak(advice.text));
   }
 
   Future<void> _actOnUpdateAction() async {
@@ -1090,7 +1244,8 @@ class GlobalGuruFab extends StatelessWidget {
   // this only hides the FAB where the companion has genuinely taken
   // its place.
   static bool _chittiCompanionOwnsThisScreen() =>
-      currentAppVariant == 'customer' && ChittiCompanion.isSupported;
+      (currentAppVariant == 'customer' || currentAppVariant == 'admin') &&
+      ChittiCompanion.isSupported;
 
   @override
   Widget build(BuildContext context) {
@@ -1194,6 +1349,26 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
       if (mounted) unawaited(_resumeConversationListening());
     };
 
+    GuruOverlayService.instance.onPendingTopicReceived = (topicText) {
+      if (!mounted) return;
+      final isTamil = context.read<LocalizationService>().languageCode == 'ta';
+      final bridgeText = isTamil
+          ? "பாஸ், நீங்க பேசும்போது இன்னொன்னு கேட்டீங்களே: '$topicText' — அதை இப்போ பார்க்கிறேன்..."
+          : "Boss, you also asked: '$topicText' — checking that now...";
+      GuruOverlayService.instance.addAssistantTurn(bridgeText);
+      final intent = ChittiLocalIntentEngine.resolveBest(
+        <String>[topicText],
+        fromVoice: true,
+      );
+      if (intent != null) {
+        _controller.clear();
+        unawaited(GuruOverlayService.instance.runVoiceIntent(intent.args));
+        _continueConversation(topicText, resolvedAnIntent: true);
+      } else {
+        unawaited(GuruOverlayService.instance.sendMessage(topicText));
+        _continueConversation(topicText, resolvedAnIntent: false);
+      }
+    };
   }
 
   @override
@@ -1205,6 +1380,7 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
     _voiceSessionActive = false;
     GuruOverlayService.instance
       ..onConversationWantsMic = null
+      ..onPendingTopicReceived = null
       ..conversation.stop();
     _voiceSilenceTimer?.cancel();
     if (_isListening) {
@@ -1228,6 +1404,21 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
     }
 
     if (!_speechReady) {
+      if (!kIsWeb) {
+        final micGranted = await PermissionService().requestMicrophonePermission();
+        if (!micGranted) {
+          debugPrint('[GuruOverlayService] Microphone permission not granted');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Please grant microphone permission to speak with Chitti.'),
+                backgroundColor: Color(0xFF4A1236),
+              ),
+            );
+          }
+          return;
+        }
+      }
       _speechReady = await _speech.initialize(
         // FIX (Aug 25 2026 — segment chaining): only reflect
         // 'notListening'/'done' in the UI once genuinely finished — it
@@ -1240,6 +1431,22 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
         },
         onError: (error) {
           debugPrint('[GuruOverlayService] speech error: $error');
+          final msg = (error.errorMsg).toLowerCase();
+          final isRecoverable = msg.contains('no_match') ||
+              msg.contains('timeout') ||
+              msg.contains('speech_timeout') ||
+              msg.contains('network_timeout') ||
+              msg.contains('error_audio') ||
+              msg.contains('busy');
+          if (isRecoverable && _voiceSessionActive && mounted) {
+            debugPrint('[GuruOverlayService] transient speech error "$msg" — auto-recovering listening session');
+            Future.delayed(const Duration(milliseconds: 400), () {
+              if (_voiceSessionActive && mounted) {
+                unawaited(_startVoiceSegment(_conversationLocaleId));
+              }
+            });
+            return;
+          }
           _finishVoiceInput();
         },
       );
@@ -1297,7 +1504,12 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
           final convo = GuruOverlayService.instance.conversation;
           if (convo.isSpeaking) {
             if (convo.isSelfEcho(words)) return;
-            unawaited(GuruOverlayService.instance.stopSpeaking());
+            if (convo.isStopRequest(words)) {
+              unawaited(GuruOverlayService.instance.stopSpeaking());
+              _finishVoiceInput();
+              return;
+            }
+            convo.queuePendingTopic(words);
           }
           if (words.isNotEmpty) {
             _accumulatedVoiceText =
@@ -1457,6 +1669,10 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
+      // Same guard as the full chat screen — see the note there.
+      if (_scroll.position.userScrollDirection != ScrollDirection.idle) {
+        return;
+      }
       _scroll.animateTo(
         _scroll.position.maxScrollExtent,
         duration: const Duration(milliseconds: 200),
@@ -1464,6 +1680,20 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
       );
     });
   }
+
+  int _sizeStage = 1; // 0 = compact, 1 = standard, 2 = expanded
+
+  double get _panelWidth => switch (_sizeStage) {
+        0 => 300.0,
+        2 => 360.0,
+        _ => 330.0,
+      };
+
+  double get _panelHeight => switch (_sizeStage) {
+        0 => 350.0,
+        2 => 560.0,
+        _ => 440.0,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -1481,8 +1711,6 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
               child: GestureDetector(
                 onTap: service.toggleMinimized,
                 child: const AiBotAvatar(
-                  // CHANGED (Aug 25 2026 — Super Chitti Phase 2,
-                  // "Floating Icon Size Bump"): 64 -> 66, exact +2.0pt.
                   size: 66,
                   fallbackColor: Color(0xFFFF4FA3),
                 ),
@@ -1491,18 +1719,8 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
           );
         }
 
-        // FIX (Aug 28 2026 — latent crash). These were
-        // `clamp(0.0, size.width - 320)`. Dart's num.clamp throws when
-        // lowerLimit > upperLimit, so on any viewport shorter than the
-        // panel — a phone in landscape is 360-400px tall, against a
-        // 420px panel — `clamp(0.0, -60.0)` threw and took the whole
-        // overlay down. Never reproduced on a portrait phone, which is
-        // exactly why it survived.
-        //
-        // Clamping the LIMIT at zero first means a screen too small for
-        // the panel pins it to the top-left corner instead of crashing.
-        final maxLeft = (size.width - _kPanelWidth).clamp(0.0, double.infinity);
-        final maxTop = (size.height - _kPanelHeight).clamp(0.0, double.infinity);
+        final maxLeft = (size.width - _panelWidth).clamp(0.0, double.infinity);
+        final maxTop = (size.height - _panelHeight).clamp(0.0, double.infinity);
         final left = service.position.dx.clamp(0.0, maxLeft);
         final top = service.position.dy.clamp(0.0, maxTop);
 
@@ -1510,38 +1728,16 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
           left: left,
           top: top,
           child: GestureDetector(
-            // Dragging the header repositions the whole panel — makes it
-            // a real "floating" assistant instead of pinned to one spot.
             onPanUpdate: (details) {
               service.setPosition(service.position + details.delta);
             },
             child: Material(
               color: Colors.transparent,
-              child: Container(
-                width: 320,
-                height: 420,
-                // HIGH-TECH POLISH (Aug 19 2026, Founder: "classy and
-                // high-tech"). Three changes, each doing one job:
-                //
-                //  - A diagonal gradient instead of a flat fill. A
-                //    single flat colour is what makes a panel read as a
-                //    dialog box; a soft top-left-to-bottom-right ramp
-                //    is most of what separates "Apple/CRED" from
-                //    "Material default" at zero cost.
-                //  - Radius 20 → 24. At 320px wide, 20 reads slightly
-                //    boxy next to the app's cards; 24 matches them.
-                //  - A coloured ambient shadow rather than plain black.
-                //    The panel now sits in its own faint violet light,
-                //    which is what makes it look like it's hovering
-                //    above the screen instead of pasted onto it.
-                // REPAINTED (Aug 28 2026 — Nizam: "chitti popup namma
-                // white and pink la kaatama vera color la kaatughu").
-                //
-                // This panel was the last dark-violet surface left in a
-                // pink-and-white app: a near-black gradient body with a
-                // #B44CFF violet accent, which AGENTS.md §2 explicitly
-                // rules out. It is now the same white surface and kPink
-                // accent every card in the app uses.
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutCubic,
+                width: _panelWidth,
+                height: _panelHeight,
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
@@ -1577,66 +1773,89 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
 
   Widget _buildHeader(GuruOverlayService service) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          // Three stops, not two: the mid violet stops the purple→pink
-          // ramp from passing through a muddy band in the middle, which
-          // is the usual reason a two-colour gradient looks cheap.
           colors: [Color(0xFFFF4FA3), Color(0xFFFF6FB5), Color(0xFFFF9AC9)],
         ),
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Row(
         children: [
-          // Avatar sits in a soft glass disc so the robot's own dark
-          // pixels don't disappear into the violet behind it.
           Container(
-            padding: const EdgeInsets.all(4),
+            padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
+              color: Colors.white.withValues(alpha: 0.2),
               shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.4),
+                  blurRadius: 6,
+                  spreadRadius: 1,
+                ),
+              ],
             ),
-            child: const AiBotAvatar(size: 20),
+            child: const AiBotAvatar(size: 22),
           ),
-          const SizedBox(width: 9),
+          const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Chitti',
-                  style: GoogleFonts.outfit(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                    letterSpacing: 0.2,
-                    height: 1.05,
-                  ),),
-              Text('your Allin1 buddy',
-                  style: GoogleFonts.outfit(
-                    color: Colors.white.withValues(alpha: 0.72),
-                    fontWeight: FontWeight.w500,
-                    fontSize: 9,
-                    height: 1.15,
-                  ),),
+              Text(
+                'Chitti',
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13.5,
+                  letterSpacing: 0.2,
+                  height: 1.05,
+                ),
+              ),
+              Text(
+                'your Allin1 buddy',
+                style: GoogleFonts.outfit(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 8.5,
+                  height: 1.15,
+                ),
+              ),
             ],
           ),
           const Spacer(),
-          // NEW (CTO mandate — Text-to-Speech): overlay header mute
-          // toggle, same intent as the full chat screen's speaker icon.
+          IconButton(
+            icon: Icon(
+              _sizeStage == 0
+                  ? Icons.unfold_more_rounded
+                  : _sizeStage == 1
+                      ? Icons.open_in_full_rounded
+                      : Icons.close_fullscreen_rounded,
+              color: Colors.white,
+              size: 16,
+            ),
+            tooltip: 'Resize (Compact / Standard / Expanded)',
+            onPressed: () {
+              setState(() {
+                _sizeStage = (_sizeStage + 1) % 3;
+              });
+            },
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+          ),
           IconButton(
             icon: Icon(
               service.autoSpeak ? Icons.volume_up_rounded : Icons.volume_off_rounded,
               color: Colors.white,
-              size: 18,
+              size: 16,
             ),
             tooltip: service.autoSpeak ? 'Mute Chitti AI' : 'Unmute Chitti AI',
             onPressed: service.toggleAutoSpeak,
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
           ),
           IconButton(
-            icon: const Icon(Icons.history_rounded, color: Colors.white, size: 18),
+            icon: const Icon(Icons.history_rounded, color: Colors.white, size: 16),
             tooltip: 'Past chats',
             onPressed: () async {
               final picked = await showChittiHistorySheet(context);
@@ -1645,29 +1864,28 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
               }
             },
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
           ),
           IconButton(
-            icon: const Icon(Icons.add_comment_outlined,
-                color: Colors.white, size: 18),
+            icon: const Icon(Icons.add_comment_outlined, color: Colors.white, size: 16),
             tooltip: 'New chat',
             onPressed: () => service.startNewChat(),
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
           ),
           IconButton(
-            icon: const Icon(Icons.remove, color: Colors.white, size: 18),
+            icon: const Icon(Icons.remove, color: Colors.white, size: 16),
             tooltip: 'Minimize',
             onPressed: service.toggleMinimized,
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
           ),
           IconButton(
-            icon: const Icon(Icons.close, color: Colors.white, size: 18),
+            icon: const Icon(Icons.close, color: Colors.white, size: 16),
             tooltip: 'Close',
             onPressed: () => service.requestClose(),
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
           ),
         ],
       ),
@@ -1712,14 +1930,10 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
       itemCount: service.messages.length + (service.isSending ? 1 : 0),
       itemBuilder: (context, i) {
         if (i >= service.messages.length) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 6),
-            child: SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF4FA3)),
-            ),
-          );
+          // Claude-style animated typing bubble, replacing a bare
+          // spinner. UI only -- service.isSending already drove the
+          // slot count above; this just changes what fills it.
+          return const _GuruOverlayTypingBubble();
         }
         final m = service.messages[i];
         final isUser = m.role == 'user';
@@ -1728,15 +1942,80 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
           child: Column(
             crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 4),
-                constraints: const BoxConstraints(maxWidth: 240),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isUser ? const Color(0xFFFF4FA3) : const Color(0xFFFFF1F8),
-                  borderRadius: BorderRadius.circular(14),
+              GestureDetector(
+                // Claude-mobile-style long-press-to-copy. UI-only: no
+                // message data or send/receive logic is touched here.
+                onLongPress: () async {
+                  await Clipboard.setData(ClipboardData(text: m.text));
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Copied'),
+                        duration: Duration(milliseconds: 900),
+                      ),
+                    );
+                  }
+                },
+                child: Container(
+                  // REDESIGNED (Aug 31 2026 — Claude-app proportions,
+                  // brand pink kept). Same reasoning as the full chat
+                  // screen's bubble: the Aug 29 shrink went too far for
+                  // comfortable reading, especially in Tamil. Roomier
+                  // padding and a softer radius, with maxWidth still
+                  // capping the bubble so nothing can overflow the
+                  // popup's own narrow frame.
+                  margin: const EdgeInsets.symmetric(vertical: 5),
+                  constraints: const BoxConstraints(maxWidth: 240),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isUser ? const Color(0xFFFF4FA3) : const Color(0xFFFFF1F8),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  // FIX (Aug 29 2026 - Nizam: "popup chat font pink la
+                  // namma brand pink maathiru"). Both bubbles hardcoded
+                  // white text. The user's own bubble is solid brand
+                  // pink (0xFFFF4FA3) so white reads fine there - but
+                  // Chitti's reply bubble is near-white (0xFFFFF1F8),
+                  // and white text on a near-white background was
+                  // effectively invisible. Chitti's replies now use the
+                  // same dark brand text color the rest of this panel
+                  // already uses.
+                  child: isUser
+                      ? Text(
+                          m.text,
+                          style: GoogleFonts.outfit(
+                            // Kept at w600 unlike the reply side: this
+                            // is white on solid brand pink, where the
+                            // heavier weight genuinely helps contrast
+                            // rather than shouting.
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13.5,
+                            height: 1.5,
+                          ),
+                        )
+                      // Typewriter reveal (Aug 29 2026 — Nizam:
+                      // "ovvoru work ah type aguramari set pannuna
+                      // customer ku oru nalla interest irukum"). Only
+                      // the newest reply, while nothing else is
+                      // loading, counts as "freshly arrived" — the
+                      // ValueKey below is what stops this from
+                      // replaying on every later rebuild once it has
+                      // already finished. See chitti_typewriter_text
+                      // .dart.
+                      : ChittiTypewriterText(
+                          key: ValueKey('overlay_msg_$i'),
+                          m.text,
+                          animate: i == service.messages.length - 1 &&
+                              !service.isSending,
+                          style: GoogleFonts.outfit(
+                            color: const Color(0xFF4A1236),
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13.5,
+                            height: 1.5,
+                          ),
+                        ),
                 ),
-                child: Text(m.text, style: GoogleFonts.outfit(color: Colors.white, fontSize: 12.5, height: 1.35)),
               ),
               // NEW (CTO mandate — Suggestion Chips): tapping one sends
               // that exact text back to Guru as the next message.
@@ -1890,5 +2169,76 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
     if (text.trim().isEmpty) return;
     _controller.clear();
     unawaited(service.sendMessage(text));
+  }
+}
+
+/// A three-dot "Chitti is typing" bubble for the popup chat, styled
+/// like Chitti's own reply bubble rather than a bare platform spinner.
+/// UI only -- see the note where this is used.
+class _GuruOverlayTypingBubble extends StatefulWidget {
+  const _GuruOverlayTypingBubble();
+
+  @override
+  State<_GuruOverlayTypingBubble> createState() =>
+      _GuruOverlayTypingBubbleState();
+}
+
+class _GuruOverlayTypingBubbleState extends State<_GuruOverlayTypingBubble>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller =
+        AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
+          ..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF1F8),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(3, (index) {
+                final phase = (_controller.value + index * 0.22) % 1;
+                final scale = 0.7 + (phase < 0.5 ? phase : 1 - phase) * 0.8;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Transform.scale(
+                    scale: scale,
+                    child: Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFF4FA3),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            );
+          },
+        ),
+      ),
+    );
   }
 }

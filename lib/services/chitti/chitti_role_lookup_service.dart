@@ -35,6 +35,8 @@ import 'package:flutter/foundation.dart';
 
 import 'chitti_enquiry_service.dart';
 import 'chitti_local_read.dart';
+import 'chitti_accessibility_bridge.dart';
+import 'chitti_summarizer.dart';
 
 class ChittiRoleLookupService {
   ChittiRoleLookupService._();
@@ -477,36 +479,60 @@ class ChittiRoleLookupService {
     }
   }
 
-  /// "Innaiku evlo order?" — today's activity across the platform.
+  /// "Innaiku evlo order?" — today's activity across the platform (service requests + rides).
   static Future<String> adminTodayActivitySummary() async {
     try {
-      final snap = await ChittiLocalRead.query(
+      final snapReqs = await ChittiLocalRead.query(
         FirebaseFirestore.instance
             .collection('service_requests')
-            .orderBy('timestamp', descending: true)
+            .orderBy('createdAt', descending: true)
             .limit(_adminCountCap),
       );
-      if (snap == null) {
-        return "I couldn't reach today's orders right now — please try again "
-            'in a moment.';
+      final snapRides = await ChittiLocalRead.query(
+        FirebaseFirestore.instance
+            .collection('rides')
+            .orderBy('createdAt', descending: true)
+            .limit(_adminCountCap),
+      );
+      if (snapReqs == null && snapRides == null) {
+        return "I couldn't reach today's orders right now — please try again in a moment.";
       }
-      // Date filtering in Dart, for the composite-index reason at the
-      // top of this file.
+
       final now = DateTime.now();
-      final today = snap.docs.where((d) {
-        final ts = d.data()['timestamp'];
+      bool isToday(dynamic ts) {
         if (ts is! Timestamp) return false;
         final t = ts.toDate();
         return t.year == now.year && t.month == now.month && t.day == now.day;
-      }).toList();
-      if (today.isEmpty) {
-        return 'No orders have come in today yet.';
       }
-      final open = today
-          .where((d) => (d.data()['status'] as String?) != 'completed')
+
+      final todayReqs = (snapReqs?.docs ?? []).where((d) {
+        final data = d.data();
+        return isToday(data['createdAt'] ?? data['timestamp']);
+      }).toList();
+
+      final todayRides = (snapRides?.docs ?? []).where((d) {
+        final data = d.data();
+        return isToday(data['createdAt'] ?? data['timestamp']);
+      }).toList();
+
+      final totalCount = todayReqs.length + todayRides.length;
+      if (totalCount == 0) {
+        return 'No orders or rides have come in today yet.';
+      }
+
+      final openReqs = todayReqs
+          .where((d) => (d.data()['status'] as String?) != 'completed' && (d.data()['status'] as String?) != 'cancelled')
           .length;
-      final n = today.length;
-      return '$n order${n == 1 ? '' : 's'} today, $open still in progress.';
+      final openRides = todayRides
+          .where((d) => (d.data()['status'] as String?) != 'completed' && (d.data()['status'] as String?) != 'cancelled')
+          .length;
+      final totalOpen = openReqs + openRides;
+
+      final breakdown = <String>[];
+      if (todayRides.isNotEmpty) breakdown.add('${todayRides.length} ride${todayRides.length == 1 ? '' : 's'}');
+      if (todayReqs.isNotEmpty) breakdown.add('${todayReqs.length} service/food order${todayReqs.length == 1 ? '' : 's'}');
+
+      return '$totalCount total order${totalCount == 1 ? '' : 's'} today (${breakdown.join(', ')}), $totalOpen still in progress.';
     } catch (e) {
       debugPrint('[ChittiRoleLookupService] adminTodayActivity failed: $e');
       return "I couldn't reach today's orders right now — please try again "
@@ -568,13 +594,16 @@ class ChittiRoleLookupService {
       final lines = snap.docs.take(5).map((d) {
         final data = d.data();
         final q = ((data['question'] as String?) ?? '').trim();
-        final who = ((data['customerName'] as String?) ?? '').trim();
-        final short = q.length > 70 ? '${q.substring(0, 70)}…' : q;
-        return who.isEmpty ? '• $short' : '• $short — $who';
+        final who = ((data['customerName'] as String?) ?? 'வாடிக்கையாளர்').trim();
+        final summary = ChittiSummarizer.heuristicSummary(
+          sender: who,
+          message: q,
+          isTamil: true,
+        );
+        return '• $summary';
       }).join('\n');
       final n = snap.docs.length;
-      return '${_countLabel(n)} customer${n == 1 ? '' : 's'} waiting for a '
-          'price from you:\n$lines';
+      return '${_countLabel(n)} வாடிக்கையாளர்கள் விலை மற்றும் விபரம் கேட்டு காத்திருக்கிறார்கள்:\n$lines';
     } catch (e) {
       debugPrint('[ChittiRoleLookupService] adminOpenEnquiries failed: $e');
       return "I couldn't reach the enquiries right now — please try again "
@@ -582,4 +611,34 @@ class ChittiRoleLookupService {
     }
   }
 
+  /// Communications summary (recent screened calls + unread/recent SMS count)
+  static Future<String> adminCommunicationsSummary() async {
+    try {
+      final smsList = await ChittiAccessibilityBridge.instance.getRecentSms();
+      final callLogsSnap = await ChittiLocalRead.query(
+        FirebaseFirestore.instance
+            .collection('chitti_screening_debug_logs')
+            .orderBy('timestamp', descending: true)
+            .limit(10),
+      );
+      final recentCalls = callLogsSnap?.docs ?? [];
+      final smsCount = smsList.length;
+      final callCount = recentCalls.length;
+
+      if (smsCount == 0 && callCount == 0) {
+        return 'No recent communications or screened calls recorded.';
+      }
+      final parts = <String>[];
+      if (callCount > 0) {
+        parts.add('$callCount call activity log${callCount == 1 ? '' : 's'}');
+      }
+      if (smsCount > 0) {
+        parts.add('$smsCount recent SMS message${smsCount == 1 ? '' : 's'}');
+      }
+      return 'Communications update: ${parts.join(' and ')}.';
+    } catch (e) {
+      debugPrint('[ChittiRoleLookupService] adminCommunicationsSummary failed: $e');
+      return 'Communications summary currently unavailable.';
+    }
+  }
 }

@@ -22,15 +22,17 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../services/auth_prompt_service.dart';
 import '../services/location_service.dart';
 import '../services/map_service.dart';
+import '../services/recent_places_service.dart';
 import '../services/service_request_service.dart';
 import '../services/shared_location_inbox.dart';
 import '../utils/location_link_parser.dart';
 import '../utils/service_request_labels.dart';
+import '../widgets/allin1_map_widget.dart';
 import '../widgets/quick_order_line_items.dart';
 import '../services/auth_service.dart';
 import '../widgets/server_busy_dialog.dart';
 import 'hero_booking_status_screen.dart';
-import 'hero_booking_tracking_screen.dart';
+import 'hero_search_radar_screen.dart';
 import 'location_picker_screen.dart';
 import '../services/theme_context_extensions.dart';
 // Batch 1 retrofit: former hardcoded hex constants (_kPink, _kPinkDark,
@@ -118,6 +120,25 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
   double? _locationLat;
   double? _locationLng;
 
+  /// Customer's own live position, for the small map preview at the
+  /// top of the form. Non-interactive and cheap: reuses whatever
+  /// LocationService already has cached (see
+  /// _primeSearchBiasWithCustomerCity below) rather than a fresh GPS
+  /// fix, so this never costs extra battery on its own.
+  LatLng? _customerPosition;
+
+  /// Marker label for the small preview map — 'You' while it's just
+  /// showing where the customer is, switched to 'Service location'
+  /// once they've actually picked a drop/service address, so the pin
+  /// reads correctly for whichever point it's currently centred on.
+  String _mapMarkerLabel = 'You';
+
+  /// The customer's own genuine past pickup/drop selections (never
+  /// invented placeholders — see recent_places_service.dart's header).
+  /// Shown as quick chips under the location field so a repeat errand
+  /// (same shop, same home) doesn't need to be searched again.
+  List<Map<String, dynamic>> _recentPlaces = [];
+
   bool get _isPickupDelivery => _selectedCategory == 'pickup_delivery';
 
   @override
@@ -125,6 +146,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
     super.initState();
     _selectedCategory = widget.initialCategory;
     unawaited(_primeSearchBiasWithCustomerCity());
+    unawaited(_loadRecentPlaces());
     // A location shared in from WhatsApp/Maps may already be waiting
     // (see shared_location_inbox.dart). Checked after the first frame
     // so there's a Navigator/ScaffoldMessenger to show the prompt on.
@@ -241,12 +263,35 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
       position ??= await locationService.getLastKnownLocation();
       position ??= await locationService.getCurrentLocation();
       if (position == null) return;
-      _mapService.setSearchCenter(
-        LatLng(position.latitude, position.longitude),
-      );
+      final point = LatLng(position.latitude, position.longitude);
+      _mapService.setSearchCenter(point);
+      if (mounted) setState(() => _customerPosition = point);
     } catch (e) {
       debugPrint('[HeroBooking] search-bias location fetch failed: $e');
     }
+  }
+
+  Future<void> _loadRecentPlaces() async {
+    final places = await RecentPlacesService().getRecentPlaces();
+    if (mounted) setState(() => _recentPlaces = places);
+  }
+
+  /// Called every time a location is actually confirmed (suggestion
+  /// tap, current-location fetch, map pick, pasted link) — moves the
+  /// small preview map to follow that pick, and remembers it as a
+  /// genuine recent place for next time. Never called for a manually
+  /// typed address with no resolved coordinates.
+  void _onLocationConfirmed(String name, double lat, double lng) {
+    setState(() {
+      _customerPosition = LatLng(lat, lng);
+      _mapMarkerLabel = 'Service location';
+    });
+    unawaited(
+      RecentPlacesService()
+          .recordPlace({'name': name, 'lat': lat, 'lng': lng}).then(
+        (_) => _loadRecentPlaces(),
+      ),
+    );
   }
 
   @override
@@ -565,16 +610,17 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
       ),);
 
       if (!mounted) return;
-      // Was ServiceRequestTrackingScreen (the older, generic 4-category
-      // tracker with just a status stepper) — now routes to
-      // HeroBookingTrackingScreen, the screen with the task-details
-      // card, estimate-approval, payment, and rating features. It
-      // resolves the customer's active hero_booking request live, so
-      // no requestId/requestType args are needed here.
+      // Radar-search screen (Taxi-style "searching for a hero" wait)
+      // shows first — it listens for status to flip to 'hero_assigned'
+      // and hands off to HeroBookingTrackingScreen itself once a hero
+      // accepts, or on a 90s timeout.
       await Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => const HeroBookingTrackingScreen(),
+          builder: (_) => HeroSearchRadarScreen(
+            requestId: requestId,
+            serviceLabel: heroBookingCategoryLabel(_selectedCategory) ?? 'Hero',
+          ),
         ),
       );
     } catch (e) {
@@ -630,7 +676,35 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
+
+            // ── Small live-location preview ───────────────────────
+            // Non-interactive (no gesture cost) and only rendered once
+            // a position is known — reuses whatever LocationService
+            // already had cached from _primeSearchBiasWithCustomerCity,
+            // so this never triggers an extra GPS fix on its own.
+            if (_customerPosition != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: SizedBox(
+                  height: 150,
+                  child: IgnorePointer(
+                    child: Allin1MapWidget(
+                      center: _customerPosition!,
+                      zoom: 15,
+                      interactive: false,
+                      markers: [
+                        MapMarker(
+                          point: _customerPosition!,
+                          icon: Icons.my_location_rounded,
+                          label: _mapMarkerLabel,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            if (_customerPosition != null) const SizedBox(height: 20),
 
             // ── What a Hero can do -- tappable idea slider ────────
             // Concrete examples, not just the dry category labels
@@ -947,12 +1021,16 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
   }
 
   void _selectLocationSuggestion(Map<String, dynamic> loc) {
+    final name = loc['name'] as String? ?? '';
+    final lat = (loc['lat'] as num?)?.toDouble();
+    final lng = (loc['lng'] as num?)?.toDouble();
     setState(() {
-      _locationCtrl.text = loc['name'] as String? ?? '';
-      _locationLat = (loc['lat'] as num?)?.toDouble();
-      _locationLng = (loc['lng'] as num?)?.toDouble();
+      _locationCtrl.text = name;
+      _locationLat = lat;
+      _locationLng = lng;
       _locationSuggestions = [];
     });
+    if (lat != null && lng != null) _onLocationConfirmed(name, lat, lng);
   }
 
   Future<void> _useCurrentLocationFor(
@@ -1004,6 +1082,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
           _locationSuggestions = [];
         }
       });
+      if (!isFrom) _onLocationConfirmed(name, pos.latitude, pos.longitude);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1058,6 +1137,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         _locationSuggestions = [];
       }
     });
+    if (!isFrom) _onLocationConfirmed(picked.name, picked.lat, picked.lng);
   }
 
   // ── Paste a location link ────────────────────────────────────────
@@ -1162,6 +1242,13 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         _locationSuggestions = [];
       }
     });
+    if (!isFrom) {
+      _onLocationConfirmed(
+        label.isNotEmpty ? label : controller.text,
+        lat,
+        lng,
+      );
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1429,6 +1516,64 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
               },
             ),
           ),
+        // ── Recent places ─────────────────────────────────────────
+        // Only under the drop/service-location field, only real past
+        // selections (recent_places_service.dart), only while the
+        // customer isn't mid-search with fresh suggestions showing.
+        if (!isFrom && suggestions.isEmpty && _recentPlaces.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Text('Recently used places',
+              style: GoogleFonts.outfit(
+                  color: context.colors.mutedText,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,),),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _recentPlaces.map((place) {
+              final name = place['name'] as String? ?? '';
+              final lat = (place['lat'] as num?)?.toDouble();
+              final lng = (place['lng'] as num?)?.toDouble();
+              if (name.isEmpty || lat == null || lng == null) {
+                return const SizedBox.shrink();
+              }
+              return InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () => _selectLocationSuggestion(
+                  {'name': name, 'lat': lat, 'lng': lng},
+                ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8,),
+                  decoration: BoxDecoration(
+                    color: context.colors.subtleFill,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: context.colors.border),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.history_rounded,
+                          size: 14, color: context.colors.accentSecondary,),
+                      const SizedBox(width: 5),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 140),
+                        child: Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: context.colors.text, fontSize: 12,),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
       ],
     );
   }

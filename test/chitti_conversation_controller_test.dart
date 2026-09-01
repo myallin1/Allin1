@@ -196,4 +196,44 @@ void main() {
       expect(c.isActive, isFalse);
     });
   });
+
+  group('pending topic queue (mid-speech interruption memory)', () {
+    test('queues background topic while speaking', () {
+      c.markSpeaking('Checking your today earnings now, boss.');
+      expect(c.hasPendingTopic, isFalse);
+
+      c.queuePendingTopic('read my recent sms');
+      expect(c.hasPendingTopic, isTrue);
+      expect(c.pendingTopic?.text, 'read my recent sms');
+
+      final popped = c.popPendingTopic();
+      expect(popped?.text, 'read my recent sms');
+      expect(c.hasPendingTopic, isFalse);
+    });
+
+    test('ignores stop words from being queued as pending topics', () {
+      c.markSpeaking('Processing your order now.');
+      c.queuePendingTopic('stop');
+      expect(c.hasPendingTopic, isFalse);
+      c.queuePendingTopic('podhum');
+      expect(c.hasPendingTopic, isFalse);
+    });
+
+    test('auto-stop does not exit when pending topic is queued', () {
+      c.queuePendingTopic('send sms to 9876543210');
+      expect(c.hasPendingTopic, isTrue);
+
+      final step = c.onUserSaid('check orders', resolvedAnIntent: true, awaitingReply: false);
+      expect(step, ChittiConversationStep.speak);
+      expect(c.isActive, isTrue);
+    });
+
+    test('stop clears pending topic', () {
+      c.queuePendingTopic('check open bugs');
+      expect(c.hasPendingTopic, isTrue);
+      c.stop();
+      expect(c.hasPendingTopic, isFalse);
+      expect(c.pendingTopic, isNull);
+    });
+  });
 }

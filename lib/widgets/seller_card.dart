@@ -49,10 +49,12 @@ class SellerCard extends StatelessWidget {
     // this particular seller has no photo yet, so nothing regresses for
     // sellers who haven't uploaded one.
     final iconTheme = context.watch<ThemeService>().iconThemeKey;
-    final photoUrl = (seller['coverImageUrl'] as String?)?.trim().isNotEmpty == true
-        ? seller['coverImageUrl'] as String
-        : (seller['imageUrl'] as String?)?.trim().isNotEmpty == true
-            ? seller['imageUrl'] as String
+    final coverUrl = (seller['coverImageUrl'] as String?)?.trim();
+    final imgUrl = (seller['imageUrl'] as String?)?.trim();
+    final photoUrl = (coverUrl != null && coverUrl.isNotEmpty)
+        ? coverUrl
+        : (imgUrl != null && imgUrl.isNotEmpty)
+            ? imgUrl
             : null;
     if (iconTheme == 'photo_realistic' && photoUrl != null) {
       return _buildPhotoCard(context, config, isOpen, metadata, photoUrl);
@@ -249,7 +251,8 @@ class SellerCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: config.primaryColor.withValues(alpha: 0.18)),
+          border:
+              Border.all(color: config.primaryColor.withValues(alpha: 0.18)),
           boxShadow: [
             BoxShadow(
               color: config.primaryColor.withValues(alpha: 0.12),
@@ -275,7 +278,8 @@ class SellerCard extends StatelessWidget {
                     height: 140,
                     color: config.primaryColor.withValues(alpha: 0.1),
                     child: Center(
-                      child: Text(_getShopEmoji(), style: const TextStyle(fontSize: 40)),
+                      child: Text(_getShopEmoji(),
+                          style: const TextStyle(fontSize: 40)),
                     ),
                   ),
                 ),
@@ -308,15 +312,20 @@ class SellerCard extends StatelessWidget {
                       const SizedBox(width: 4),
                       Text(
                         _getRating(),
-                        style: GoogleFonts.outfit(fontSize: 12, color: _kText, fontWeight: FontWeight.w600),
+                        style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: _kText,
+                            fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(width: 8),
-                      const Text('•', style: TextStyle(fontSize: 12, color: _kMuted)),
+                      const Text('•',
+                          style: TextStyle(fontSize: 12, color: _kMuted)),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           metadata,
-                          style: GoogleFonts.outfit(fontSize: 11, color: _kMuted),
+                          style:
+                              GoogleFonts.outfit(fontSize: 11, color: _kMuted),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),

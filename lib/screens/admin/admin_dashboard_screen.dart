@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/chitti/chitti_admin_briefing_service.dart';
 import '../../services/chitti/chitti_enquiry_service.dart';
 import '../../services/app_minimizer_service.dart';
 import '../../widgets/native_update_button.dart';
@@ -205,6 +206,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     // Use unawaited if we don't want to block, or just call it since it handles its own state
     _computeWalletTotal();
+
+    // Trigger Chitti's Daily Morning Briefing for the CEO (Phase 1)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ChittiAdminBriefingService.instance.speakBriefingIfFirstTimeToday();
+    });
   }
 
   Future<void> _fetchStatCards() async {
@@ -355,6 +361,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   @override
   void dispose() {
+    ChittiAdminBriefingService.instance.stopBriefing();
     _phoneController.dispose();
     _topUpAmountController.dispose();
     super.dispose();
@@ -735,6 +742,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       setState(() => _selectedTab = 0);
       return;
     }
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+      return;
+    }
     if (kIsWeb) {
       if (AppMinimizer.consumeWebHintOnce()) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -808,12 +819,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       backgroundColor: _surface,
+      leading: Navigator.canPop(context)
+          ? IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _text, size: 20),
+              tooltip: 'Back to HQ',
+              onPressed: () {
+                if (_selectedTab != 0) {
+                  setState(() => _selectedTab = 0);
+                } else {
+                  Navigator.pop(context);
+                }
+              },
+            )
+          : null,
       title: Row(
         children: [
-          const Text('🔐', style: TextStyle(fontSize: 18)),
+          const Text('🚕', style: TextStyle(fontSize: 18)),
           const SizedBox(width: 8),
           Text(
-            'Admin Dashboard',
+            'Taxi & Transport',
             style: GoogleFonts.outfit(
               color: _text,
               fontWeight: FontWeight.w800,

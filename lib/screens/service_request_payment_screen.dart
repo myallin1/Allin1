@@ -26,9 +26,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/gift_coupon_model.dart';
 import '../models/service_request_model.dart';
 import '../services/chitti_order_memory_service.dart';
 import '../services/chitti_overlay_service.dart';
+import '../services/gift_coupon_service.dart';
 import '../widgets/animated_meter_fare.dart';
 import '../widgets/rating_feedback_sheet.dart';
 
@@ -76,6 +78,50 @@ class _ServiceRequestPaymentScreenState
   // once, the first time paymentStatus flips to 'paid', mirroring
   // ride_tracking_screen.dart's `_handledPaidFlow` guard.
   bool _memoryRecorded = false;
+
+  // Gift Coupons: lets the customer discount THIS bill (finalAmount)
+  // with one of their own active coupons before the hero marks it
+  // paid. Deliberately separate from the removed self-attest "mark
+  // paid" flow above — this only ever touches finalAmount, never
+  // paymentStatus, so the hero's own "Payment Received" confirmation
+  // remains the sole way this task closes.
+  final GiftCouponService _giftCouponService = GiftCouponService();
+  bool _applyingCoupon = false;
+
+  Future<void> _showApplyCouponSheet(String requestId) async {
+    final coupon = await showModalBottomSheet<GiftCouponModel>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => _CouponPickerSheet(
+        stream: _giftCouponService.streamActiveCouponsForCurrentUser(),
+      ),
+    );
+    if (coupon == null || !mounted) return;
+
+    setState(() => _applyingCoupon = true);
+    try {
+      final redemption = await _giftCouponService.redeemOnServiceRequest(
+        couponId: coupon.id,
+        requestId: requestId,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Coupon applied! New bill: ₹${redemption.payableAmount.toStringAsFixed(0)}')),
+      );
+    } catch (e) {
+      debugPrint('[ServiceRequestPayment] coupon redeem failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not apply coupon: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _applyingCoupon = false);
+    }
+  }
 
   /// Short key matching the vocabulary already used elsewhere (Voice
   /// Service enum, book_transport's tool enum) so Chitti doesn't have
@@ -256,6 +302,26 @@ class _ServiceRequestPaymentScreenState
                           fontWeight: FontWeight.w700,),
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _applyingCoupon
+                          ? null
+                          : () => unawaited(_showApplyCouponSheet(widget.requestId)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFFF8F00),
+                        side: const BorderSide(color: Color(0xFFFF8F00)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      icon: _applyingCoupon
+                          ? const SizedBox(
+                              width: 16, height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF8F00)),)
+                          : const Icon(Icons.card_giftcard_rounded, size: 18),
+                      label: Text(_applyingCoupon ? 'Applying...' : 'Apply Gift Coupon'),
+                    ),
+                  ),
                 ] else if (!isPaid) ...[
                   const Text(
                     'Waiting for the hero to complete the task and generate the final bill.',
@@ -292,4 +358,89 @@ class _ServiceRequestPaymentScreenState
     );
   }
 
+}
+
+// ================================================================
+// Shared coupon-picker bottom sheet — used by both redemption points
+// (this screen for Heroes bills, and the equivalent picker in
+// custom_hotel_view_screen.dart for Hotel checkout). Kept as a small
+// self-contained widget rather than a shared file: the two call sites
+// differ enough in surrounding style/theme that duplicating this one
+// small sheet is cheaper than a cross-screen shared-widget import.
+// ================================================================
+class _CouponPickerSheet extends StatelessWidget {
+  const _CouponPickerSheet({required this.stream});
+
+  final Stream<List<GiftCouponModel>> stream;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: StreamBuilder<List<GiftCouponModel>>(
+          stream: stream,
+          builder: (context, snapshot) {
+            final coupons = snapshot.data ?? const [];
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Apply a Gift Coupon',
+                    style: GoogleFonts.outfit(color: _kText, fontSize: 17, fontWeight: FontWeight.w800),),
+                const SizedBox(height: 12),
+                if (snapshot.connectionState == ConnectionState.waiting)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Center(child: CircularProgressIndicator(color: _kPink)),
+                  )
+                else if (coupons.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Text("You don't have any active gift coupons.",
+                        style: GoogleFonts.outfit(color: _kMuted, fontSize: 13),),
+                  )
+                else
+                  ...coupons.map(
+                    (c) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () => Navigator.pop(context, c),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: _kSurface,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: _kBorder),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.card_giftcard_rounded, color: Color(0xFFFF8F00)),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text('₹${c.value.toStringAsFixed(0)} OFF'
+                                    '${c.sourceSummary.isNotEmpty ? ' — ${c.sourceSummary}' : ''}',
+                                    style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w700, fontSize: 13),),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(ObjectFlagProperty<Stream<List<GiftCouponModel>>>.has('stream', stream));
+  }
 }

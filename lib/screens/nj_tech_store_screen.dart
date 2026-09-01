@@ -26,6 +26,7 @@ import '../services/theme_service.dart';
 import '../utils/service_request_labels.dart';
 import '../widgets/cached_cloud_image.dart';
 import '../widgets/location_capture_field.dart';
+import 'hero_search_radar_screen.dart';
 import 'service_request_tracking_screen.dart';
 
 // ── Brand Colors (matches dashboard theme) ───────────────────────
@@ -896,9 +897,13 @@ class _CategoryModalState extends State<_CategoryModal> {
       await Navigator.push(
         context,
         MaterialPageRoute<void>(
-          builder: (_) => ServiceRequestTrackingScreen(
+          builder: (_) => HeroSearchRadarScreen(
             requestId: requestId,
-            requestType: 'electronics_service',
+            serviceLabel: widget.category.title,
+            matchedScreenBuilder: (id) => ServiceRequestTrackingScreen(
+              requestId: id,
+              requestType: 'electronics_service',
+            ),
           ),
         ),
       );
@@ -1558,15 +1563,28 @@ class _EnquiryCardView extends StatelessWidget {
     final statusColor = serviceRequestStatusColor(status);
     final statusLabel = serviceRequestStatusLabel('electronics_service', status);
 
+    final isStillSearching = status == 'pending' || status == 'admin_review';
+
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute<void>(
-          builder: (_) => ServiceRequestTrackingScreen(
-            requestId: requestId,
-            requestType: 'electronics_service',
-          ),
+          builder: (_) => isStillSearching
+              ? HeroSearchRadarScreen(
+                  requestId: requestId,
+                  serviceLabel: categoryLabel?.isNotEmpty == true
+                      ? categoryLabel!
+                      : 'Repair Hero',
+                  matchedScreenBuilder: (id) => ServiceRequestTrackingScreen(
+                    requestId: id,
+                    requestType: 'electronics_service',
+                  ),
+                )
+              : ServiceRequestTrackingScreen(
+                  requestId: requestId,
+                  requestType: 'electronics_service',
+                ),
         ),
       ),
       child: Container(

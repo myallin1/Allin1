@@ -8,7 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/gift_coupon_model.dart';
 import '../services/db_usage_tracker.dart';
+import '../services/gift_coupon_service.dart';
 import '../widgets/banner_slider.dart';
 import '../widgets/promo_overlay.dart';
 import '../widgets/server_busy_dialog.dart' show kCallCenterNumberIntl;
@@ -67,6 +69,8 @@ class _RewardsScreenState extends State<RewardsScreen>
   bool _aiQuizClaimed = false;
 
   int _topTab = 0; // 0 = Rewards, 1 = Erode Offers
+
+  final GiftCouponService _giftCouponService = GiftCouponService();
 
   @override
   void initState() {
@@ -253,14 +257,14 @@ class _RewardsScreenState extends State<RewardsScreen>
   Widget _buildHeader() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [_paytmDarkBlue, _paytmBlue],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
             color: _paytmBlue.withValues(alpha: 0.32),
@@ -276,7 +280,7 @@ class _RewardsScreenState extends State<RewardsScreen>
               'Rewards',
               style: GoogleFonts.outfit(
                 color: Colors.white,
-                fontSize: 24,
+                fontSize: 20,
                 fontWeight: FontWeight.w900,
               ),
             ),
@@ -285,7 +289,7 @@ class _RewardsScreenState extends State<RewardsScreen>
             'Answer 2 quick one-time questions to unlock real rewards — no daily wait, no gimmicks.',
             style: GoogleFonts.outfit(
               color: Colors.white.withValues(alpha: 0.9),
-              fontSize: 13,
+              fontSize: 11,
               height: 1.35,
               fontWeight: FontWeight.w600,
             ),
@@ -297,10 +301,10 @@ class _RewardsScreenState extends State<RewardsScreen>
 
   Widget _buildTopTabBar() {
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(15),
         border: Border.all(color: _paytmBlue.withValues(alpha: 0.18)),
       ),
       child: Row(
@@ -318,23 +322,23 @@ class _RewardsScreenState extends State<RewardsScreen>
       onTap: () => setState(() => _topTab = index),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 9),
         decoration: BoxDecoration(
           gradient: selected
               ? const LinearGradient(colors: [_paytmDarkBlue, _paytmBlue])
               : null,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 18, color: selected ? Colors.white : _rewardInk.withValues(alpha: 0.55)),
-            const SizedBox(width: 6),
+            Icon(icon, size: 15, color: selected ? Colors.white : _rewardInk.withValues(alpha: 0.55)),
+            const SizedBox(width: 5),
             Text(
               label,
               style: GoogleFonts.outfit(
                 color: selected ? Colors.white : _rewardInk.withValues(alpha: 0.55),
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -346,6 +350,17 @@ class _RewardsScreenState extends State<RewardsScreen>
 
   List<Widget> _buildRewardsTabContent() {
     return [
+      StreamBuilder<List<GiftCouponModel>>(
+        stream: _giftCouponService.streamActiveCouponsForCurrentUser(),
+        builder: (context, snapshot) {
+          final coupons = snapshot.data ?? const [];
+          if (coupons.isEmpty) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 20),
+            child: _GiftCouponsSection(coupons: coupons),
+          );
+        },
+      ),
       _QuizRewardCard(
         animation: _glowController,
         onTap: _openPaytmQuizDialog,
@@ -951,6 +966,124 @@ class _AiQuizDialogState extends State<_AiQuizDialog> {
         ),
       ],
     );
+  }
+}
+
+// ================================================================
+// My Gift Coupons — repair/replacement -> Hero/Hotel bill discount.
+// Read-only display; the actual "apply" action lives at the two
+// redemption points themselves (service_request_payment_screen.dart
+// for a Hero task bill, custom_hotel_view_screen.dart for a Hotel
+// order checkout) since that's where the amount being discounted
+// actually exists.
+// ================================================================
+class _GiftCouponsSection extends StatelessWidget {
+  const _GiftCouponsSection({required this.coupons});
+
+  final List<GiftCouponModel> coupons;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'My Gift Coupons',
+          style: GoogleFonts.outfit(color: _rewardInk, fontSize: 18, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Use these at a Hero task bill or Hotel order checkout.',
+          style: GoogleFonts.outfit(color: _rewardInk.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 12),
+        ...coupons.map(
+          (c) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _GiftCouponTile(coupon: c),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(IterableProperty<GiftCouponModel>('coupons', coupons));
+  }
+}
+
+class _GiftCouponTile extends StatelessWidget {
+  const _GiftCouponTile({required this.coupon});
+
+  final GiftCouponModel coupon;
+
+  @override
+  Widget build(BuildContext context) {
+    final expiresAt = coupon.expiresAt;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFFC107), Color(0xFFFF8F00)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFF8F00).withValues(alpha: 0.28),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+            child: const Icon(Icons.card_giftcard_rounded, color: Color(0xFFFF8F00), size: 26),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '₹${coupon.value.toStringAsFixed(0)} OFF',
+                  style: GoogleFonts.outfit(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900),
+                ),
+                if (coupon.sourceSummary.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'From: ${coupon.sourceSummary}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(color: Colors.white.withValues(alpha: 0.92), fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ],
+                if (expiresAt != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Valid till ${expiresAt.day}/${expiresAt.month}/${expiresAt.year}',
+                    style: GoogleFonts.outfit(color: Colors.white.withValues(alpha: 0.85), fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<GiftCouponModel>('coupon', coupon));
   }
 }
 

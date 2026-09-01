@@ -164,6 +164,17 @@ class ChittiLocalIntentEngine {
       ],
     ),
     _IntentRule(
+      action: 'open_external_app',
+      variants: {'customer', 'hero', 'seller', 'admin'},
+      slots: {'target': 'call'},
+      phrases: [
+        'phone dialer', 'dialer', 'open dialer', 'dialer open pannu',
+        'call friend', 'call pannu', 'call pannanum', 'make a call',
+        'open phone', 'phone open pannu', 'dial a number',
+        'டயலர்', 'கால் பண்ணு', 'போன் பண்ணு', 'டயலர் திற',
+      ],
+    ),
+    _IntentRule(
       action: 'navigate_to_section',
       variants: {'customer'},
       slots: {'section': 'grocery'},
@@ -510,6 +521,138 @@ class ChittiLocalIntentEngine {
         'rate kekuranga', 'என்குயரி', 'ரேட் கேட்குறாங்க',
       ],
     ),
+    _IntentRule(
+      action: 'audit_ui_sections',
+      variants: {'admin'},
+      phrases: [
+        'audit the database', 'audit database', 'db audit', 'database audit',
+        'check database leakage', 'check for db leakage', 'db leakage',
+        'audit panu', 'டேட்டாபேஸ் ஆடிட்', 'ஆடிட் பண்ணு',
+      ],
+    ),
+    _IntentRule(
+      action: 'run_ux_audit',
+      variants: {'admin'},
+      phrases: [
+        'show qa audit', 'qa audit', 'ux audit', 'test bot findings',
+        'qa test bot', 'qa report', 'கியூஏ ஆடிட்',
+      ],
+    ),
+    _IntentRule(
+      action: 'read_recent_sms',
+      variants: {'admin'},
+      phrases: [
+        'read my recent sms', 'read recent sms', 'read sms', 'check sms',
+        'incoming sms', 'recent messages', 'sms paaru', 'எஸ்எம்எஸ் பாரு',
+        'புது மெசேஜ்',
+      ],
+    ),
+    _IntentRule(
+      action: 'summarize_last_call',
+      variants: {'admin'},
+      phrases: [
+        'summarize last call', 'last call summary', 'last call', 'who called',
+        'what did the caller say', 'screened call', 'kadasia vantha call',
+        'call la enna sonnanga', 'caller enna sonnanga', 'கடைசி கால்',
+        'கால் சம்மரி', 'கடைசியா வந்த கால்',
+      ],
+    ),
+    // ── system automation (offline voice control) ─────────────────
+    _IntentRule(
+      action: 'system_perform_action',
+      variants: {'admin'},
+      slots: {'actionType': 'go_back'},
+      phrases: [
+        'go back', 'back po', 'back', 'previous screen',
+        'பின்னாடி போ', 'பின்னே போ', 'முன்னாடி போ',
+      ],
+      requiresCommandTone: true,
+    ),
+    _IntentRule(
+      action: 'system_perform_action',
+      variants: {'admin'},
+      slots: {'actionType': 'go_home'},
+      phrases: [
+        'go home', 'home screen', 'open home', 'home ku po',
+        'ஹோம் போ', 'ஹோம் ஸ்கிரீன்', 'முகப்பு போ',
+      ],
+      requiresCommandTone: true,
+    ),
+    _IntentRule(
+      action: 'system_perform_action',
+      variants: {'admin'},
+      slots: {'actionType': 'scroll', 'scrollDirection': 'down'},
+      phrases: [
+        'scroll down', 'kela scroll', 'kizha scroll', 'page down',
+        'கீழே ஸ்க்ரோல்', 'கீழே போ',
+      ],
+      requiresCommandTone: true,
+    ),
+    _IntentRule(
+      action: 'system_perform_action',
+      variants: {'admin'},
+      slots: {'actionType': 'scroll', 'scrollDirection': 'up'},
+      phrases: [
+        'scroll up', 'mela scroll', 'page up',
+        'மேலே ஸ்க்ரோல்', 'மேலே போ',
+      ],
+      requiresCommandTone: true,
+    ),
+    _IntentRule(
+      action: 'system_perform_action',
+      variants: {'admin'},
+      slots: {'actionType': 'read_screen'},
+      phrases: [
+        'read screen', 'read the screen', 'screen la enna irukku',
+        'whats on screen', 'வாசி', 'ஸ்கிரீன்ல என்ன இருக்கு',
+      ],
+    ),
+    _IntentRule(
+      action: 'system_perform_action',
+      variants: {'admin'},
+      slots: {'actionType': 'launch_app', 'targetText': 'whatsapp'},
+      phrases: [
+        'open whatsapp', 'whatsapp open pannu', 'launch whatsapp',
+        'வாட்ஸ்அப் திற', 'வாட்ஸ்அப் ஓபன் பண்ணு',
+      ],
+    ),
+    _IntentRule(
+      action: 'system_perform_action',
+      variants: {'admin'},
+      slots: {'actionType': 'launch_app', 'targetText': 'settings'},
+      phrases: [
+        'open settings', 'settings open pannu', 'phone settings',
+        'செட்டிங்ஸ் திற', 'செட்டிங்ஸ் ஓபன் பண்ணு',
+      ],
+    ),
+    _IntentRule(
+      action: 'system_perform_action',
+      variants: {'admin'},
+      slots: {'actionType': 'launch_app', 'targetText': 'gallery'},
+      phrases: [
+        'open gallery', 'gallery open pannu', 'open photos',
+        'கேலரி திற', 'கேலரி ஓபன் பண்ணு', 'போட்டோஸ் திற',
+      ],
+    ),
+    _IntentRule(
+      action: 'system_perform_action',
+      variants: {'admin'},
+      slots: {'actionType': 'launch_app', 'targetText': 'camera'},
+      phrases: [
+        'open camera', 'camera open pannu', 'take photo',
+        'கேமரா திற', 'கேமரா ஓபன் பண்ணு',
+      ],
+    ),
+    _IntentRule(
+      action: 'system_perform_action',
+      variants: {'admin'},
+      slots: {'actionType': 'launch_app', 'targetText': 'youtube'},
+      phrases: [
+        'open youtube', 'youtube open pannu', 'launch youtube',
+        'யூடியூப் திற', 'யூடியூப் ஓபன் பண்ணு',
+      ],
+    ),
+
     // ── screen guidance (Aug 28 2026) ─────────────────────────────
     //
     // Every variant, and deliberately the most offline-capable rule

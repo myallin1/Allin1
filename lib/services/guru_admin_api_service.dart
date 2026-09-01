@@ -100,7 +100,7 @@ class GuruAdminApiService {
   static const String _savedApiKeyPrefsKey = 'personal_ai_api_key';
   static final Uri _endpoint =
       Uri.parse('https://api.groq.com/openai/v1/chat/completions');
-  static const String _textModel = 'llama-3.1-8b-instant';
+  static const String _textModel = 'llama-3.3-70b-versatile';
 
   // NEW (Aug 12 2026 — Nizam: "api key podumbothu athuku keelaye
   // model select pannalam"): admin_ai_settings_screen.dart now saves
@@ -108,7 +108,7 @@ class GuruAdminApiService {
   // this key. Falls back to the original hardcoded _textModel when
   // nothing has been picked yet, so a fresh install behaves exactly
   // as before this feature existed.
-  static const String _modelPrefsKey = 'personal_ai_model';
+  static const String _modelPrefsKey = 'personal_groq_model';
 
   Future<String> _resolveModel() async {
     final prefs = await SharedPreferences.getInstance();
@@ -175,7 +175,7 @@ class GuruAdminApiService {
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         debugPrint('Admin AI Groq request failed: ${response.statusCode} ${response.body}');
-        return 'Admin AI is having a short network pause. Please try again in a moment.';
+        return _explainFailure(response);
       }
 
       final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -445,11 +445,14 @@ class GuruAdminApiService {
   }
 
   Future<String> _resolveApiKey() async {
-    if (_apiKey.trim().isNotEmpty && _apiKey != 'GROQ_API_KEY_HERE') {
-      return _apiKey.trim();
+    final baked = _apiKey.trim();
+    if (baked.isNotEmpty && baked != 'GROQ_API_KEY_HERE' && baked != 'GROQ_API_KEY') {
+      return baked;
     }
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_savedApiKeyPrefsKey)?.trim() ?? '';
+    final stored = prefs.getString(_savedApiKeyPrefsKey)?.trim() ?? '';
+    debugPrint('[GuruAdminApiService] resolved Groq key length: ${stored.length}');
+    return stored;
   }
 
   // NEW (CTO mandate — Advanced KYC & Facial Verification): public
@@ -468,11 +471,40 @@ class GuruAdminApiService {
   // into GeminiApiService when the CTO has switched the active agent to
   // Gemini.
   Future<String> resolveGeminiApiKey() async {
-    if (_geminiApiKey.trim().isNotEmpty && _geminiApiKey != 'GEMINI_API_KEY_HERE') {
-      return _geminiApiKey.trim();
+    final baked = _geminiApiKey.trim();
+    if (baked.isNotEmpty && baked != 'GEMINI_API_KEY_HERE' && baked != 'GEMINI_API_KEY') {
+      return baked;
     }
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_savedGeminiApiKeyPrefsKey)?.trim() ?? '';
+    final stored = prefs.getString(_savedGeminiApiKeyPrefsKey)?.trim() ?? '';
+    debugPrint('[GuruAdminApiService] resolved Gemini key length: ${stored.length}');
+    return stored;
+  }
+
+  static String _explainFailure(http.Response res) {
+    String detail = '';
+    try {
+      final decoded = jsonDecode(res.body);
+      if (decoded is Map && decoded['error'] is Map) {
+        detail = (decoded['error']['message'] as String?)?.trim() ?? '';
+      }
+    } catch (_) {}
+
+    switch (res.statusCode) {
+      case 401:
+        return 'Groq rejected this API key (401). Re-paste it in Admin '
+            'AI Configuration.${detail.isEmpty ? '' : '\n\n$detail'}';
+      case 402:
+        return 'Groq account has insufficient balance (402). Top up '
+            'credit at console.groq.com.'
+            '${detail.isEmpty ? '' : '\n\n$detail'}';
+      case 429:
+        return 'Groq rate limit hit (429). Wait a moment and retry.'
+            '${detail.isEmpty ? '' : '\n\n$detail'}';
+      default:
+        return 'Groq error ${res.statusCode}.'
+            '${detail.isEmpty ? '' : '\n\n$detail'}';
+    }
   }
 
   void dispose() {

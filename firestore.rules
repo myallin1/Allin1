@@ -151,6 +151,14 @@ service cloud.firestore {
     }
 
     // ==============================================================
+    // ADMIN_AI_ACTIONS COLLECTION (Chitti AI Co-Pilot Audit Trail)
+    // ==============================================================
+    match /admin_ai_actions/{actionId} {
+      allow read, create, update: if isAdminAny();
+      allow delete: if isAdmin();
+    }
+
+    // ==============================================================
     // AFFILIATE_CODES COLLECTION (Aug 12 2026 — Affiliate QR Generator)
     // ==============================================================
     // Admin creates/deletes codes (metadata: type/label/createdBy).
@@ -207,6 +215,12 @@ service cloud.firestore {
             && request.resource.data.diff(resource.data).affectedKeys()
                 .hasOnly(['scans', 'signups']));
       allow delete: if isAdminAny();
+    }
+
+    match /affiliate_links/{linkId} {
+      allow read: if true; // public redirect
+      allow create: if isAuth(); // customers create this along with affiliate_codes
+      allow update, delete: if isAdminAny();
     }
 
     // NEW (Aug 12 2026 — affiliate LEADS, per Nizam's request for an
@@ -312,7 +326,18 @@ service cloud.firestore {
         || (isAuth()
             && request.auth.uid == leadId
             && request.resource.data.uid == request.auth.uid);
-      allow delete: if isAdminAny();
+    }
+
+    match /chitti_appointments/{appointmentId} {
+      allow read: if isAdminAny();
+      allow create: if isAdminAny();
+      allow update, delete: if isAdminAny();
+    }
+
+    match /chitti_screening_debug_logs/{logId} {
+      allow read: if isAdminAny();
+      allow create: if isAdminAny();
+      allow update, delete: if isAdminAny();
     }
 
     // ==============================================================
@@ -1197,7 +1222,28 @@ service cloud.firestore {
     match /sos_alerts/{alertId} {
       allow read: if isAuth();
       allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdminAny();
+
+      // FIX (Aug 29 2026 — Emergency Responder dispatch, Nizam's spec):
+      // sos_dispatch_service.dart's claim()/resolveNoProblem()/
+      // escalateNoAnswer() are called DIRECTLY from a hero's own client
+      // — there is no Cloud Function relaying these writes — so
+      // "only admin may update" (the original rule, from when this
+      // collection was just a read-only alert board) silently rejected
+      // every one of them. Same two-clause claim shape already proven
+      // on service_requests/{requestId} just above: a "first claim"
+      // clause that only fires while nobody owns the alert yet, and a
+      // "current claimant" clause for everything that happens after.
+      // userId (whose emergency this is) can never change either way.
+      allow update: if isAdminAny()
+        || (isAuth()
+            && resource.data.get('claimedByHeroId', null) == null
+            && request.resource.data.claimedByHeroId == request.auth.uid
+            && request.resource.data.userId == resource.data.userId)
+        || (isAuth()
+            && resource.data.get('claimedByHeroId', null) == request.auth.uid
+            && request.resource.data.userId == resource.data.userId);
+
+      allow delete: if isAdminAny();
     }
 
     // ==============================================================
@@ -1224,6 +1270,24 @@ service cloud.firestore {
         || (isRealUser() && request.resource.data.userId == request.auth.uid)
         || (isRealUser() && request.resource.data.heroId == request.auth.uid);
       allow update, delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // PAYMENT_ORDERS (PhonePe gateway integration — see
+    // functions/phonepeCreateOrder.ts / phonepeWebhook.ts /
+    // phonepeCheckStatus.ts): one doc per gateway checkout attempt,
+    // keyed by merchantTransactionId. createPhonePeOrder() (Admin SDK)
+    // is the only writer of 'created'/'failed'; phonepeWebhook.ts
+    // (Admin SDK, checksum-verified server-to-server callback) is the
+    // ONLY thing allowed to write 'paid'. No client write at all —
+    // unlike service_requests.paymentStatus (hero/customer self-report
+    // for the cash/UPI-QR flow), a gateway-verified payment must never
+    // be settable by the client, or the whole point of moving off
+    // client-side UPI-intent trust is defeated.
+    // ==============================================================
+    match /payment_orders/{orderId} {
+      allow read: if isAdminAny() || (isAuth() && resource.data.customerId == request.auth.uid);
+      allow write: if false; // Cloud Functions only (Admin SDK bypasses rules).
     }
 
     // ==============================================================
@@ -1534,6 +1598,39 @@ service cloud.firestore {
       allow write: if isAdminAny();
     }
 
+    // Gift Coupons — the scratch-card reward flow (per Nizam):
+    // a paid service mints a LOCKED coupon (onServicePaidCreateCoupon
+    // Cloud Function), an admin sets what's inside from the Gift
+    // Coupons screen (Overview > Manage), and once the unlock timer
+    // runs out the customer scratches it open (scratchGiftCoupon).
+    //
+    // NO CUSTOMER WRITES EXIST HERE AT ALL — deliberately. Minting a
+    // coupon, revealing the gift, and spending it are each worth real
+    // money, and each is done by a Cloud Function running as Admin SDK
+    // (which bypasses these rules). A customer with a patched app or a
+    // fast device clock therefore has nothing to attack: they can read
+    // their own coupons and nothing more. In particular the gift
+    // itself is only ever delivered by scratchGiftCoupon's response
+    // after a SERVER-clock check, never inferred from a doc read.
+    match /gift_coupons/{couponId} {
+      // Normal minting is the Cloud Function's job; this clause only
+      // covers an admin issuing one by hand.
+      allow create: if isAdminAny()
+        && request.resource.data.customerId is string;
+
+      // A customer may read only their own coupons; admin reads all
+      // (the Gift Coupons management list).
+      allow read: if isAdminAny()
+        || (isAuth() && resource.data.customerId == request.auth.uid);
+
+      // Admin sets the gift ('awaiting_gift' -> 'ready') and marks an
+      // item gift handed over ('scratched' -> 'claimed'). Every other
+      // transition belongs to a Cloud Function.
+      allow update: if isAdminAny();
+
+      allow delete: if isAdminAny();
+    }
+
     // tutorial_videos — "how it works" clips for the Hero app, the Hero
     // PWA and the Customer app (Aug 29 2026). Same shape as ads/
     // erode_offers above: anyone signed in can read, only admin writes.
@@ -1570,38 +1667,7 @@ service cloud.firestore {
       allow write: if isAdminAny();
     }
 
-    // ==============================================================
-    // AFFILIATE / REFERRAL QR CODES (Customer & Hero Referrals)
-    // ==============================================================
-    // FIX (Customer Referral bug): The previous developer added the Dart
-    // AffiliateService to generate codes, but never added the Firestore
-    // rules! This caused every customer/hero's attempt to mint a code to
-    // fail 3 times and return null.
-    match /affiliate_codes/{codeId} {
-      allow read: if isAdminAny();
-      allow create: if isAuth() 
-        && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.type in ['customer_referral', 'hero_referral', 'admin_campaign']
-        || isAdminAny();
-      // Only scans/signups counters can be updated by normal users
-      allow update: if isAuth() 
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['scans', 'signups'])
-        || isAdminAny();
-      allow delete: if isAdminAny();
-    }
 
-    match /affiliate_links/{linkId} {
-      allow read: if true; // public redirect
-      allow create: if isAuth(); // customers create this along with affiliate_codes
-      allow update, delete: if isAdminAny();
-    }
-
-    match /affiliate_scans/{scanId} {
-      allow read: if isAdminAny();
-      allow create: if isAuth(); // anonymous users logging their scan
-      allow update, delete: if isAdminAny();
-    }
 
     // ==============================================================
     // DEFAULT DENY (catch-all safety net)

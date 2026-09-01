@@ -12,6 +12,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:latlong2/latlong.dart';
@@ -84,6 +85,7 @@ class _HeroCategory {
     required this.dbLabel,
     this.kind = _HeroKind.vehicle,
     this.tamilTitle = '',
+    this.svgIcon,
   });
 
   final String key;
@@ -98,6 +100,12 @@ class _HeroCategory {
   /// categories don't (those already carry a universally understood
   /// icon; "Fridge & AC" does not).
   final String tamilTitle;
+
+  /// Set only for trades, carried over from [HeroSkill.svgIcon] — see
+  /// that field's doc comment for why. Null for every vehicle category,
+  /// which keeps their existing Material icon (bike/auto/car silhouettes
+  /// read fine at a glance; the trades didn't).
+  final String? svgIcon;
 }
 
 const List<_HeroCategory> _vehicleHeroCategories = <_HeroCategory>[
@@ -172,6 +180,7 @@ final List<_HeroCategory> _skillHeroCategories = kHeroSkills
         tamilTitle: skill.tamilTitle,
         subtitle: skill.subtitle,
         icon: skill.icon,
+        svgIcon: skill.svgIcon,
         dbLabel: skill.title,
         kind: _HeroKind.skill,
       ),
@@ -201,6 +210,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
   final _dobController         = TextEditingController(); // T1: D.O.B
   final _addressController     = TextEditingController(); // T1: Address
   final _licenseNumberController = TextEditingController();
+  final _vehicleNumberController = TextEditingController();
   final _aadhaarController     = TextEditingController(); // T1: Aadhaar No
   final _panController         = TextEditingController(); // T1: PAN No
   // FIX: Nizam wants heroes to state which Erode-area locality they want
@@ -426,6 +436,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       _dobController,
       _addressController,
       _licenseNumberController,
+      _vehicleNumberController,
       _aadhaarController,
       _panController,
       _preferredLocationController,
@@ -461,6 +472,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
           'dob': _dobController.text,
           'address': _addressController.text,
           'license': _licenseNumberController.text,
+          'vehicleNumber': _vehicleNumberController.text,
           'aadhaar': _aadhaarController.text,
           'pan': _panController.text,
           'preferredLocation': _preferredLocationController.text,
@@ -485,6 +497,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       _dobController.text = (d['dob'] as String?) ?? '';
       _addressController.text = (d['address'] as String?) ?? '';
       _licenseNumberController.text = (d['license'] as String?) ?? '';
+      _vehicleNumberController.text = (d['vehicleNumber'] as String?) ?? '';
       _aadhaarController.text = (d['aadhaar'] as String?) ?? '';
       _panController.text = (d['pan'] as String?) ?? '';
       _preferredLocationController.text = (d['preferredLocation'] as String?) ?? '';
@@ -518,6 +531,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     _dobController.dispose();
     _addressController.dispose();
     _licenseNumberController.dispose();
+    _vehicleNumberController.dispose();
     _aadhaarController.dispose();
     _panController.dispose();
     _preferredLocationController.dispose();
@@ -914,6 +928,21 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       final categoryKey = _normalizeVehicleType(selectedVehicleType);
       final vehicleCategoryLabel = _vehicleCategoryLabel(categoryKey);
       final isSkillHero = _categoryFor(categoryKey)?.kind == _HeroKind.skill;
+      // EMERGENCY-ONLY HEROES (Aug 29 2026 — Nizam: "emergency responder
+      // ah mattum irukanga nu solranga, so avangala emergency responder
+      // ah mattum approve ana heros only sos trigger ana mattum
+      // avangaluku notification pogum, vera yentha disturb-um
+      // pannathu"). 'emergency_manpower' has existed as a pickable
+      // vehicle category since before this feature, but it was never
+      // actually WIRED to anything — a hero who picked it still received
+      // every ride/food/grocery/parcel ping every other hero got, same
+      // bug the skill-hero audit found for the trades. Reusing
+      // skillHeroServiceAccess() rather than inventing a second
+      // deny-everything map: it already denies every HeroServiceKeys
+      // bucket, which is exactly "no job pings at all" — SOS itself is
+      // a separate collection (sos_alerts) with its own dispatch (see
+      // hero_home_screen.dart's SOS overlay), untouched by this map.
+      final isEmergencyOnly = categoryKey == 'emergency_manpower';
 
       // SKILL HEROES (Aug 29 2026) — the whole "backend logic maarama"
       // requirement lives in these three lines.
@@ -1091,10 +1120,16 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
          // "absent means allowed" default is what lets that file ship
          // onto a live fleet without changing anyone's workload, and
          // writing a map here for everyone would quietly retire it.
-         if (isSkillHero) kHeroServiceAccessField: skillHeroServiceAccess(),
+         if (isSkillHero || isEmergencyOnly)
+           kHeroServiceAccessField: skillHeroServiceAccess(),
          'isEmergencyHelper': true,
          'sosNetworkAcceptedAt': FieldValue.serverTimestamp(),
          'licenseNumber': _licenseNumberController.text.trim(),
+         // Empty string (not omitted) for a skill hero, matching
+         // licenseNumber's own convention just above — the field always
+         // exists on the doc, so admin screens reading it never have to
+         // special-case a missing key.
+         'vehicleNumber': _vehicleNumberController.text.trim(),
          // FIX: doc photo URLs, uploaded above — was previously always
          // absent ("no document URLs — hero sends physical docs via
          // WhatsApp"). WhatsApp is still available as a fallback (see
@@ -1620,13 +1655,10 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
 
   /// One half of the "vehicle or skill" question at the top of the
   /// picker. Deliberately two large targets rather than a segmented
-  /// control or a dropdown — this is the single most consequential tap
-  /// in the form (it decides which documents the hero is asked for and
-  /// which work they will be sent), and it is made by people filling
-  /// this in on a small phone, often outdoors.
+  /// control or a dropdown.
   Widget _buildKindOption({
     required _HeroKind kind,
-    required IconData icon,
+    required String imagePath,
     required String title,
     required String tamilTitle,
     required String subtitle,
@@ -1663,7 +1695,16 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
           ),
           child: Column(
             children: [
-              Icon(icon, color: selected ? _njPink : _muted, size: 26),
+              Opacity(
+                opacity: selected ? 1.0 : 0.65,
+                child: Image.asset(
+                  imagePath,
+                  width: 32,
+                  height: 32,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Icon(Icons.help_outline, size: 32),
+                ),
+              ),
               const SizedBox(height: 8),
               Text(
                 title,
@@ -1672,16 +1713,6 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                   color: selected ? _text : _muted,
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                tamilTitle,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.outfit(
-                  color: selected ? _njPink : _muted,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 4),
@@ -1706,7 +1737,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'What kind of Hero are you?  /  நீங்க எந்த மாதிரி ஹீரோ?',
+          'What kind of Hero are you?',
           style: GoogleFonts.outfit(
             color: _text,
             fontSize: 14,
@@ -1714,30 +1745,32 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
           ),
         ),
         const SizedBox(height: 10),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildKindOption(
-              kind: _HeroKind.vehicle,
-              icon: Icons.two_wheeler_rounded,
-              title: 'Vehicle Hero',
-              tamilTitle: 'வண்டி ஹீரோ',
-              subtitle: 'Rides, parcels, delivery',
-            ),
-            const SizedBox(width: 10),
-            _buildKindOption(
-              kind: _HeroKind.skill,
-              icon: Icons.handyman_rounded,
-              title: 'Skill Hero',
-              tamilTitle: 'திறன் ஹீரோ',
-              subtitle: 'Electrician, plumber, AC, TV',
-            ),
-          ],
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildKindOption(
+                kind: _HeroKind.vehicle,
+                imagePath: 'assets/images/pink_icons/taxi_1_a.webp',
+                title: 'Vehicle Hero',
+                tamilTitle: '',
+                subtitle: 'Rides, parcels, delivery',
+              ),
+              const SizedBox(width: 10),
+              _buildKindOption(
+                kind: _HeroKind.skill,
+                imagePath: 'assets/images/pink_icons/hero_3_a.webp',
+                title: 'Skill Hero',
+                tamilTitle: '',
+                subtitle: 'Electrician, plumber, AC, TV',
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 16),
         Text(
           _heroKind == _HeroKind.skill
-              ? 'Your trade  /  உங்க வேலை'
+              ? 'Your trade'
               : 'Hero Category',
           style: GoogleFonts.outfit(
             color: _text,
@@ -1754,12 +1787,44 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
           ),
         ],
         const SizedBox(height: 10),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final isCompact = constraints.maxWidth < 430;
-            final cardWidth = isCompact
-                ? constraints.maxWidth
-                : (constraints.maxWidth - 12) / 2;
+        Builder(
+          builder: (context) {
+            // FIX (Aug 29 2026 — root cause of the "hero registration
+            // screen goes blank" report, found in two stages).
+            //
+            // Stage 1: this used to size each card from a LayoutBuilder
+            // wrapping this Wrap. A LayoutBuilder inside a
+            // SingleChildScrollView/Column can report its constraint
+            // BEFORE the scroll view's own size has actually settled —
+            // and on Flutter Web's CanvasKit renderer, feeding that raw
+            // (sometimes near-zero) width into a gradient-filled
+            // Container crashed the ENGINE's own paint call
+            // (CkGradientLinear.getSkShader — "Null check operator used
+            // on a null value"), not Dart code, so no error boundary
+            // could catch it. Removing the LinearGradient (see
+            // _HeroCategoryCard's decoration below) stopped the crash.
+            //
+            // Stage 2: with the crash gone, the SAME bad LayoutBuilder
+            // width was still being read in this exact nested position
+            // — Wrap inside a Column inside a SingleChildScrollView —
+            // and it was NOT transient: it stayed near-zero for the
+            // whole session, silently rendering every category card at
+            // a few pixels wide. No exception this time (a solid-color
+            // fill on a degenerate rect is a Skia no-op, not a crash),
+            // just a grid that looked entirely blank.
+            //
+            // MediaQuery.sizeOf(context) is not vulnerable to either
+            // failure mode: it reads the actual device viewport, which
+            // is known and stable the instant this widget builds,
+            // regardless of where it sits in the scroll/layout tree or
+            // whether an ancestor's own size has finished resolving.
+            final screenWidth = MediaQuery.sizeOf(context).width;
+            // Mirrors this form's own SingleChildScrollView(padding:
+            // EdgeInsets.all(24)) — 24 logical pixels on each side.
+            final availableWidth = screenWidth - 48;
+            final isCompact = availableWidth < 430;
+            final cardWidth =
+                isCompact ? availableWidth : (availableWidth - 12) / 2;
             return Wrap(
               spacing: 8,
               runSpacing: 10,
@@ -2066,6 +2131,27 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
                   onClear: () => setState(() => _licensePhoto = null),
                 ),
                 const SizedBox(height: 12),
+                // FIX (Aug 29 2026 — Nizam: "admin ku send pannavendiya
+                // proof and needed column mis aagirukku"). Re-audit found
+                // this field never existed on the form at all: admin's
+                // approval card, full KYC details screen, dispatch
+                // screen, taxi-rides screen and the approved-heroes list
+                // all read `heroes/{uid}.vehicleNumber` and show it as
+                // "Vehicle No." — but nothing anywhere in this app ever
+                // wrote that key, so it showed "N/A" for every hero ever
+                // registered. Skill heroes have no vehicle (same reason
+                // the licence fields above are hidden for them), so this
+                // sits inside the same `if (!_isSkillHero)` block.
+                _field(
+                  controller: _vehicleNumberController,
+                  label: 'Vehicle Registration Number',
+                  icon: Icons.pin_rounded,
+                  textCapitalization: TextCapitalization.characters,
+                  validator: (v) => v!.trim().isEmpty
+                      ? 'Vehicle number is required'
+                      : null,
+                ),
+                const SizedBox(height: 12),
               ],
               _field(
                 controller: _aadhaarController,
@@ -2145,11 +2231,12 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
               Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF1B2E1B), Color(0xFF122012)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  // Solid, not gradient — see the identical fix (and
+                  // full explanation) on _HeroCategoryCard's decoration
+                  // above. Same CanvasKit crash, same screen; converting
+                  // every LinearGradient on this route is what actually
+                  // guarantees it can't recur here.
+                  color: const Color(0xFF17241A),
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(
                     color: const Color(0xFF25D366).withValues(alpha: 0.5),
@@ -2479,25 +2566,101 @@ class _HeroCategoryCard extends StatelessWidget {
   final bool _selected;
   final VoidCallback _onTap;
 
+  String? _pinkIconForCategory(String key) {
+    switch (key) {
+      // Vehicles:
+      case 'bike':
+        return 'assets/images/pink_icons/taxi_1_a.webp';
+      case 'auto':
+        return 'assets/images/pink_icons/taxi_2_a.webp';
+      case 'car':
+        return 'assets/images/pink_icons/taxi_3_a.webp';
+      case 'parcel':
+        return 'assets/images/pink_icons/taxi_4_a.webp';
+      case 'mini_truck':
+        return 'assets/images/pink_icons/taxi_5_a.webp';
+      case 'lorry':
+        return 'assets/images/pink_icons/taxi_5_b.webp';
+      case 'emergency_manpower':
+        return 'assets/images/pink_icons/hero_3_a.webp';
+      // Skills DELIBERATELY NOT mapped here (Aug 29 2026 — Nizam, on
+      // seeing the rendered cards: "icons category ku mismatch aagi
+      // irukku"). This used to map every trade onto
+      // pink_icons/electronics_{1..5}_a.webp — a set of five generic
+      // gadget photos built for the NJ Tech/Mobile Hub slideshow, with
+      // no connection to "electrician" or "plumber" specifically beyond
+      // both being filed under "electronics" in someone's asset
+      // folder. That is what a hero was actually seeing: an unrelated
+      // product photo standing in for their trade. Trades render their
+      // own correctly-matched [HeroSkill.svgIcon] instead — see below.
+      default:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final pinkIcon = _pinkIconForCategory(_category.key);
+    final hasPinkIcon = pinkIcon != null;
+    final svgIcon = _category.svgIcon;
     return InkWell(
       onTap: _onTap,
       borderRadius: BorderRadius.circular(18),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+        // FIX (Aug 29 2026 — the other half of the "registration screen
+        // goes blank" crash). Clamping cardWidth's floor, above, was not
+        // enough on its own: this Container's HEIGHT is intrinsic —
+        // sized by its Column(mainAxisSize.min) content — and that
+        // content now includes the new tamilTitle Text for skill
+        // categories, in a font (GoogleFonts Tamil) that is not
+        // guaranteed to be loaded and measured the first time this card
+        // is actually laid out (e.g. the instant it scrolls into view).
+        // A transient pass with an unresolved font metric is a second,
+        // independent way to hand this SAME gradient a degenerate
+        // (near-zero) bounding rect, which is what kept reproducing the
+        // CkGradientLinear crash — see the width-floor comment below —
+        // even after that fix.
+        //
+        // An explicit floor on BOTH axes closes both paths at once,
+        // regardless of which dimension a future change destabilizes:
+        // this card never legitimately needs to be smaller than this in
+        // either direction, so the constraint is inert during normal
+        // layout and only matters for the transient frame it exists to
+        // guard against.
+        constraints: const BoxConstraints(minWidth: 96, minHeight: 104),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
           // THEME FIX: unselected cards used to be dark-navy — repainted
           // white/soft-pink so the whole picker matches the light theme.
-          gradient: LinearGradient(
-            colors: _selected
-                ? const [Color(0xFFFF4FA3), Color(0xFFBE2A7A)]
-                : const [Colors.white, Color(0xFFFFF0F7)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          //
+          // SOLID COLOR, NOT GRADIENT (Aug 29 2026 — root cause of the
+          // "registration screen goes blank" crash). This was a
+          // LinearGradient. Flutter Web's CanvasKit renderer has a
+          // real, reproducible bug where building a gradient's Skia
+          // shader for this decoration throws "Null check operator
+          // used on a null value" out of CkGradientLinear.getSkShader
+          // — inside the RENDERING ENGINE's paint call, not
+          // catchable Dart code. Confirmed via a release-mode CanvasKit
+          // build with the full non-minified stack:
+          //   CkGradientLinear.getSkShader
+          //   -> CkPaint.toSkPaint -> CkCanvas.drawRRect
+          //   -> _BoxDecorationPainter.paint -> RenderDecoratedBox.paint
+          // It fires on EVERY repaint attempt once triggered, which is
+          // what turned one bad frame into the whole screen going blank
+          // and unresponsive to taps. Constraining this card's minimum
+          // size (above) closed ONE path into that transient state, but
+          // a second one reproduced from simply expanding the "How to
+          // register" guide above this grid — any relayout of this
+          // Column is enough to retrigger it, not only this card's own
+          // resize. Chasing every possible transient-constraint path
+          // individually is not tractable; removing the LinearGradient
+          // removes CanvasKit's gradient-shader code path from this
+          // screen entirely, which is the only fix that is actually
+          // guaranteed. A flat brand pink reads as "selected" exactly
+          // as clearly as the two-tone gradient did.
+          color: _selected ? _njPink : Colors.white,
           border: Border.all(
             color: _selected ? _njPink : _njPink.withValues(alpha: 0.18),
             width: _selected ? 1.6 : 1,
@@ -2523,10 +2686,35 @@ class _HeroCategoryCard extends StatelessWidget {
                     ? Colors.white.withValues(alpha: 0.22)
                     : _njPink.withValues(alpha: 0.1),
               ),
-              child: Icon(
-                _category.icon,
-                color: _selected ? Colors.white : _njPink,
-                size: 26,
+              child: Center(
+                child: hasPinkIcon
+                    ? Opacity(
+                        opacity: _selected ? 1.0 : 0.85,
+                        child: Image.asset(
+                          pinkIcon,
+                          width: 32,
+                          height: 32,
+                          fit: BoxFit.contain,
+                        ),
+                      )
+                    : svgIcon != null
+                        // Full-color illustrated icon, correctly
+                        // matched to the trade — see [HeroSkill.svgIcon].
+                        // Not tinted to _selected's white/pink like the
+                        // Material icon below: these are pre-illustrated
+                        // in their own colors specifically so a hero can
+                        // tell them apart, and forcing them to a single
+                        // flat tint would throw that away.
+                        ? SvgPicture.string(
+                            svgIcon,
+                            width: 30,
+                            height: 30,
+                          )
+                        : Icon(
+                            _category.icon,
+                            color: _selected ? Colors.white : _njPink,
+                            size: 26,
+                          ),
               ),
             ),
             const SizedBox(height: 10),
@@ -2541,24 +2729,6 @@ class _HeroCategoryCard extends StatelessWidget {
                 fontWeight: FontWeight.w800,
               ),
             ),
-            // Trades carry a Tamil line; vehicle categories don't need
-            // one — see [_HeroCategory.tamilTitle].
-            if (_category.tamilTitle.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(
-                _category.tamilTitle,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.outfit(
-                  color: _selected
-                      ? Colors.white.withValues(alpha: 0.92)
-                      : _njPink,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
             const SizedBox(height: 4),
             Text(
               _category.subtitle,

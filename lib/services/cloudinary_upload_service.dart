@@ -286,6 +286,66 @@ class CloudinaryUploadService {
     }
     return secureUrl;
   }
+
+  /// Uploads raw audio bytes (.m4a/.aac) to Cloudinary media library.
+  Future<String> uploadAudioBytes(
+    Uint8List bytes, {
+    required String fileName,
+    String folder = 'call_recordings',
+    String? customUploadPreset,
+    bool isAuthenticated = false,
+  }) async {
+    if (!isConfigured) {
+      throw Exception(
+        'Cloudinary is not configured yet. Set kCloudinaryCloudName and '
+        'kCloudinaryUploadPreset in cloudinary_upload_service.dart.',
+      );
+    }
+
+    final uri = Uri.parse(
+      'https://api.cloudinary.com/v1_1/$kCloudinaryCloudName/video/upload',
+    );
+
+    final request = http.MultipartRequest('POST', uri)
+      ..fields['upload_preset'] = customUploadPreset ?? kCloudinaryUploadPreset
+      ..files.add(
+        http.MultipartFile.fromBytes('file', bytes, filename: fileName),
+      );
+
+    if (isAuthenticated) {
+      request.fields['type'] = 'authenticated';
+    }
+
+    if (folder.isNotEmpty) {
+      request.fields['folder'] = folder;
+    }
+
+    final streamedResponse = await request.send().timeout(
+      const Duration(seconds: 35),
+      onTimeout: () => throw Exception(
+        'Audio upload timed out — check your connection and try again.',
+      ),
+    );
+    final response = await http.Response.fromStream(streamedResponse).timeout(
+      const Duration(seconds: 20),
+      onTimeout: () => throw Exception(
+        'Audio upload timed out while finishing — check your connection.',
+      ),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Cloudinary audio upload failed (${response.statusCode}): ${response.body}',
+      );
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final secureUrl = data['secure_url'] as String?;
+    if (secureUrl == null || secureUrl.isEmpty) {
+      throw Exception('Cloudinary response missing secure_url: ${response.body}');
+    }
+    return secureUrl;
+  }
 }
 
 // Compression itself now lives entirely in image_compressor_web.dart /

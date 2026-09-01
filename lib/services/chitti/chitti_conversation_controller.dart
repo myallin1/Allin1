@@ -72,6 +72,18 @@ enum ChittiConversationStep {
   stop,
 }
 
+/// A topic/utterance recorded while Chitti was mid-speech, to be addressed
+/// immediately after the current turn concludes.
+class PendingTopic {
+  final String text;
+  final DateTime timestamp;
+
+  const PendingTopic({
+    required this.text,
+    required this.timestamp,
+  });
+}
+
 /// The user's saved choice of [ChittiConversationMode].
 ///
 /// Nizam asked for both modes with the user picking — auto-stop is the
@@ -131,6 +143,7 @@ class ChittiConversationController {
   bool _active = false;
   bool _speaking = false;
   String _spokenNormalized = '';
+  PendingTopic? _pendingTopic;
 
   /// Consecutive turns where the mic returned nothing usable. Two in a
   /// row usually means the customer has walked away or is in a noisy
@@ -140,6 +153,33 @@ class ChittiConversationController {
   bool get isActive => _active;
 
   bool get isSpeaking => _speaking;
+
+  bool get hasPendingTopic => _pendingTopic != null;
+
+  PendingTopic? get pendingTopic => _pendingTopic;
+
+  /// Queues an utterance heard while Chitti was speaking or executing.
+  void queuePendingTopic(String text) {
+    final trimmed = text.trim();
+    if (trimmed.length >= 2 && !isStopRequest(trimmed)) {
+      _pendingTopic = PendingTopic(
+        text: trimmed,
+        timestamp: DateTime.now(),
+      );
+    }
+  }
+
+  /// Consumes and clears the current pending topic.
+  PendingTopic? popPendingTopic() {
+    final topic = _pendingTopic;
+    _pendingTopic = null;
+    return topic;
+  }
+
+  /// Explicitly clears the pending topic.
+  void clearPendingTopic() {
+    _pendingTopic = null;
+  }
 
   /// Words that end the loop immediately, in the four languages the
   /// app supports plus the Tanglish people actually speak.
@@ -168,6 +208,7 @@ class ChittiConversationController {
     _active = false;
     _speaking = false;
     _spokenNormalized = '';
+    _pendingTopic = null;
   }
 
   /// Call immediately before handing [text] to the TTS engine.
@@ -250,7 +291,7 @@ class ChittiConversationController {
 
     // Task done and nothing pending. In autoStop that is the natural
     // end; in call mode the customer stays connected.
-    if (resolvedAnIntent && mode == ChittiConversationMode.autoStop) {
+    if (resolvedAnIntent && mode == ChittiConversationMode.autoStop && !hasPendingTopic) {
       stop();
       return ChittiConversationStep.stop;
     }

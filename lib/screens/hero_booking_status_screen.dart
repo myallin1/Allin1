@@ -28,6 +28,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/service_request_model.dart';
 import '../utils/service_request_labels.dart';
 import 'hero_booking_tracking_screen.dart';
+import 'hero_search_radar_screen.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
 const Color _kBg = Color(0xFFFFFFFF);
@@ -135,12 +136,23 @@ class _HeroBookingStatusCard extends StatelessWidget {
         : 'Hero Booking';
     final subtitle = (details['taskDescription'] as String?)?.trim() ?? '';
 
+    // Still searching for a hero — reopen the radar screen so the
+    // customer picks up exactly where they left off, instead of a bare
+    // status stepper with no live search visual. Any other status
+    // (hero_assigned onward) opens the full tracker as before.
+    final isStillSearching = status == 'pending' || status == 'admin_review';
+
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => HeroBookingTrackingScreen(requestId: request.requestId),
+          builder: (_) => isStillSearching
+              ? HeroSearchRadarScreen(
+                  requestId: request.requestId,
+                  serviceLabel: heroBookingCategoryLabel(category) ?? 'Hero',
+                )
+              : HeroBookingTrackingScreen(requestId: request.requestId),
         ),
       ),
       child: Container(

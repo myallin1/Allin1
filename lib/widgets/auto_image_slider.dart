@@ -20,6 +20,12 @@ class AutoImageSlider extends StatefulWidget {
   /// Taxi mega card.
   final BoxFit fit;
 
+  /// Shown instead of blank space when an image path 404s (e.g. a
+  /// category that has no dedicated 3D artwork yet). Defaults to null,
+  /// which preserves the original "degrade to empty space" behaviour
+  /// for every existing caller that already has real assets.
+  final Widget? fallback;
+
   const AutoImageSlider({
     super.key,
     required this.imagePaths,
@@ -27,6 +33,7 @@ class AutoImageSlider extends StatefulWidget {
     this.height = 24,
     this.duration = const Duration(seconds: 3),
     this.fit = BoxFit.cover,
+    this.fallback,
   });
 
   @override
@@ -97,8 +104,9 @@ class _AutoImageSliderState extends State<AutoImageSlider> {
           // ai_bot_avatar.dart.
           cacheWidth: (widget.width * 3).round(),
           // A missing asset must never become a red error box in the
-          // middle of the home screen — it degrades to empty space.
-          errorBuilder: (_, __, ___) =>
+          // middle of the home screen — it degrades to [fallback] when
+          // given one, otherwise empty space (original behaviour).
+          errorBuilder: (_, __, ___) => widget.fallback ??
               SizedBox(width: widget.width, height: widget.height),
         ),
       ),

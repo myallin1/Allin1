@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'analytics_service.dart';
 import '../config/app_knowledge_briefing.dart';
@@ -207,7 +208,7 @@ class GuruApiService {
   // (console.groq.com/docs/model/...) at the time this was written —
   // meta-llama/llama-4-maverick-17b-128e-instruct was deprecated
   // Feb 2026, so Scout is the one to use.
-  static const String _textModel = 'llama-3.1-8b-instant';
+  static const String _textModel = 'llama-3.3-70b-versatile';
   static const String _visionModel = 'meta-llama/llama-4-scout-17b-16e-instruct';
 
   final http.Client _client;
@@ -409,12 +410,21 @@ class GuruApiService {
   // it without re-parsing raw Groq response shape.
   Future<Map<String, dynamic>?> extractAgentAction({
     required String message,
-    required String apiKeyOverride,
+    String? apiKeyOverride,
     bool hasAttachedImage = false,
   }) async {
-    final apiKey = apiKeyOverride.trim();
     final input = message.trim();
-    if (apiKey.isEmpty || input.isEmpty) {
+    if (input.isEmpty) return null;
+
+    final overrideTrimmed = apiKeyOverride?.trim() ?? '';
+    final backend = overrideTrimmed.isNotEmpty
+        ? (model: defaultChittiModel, key: overrideTrimmed)
+        : await _resolveBackend(needsVision: hasAttachedImage);
+    final apiKey = backend?.key ?? '';
+    final model = backend?.model ?? defaultChittiModel;
+    final textModelId = await _chosenTextModel(model);
+
+    if (apiKey.isEmpty) {
       return null;
     }
     // NEW (CTO mandate — Multi-Agent Orchestration & Handoff
@@ -473,14 +483,14 @@ class GuruApiService {
     try {
       final response = await _client
           .post(
-            _endpoint,
+            Uri.parse(model.endpoint),
             headers: <String, String>{
               'Content-Type': 'application/json',
               'Authorization': 'Bearer $apiKey',
             },
             body: jsonEncode(
               <String, dynamic>{
-                'model': _textModel,
+                'model': textModelId,
                 'messages': <Map<String, String>>[
                   {
                     'role': 'system',
@@ -788,6 +798,7 @@ class GuruApiService {
   /// restart.
   Future<Map<String, String>> _allKeys() async {
     final prefs = await SharedPreferences.getInstance();
+    const secureStorage = FlutterSecureStorage();
     final out = <String, String>{};
     for (final m in kChittiModels) {
       final baked = switch (m.id) {
@@ -798,9 +809,18 @@ class GuruApiService {
       }
           .trim();
       final usable = baked.isNotEmpty && !baked.endsWith('_HERE') ? baked : '';
-      out[m.id] = usable.isNotEmpty
-          ? usable
-          : (prefs.getString(m.prefsKeyName)?.trim() ?? '');
+      
+      String storedKey = '';
+      if (m.id == 'groq') {
+        storedKey = await secureStorage.read(key: 'personal_ai_api_key_secure') ?? '';
+        if (storedKey.trim().isEmpty) {
+          storedKey = prefs.getString(m.prefsKeyName)?.trim() ?? '';
+        }
+      } else {
+        storedKey = prefs.getString(m.prefsKeyName)?.trim() ?? '';
+      }
+
+      out[m.id] = usable.isNotEmpty ? usable : storedKey;
     }
     return out;
   }
@@ -823,6 +843,11 @@ class GuruApiService {
     if (model == null) return null;
     return (model: model, key: keys[model.id] ?? '');
   }
+
+  /// Public accessor for overlay and tools to check backend configuration.
+  Future<({ChittiModel model, String key})?> resolveBackendDirect({
+    bool needsVision = false,
+  }) => _resolveBackend(needsVision: needsVision);
 
   /// The model id the admin picked for this provider in
   /// admin_ai_settings_screen.dart, or the built-in default.
@@ -1046,6 +1071,14 @@ class GuruApiService {
             'waiting, the oldest since Tuesday — shall I open '
             'approvals?" Anticipate the follow-up question and answer '
             'it before it is asked.\n'
+            'SYSTEM CONTROL & VOICE ASSISTANT: You have autonomous system control '
+            'powers (`system_perform_action`) to control the boss\'s Android phone '
+            'via accessibility service. You can click elements, type text, scroll, '
+            'go back, go home, read screen contents, or launch apps. '
+            'If the boss asks you to read, reply to messages, or write replies in '
+            'WhatsApp, first read the screen contents using `read_screen` to see '
+            'the conversation, use `type` to write the text, and click the send '
+            'button. Execute these sequentially and report results.\n'
             'LEAD WITH WHAT IS WRONG. Pending approvals, stranded '
             'orders, timed-out rides, unanswered enquiries, unusual '
             'spikes. A reply that opens with good news buries the thing '
@@ -1056,8 +1089,8 @@ class GuruApiService {
             'ACTIONS THAT CHANGE DATA ARE ALWAYS CONFIRMED FIRST. '
             'Approvals, refunds, wallet changes, assigning a hero: '
             'state exactly what you are about to do and wait for a '
-            'yes. Reads need no confirmation — answer those '
-            'immediately.\n'
+            'yes. Reads and system accessibility control commands need no '
+            'confirmation — execute them immediately.\n'
             'TAMIL WHEN THEY SPEAK TAMIL. Reply in whatever language '
             'the boss used, including Thanglish. Keep numbers, money '
             'and status words in the form they appear in the app so '
@@ -1072,19 +1105,49 @@ class GuruApiService {
       // a friend rather than a form.
       case 'customer':
       default:
+        // UPGRADED (Aug 29 2026 — Nizam: "avana customer ku enthusiam
+        // and boosting advisor and customeroda sogam feelinglam
+        // purinjukuttu behave pandra oru personal buddy alavuku
+        // ovvoru customer kum chitti behave pannnaum... customer oda
+        // thanmai purinju athukeththa kelvi keetu avangala sinthikk
+        // vaikura buddya maathu").
+        //
+        // The old version already had the tone right (naughty, warm,
+        // drops the humour when things go wrong) but stopped at "just
+        // help" — correct, but not a BUDDY. A buddy notices the mood
+        // and stays present instead of going quiet. Added: read the
+        // mood, encourage, ask a real question back sometimes instead
+        // of only answering — the same shift chitti_buddy.dart's
+        // comfortAfterSetback() makes offline, so the two do not
+        // contradict each other.
         return 'You are Chitti, the customer\'s slightly naughty, very '
             'helpful friend from Erode — the friend who teases a little '
             'while getting the job done properly.\n'
             'Be playful, warm, a bit cheeky. Light Tamil-English banter '
             'is welcome. Small jokes are welcome.\n'
+            'BE A BUDDY, NOT A COUNTER. Notice how they sound, not just '
+            'what they asked. If they sound excited, match the energy '
+            'and cheer them on. If they sound flat, tired or unsure, '
+            'say you noticed before you answer — a genuine line, not a '
+            'template. Ask ONE real follow-up sometimes, the way a '
+            'friend would, instead of only ever answering and '
+            'stopping. Learn their pattern across the conversation — '
+            'someone who always orders the same thing, or always '
+            'haggles, or is always in a hurry — and let that shape how '
+            'you talk to them specifically, not a generic script for '
+            'everyone.\n'
             'THE LINE YOU DO NOT CROSS: the naughtiness is in the '
             'TONE, never in the FACTS. Fares, timings, order status, '
             'availability and anything about their money stay exactly '
             'accurate and plainly stated. Never joke about a delay, a '
-            'cancellation, a refund, an emergency or an SOS — when '
-            'something has gone wrong for them, drop the humour '
-            'entirely and just help. A friend knows when to stop '
-            'joking; that judgement is the whole persona.';
+            'cancellation, a refund, an emergency or an SOS.\n'
+            'WHEN SOMETHING HAS GONE WRONG: drop the humour, but do '
+            'NOT go cold or robotic either — show you noticed it '
+            'matters to them, THEN help. Going silent on the emotion '
+            'and only stating facts is exactly what a bot does; a '
+            'friend acknowledges it first. A friend knows when to stop '
+            'joking without stopping caring — that judgement is the '
+            'whole persona.';
     }
   }
 }

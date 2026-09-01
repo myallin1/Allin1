@@ -56,12 +56,15 @@ void main() {
     'seller_today_earnings',
     'seller_set_shop_open',
     'seller_shop_status',
-    // admin — all four are capped, cache-first counting reads, so they
-    // answer from the local cache with no API key and no model call.
+    // admin — all four counting reads + audits answer with no model call.
     'admin_pending_approvals',
     'admin_today_activity',
     'admin_open_bugs',
     'admin_open_enquiries',
+    'audit_ui_sections',
+    'run_ux_audit',
+    'read_recent_sms',
+    'summarize_last_call',
   };
 
   /// Tools that legitimately need the model. Listed explicitly so that
@@ -73,6 +76,19 @@ void main() {
     'add_to_grocery_cart', // free-text item and quantity
     'seller_set_item_availability', // must match a real menu item
     'analyze_screen_with_vision', // needs image bytes and a vision model
+    'open_external_app', // free-text phone/message/destination
+    'system_perform_action', // parses custom voice commands to system actions
+    'search_order',
+    'search_customer',
+    'generate_kyc_report',
+    'propose_write_action',
+    'send_sms',
+    'create_dev_task', // free-text title/description of the requested feature
+    // Understanding a screen nobody described in advance is the ONE
+    // thing that cannot be done on-device: the offline engine works
+    // only because its phrases and its tools are both fixed lists.
+    'control_screen',
+    'google_search', // live web search querying Google Grounding
   };
 
   test('every tool is accounted for on one side of the line', () {
@@ -126,6 +142,10 @@ void main() {
       'admin_open_bugs': (text: 'any open bug reports', variant: 'admin'),
       'admin_open_enquiries':
           (text: 'any customer enquiries waiting', variant: 'admin'),
+      'audit_ui_sections': (text: 'audit the database', variant: 'admin'),
+      'run_ux_audit': (text: 'show qa audit', variant: 'admin'),
+      'read_recent_sms': (text: 'read my recent sms', variant: 'admin'),
+      'summarize_last_call': (text: 'summarize last call', variant: 'admin'),
     };
 
     test('no offline-capable tool is left without a phrasing', () {

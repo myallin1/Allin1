@@ -378,6 +378,43 @@ class GeminiApiService {
     return prefs.getString(_savedApiKeyPrefsKey)?.trim() ?? '';
   }
 
+  /// Performs Google Search Grounded query on Gemini API for live web facts.
+  Future<String?> searchWithGoogleGrounding({
+    required String query,
+    required String apiKey,
+  }) async {
+    if (apiKey.trim().isEmpty || query.trim().isEmpty) return null;
+    try {
+      final body = <String, dynamic>{
+        'contents': [
+          {
+            'role': 'user',
+            'parts': [
+              {
+                'text': 'Answer the following question concisely with up-to-date accurate facts from Google Search. '
+                    'Keep the tone natural, helpful, direct and clear.\n\nQuery: $query',
+              }
+            ],
+          }
+        ],
+        'tools': [
+          {
+            'googleSearch': <String, dynamic>{},
+          }
+        ],
+      };
+
+      final response = await _postWithModelFallback(apiKey.trim(), body);
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final text = _extractText(response.body);
+        return text;
+      }
+    } catch (e) {
+      debugPrint('[GeminiApiService] searchWithGoogleGrounding error: $e');
+    }
+    return null;
+  }
+
   void dispose() {
     _client.close();
   }

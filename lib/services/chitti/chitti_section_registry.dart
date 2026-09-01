@@ -32,6 +32,8 @@
 import 'package:flutter/widgets.dart';
 
 import '../../screens/admin/admin_ai_settings_screen.dart';
+import '../../screens/admin/chitti_debug_logs_screen.dart';
+import '../../screens/admin/super_admin_home_screen.dart';
 import '../../screens/admin/admin_db_usage_screen.dart';
 import '../../screens/admin/admin_hero_dispatch_screen.dart';
 import '../../screens/admin/admin_new_orders_screen.dart';
@@ -46,7 +48,7 @@ import '../../screens/admin/erode_offers_management_screen.dart';
 import '../../screens/admin/fare_management_screen.dart';
 import '../../screens/admin/hero_approvals_screen.dart';
 import '../../screens/admin/payments_received_screen.dart';
-import '../../screens/admin_dashboard_screen.dart';
+import '../../screens/admin/admin_dashboard_screen.dart';
 import '../../screens/bike_taxi/hero_earnings_screen.dart';
 import '../../screens/bike_taxi/hero_history_screen.dart';
 import '../../screens/bike_taxi/hero_incomplete_tasks_screen.dart';
@@ -522,13 +524,39 @@ const List<ChittiSection> kChittiSections = <ChittiSection>[
 
   // ── ADMIN ───────────────────────────────────────────────────────
   ChittiSection(
+    key: 'admin_home',
+    label: 'Allin1 HQ Main Home',
+    description: 'The main HQ overview page with all management tabs and SOS dispatch.',
+    variants: {'admin'},
+    builder: _adminHome,
+    screenType: SuperAdminHomeScreen,
+    aliases: ['home', 'main page', 'hq', 'admin home', 'main home', 'ஹோம்', 'மெயின்'],
+  ),
+  ChittiSection(
     key: 'admin_dashboard',
-    label: 'Admin Dashboard',
-    description: 'The main admin overview.',
+    label: 'Taxi & Transport Dashboard',
+    description: 'The taxi and transportation overview dashboard.',
     variants: {'admin'},
     builder: _adminDashboard,
     screenType: AdminDashboardScreen,
-    aliases: ['dashboard', 'home', 'overview'],
+    aliases: ['dashboard', 'taxi dashboard', 'transport', 'rides overview', 'taxi manage'],
+  ),
+  // NEW (Aug 31 2026 — Nizam: "இதை admin app-க்குள்ளயே பாக்க ஒரு detail
+  // screen ready பண்ணு"). Reachable both from a direct nav link AND by
+  // asking Chitti — "show me the call logs" reaches the same screen a
+  // tap would, no separate voice-only code path to drift out of sync.
+  ChittiSection(
+    key: 'chitti_debug_logs',
+    label: 'Chitti Call Debug Logs',
+    description: 'Step-by-step logs of what happened on each screened call — '
+        'greeting, speech recognition, TTS start/error, in order.',
+    variants: {'admin'},
+    builder: _chittiDebugLogs,
+    screenType: ChittiDebugLogsScreen,
+    aliases: [
+      'call logs', 'debug logs', 'chitti logs', 'call debug', 'screening logs',
+      'call history logs', 'கால் லாக்ஸ்', 'டிபக் லாக்ஸ்',
+    ],
   ),
   ChittiSection(
     key: 'admin_new_orders',
@@ -749,7 +777,9 @@ Widget _earningsHub(BuildContext _) => const EarningsHubScreen();
 Widget _sellerVerticalPicker(BuildContext _) => const SellerVerticalPickerScreen();
 Widget _sellerSettings(BuildContext _) => const SellerSettingsScreen();
 
+Widget _adminHome(BuildContext _) => const SuperAdminHomeScreen();
 Widget _adminDashboard(BuildContext _) => const AdminDashboardScreen();
+Widget _chittiDebugLogs(BuildContext _) => const ChittiDebugLogsScreen();
 Widget _adminNewOrders(BuildContext _) => const AdminNewOrdersScreen();
 Widget _heroApprovals(BuildContext _) => const HeroApprovalsScreen();
 Widget _approvedHeroes(BuildContext _) => const ApprovedHeroesScreen();

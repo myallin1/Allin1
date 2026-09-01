@@ -54,7 +54,14 @@ void main() {
           .where((t) => t.requiresConfirmation)
           .map((t) => t.name)
           .toSet();
-      expect(gated, {'create_service_request', 'cancel_order'});
+      expect(gated, {
+        'create_service_request',
+        'cancel_order',
+        'system_perform_action',
+        'propose_write_action',
+        'send_sms',
+        'create_dev_task',
+      });
     });
   });
 

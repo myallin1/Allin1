@@ -24,6 +24,9 @@ const Color _bg = Colors.white;
 const Color _card = Color(0xFFFFF3F9);
 const Color _green = Color(0xFF00C853);
 const Color _gold = Color(0xFFFFBB00);
+// "Register as Hero" button color — requested green, kept separate from
+// _gold since that's still used elsewhere (SnackBars) on this screen.
+const Color _registerGreen = Color(0xFF00C853);
 const Color _text = Color(0xFF4A1236);
 const Color _muted = Color(0xFF8A4E72);
 const Color _pink = Color(0xFFFF4FA3);
@@ -619,8 +622,8 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
                     );
                   },
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: _gold,
-                    side: const BorderSide(color: _gold),
+                    foregroundColor: _registerGreen,
+                    side: const BorderSide(color: _registerGreen),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),

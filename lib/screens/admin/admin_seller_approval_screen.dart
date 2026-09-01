@@ -12,6 +12,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import '../../services/chitti/chitti_voice_service.dart';
 
 import '../../config/city_config.dart';
 
@@ -321,6 +323,29 @@ class _AdminSellerApprovalScreenState extends State<AdminSellerApprovalScreen> {
         },
         SetOptions(merge: true),
       );
+
+      // Auto-WhatsApp welcome draft (CEO Feature)
+      try {
+        final tts = FlutterTts();
+        await ChittiVoiceService.apply(tts, 'ta-IN');
+        await tts.speak("செல்லர் ${data['name'] ?? ''} அப்ரூவ் செய்யப்பட்டார். வாட்ஸ்அப் மெசேஜ் தயார் செய்யப்படுகிறது பாஸ்.");
+      } catch (_) {}
+
+      try {
+        final String phone = (data['phone'] as String? ?? '').trim();
+        final String name = (data['name'] as String? ?? 'Seller').trim();
+        if (phone.isNotEmpty) {
+          final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+          final formattedPhone = cleanPhone.startsWith('91') ? cleanPhone : '91$cleanPhone';
+          final welcomeMsg = "Vanakkam $name! Allin1 app-il ungal store profile approve seyyapattathu. Welcome aboard! - NJ Tech Team.";
+          final url = Uri.parse("https://wa.me/$formattedPhone?text=${Uri.encodeComponent(welcomeMsg)}");
+          if (await canLaunchUrl(url)) {
+            await launchUrl(url, mode: LaunchMode.externalApplication);
+          }
+        }
+      } catch (e) {
+        debugPrint('[SellerApproval] WhatsApp launch failed: $e');
+      }
 
       await Future<void>.delayed(const Duration(milliseconds: 300));
       if (!mounted) return;

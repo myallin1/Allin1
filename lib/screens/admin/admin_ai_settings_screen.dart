@@ -23,9 +23,18 @@ import 'package:flutter_tts/flutter_tts.dart';
 
 import '../../services/chitti/chitti_model_provider.dart';
 import '../../services/chitti/chitti_voice_service.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
+import '../../services/chitti/chitti_accessibility_bridge.dart';
+import 'chitti_debug_logs_screen.dart';
+import '../../services/chitti/chitti_dev_task_service.dart';
+import '../../services/chitti/chitti_summarizer.dart';
+import '../../services/cloudinary_upload_service.dart';
 
 const String _kGroqKeyPrefsKey = 'personal_ai_api_key';
 const String _kGeminiKeyPrefsKey = 'personal_gemini_api_key';
@@ -41,7 +50,7 @@ const String _kDeepSeekKeyPrefsKey = 'personal_deepseek_api_key';
 // gemini_api_service.dart, deepseek_api_service.dart) — same
 // "silent mismatch" risk called out for the key-prefs constants
 // above, so triple-checked to match.
-const String _kGroqModelPrefsKey = 'personal_ai_model';
+const String _kGroqModelPrefsKey = 'personal_groq_model';
 const String _kGeminiModelPrefsKey = 'personal_gemini_model';
 const String _kDeepSeekModelPrefsKey = 'personal_deepseek_model';
 
@@ -85,12 +94,64 @@ class AdminAiSettingsScreen extends StatefulWidget {
   State<AdminAiSettingsScreen> createState() => _AdminAiSettingsScreenState();
 }
 
-class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
+class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
+    with WidgetsBindingObserver {
   final TextEditingController _groqCtrl = TextEditingController();
   final TextEditingController _geminiCtrl = TextEditingController();
   final TextEditingController _deepseekCtrl = TextEditingController();
+
+  // NEW (Aug 31 2026 — Developer Automation / create_dev_task). Stored
+  // via ChittiDevTaskService (flutter_secure_storage), never
+  // SharedPreferences — see that file's header for why this one starts
+  // secure instead of migrating later.
+  final TextEditingController _githubTokenCtrl = TextEditingController();
+  final TextEditingController _githubOwnerCtrl = TextEditingController();
+  final TextEditingController _githubRepoCtrl = TextEditingController();
   bool _loading = true;
   bool _saving = false;
+
+  // Call Assistant configuration state
+  bool _callAssistantEnabled = false;
+  bool _morningBriefingEnabled = true;
+  bool _hasCallPermission = false;
+  bool _hasMicPermission = false;
+  bool _hasOverlayPermission = false;
+
+  // NEW (Aug 30 2026 — Nizam: "chitti setting page la oru button vai
+  // atha thotta accessibility on aganum, on aiduchu-nnu notification
+  // varanum"). This is a SEPARATE OS-level toggle from the three app
+  // permissions above (Answer Calls / Record Audio / Appear on Top) —
+  // those are granted via the standard Android runtime-permission
+  // dialog, but Accessibility Service can only be turned on from
+  // Settings > Accessibility itself, no in-app dialog can grant it.
+  // Tracked here so returning from that settings screen (caught via
+  // WidgetsBindingObserver.didChangeAppLifecycleState below) can tell
+  // the difference between "still off" and "just turned on" and show a
+  // confirmation the moment it changes, rather than the admin having to
+  // guess or back out and back in again to see updated state.
+  bool _accessibilityServiceEnabled = false;
+
+  // NEW (Aug 31 2026 — Option A, default-dialer role): "Chitti loud
+  // speaker on agala" — confirmed by real testing on Oppo Reno7 Pro AND
+  // Lenovo K9 that only the app holding this OS role can control a real
+  // call's audio route. Same poll-on-resume pattern as
+  // _accessibilityServiceEnabled above — the grant happens in a system
+  // dialog this screen doesn't get a direct callback from.
+  bool _isDefaultDialer = false;
+
+  static const String _kCallAssistantEnabledKey = 'kChittiCallAssistantEnabled';
+  static const String _kMorningBriefingEnabledKey = 'personal_morning_briefing_enabled';
+
+  // NEW (per Nizam's request, Aug 31 2026): "chitti pesurathuku late
+  // aguthu, athayum step ah pirikkalam" — two answering modes now
+  // exist in ChittiCallScreeningService.startScreening(). 'quick_record'
+  // is the new default: one fixed greeting, then the native call
+  // recorder captures the rest — no speech-recognition engine, no AI
+  // network round-trip, so there's no latency the caller can notice.
+  // 'full' is the original live back-and-forth conversation, kept as an
+  // option once that flow's latency is tuned.
+  static const String _kCallAnsweringModeKey = 'kChittiCallAnsweringMode';
+  String _callAnsweringMode = 'quick_record';
 
   // NEW (Aug 12 2026 — per-key model selection): each provider's
   // currently-selected model, defaulting to that provider's first
@@ -122,7 +183,54 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+    _checkAccessibilityService();
+    _checkDefaultDialer();
+  }
+
+  Future<void> _checkDefaultDialer() async {
+    final isDefault = await ChittiAccessibilityBridge.instance.isDefaultDialer();
+    if (!mounted) return;
+    final justTurnedOn = isDefault && !_isDefaultDialer;
+    setState(() => _isDefaultDialer = isDefault);
+    if (justTurnedOn) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("✅ Chitti is now the default Phone app — real speaker control is active."),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
+  Future<void> _checkAccessibilityService() async {
+    final enabled = await ChittiAccessibilityBridge.instance.isPermissionGranted();
+    if (!mounted) return;
+    final justTurnedOn = enabled && !_accessibilityServiceEnabled;
+    setState(() => _accessibilityServiceEnabled = enabled);
+    if (justTurnedOn) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("✅ Accessibility enabled — Chitti will now follow you across apps!"),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Returning from Settings > Accessibility (where opening it is the
+    // only way to grant this) lands back here as a resume — that is the
+    // one moment worth re-checking, so this stays a light poll rather
+    // than a timer running the whole time the screen is open.
+    if (state == AppLifecycleState.resumed) {
+      _checkAccessibilityService();
+      _checkDefaultDialer();
+    }
   }
 
   Future<void> _load() async {
@@ -157,14 +265,41 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
       _voices = voices;
       _loadingVoices = false;
       _loading = false;
+      _callAssistantEnabled = prefs.getBool(_kCallAssistantEnabledKey) ?? true;
+      _morningBriefingEnabled = prefs.getBool(_kMorningBriefingEnabledKey) ?? true;
+      _callAnsweringMode = prefs.getString(_kCallAnsweringModeKey) ?? 'quick_record';
     });
+
+    final statuses = await ChittiAccessibilityBridge.instance.checkCallPermissions();
+    final hasOverlay = await ChittiAccessibilityBridge.instance.checkOverlayPermission();
+    if (mounted) {
+      setState(() {
+        _hasCallPermission = (statuses['readPhone'] == true) && (statuses['answerCalls'] == true) && (statuses['readCallLog'] == true);
+        _hasMicPermission = statuses['recordAudio'] == true;
+        _hasOverlayPermission = hasOverlay;
+      });
+    }
+
+    final githubToken = await ChittiDevTaskService.readToken();
+    final githubRepo = await ChittiDevTaskService.readRepo();
+    if (mounted) {
+      setState(() {
+        _githubTokenCtrl.text = githubToken ?? '';
+        _githubOwnerCtrl.text = githubRepo.owner;
+        _githubRepoCtrl.text = githubRepo.name;
+      });
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _groqCtrl.dispose();
     _geminiCtrl.dispose();
     _deepseekCtrl.dispose();
+    _githubTokenCtrl.dispose();
+    _githubOwnerCtrl.dispose();
+    _githubRepoCtrl.dispose();
     super.dispose();
   }
 
@@ -197,6 +332,14 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
       await prefs.setString(_kGroqModelPrefsKey, _groqModel);
       await prefs.setString(_kGeminiModelPrefsKey, _geminiModel);
       await prefs.setString(_kDeepSeekModelPrefsKey, _deepseekModel);
+      await prefs.setBool(_kCallAssistantEnabledKey, _callAssistantEnabled);
+      await prefs.setBool(_kMorningBriefingEnabledKey, _morningBriefingEnabled);
+      await prefs.setString(_kCallAnsweringModeKey, _callAnsweringMode);
+      await ChittiDevTaskService.saveToken(_githubTokenCtrl.text);
+      await ChittiDevTaskService.saveRepo(
+        owner: _githubOwnerCtrl.text,
+        name: _githubRepoCtrl.text,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Admin AI Co-Pilot keys saved on this device.')),
@@ -262,7 +405,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
       children: [
         Text(
           "Chitti's Voice",
-          style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700),
+          style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13),
         ),
         const SizedBox(height: 4),
         Text(
@@ -344,7 +487,680 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
             ],
             onChanged: _pinVoice,
           ),
+        // NEW (Aug 29 2026 — Nizam: "oppo phone la chitti ku male
+        // voice varuthu, samsung phone la male voice varala"). See the
+        // matching note in ai_settings_screen.dart — this is a TTS
+        // ENGINE difference between phones, not a code bug, so the fix
+        // has to happen in the phone's own settings.
+        if (!_loadingVoices &&
+            _voices.isNotEmpty &&
+            !_voices.any((v) => v.isMale))
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              "No male voice showed up above? Some phones (often "
+              'Samsung) ship a TTS engine with a smaller voice set. Go '
+              'to Settings → General management → Text-to-speech → '
+              'Preferred engine, switch it to "Google Text-to-speech", '
+              'then come back here.',
+              style: GoogleFonts.outfit(
+                color: _red,
+                fontSize: 11,
+                height: 1.4,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
       ],
+    );
+  }
+
+  Future<void> _requestCallPermissions() async {
+    await ChittiAccessibilityBridge.instance.requestCallPermissions();
+    if (!_hasOverlayPermission) {
+      await ChittiAccessibilityBridge.instance.requestOverlayPermission();
+    }
+    await Future.delayed(const Duration(milliseconds: 1000));
+    final statuses = await ChittiAccessibilityBridge.instance.checkCallPermissions();
+    final hasOverlay = await ChittiAccessibilityBridge.instance.checkOverlayPermission();
+    if (mounted) {
+      setState(() {
+        _hasCallPermission = (statuses['readPhone'] == true) && (statuses['answerCalls'] == true) && (statuses['readCallLog'] == true);
+        _hasMicPermission = statuses['recordAudio'] == true;
+        _hasOverlayPermission = hasOverlay;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _hasCallPermission && _hasMicPermission && _hasOverlayPermission
+                ? 'All Call Assistant permissions granted!'
+                : 'Some permissions were denied. Please grant them in Settings.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildCallAssistantSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(color: _border, height: 32),
+        Row(
+          children: [
+            const Icon(Icons.call_rounded, color: _red, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              "Chitti AI Call Assistant",
+              style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          "Auto-answers incoming calls when you are busy, talks to the customer using warm Tamil/English, and takes messages or schedules appointments.",
+          style: GoogleFonts.outfit(color: _muted, fontSize: 11.5, height: 1.35),
+        ),
+        const SizedBox(height: 12),
+        SwitchListTile(
+          title: Text(
+            "Enable Call Assistant",
+            style: GoogleFonts.outfit(color: _text, fontSize: 13.5, fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            _callAssistantEnabled ? "Active (Auto-answers calls)" : "Inactive",
+            style: GoogleFonts.outfit(color: _callAssistantEnabled ? Colors.green : _muted, fontSize: 11),
+          ),
+          value: _callAssistantEnabled,
+          activeColor: _red,
+          activeTrackColor: _red.withValues(alpha: 0.3),
+          inactiveThumbColor: _muted,
+          contentPadding: EdgeInsets.zero,
+          onChanged: (val) async {
+            setState(() {
+              _callAssistantEnabled = val;
+            });
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool(_kCallAssistantEnabledKey, val);
+          },
+        ),
+        const SizedBox(height: 12),
+        // NEW (Aug 31 2026 — Option A, default-dialer role): the real
+        // fix for "Chitti loud speaker on agala" — confirmed on both
+        // Oppo Reno7 Pro and Lenovo K9 that AudioManager alone cannot
+        // route a real SIM call to the speaker, only the app holding
+        // this OS role can. See ChittiInCallService.kt for the full
+        // root-cause writeup.
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _isDefaultDialer ? Colors.green.withValues(alpha: 0.1) : _red.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _isDefaultDialer ? Colors.green : _red),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    _isDefaultDialer ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
+                    color: _isDefaultDialer ? Colors.green : _red,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _isDefaultDialer
+                          ? "Chitti is the default Phone app — real speaker control is active"
+                          : "Real speaker control needs Chitti to be the default Phone app",
+                      style: GoogleFonts.outfit(color: _text, fontSize: 12.5, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                "Without this, Chitti's greeting only plays through the earpiece — "
+                "the caller never hears it (confirmed on both Oppo and Lenovo). "
+                "This replaces this phone's calling app with Chitti so it can "
+                "switch a real call to the speaker.",
+                style: GoogleFonts.outfit(color: _muted, fontSize: 11, height: 1.3),
+              ),
+              if (!_isDefaultDialer) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () async {
+                      final outcome = await ChittiAccessibilityBridge.instance.requestDefaultDialerRole();
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(outcome), duration: const Duration(seconds: 5)),
+                      );
+                    },
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: _red),
+                      foregroundColor: _red,
+                    ),
+                    child: const Text('Make Chitti the Default Phone App'),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // NEW (per Nizam's request, Aug 31 2026): "chitti pesurathuku
+        // late aguthu, athayum step ah pirikkalam" — pick which
+        // answering mode ChittiCallScreeningService.startScreening()
+        // uses for the next call.
+        Text(
+          "How Chitti answers a screened call",
+          style: GoogleFonts.outfit(color: _text, fontSize: 13.5, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        _AnsweringModeOption(
+          selected: _callAnsweringMode == 'quick_record',
+          title: 'Quick Greeting + Record (backup, faster)',
+          subtitle: 'Chitti says one fixed line, then just records what the '
+              'caller says. No live back-and-forth — check the recording in '
+              'File Manager / Dialer when free.',
+          onTap: () async {
+            setState(() => _callAnsweringMode = 'quick_record');
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString(_kCallAnsweringModeKey, 'quick_record');
+          },
+        ),
+        const SizedBox(height: 8),
+        _AnsweringModeOption(
+          selected: _callAnsweringMode == 'full',
+          title: 'Full Chitti Conversation',
+          subtitle: 'Chitti listens and replies back and forth in real time '
+              '— can feel slightly slow while this flow is still being tuned.',
+          onTap: () async {
+            setState(() => _callAnsweringMode = 'full');
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString(_kCallAnsweringModeKey, 'full');
+          },
+        ),
+        const SizedBox(height: 12),
+        SwitchListTile(
+          title: Text(
+            "Enable Morning Briefing",
+            style: GoogleFonts.outfit(color: _text, fontSize: 13.5, fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            _morningBriefingEnabled ? "Active (Vocal summary at launch)" : "Inactive",
+            style: GoogleFonts.outfit(color: _morningBriefingEnabled ? Colors.green : _muted, fontSize: 11),
+          ),
+          value: _morningBriefingEnabled,
+          activeColor: _red,
+          activeTrackColor: _red.withValues(alpha: 0.3),
+          inactiveThumbColor: _muted,
+          inactiveTrackColor: _bg,
+          contentPadding: EdgeInsets.zero,
+          onChanged: (val) {
+            setState(() {
+              _morningBriefingEnabled = val;
+            });
+          },
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _bg,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            children: [
+              _permissionStatusRow("Answer Phone Calls", _hasCallPermission),
+              const SizedBox(height: 8),
+              _permissionStatusRow("Record Call Audio", _hasMicPermission),
+              const SizedBox(height: 8),
+              _permissionStatusRow("Appear on Top (Overlay)", _hasOverlayPermission),
+              const SizedBox(height: 8),
+              _permissionStatusRow("Follow You Across Apps (Accessibility)", _accessibilityServiceEnabled),
+              if (!_accessibilityServiceEnabled) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => ChittiAccessibilityBridge.instance.openSettings(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _red.withValues(alpha: 0.15),
+                      side: const BorderSide(color: _red),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                    child: Text(
+                      "Enable Accessibility",
+                      style: GoogleFonts.outfit(color: _red, fontWeight: FontWeight.w600, fontSize: 12),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    "Opens system Settings — find Chitti in the list and turn it on. Come back here and you'll see a confirmation.",
+                    style: GoogleFonts.outfit(color: _muted, fontSize: 10.5, height: 1.3),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              if (!_hasCallPermission || !_hasMicPermission || !_hasOverlayPermission)
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _requestCallPermissions,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _purple.withValues(alpha: 0.2),
+                      side: const BorderSide(color: _purple),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                    child: Text(
+                      "Request Call Permissions",
+                      style: GoogleFonts.outfit(color: _purple, fontWeight: FontWeight.w600, fontSize: 12),
+                    ),
+                  ),
+                )
+              else
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.check_circle_rounded, color: Colors.green, size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      "Permissions configured successfully",
+                      style: GoogleFonts.outfit(color: Colors.green, fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // NEW (Aug 31 2026 — debug-log viewer, right where the admin is
+        // already looking after a test call).
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const ChittiDebugLogsScreen()),
+            ),
+            icon: const Icon(Icons.bug_report_rounded, color: _red, size: 18),
+            label: Text(
+              'View Call Debug Logs',
+              style: GoogleFonts.outfit(color: _red, fontWeight: FontWeight.w600, fontSize: 12.5),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: _red),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Text(
+          "AI-Recorded Appointments",
+          style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 12.5),
+        ),
+        const SizedBox(height: 8),
+        _buildAppointmentsList(),
+      ],
+    );
+  }
+
+  Widget _permissionStatusRow(String label, bool isGranted) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.outfit(color: _text, fontSize: 12.5),
+        ),
+        Row(
+          children: [
+            Text(
+              isGranted ? "Granted" : "Denied",
+              style: GoogleFonts.outfit(color: isGranted ? Colors.green : _red, fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(width: 6),
+            Icon(
+              isGranted ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded,
+              color: isGranted ? Colors.green : _red,
+              size: 16,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // NEW (Aug 31 2026 — create_dev_task). Lets Chitti place a GitHub
+  // issue tagging @claude on Nizam's behalf, once he's confirmed the
+  // request — see chitti_dev_task_service.dart for why the token is
+  // secure-storage-only and the security note about scoping it to a
+  // fine-grained, repo-limited, Issues-only PAT.
+  Widget _buildDevAutomationSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(color: _border, height: 32),
+        Row(
+          children: [
+            const Icon(Icons.rocket_launch_rounded, color: _red, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Developer Automation',
+              style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          "Lets Chitti open a GitHub issue tagging @claude when you ask it "
+          "to build or fix something — the Claude Code GitHub App picks it "
+          "up automatically. Use a fine-grained token scoped to ONLY this "
+          "repo, with ONLY 'Issues: Write' permission.",
+          style: GoogleFonts.outfit(color: _muted, fontSize: 11.5, height: 1.35),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _githubOwnerCtrl,
+                style: const TextStyle(color: _text),
+                decoration: InputDecoration(
+                  hintText: 'Repo owner (e.g. myallin1)',
+                  hintStyle: const TextStyle(color: _muted),
+                  filled: true,
+                  fillColor: _bg,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: _githubRepoCtrl,
+                style: const TextStyle(color: _text),
+                decoration: InputDecoration(
+                  hintText: 'Repo name (e.g. Allin1)',
+                  hintStyle: const TextStyle(color: _muted),
+                  filled: true,
+                  fillColor: _bg,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _githubTokenCtrl,
+          obscureText: true,
+          style: const TextStyle(color: _text),
+          decoration: InputDecoration(
+            hintText: 'Paste your GitHub fine-grained token',
+            hintStyle: const TextStyle(color: _muted),
+            prefixIcon: const Icon(Icons.key_rounded, color: _red),
+            filled: true,
+            fillColor: _bg,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAppointmentsList() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('chitti_appointments')
+          .orderBy('timestamp', descending: true)
+          .limit(10)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Text(
+              "Error loading appointments: ${snapshot.error}",
+              style: GoogleFonts.outfit(color: _red, fontSize: 12),
+            ),
+          );
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2, color: _red),
+              ),
+            ),
+          );
+        }
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+            decoration: BoxDecoration(
+              color: _bg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _border),
+            ),
+            child: Column(
+              children: [
+                const Icon(Icons.event_busy_rounded, color: _muted, size: 36),
+                const SizedBox(height: 8),
+                Text(
+                  "No appointments recorded yet",
+                  style: GoogleFonts.outfit(color: _muted, fontSize: 12.5),
+                ),
+              ],
+            ),
+          );
+        }
+        return ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: docs.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 10),
+          itemBuilder: (context, index) {
+            final data = docs[index].data() as Map<String, dynamic>;
+            final docId = docs[index].id;
+            final phone = data['phone'] as String? ?? 'Unknown Caller';
+            final name = data['name'] as String? ?? 'New Customer';
+            final summary = data['summary'] as String? ?? 'No message summary';
+            final localAudioPath = data['localAudioPath'] as String?;
+            final localTranscriptPath = data['localTranscriptPath'] as String?;
+            final audioUrl = data['audioUrl'] as String?;
+            final ts = data['timestamp'] as Timestamp?;
+            final dateStr = ts != null
+                ? "${ts.toDate().day}/${ts.toDate().month} ${ts.toDate().hour.toString().padLeft(2, '0')}:${ts.toDate().minute.toString().padLeft(2, '0')}"
+                : "Just now";
+
+            final oneLineSummary = ChittiSummarizer.heuristicSummary(
+              sender: phone,
+              message: summary,
+              isTamil: true,
+            );
+
+            return Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _bg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        name,
+                        style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                      Text(
+                        dateStr,
+                        style: GoogleFonts.outfit(color: _muted, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(
+                        phone,
+                        style: GoogleFonts.outfit(color: _red, fontSize: 11.5, fontWeight: FontWeight.w600),
+                      ),
+                      const Spacer(),
+                      if (localAudioPath != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.mic_rounded, color: Colors.green, size: 12),
+                              const SizedBox(width: 3),
+                              Text(
+                                "Recorded",
+                                style: GoogleFonts.outfit(color: Colors.green, fontSize: 10, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: _surface,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      oneLineSummary,
+                      style: GoogleFonts.outfit(color: _text, fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (localAudioPath != null)
+                        IconButton(
+                          tooltip: 'Play / Share Voice Recording',
+                          icon: const Icon(Icons.play_circle_fill_rounded, color: Colors.green, size: 22),
+                          onPressed: () async {
+                            final file = File(localAudioPath);
+                            if (await file.exists()) {
+                              await SharePlus.instance.share(
+                                ShareParams(
+                                  files: [XFile(localAudioPath)],
+                                  text: 'Call recording from $phone',
+                                ),
+                              );
+                            } else if (audioUrl != null) {
+                              final uri = Uri.parse(audioUrl);
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              }
+                            }
+                          },
+                        ),
+                      if (localTranscriptPath != null)
+                        IconButton(
+                          tooltip: 'Share Transcript',
+                          icon: const Icon(Icons.description_rounded, color: Colors.orange, size: 20),
+                          onPressed: () async {
+                            final file = File(localTranscriptPath);
+                            if (await file.exists()) {
+                              await SharePlus.instance.share(
+                                ShareParams(
+                                  files: [XFile(localTranscriptPath)],
+                                  text: 'Call transcript with $phone',
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      if (localAudioPath != null && audioUrl == null)
+                        IconButton(
+                          tooltip: 'Backup audio to Cloud',
+                          icon: const Icon(Icons.cloud_upload_rounded, color: Colors.blue, size: 20),
+                          onPressed: () async {
+                            try {
+                              final file = File(localAudioPath);
+                              if (await file.exists()) {
+                                final bytes = await file.readAsBytes();
+                                final cleanNumber = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+                                final fileName = 'call_${cleanNumber}_${DateTime.now().millisecondsSinceEpoch}.m4a';
+                                final url = await CloudinaryUploadService().uploadAudioBytes(
+                                  bytes,
+                                  fileName: fileName,
+                                  folder: 'call_recordings',
+                                );
+                                await FirebaseFirestore.instance
+                                    .collection('chitti_appointments')
+                                    .doc(docId)
+                                    .update({'audioUrl': url});
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Audio successfully backed up to Cloud!')),
+                                  );
+                                }
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Upload failed: $e')),
+                                );
+                              }
+                            }
+                          },
+                        ),
+                      IconButton(
+                        tooltip: 'Send SMS',
+                        icon: const Icon(Icons.sms_rounded, color: _purple, size: 18),
+                        onPressed: () async {
+                          final uri = Uri.parse('sms:$phone');
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri);
+                          }
+                        },
+                      ),
+                      IconButton(
+                        tooltip: 'Call Back',
+                        icon: const Icon(Icons.phone_in_talk_rounded, color: Colors.green, size: 18),
+                        onPressed: () async {
+                          final uri = Uri.parse('tel:$phone');
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -355,7 +1171,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
       appBar: AppBar(
         backgroundColor: _surface,
         elevation: 0,
-        title: Text('Admin AI Configuration', style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700)),
+        title: Text('Admin AI Configuration', style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 16)),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _red))
@@ -394,6 +1210,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
                       style: GoogleFonts.outfit(
                         color: _text,
                         fontWeight: FontWeight.w700,
+                        fontSize: 13,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -433,8 +1250,10 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
                     ),
                     const SizedBox(height: 20),
                     _buildChittiVoiceSection(),
+                    _buildCallAssistantSection(),
+                    _buildDevAutomationSection(),
                     const SizedBox(height: 20),
-                    Text('Groq API Key', style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700)),
+                    Text('Groq API Key', style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13)),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _groqCtrl,
@@ -457,7 +1276,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
                       onChanged: (v) => setState(() => _groqModel = v),
                     ),
                     const SizedBox(height: 20),
-                    Text('Gemini API Key', style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700)),
+                    Text('Gemini API Key', style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13)),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _geminiCtrl,
@@ -483,7 +1302,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
                     // NEW (Aug 11 2026): admin-only third agent, used as
                     // the backup when Groq/Gemini free limits run out.
                     Text('DeepSeek API Key (backup agent)',
-                        style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700),),
+                        style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13),),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _deepseekCtrl,
@@ -532,6 +1351,68 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen> {
                 ),
               ),
             ),
+    );
+  }
+}
+
+// NEW (per Nizam's request, Aug 31 2026): a selectable card for the
+// "How Chitti answers a screened call" choice above — same tappable-
+// card convention as _ManageTile in super_admin_home_screen.dart, just
+// with a selected/unselected state instead of a nav arrow.
+class _AnsweringModeOption extends StatelessWidget {
+  const _AnsweringModeOption({
+    required this.selected,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: selected ? _red.withValues(alpha: 0.12) : const Color(0xFF141420),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: selected ? _red : _border),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              selected ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
+              color: selected ? _red : _muted,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.outfit(color: _text, fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.outfit(color: _muted, fontSize: 11, height: 1.3),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

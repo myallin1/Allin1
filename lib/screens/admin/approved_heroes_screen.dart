@@ -10,9 +10,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../config/hero_service_access.dart';
 import '../../widgets/admin/hero_service_access_sheet.dart';
+import '../../config/city_config.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-// T3: Admin Mirror — full God's Eye hero profile
-import 'admin_hero_mirror_screen.dart';
+import 'admin_hero_details_screen.dart';
 
 // ── Theme (matches admin dashboard) ────────────────────────────
 const Color _bg = Color(0xFF0A0A1A);
@@ -270,14 +271,26 @@ class _ApprovedHeroesScreenState extends State<ApprovedHeroesScreen> {
   }
 
   // ── Mirror Navigation (T3) ─────────────────────────────────────
-  // Opens the full "God's Eye" mirror view instead of the old thin dialog.
+  // Opens the full verification style detail screen for approved heroes.
   void _showDetailDialog(String uid, Map<String, dynamic> data) {
     Navigator.push<void>(
       context,
       MaterialPageRoute<void>(
-        builder: (_) => AdminHeroMirrorScreen(
-          heroUid: uid,
-          heroData: data,
+        builder: (_) => AdminHeroDetailsScreen(
+          uid: uid,
+          data: data,
+          getCityLabel: cityLabelFor,
+          onCall: () async {
+            final phone = data['phone'] as String? ?? '';
+            if (phone.isNotEmpty) {
+              final uri = Uri.parse('tel:$phone');
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri);
+              }
+            }
+          },
+          onApprove: () {},
+          onReject: () {},
         ),
       ),
     );

@@ -18,8 +18,8 @@ class AIService {
     Duration? requestTimeout,
   })  : _modelChain = modelChain ??
             const <String>[
-              'llama-3.1-8b-instant',
               'llama-3.3-70b-versatile',
+              'llama-3.1-8b-instant',
               'openai/gpt-oss-20b',
             ],
         _client = client ?? http.Client(),

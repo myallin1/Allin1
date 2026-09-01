@@ -9,6 +9,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import '../../services/chitti/chitti_voice_service.dart';
 
 import '../../config/city_config.dart';
 import '../../config/hero_skill_catalog.dart';
@@ -312,7 +314,21 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
     if (empty('selfieUrl')) missing.add('Selfie photo');
     if (empty('aadhaarDocUrl')) missing.add('Aadhaar document');
     if (empty('panDocUrl')) missing.add('PAN document');
-    if (empty('licenseDocUrl')) missing.add('License document');
+    
+    final isSkillHero = data['vehicleType'] == 'skill_worker';
+    if (!isSkillHero && empty('licenseDocUrl')) {
+      missing.add('License document');
+    }
+    // FIX (Aug 29 2026 — the vehicleNumber field this checks for did not
+    // exist anywhere in the app until this same audit added it to
+    // hero_register_screen.dart. Added here, mirroring the licenceDocUrl
+    // check right above, so an admin can't approve a vehicle hero with
+    // no vehicle number the exact same way they already can't approve
+    // one with no licence photo.
+    if (!isSkillHero && empty('vehicleNumber')) {
+      missing.add('Vehicle number');
+    }
+
     if (empty('name')) missing.add('Name');
     if (empty('phone')) missing.add('Phone number');
     return missing;
@@ -431,6 +447,29 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
         });
       } catch (e) {
         debugPrint('[HeroApprovals] hero_status_updates write failed: $e');
+      }
+
+      // Auto-WhatsApp welcome draft (CEO Feature)
+      try {
+        final tts = FlutterTts();
+        await ChittiVoiceService.apply(tts, 'ta-IN');
+        await tts.speak("ஹீரோ ${data['name'] ?? ''} அப்ரூவ் செய்யப்பட்டார். வாட்ஸ்அப் மெசேஜ் தயார் செய்யப்படுகிறது பாஸ்.");
+      } catch (_) {}
+
+      try {
+        final String phone = (data['phone'] as String? ?? '').trim();
+        final String name = (data['name'] as String? ?? 'Hero').trim();
+        if (phone.isNotEmpty) {
+          final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+          final formattedPhone = cleanPhone.startsWith('91') ? cleanPhone : '91$cleanPhone';
+          final welcomeMsg = "Vanakkam $name! Allin1 app-il ungal captain profile approve seyyapattathu. Welcome aboard! - NJ Tech Team.";
+          final url = Uri.parse("https://wa.me/$formattedPhone?text=${Uri.encodeComponent(welcomeMsg)}");
+          if (await canLaunchUrl(url)) {
+            await launchUrl(url, mode: LaunchMode.externalApplication);
+          }
+        }
+      } catch (e) {
+        debugPrint('[HeroApprovals] WhatsApp launch failed: $e');
       }
 
       // Allow stream to settle before showing success message
@@ -681,6 +720,8 @@ class _HeroApprovalCard extends StatelessWidget {
     final vehicleType = data['vehicleType'] as String? ?? '';
     final skills = heroSkillsOf(data);
     final email = data['email'] as String? ?? '';
+    final dob = data['dob'] as String? ?? '';
+    final address = data['address'] as String? ?? '';
     final createdAt = data['createdAt'] as Timestamp?;
 
     return Container(
@@ -801,6 +842,45 @@ class _HeroApprovalCard extends StatelessWidget {
               style: const TextStyle(fontSize: 10, color: _muted),
               overflow: TextOverflow.ellipsis,
             ),
+          ],
+          // FIX (Aug 29 2026 — Nizam: "admin ku send pannavendiya proof
+          // and needed column mis aagirukku"). dob and address are
+          // MANDATORY fields on hero_register_screen.dart — a hero
+          // cannot submit without them — but this card, the one screen
+          // where admin actually decides approve/reject, never showed
+          // either. Admin was making that call blind to two of the
+          // identity fields the hero was forced to provide.
+          if (dob.isNotEmpty || address.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.cake_rounded, size: 13, color: _muted),
+                const SizedBox(width: 6),
+                Text(
+                  dob.isNotEmpty ? dob : 'DOB: N/A',
+                  style: const TextStyle(fontSize: 11, color: _muted),
+                ),
+              ],
+            ),
+            if (address.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.home_rounded, size: 13, color: _muted),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      address,
+                      style: const TextStyle(fontSize: 11, color: _muted),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
           const SizedBox(height: 14),
           // Action buttons

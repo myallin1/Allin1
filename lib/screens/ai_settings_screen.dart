@@ -425,6 +425,39 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
               await _previewVoice();
             },
           ),
+        // NEW (Aug 29 2026 — Nizam: "oppo phone la chitti ku male
+        // voice varuthu, samsung phone la male voice varala").
+        //
+        // Not a code bug — a device difference. Oppo phones generally
+        // default to Google's own TTS engine, whose voice catalogue
+        // has a male Tamil/English-India option; many Samsung phones
+        // default to "Samsung TTS", a separate engine with a smaller
+        // catalogue that often has no male option for those languages
+        // at all. No amount of app-side name-matching can produce a
+        // voice the active engine does not have — the fix has to
+        // happen in the phone's own TTS settings. Shown only when
+        // voices exist but NONE of them look male, which is exactly
+        // this situation (the empty-list case above already covers
+        // "no voices at all").
+        if (!_loadingVoices &&
+            _voices.isNotEmpty &&
+            !_voices.any((v) => v.isMale))
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              "No male voice showed up above? Some phones (often "
+              'Samsung) ship a TTS engine with a smaller voice set. Go '
+              'to Settings → General management → Text-to-speech → '
+              'Preferred engine, switch it to "Google Text-to-speech", '
+              'then come back here.',
+              style: GoogleFonts.outfit(
+                color: pink,
+                fontSize: 11,
+                height: 1.4,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
         const SizedBox(height: 14),
         Text(
           'Hands-free conversation',

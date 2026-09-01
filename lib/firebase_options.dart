@@ -41,17 +41,18 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDipnXQFpwR1Zm4L3-XebKVgc1oPJhReME',
-    appId: '1:357526153693:android:4aee34',
+    apiKey: 'AIzaSyC_GWgATZDWeKL0rk9YJAtA6ubWdUP7ROY',
+    appId: '1:357526153693:android:52a73ef55b9073544aee34',
     messagingSenderId: '357526153693',
     projectId: 'erode-super-app',
     authDomain: 'erode-super-app.firebaseapp.com',
     storageBucket: 'erode-super-app.firebasestorage.app',
+    databaseURL: 'https://erode-super-app-default-rtdb.firebaseio.com',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDipnXQFpwR1Zm4L3-XebKVgc1oPJhReME',
-    appId: '1:357526153693:ios:4aee34',
+    appId: '1:357526153693:ios:3a220b09b185f2ef4aee34',
     messagingSenderId: '357526153693',
     projectId: 'erode-super-app',
     authDomain: 'erode-super-app.firebaseapp.com',
