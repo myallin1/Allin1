@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/app_knowledge_briefing.dart';
 
 enum AIPersona {
   customer,
@@ -17,8 +18,8 @@ class AIService {
     Duration? requestTimeout,
   })  : _modelChain = modelChain ??
             const <String>[
-              'llama-3.1-8b-instant',
               'llama-3.3-70b-versatile',
+              'llama-3.1-8b-instant',
               'openai/gpt-oss-20b',
             ],
         _client = client ?? http.Client(),
@@ -37,15 +38,33 @@ class AIService {
     AIPersona persona = AIPersona.customer,
     List<Map<String, String>> history = const <Map<String, String>>[],
     String? systemPrompt,
+    // FIX (QA bug — "AI State Mismatch"): callers that already hold an
+    // AiActivationService (which reads the customer's key from
+    // flutter_secure_storage) should pass its `apiKey` here directly.
+    // Without this, this method fell back to its OWN independent
+    // SharedPreferences('personal_ai_api_key') lookup — the LEGACY
+    // storage location that AiActivationService's one-time migration
+    // actively deletes from once a key is moved into secure storage.
+    // That split meant Settings could report "activated" (secure
+    // storage has the key) while every actual chat call still saw an
+    // empty key here and returned a generic "add your key" message.
+    String? apiKey,
   }) async {
     final trimmed = message.trim();
     if (trimmed.isEmpty) {
       return 'Tell me what you need, and I will help you place the right request.';
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    final apiKey = prefs.getString(_apiKeyPrefsKey)?.trim() ?? '';
-    if (apiKey.isEmpty) {
+    var resolvedKey = apiKey?.trim() ?? '';
+    if (resolvedKey.isEmpty) {
+      // Back-compat fallback only — no current caller should hit this
+      // once every call site passes AiActivationService's apiKey, but
+      // kept so an old/legacy key some device migrated from still works
+      // rather than silently breaking.
+      final prefs = await SharedPreferences.getInstance();
+      resolvedKey = prefs.getString(_apiKeyPrefsKey)?.trim() ?? '';
+    }
+    if (resolvedKey.isEmpty) {
       return 'Add your Groq API key in Settings to activate NJ Tech AI chat.';
     }
 
@@ -53,7 +72,7 @@ class AIService {
     for (final model in _modelChain) {
       try {
         final response = await _sendViaGroq(
-          apiKey: apiKey,
+          apiKey: resolvedKey,
           model: model,
           persona: persona,
           message: trimmed,
@@ -167,7 +186,28 @@ class AIService {
     );
   }
 
+  /// NEW (Aug 17 2026): every persona is now briefed on the real app
+  /// before its own personality is applied.
+  ///
+  /// Previously each persona prompt described only a TONE ("motivation
+  /// buddy", "local friend") and nothing about the system it lives in,
+  /// so the assistant had no idea what MyAllin1 actually does, which
+  /// collections exist, or that there is no server. It answered from
+  /// generic world knowledge and guessed.
+  ///
+  /// The briefing comes from AppKnowledgeBriefing, whose factual half is
+  /// REGENERATED FROM THE CODEBASE ON EVERY DEPLOY
+  /// (tools/gen_app_knowledge.dart, wired into deploy_web.ps1). That is
+  /// what makes "namma oru new update vittalum athuvum AI-ku theriyum"
+  /// true by construction rather than by remembering to update a prompt.
+  ///
+  /// Persona voice is appended AFTER the briefing so it stays the last
+  /// instruction the model reads.
   String _systemPromptFor(AIPersona persona) {
+    return '${AppKnowledgeBriefing.build()}\n\n${_personaVoiceFor(persona)}';
+  }
+
+  String _personaVoiceFor(AIPersona persona) {
     switch (persona) {
       case AIPersona.hero:
         return 'You are NJ Tech Hero AI, a Motivation Buddy for bike-taxi Heroes. '

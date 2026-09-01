@@ -4,12 +4,17 @@
 // ================================================================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../config/hero_service_access.dart';
+import '../../widgets/admin/hero_service_access_sheet.dart';
+import '../../config/city_config.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-// T3: Admin Mirror — full God's Eye hero profile
-import 'admin_hero_mirror_screen.dart';
+import 'admin_hero_details_screen.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 // ── Theme (matches admin dashboard) ────────────────────────────
 const Color _bg = Color(0xFF0A0A1A);
@@ -77,7 +82,7 @@ class _ApprovedHeroesScreenState extends State<ApprovedHeroesScreen> {
               style: GoogleFonts.outfit(
                 color: _text,
                 fontWeight: FontWeight.w800,
-                fontSize: 17,
+                fontSize: 18, // FIX (UI standardization, Aug 11 2026): app-bar titles are 18sp app-wide
               ),
             ),
           ],
@@ -131,7 +136,7 @@ class _ApprovedHeroesScreenState extends State<ApprovedHeroesScreen> {
               stream: FirebaseFirestore.instance
                   .collection('heroes')
                   .where('approvalStatus', isEqualTo: 'approved')
-                  .snapshots(),
+                  .trackedSnapshots(),
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(
@@ -267,14 +272,26 @@ class _ApprovedHeroesScreenState extends State<ApprovedHeroesScreen> {
   }
 
   // ── Mirror Navigation (T3) ─────────────────────────────────────
-  // Opens the full "God's Eye" mirror view instead of the old thin dialog.
+  // Opens the full verification style detail screen for approved heroes.
   void _showDetailDialog(String uid, Map<String, dynamic> data) {
     Navigator.push<void>(
       context,
       MaterialPageRoute<void>(
-        builder: (_) => AdminHeroMirrorScreen(
-          heroUid: uid,
-          heroData: data,
+        builder: (_) => AdminHeroDetailsScreen(
+          uid: uid,
+          data: data,
+          getCityLabel: cityLabelFor,
+          onCall: () async {
+            final phone = data['phone'] as String? ?? '';
+            if (phone.isNotEmpty) {
+              final uri = Uri.parse('tel:$phone');
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri);
+              }
+            }
+          },
+          onApprove: () {},
+          onReject: () {},
         ),
       ),
     );
@@ -294,15 +311,48 @@ class _ApprovedHeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final approvedAt = data['approvedAt'] as Timestamp?;
+
+    // FIX (WhatsApp-model presence migration, CTO mandate): this used to
+    // read data['status'] from the Firestore heroes doc — a field that's
+    // no longer written at all (see hero_home_screen.dart's
+    // _syncOnlineStatus and services/auth_service.dart's
+    // completeProfileSetup). RTDB's online_heroes/{uid} node, backed by
+    // onDisconnect(), is now the ONLY source of truth for whether this
+    // hero is currently online, so this card now listens to it live
+    // instead of trusting a Firestore field that would otherwise sit
+    // stale forever.
+    return StreamBuilder<DatabaseEvent>(
+      stream: FirebaseDatabase.instance.ref('online_heroes/$uid').onValue,
+      builder: (context, rtdbSnapshot) {
+        final rawRtdbValue = rtdbSnapshot.data?.snapshot.value;
+        final rtdbMap = rawRtdbValue is Map ? rawRtdbValue : null;
+        // Node existence = online (CTO architecture decision): presence
+        // is governed entirely by onDisconnect() + the `.info/connected`
+        // reconnect watcher in hero_home_screen.dart, no staleness
+        // cross-check needed here.
+        final isOnline = rtdbMap != null;
+        final isActiveRide = rtdbMap != null &&
+            (rtdbMap['isAvailable'] as bool? ?? true) == false;
+        return _buildCard(context, isOnline: isOnline, isActiveRide: isActiveRide, approvedAt: approvedAt);
+      },
+    );
+  }
+
+  Widget _buildCard(
+    BuildContext context, {
+    required bool isOnline,
+    required bool isActiveRide,
+    required Timestamp? approvedAt,
+  }) {
+    // How many work types an admin has switched off for this hero.
+    // Zero for every hero nobody has touched — see hero_service_access.dart.
+    final restrictedCount = deniedServices(data).length;
     final name = data['captainName'] as String? ?? data['name'] as String? ?? 'Unknown';
     final phone = data['phone'] as String? ?? '';
     final vehicleNumber = data['vehicleNumber'] as String? ?? '';
     final vehicleType = data['vehicleType'] as String? ?? '';
     final email = data['email'] as String? ?? '';
-    final approvedAt = data['approvedAt'] as Timestamp?;
-    final currentStatus = data['status'] as String? ?? 'approved';
-    final isOnline = currentStatus == 'online' || currentStatus == 'on_ride';
-    final isActiveRide = currentStatus == 'on_ride';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -426,24 +476,68 @@ class _ApprovedHeroCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 14),
-          // Action button
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: onView,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: _muted,
-                side: const BorderSide(color: _border),
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+          // Action buttons
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onView,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _muted,
+                    side: const BorderSide(color: _border),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'View Details',
+                    style:
+                        TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
-              child: const Text(
-                'View Details',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              const SizedBox(width: 8),
+              // NEW (Aug 17 2026 — per-hero work permissions). Sits on
+              // the APPROVED list on purpose: this is post-registration
+              // fleet management ("heros ah handle panna admin ku innum
+              // freedoms"), not part of the approval decision itself.
+              // The label reports the current state so an admin can see
+              // at a glance which heroes are restricted, without opening
+              // each one.
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => showHeroServiceAccessSheet(
+                    context,
+                    uid: uid,
+                    heroData: data,
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: restrictedCount == 0 ? _muted : _red,
+                    side: BorderSide(
+                      color: restrictedCount == 0 ? _border : _red,
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: Icon(
+                    restrictedCount == 0
+                        ? Icons.tune_rounded
+                        : Icons.block_rounded,
+                    size: 14,
+                  ),
+                  label: Text(
+                    restrictedCount == 0
+                        ? 'Services'
+                        : '$restrictedCount off',
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),

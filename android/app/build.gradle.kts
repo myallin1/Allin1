@@ -18,9 +18,20 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
+    // NEW (CTO mandate — Naming Standardization): already the exact
+    // shared prefix of the new com.njtech.allin1.<role> applicationId
+    // family below (customer/hero/admin/seller) — no change needed here,
+    // it just generates R/BuildConfig classes and doesn't need to equal
+    // any single flavor's applicationId, but this value already lines up
+    // logically with the new structure.
     namespace = "com.njtech.allin1"
+    // FIX (build failure): receive_sharing_intent compiles against
+    // Android SDK 37 -- Flutter refuses to build unless our own
+    // compileSdk is at least as high as every plugin's (compileSdk is
+    // backward compatible, so bumping it doesn't raise the app's real
+    // minSdk/targetSdk requirements for end users).
     compileSdk = 36
-    ndkVersion = "28.2.13676358"
+    ndkVersion = flutter.ndkVersion
     flavorDimensions += "app"
 
     compileOptions {
@@ -35,7 +46,11 @@ android {
     }
 
     defaultConfig {
-        // Matches google-services.json — change after adding allin1 app in Firebase Console
+        // NEW (CTO mandate — Naming Standardization): every flavor below
+        // now overrides this with its own com.njtech.allin1.<role>
+        // applicationId, so this base value is never what actually ships
+        // — it only matters as the fallback/namespace-adjacent default.
+        // Kept aligned with the new dot-notation family on purpose.
         applicationId = "com.njtech.allin1"
         minSdk = flutter.minSdkVersion
         targetSdk = 36
@@ -44,10 +59,23 @@ android {
         multiDexEnabled = true
     }
 
+    // REVERTED (build was failing — "No matching client found... in
+    // google-services.json"): the full com.njtech.allin1.<role> rename
+    // was only half-done on the Firebase side (only "seller" got
+    // registered under the new scheme so far; customer/hero/admin were
+    // never re-registered in Firebase Console under their new names).
+    // Per instruction, we're matching code to what already exists in
+    // Firebase/Firestore right now instead of renaming everything today:
+    // customer/hero/admin go back to their ORIGINAL applicationIds
+    // (already present in google-services.json), and seller keeps the
+    // new com.njtech.allin1.seller id since that's the one actually
+    // registered in Firebase Console (see screenshot: App ID
+    // 1:357526153693:android:04dc889017e1a6774aee34). Full naming
+    // standardization across all 4 flavors can be revisited later.
     productFlavors {
         create("customer") {
             dimension = "app"
-            applicationId = "com.njtech.myallin1"
+            applicationId = "com.njtech.allin1"
             manifestPlaceholders["appName"] = "my allin1"
         }
         create("hero") {
@@ -60,6 +88,12 @@ android {
             dimension = "app"
             applicationId = "com.njtech.admininallin1"
             manifestPlaceholders["appName"] = "admin allin1"
+        }
+        // Seller flavor for assembleSellerRelease (lib/main_seller.dart)
+        create("seller") {
+            dimension = "app"
+            applicationId = "com.njtech.allin1.seller"
+            manifestPlaceholders["appName"] = "seller allin1"
         }
     }
 
@@ -93,8 +127,22 @@ flutter {
 dependencies {
     // Task 1: Required for flutter_local_notifications (Java 8+ API desugaring)
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
-    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
-    implementation("com.google.firebase:firebase-analytics")
-    implementation("com.google.firebase:firebase-auth")
+    // REMOVED (Aug 31 2026 — "Firebase initialization failed: RangeError
+    // 0..13: 14" on device, surviving two rebuilds).
+    //
+    // This block manually pinned firebase-bom:33.7.0 plus native
+    // firebase-analytics/firebase-auth. The FlutterFire plugins already
+    // declare their own native dependencies through a BOM they choose:
+    // firebase_core 4.11.0's gradle.properties sets
+    // FirebaseSDKVersion=34.15.0. Pinning 33.7.0 here fought that,
+    // giving native SDKs older than the Dart plugin code was built
+    // against — the classic shape behind a decode/enum-index error at
+    // Firebase.initializeApp().
+    //
+    // Verified before removing: nothing in android/app/src/*/kotlin
+    // references com.google.firebase directly, so no first-party code
+    // depended on these being declared here. FlutterFire's own guidance
+    // is not to add firebase-bom or firebase-* natively alongside the
+    // plugins for exactly this reason.
     implementation("androidx.multidex:multidex:2.0.1")
 }

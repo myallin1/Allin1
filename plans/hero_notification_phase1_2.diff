@@ -1,0 +1,215 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 21010ebf..405311f0 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -52,7 +52,34 @@ Treat feature requests and bug reports as issue work.
+ - **Child Docs:** When a folder becomes a durable boundary with its own specific rules, create a nested child `AGENTS.md` inside that folder. Child docs control local work details but cannot weaken root DOCS-INDEX rules.
+ - **Design Contracts:** Any major visual/UI project should route layout and brand work to a `Design.md` file before scaffolding the actual code.
+ 
+-## 8. Closeout & Verification Protocol
++## 8. Notification & Ping Timing Contracts (Hero App)
++
++These are the CURRENT, verified values in code — keep this section in
++sync whenever any of these constants change, so future agents don't
++have to re-derive them from source:
++
++- **Service-request broadcast ping expiry:** 90 seconds
++  (`kServiceRequestPingExpirySeconds` in
++  `lib/services/service_request_service.dart`). Applies to Hero
++  Booking, Custom Order, Custom Food Order, and Grocery Order pings.
++- **Ride-taxi ping staleness window:** 10 seconds (hardcoded as
++  `pingExpiresAt - 10000` in `hero_home_screen.dart`'s
++  `_listenForHeroPings`). Used only to derive when a ride ping was
++  created from its expiry timestamp.
++- **Ride-alert local-notification auto-dismiss:** 15000ms
++  (`timeoutAfter: 15000` in
++  `lib/services/hero_ride_notification_service.dart`). This is an
++  Android notification auto-dismiss timer, NOT a ping or ringtone
++  timeout — do not confuse it with the two values above.
++- **Hero-side notification de-duplication window:** 18 seconds
++  (`_deduplicationWindow` in `hero_ride_notification_service.dart`),
++  backed by `HiveCache` (persists across the FCM background-isolate /
++  main-isolate boundary, unlike a plain static field). Prevents the
++  same ride/service ping from firing a duplicate ringtone+notification
++  when the hero backgrounds and then reopens the app shortly after a
++  push already arrived.
++
++## 9. Closeout & Verification Protocol
+ 
+ 1. Run `flutter analyze` and ensure ZERO errors.
+ 2. Run `graphify update .` to keep the AST graph current (as per Section 4).
+diff --git a/lib/main_hero.dart b/lib/main_hero.dart
+index 6a0ec311..7493c251 100644
+--- a/lib/main_hero.dart
++++ b/lib/main_hero.dart
+@@ -100,7 +100,7 @@ void _initGlobalHeroPingListener() {
+       debugPrint('[GlobalPing] ✅ New ping received: $requestId');
+ 
+       // De-duplication check
+-      if (!HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
++      if (!await HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
+         debugPrint('[GlobalPing] ⏭️ Duplicate ping skipped: $requestId');
+         return;
+       }
+@@ -148,7 +148,7 @@ void _initGlobalHeroPingListener() {
+ 
+       debugPrint('[GlobalServicePing] ✅ New service ping received: $requestId');
+ 
+-      if (!HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
++      if (!await HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
+         debugPrint('[GlobalServicePing] ⏭️ Duplicate ping skipped: $requestId');
+         return;
+       }
+diff --git a/lib/screens/bike_taxi/hero_home_screen.dart b/lib/screens/bike_taxi/hero_home_screen.dart
+index c8e41a54..21f55770 100644
+--- a/lib/screens/bike_taxi/hero_home_screen.dart
++++ b/lib/screens/bike_taxi/hero_home_screen.dart
+@@ -1211,7 +1211,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
+     _heroPingSub = FirebaseDatabase.instance
+         .ref('hero_pings/$uid')
+         .onChildAdded
+-        .listen((event) {
++        .listen((event) async {
+       if (!mounted || !_isOnline || _activeRideId.isNotEmpty) return;
+       if (_isShowingRideDialog) return;
+ 
+@@ -1229,7 +1229,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
+       // ✅ FIX: Ignore pings that existed before this listener attached
+       // Prevents stale pings from re-triggering on app resume
+       final pingCreatedAt = pingExpiresAt - 10000; // expiresAt - 10s window
+-      if (pingCreatedAt < listenerAttachedAt - 2000) {
++      if (pingCreatedAt < listenerAttachedAt - 18000) {
+         debugPrint('[HeroHomeScreen] Ignoring pre-existing ping: $requestId');
+         return;
+       }
+@@ -1261,7 +1261,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
+       }
+ 
+       // Notification: only if global listener hasn't fired yet
+-      if (!kIsWeb && !HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
++      if (!kIsWeb && !await HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
+         debugPrint('[HeroHomeScreen] Notification already fired by global listener. Showing dialog only.');
+       } else if (!kIsWeb) {
+         try {
+@@ -1300,7 +1300,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
+     _servicePingSub = FirebaseDatabase.instance
+         .ref('hero_service_pings/$uid')
+         .onChildAdded
+-        .listen((event) {
++        .listen((event) async {
+       if (!mounted || !_isOnline || _activeRideId.isNotEmpty) return;
+       if (_isShowingServiceDialog) return;
+ 
+@@ -1319,7 +1319,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
+       // guard as ride pings — prevents stale-ping re-trigger on resume).
+       // 90s broadcast window, same reasoning as the 10s ride window.
+       final pingCreatedAt = pingExpiresAt - kServiceRequestPingExpirySeconds * 1000;
+-      if (pingCreatedAt < listenerAttachedAt - 2000) {
++      if (pingCreatedAt < listenerAttachedAt - 18000) {
+         debugPrint('[HeroHomeScreen] Ignoring pre-existing service ping: $requestId');
+         return;
+       }
+@@ -1329,7 +1329,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
+ 
+       debugPrint('[HeroHomeScreen] RTDB service ping received: $requestId');
+ 
+-      if (!kIsWeb && !HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
++      if (!kIsWeb && !await HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
+         debugPrint('[HeroHomeScreen] Notification already fired by global listener. Showing dialog only.');
+       } else if (!kIsWeb) {
+         try {
+diff --git a/lib/services/hero_ride_notification_service.dart b/lib/services/hero_ride_notification_service.dart
+index e1d9468c..7e1099ea 100644
+--- a/lib/services/hero_ride_notification_service.dart
++++ b/lib/services/hero_ride_notification_service.dart
+@@ -7,6 +7,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+ import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
+ import 'package:shared_preferences/shared_preferences.dart';
+ 
++import 'hive_cache.dart';
++
+ const String kPendingHeroRideIdKey = 'pending_hero_ride_id';
+ const String kPendingHeroAcceptRideIdKey = 'pending_hero_accept_ride_id';
+ 
+@@ -28,9 +30,15 @@ class HeroRideNotificationService {
+       rideId.hashCode & 0x7fffffff;
+ 
+   // ── De-duplication guards ──────────────────────────────────
+-  static String? lastProcessedRideId;
+-  static DateTime? lastProcessedAt;
+-  static const Duration _deduplicationWindow = Duration(seconds: 3);
++  // Persisted via HiveCache (not a static in-memory field) so the
++  // dedup check survives the FCM background-isolate / main-isolate
++  // boundary — a plain static var only dedups within one isolate's
++  // lifetime, which is why background + foreground paths could both
++  // fire for the same ride. Window widened from 3s to 18s to cover
++  // realistic "hero unlocks phone and opens app" delay after a
++  // background push already showed a (quiet) system notification.
++  static const Duration _deduplicationWindow = Duration(seconds: 18);
++  static String _dedupKey(String rideId) => 'hero_ride_notified_$rideId';
+ 
+   static Future<void> initialize() async {
+     if (kIsWeb || _initialized) {
+@@ -216,33 +224,29 @@ class HeroRideNotificationService {
+         '[NotificationService] ✅ Cancelled notification for ride: $rideId (ID: $notificationId)',
+       );
+ 
+-      // Clear de-duplication flag
+-      if (lastProcessedRideId == rideId) {
+-        lastProcessedRideId = null;
+-        lastProcessedAt = null;
+-      }
++      // Clear de-duplication flag (Hive-backed — see shouldProcessRideNotification)
++      await HiveCache.evict(_dedupKey(rideId));
+     } catch (e) {
+       debugPrint('[NotificationService] ❌ Cancel failed for $rideId: $e');
+     }
+   }
+ 
+   // ── Check if notification already processing (De-duplication) ──
+-  static bool shouldProcessRideNotification(String rideId) {
+-    final now = DateTime.now();
+-
+-    // If same ride pinged within 3 seconds — skip
+-    if (lastProcessedRideId == rideId &&
+-        lastProcessedAt != null &&
+-        now.difference(lastProcessedAt!).inSeconds < 3) {
++  // Async + Hive-backed: this must be checked (and awaited) from BOTH
++  // the FCM background isolate (main_hero.dart) and the main-isolate
++  // in-app RTDB listeners (hero_home_screen.dart) for the SAME ride,
++  // so the dedup record has to live somewhere both can see — a static
++  // Dart field does not cross that isolate boundary, Hive does.
++  static Future<bool> shouldProcessRideNotification(String rideId) async {
++    final alreadyProcessed = await HiveCache.isFresh(_dedupKey(rideId));
++    if (alreadyProcessed) {
+       debugPrint(
+         '[NotificationService] ⏭️ Skipping duplicate notification for $rideId',
+       );
+       return false;
+     }
+ 
+-    // New ride or 3s+ passed — process it
+-    lastProcessedRideId = rideId;
+-    lastProcessedAt = now;
++    await HiveCache.put(_dedupKey(rideId), true, ttl: _deduplicationWindow);
+     return true;
+   }
+ 
+diff --git a/lib/services/hive_cache.dart b/lib/services/hive_cache.dart
+index 9b0a322e..a9c5618d 100644
+--- a/lib/services/hive_cache.dart
++++ b/lib/services/hive_cache.dart
+@@ -18,6 +18,13 @@ class HiveCache {
+ 
+   static Future<Box> _box() async {
+     if (Hive.isBoxOpen(_boxName)) return Hive.box(_boxName);
++    // HiveCache is shared across every app entrypoint (customer, hero,
++    // seller). Only main_customer.dart calls Hive.initFlutter() at
++    // startup — callers like the hero app's notification dedup
++    // (hero_ride_notification_service.dart) would otherwise crash on
++    // openBox() with no storage path configured. initFlutter() is
++    // idempotent/safe to call again if another entrypoint already did.
++    await Hive.initFlutter();
+     return await Hive.openBox(_boxName);
+   }
+ 

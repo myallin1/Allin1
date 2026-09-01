@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/device_compat_service.dart';
+import '../services/usage_tracking_service.dart';
+import '../services/update_service.dart';
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
@@ -28,9 +32,15 @@ class _LandingPageState extends State<LandingPage> {
     super.initState();
     _customerCompatFuture = DeviceCompatService.instance.detectCustomerApkProfile();
     _heroCompatFuture = DeviceCompatService.instance.detectHeroApkProfile();
+    // NEW (per Nizam's request — Customer Usage Tracking, final
+    // pre-launch checking stage): this is the pre-login public landing
+    // page, exactly where "how many people just visited the link"
+    // needs to be measured, before any sign-in exists to count.
+    unawaited(UsageTrackingService.instance.trackLandingPageVisit());
   }
 
-  Future<void> _launchUrl(String url) async {
+  Future<void> _launchUrl(String url, {String appVariant = 'customer'}) async {
+    unawaited(UsageTrackingService.instance.trackApkDownload(appVariant));
     final uri = Uri.parse(url);
     final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!launched && mounted) {
@@ -61,33 +71,27 @@ class _LandingPageState extends State<LandingPage> {
               child: Column(
                 children: [
                   const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(28),
-                    child: Image.asset(
-                      'assets/images/bapx_nj_logo.gif',
-                      width: 112,
-                      height: 112,
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => Container(
-                        width: 112,
-                        height: 112,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFFF4FA3), Color(0xFFFF92C8)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(28),
-                        ),
-                        child: Center(
-                          child: Text(
-                            'NJ',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.22),
-                              fontSize: 34,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
+                  // Was the 2.4 MB bapx_nj_logo.gif. This is exactly the
+                  // fallback that was already written below it as
+                  // errorBuilder — promoted to be the real thing.
+                  Container(
+                    width: 112,
+                    height: 112,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFF4FA3), Color(0xFFFF92C8)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'NJ',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.22),
+                          fontSize: 34,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
                     ),
@@ -156,7 +160,10 @@ class _LandingPageState extends State<LandingPage> {
                     subtitle: 'Deliver orders & drive customers',
                     gradient: const [Color(0xFFFF4FA3), Color(0xFFFF92C8)],
                     onTap: () async {
-                      await _launchUrl('https://hero-allin1.web.app');
+                      await _launchUrl(
+                        'https://hero-allin1.web.app',
+                        appVariant: 'hero',
+                      );
                     },
                   ),
                   const SizedBox(height: 20),
@@ -191,10 +198,23 @@ class _LandingPageState extends State<LandingPage> {
           deviceMemoryGb: null,
           hardwareConcurrency: null,
           isDetectionConfident: false,
-          primaryDownloadUrl:
-              'https://github.com/myallin1/Allin1-update-release/releases/latest/download/customer-armeabi-v7a.apk',
-          universalDownloadUrl:
-              'https://github.com/myallin1/Allin1-update-release/releases/latest/download/customer-armeabi-v7a.apk',
+          // FIX (Aug 17 2026 — Nizam: "yetha thottalum namma git la
+          // latest release app yenna vaikuromo athu than download
+          // aganum... dowload source git orey place ah than irukanum").
+          //
+          // These two were hardcoded to 'customer-armeabi-v7a.apk' — a
+          // filename that does not match what the release actually
+          // publishes. UpdateService's own header states the release
+          // contains ONE universal APK per app
+          // (allin1-customer.apk / allin1-hero.apk / ...), which is what
+          // every other download path in the codebase uses. So this
+          // fallback pointed at a file that isn't there, and the tap
+          // 404'd — while the identical button elsewhere worked.
+          //
+          // Now delegated to UpdateService, which is the single source
+          // of truth for every APK link in the app.
+          primaryDownloadUrl: UpdateService.customerApkUrl,
+          universalDownloadUrl: UpdateService.customerApkUrl,
           primaryFileLabel: 'Customer Universal APK',
         );
 
@@ -284,7 +304,10 @@ class _LandingPageState extends State<LandingPage> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () => _launchUrl(resolvedProfile.primaryDownloadUrl),
+              onPressed: () => _launchUrl(
+                resolvedProfile.primaryDownloadUrl,
+                appVariant: resolvedProfile.appVariant,
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _pink,
                 foregroundColor: Colors.white,
@@ -307,7 +330,10 @@ class _LandingPageState extends State<LandingPage> {
           const SizedBox(height: 10),
           Center(
             child: TextButton.icon(
-              onPressed: () => _launchUrl(resolvedProfile.universalDownloadUrl),
+              onPressed: () => _launchUrl(
+                resolvedProfile.universalDownloadUrl,
+                appVariant: resolvedProfile.appVariant,
+              ),
               icon: const Icon(Icons.shield_outlined, size: 18, color: _pinkSoft),
               label: const Text(
                 'Download Universal APK',

@@ -16,10 +16,16 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../config/fare_rates.dart';
 import '../../models/ride_model.dart';
-import '../../services/map_service.dart';
 import '../../services/hero_ride_notification_service.dart';
+import '../../services/hero_usage_accumulator_service.dart';
+import '../../services/hero_wallet_service.dart';
+import '../../services/map_service.dart';
+import '../../utils/otp_utils.dart';
 import '../../widgets/allin1_map_widget.dart';
+import '../../widgets/hero_payment_qr_popup.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 class CaptainRideScreen extends StatefulWidget {
   final RideModel ride;
@@ -44,16 +50,30 @@ class CaptainRideScreen extends StatefulWidget {
 class _CaptainRideScreenState extends State<CaptainRideScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   // ── Theme ────────────────────────────────────────────────────
-  static const Color _bg = Color(0xFF0A0A12);
-  static const Color _surface = Color(0xFF12121E);
-  static const Color _card = Color(0xFF1A1A2A);
+  static const Color _bg = Color(0xFFFFF6FA);
+  static const Color _surface = Color(0xFFFFFFFF);
+  static const Color _card = Color(0xFFFFEAF3);
   static const Color _green = Color(0xFF00C853);
   static const Color _gold = Color(0xFFFFBB00);
   static const Color _red = Color(0xFFFF5252);
   static const Color _purple = Color(0xFF6C63FF);
-  static const Color _text = Color(0xFFEEEEF5);
-  static const Color _muted = Color(0xFF7777A0);
-  static const Color _border = Color(0x1AFFFFFF);
+  static const Color _text = Color(0xFF201A22);
+  static const Color _muted = Color(0xFF8C7A88);
+  static const Color _border = Color(0xFFF0DCE8);
+  static const Color _amber = Color(0xFFFFA000); // "Arrived" state button
+  static const Color _darkRed =
+      Color(0xFFC62828); // "End Ride" state button — distinct from _red
+  // (#FF5252), which stays reserved for error SnackBars only.
+
+  bool get _isCargoRide {
+    final type = (widget.ride.vehicleType ?? '').trim().toLowerCase();
+    return type == 'lorry' || type == 'mini_truck';
+  }
+
+  bool get _isParcelRide {
+    final type = (widget.ride.vehicleType ?? '').trim().toLowerCase();
+    return type == 'parcel';
+  }
 
   // ── State ────────────────────────────────────────────────────
   String _rideStatus = '';
@@ -62,6 +82,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   StreamSubscription<Position>? _locationSubscription;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
       _rideDocSubscription;
+  StreamSubscription<DatabaseEvent>? _activeRideStatusSub;
   final MapController _mapController = MapController();
   final MapService _mapService = MapService();
   bool _rideMapReady = false;
@@ -81,7 +102,14 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   String _paymentStatus = 'pending';
   String _pickupAddress = '---';
   String _dropAddress = '---';
+    double? _dropLatitude;
+    double? _dropLongitude;
   String _customerPhone = 'Contact available';
+  // Parcel-only: who the hero should hand the parcel to at drop-off.
+  // Empty strings mean the field wasn't collected (e.g. an older ride
+  // doc created before this field existed) — the UI hides the row.
+  String _recipientName = '';
+  String _recipientPhone = '';
   double _estimatedFare = 0;
   double _rideFareAmount = 0;
   double _tipAmount = 0;
@@ -89,31 +117,46 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   String _rideOtpCode = '';
   bool _verifyingOtp = false;
   bool _liveLocationCleanedUp = false;
+  // Set in initState() if widget.rideDocId arrives empty (hero_home_screen.dart
+  // no longer silently substitutes the RTDB push key here — see its
+  // _acceptRide() comment). build() shows a dedicated error state instead
+  // of proceeding with a Firestore/OTP setup that would silently be wrong.
+  bool _missingRideDocId = false;
 
   // Actual tracked distance during trip
   double _actualDistanceKm = 0;
   Position? _prevTrackingPosition;
 
-  // ─── LOCAL DETERMINISTIC OTP GENERATOR (NO DB REQUIRED) ───
-  String _generateLocalOtp(String docId) {
-    if (docId.isEmpty) return '1234';
-    final hash = docId.hashCode.abs();
-    return (1000 + (hash % 9000)).toString(); // Generates 1000-9999
-  }
-  // ──────────────────────────────────────────────────────────
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    
+
+    if (widget.rideDocId.trim().isEmpty) {
+      debugPrint(
+        '[HeroRideScreen] ❌ rideDocId is empty — the accepted-ride ping '
+        'was missing its Firestore doc link. Skipping ride setup; '
+        'build() will show an error state instead of a wrong OTP.',
+      );
+      _missingRideDocId = true;
+      return;
+    }
+
     // ✅ Generate Local OTP on Init
-    _rideOtpCode = _generateLocalOtp(widget.rideDocId);
+    _rideOtpCode = generateLocalOtp(widget.rideDocId);
 
     _rideStatus = widget.ride.status ?? 'accepted';
     _pickupAddress = widget.ride.pickupAddress ?? '---';
     _dropAddress = widget.ride.dropAddress ?? '---';
-    _customerPhone = widget.ride.heroPhone ?? 'Contact available';
+    // FIX (audit: customer/hero number wiring): this was reading
+    // `widget.ride.heroPhone` as a placeholder for the CUSTOMER's phone —
+    // that's the hero's own number (the Ride model has no customerPhone
+    // field at all), so the hero briefly saw their own number labeled as
+    // the customer's until the Firestore listener below overwrote it a
+    // moment later. Use a neutral placeholder instead; the real
+    // customerPhone always arrives via the _fetchRideStatus() listener
+    // right after this runs.
+    _customerPhone = 'Contact available';
     _estimatedFare = widget.ride.estimatedFare?.toDouble() ??
         widget.ride.fare?.toDouble() ??
         0;
@@ -121,7 +164,34 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
     _mapService.initialize();
     _startLocationUpdates();
     _fetchRideStatus();
+    _listenActiveRideStatus();
     unawaited(_loadRoadRoute());
+  }
+
+  // NEW (belt-and-suspenders alongside the optimistic setState() in
+  // _arriveTrip()/_startTrip()): self-heals _rideStatus from RTDB's
+  // active_rides/{rideDocId} node directly, same source of truth
+  // ride_tracking_screen.dart (the customer's screen) already reads.
+  // Covers the case the optimistic local set alone can't — hero force-
+  // closes/reopens this screen mid-ride, or two devices somehow end up
+  // on the same ride — where a fresh widget instance would otherwise
+  // start back at widget.ride.status ('accepted') until Firestore
+  // eventually says otherwise (which, per the Phase 4a migration, is
+  // never, for 'arrived'/'in_progress').
+  void _listenActiveRideStatus() {
+    if (widget.rideDocId.isEmpty) return;
+    _activeRideStatusSub = FirebaseDatabase.instance
+        .ref('active_rides/${widget.rideDocId}')
+        .onValue
+        .listen((event) {
+      if (!mounted) return;
+      final raw = event.snapshot.value;
+      final rtdbStatus = raw is Map ? raw['status'] as String? : null;
+      if (rtdbStatus == null || rtdbStatus == _rideStatus) return;
+      setState(() => _rideStatus = rtdbStatus);
+    }, onError: (Object e) {
+      debugPrint('[HeroRideScreen] active_rides listener error: $e');
+    });
   }
 
   @override
@@ -164,13 +234,14 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
     WidgetsBinding.instance.removeObserver(this);
     _locationSubscription?.cancel();
     _rideDocSubscription?.cancel();
+    _activeRideStatusSub?.cancel();
     _disposeCaptainMarkerAnimation();
     _otpController.dispose();
 
     // ✅ FIX: Cancel notification if screen closes abruptly
     if (widget.rideDocId.isNotEmpty && _rideStatus != 'paid') {
       unawaited(
-        HeroRideNotificationService.cancelRideNotification(widget.rideDocId)
+        HeroRideNotificationService.cancelRideNotification(widget.rideDocId),
       );
     }
 
@@ -368,7 +439,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       _locationSubscription = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
-          distanceFilter: 10,
+          distanceFilter: 15,
         ),
       ).listen((position) {
         if (mounted) {
@@ -389,6 +460,20 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
 
             _currentPosition = position;
           });
+          // Write live location to RTDB
+          if (widget.rideDocId.isNotEmpty) {
+            unawaited(
+              FirebaseDatabase.instance
+                  .ref()
+                  .child('live_locations/${widget.rideDocId}')
+                  .set({
+                'lat': position.latitude,
+                'lng': position.longitude,
+                'heading': bearingDegrees,
+                'updatedAt': ServerValue.timestamp,
+              }),
+            );
+          }
           _animateCaptainMarkerTo(position, bearingDegrees);
           if (_routePoints.isEmpty) {
             unawaited(_loadRoadRoute());
@@ -416,8 +501,8 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
             ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
             : null;
     final target = _rideStatus == 'in_progress'
-        ? (widget.ride.dropLatitude != null && widget.ride.dropLongitude != null
-            ? LatLng(widget.ride.dropLatitude!, widget.ride.dropLongitude!)
+        ? (_dropLatitude != null && _dropLongitude != null
+            ? LatLng(_dropLatitude!, _dropLongitude!)
             : null)
         : (widget.ride.pickupLatitude != null &&
                 widget.ride.pickupLongitude != null
@@ -454,7 +539,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
     _rideDocSubscription = FirebaseFirestore.instance
         .collection('rides')
         .doc(widget.rideDocId)
-        .snapshots()
+        .trackedSnapshots()
         .listen((snap) {
       if (snap.exists && mounted) {
         final data = snap.data()!;
@@ -474,6 +559,8 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
           _customerPhone = data['customerPhone'] as String? ??
               data['customerContact'] as String? ??
               _customerPhone;
+          _recipientName = data['recipientName'] as String? ?? _recipientName;
+          _recipientPhone = data['recipientPhone'] as String? ?? _recipientPhone;
           _estimatedFare = (data['estimatedFare'] as num?)?.toDouble() ??
               (data['fare'] as num?)?.toDouble() ??
               _estimatedFare;
@@ -485,7 +572,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
           _tipAmount = (data['tipAmount'] as num?)?.toDouble() ?? _tipAmount;
           
           // ✅ Always use local deterministic OTP 
-          _rideOtpCode = _generateLocalOtp(widget.rideDocId);
+          _rideOtpCode = generateLocalOtp(widget.rideDocId);
 
           _finalFare = (data['finalFare'] as num?)?.toDouble() ??
               (data['estimatedFare'] as num?)?.toDouble() ??
@@ -501,19 +588,80 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         if (previousStatus != nextStatus) {
           unawaited(_loadRoadRoute());
         }
+        // FIX (Real-Time Cancellation Sync, Aug 11 2026): the status
+        // check above already detected 'cancelled' and cleaned up the
+        // RTDB live-location node, but nothing told the hero — they
+        // could keep driving to a pickup/drop that no longer exists and
+        // tap Arrived/Start/Complete against a cancelled doc. Only fire
+        // once, on the transition into cancelled (not on every snapshot
+        // while already cancelled).
+        if (previousStatus != nextStatus &&
+            nextStatus.startsWith('cancelled') &&
+            !_cancellationHandled) {
+          _cancellationHandled = true;
+          unawaited(_handleCancelledByCustomer());
+        }
       }
     });
   }
 
+  bool _cancellationHandled = false;
+
+  /// Customer cancelled while this hero was actively working the ride.
+  /// Restores the hero to the dispatch pool (mirrors the isAvailable
+  /// fix in hero_home_screen.dart's _completeRide()) and cleanly exits
+  /// back to the Home screen after a blocking dialog.
+  Future<void> _handleCancelledByCustomer() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('heroes')
+            .doc(uid)
+            .set({'isAvailable': true}, SetOptions(merge: true));
+        await FirebaseDatabase.instance
+            .ref('online_heroes/$uid')
+            .update({'isAvailable': true});
+      } catch (e) {
+        debugPrint('[CaptainRideScreen] isAvailable restore on cancel failed: $e');
+      }
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Booking Cancelled'),
+        content: const Text('Booking was cancelled by the customer.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
   // ── Trip Actions ─────────────────────────────────────────────
+  // FIX (Phase 4a, WhatsApp/Uber-model active-ride migration): 'arrived'
+  // used to be a Firestore .update() on every single tap -- billed as a
+  // write PLUS a read on every customer/admin screen with a live
+  // .snapshots() listener open on this doc at that moment. Now writes
+  // straight to RTDB's active_rides/{rideDocId} node instead (same node
+  // _startTrip() below writes to, same one _completeTrip() deletes on
+  // final completion). Firestore's rides doc is untouched until the
+  // trip actually completes.
   Future<void> _arriveTrip() async {
     try {
-      await FirebaseFirestore.instance
-          .collection('rides')
-          .doc(widget.rideDocId)
+      await FirebaseDatabase.instance
+          .ref('active_rides/${widget.rideDocId}')
           .update({
         'status': 'arrived',
-        'arrivedAt': FieldValue.serverTimestamp(),
+        'arrivedAt': ServerValue.timestamp,
+        'updatedAt': ServerValue.timestamp,
       });
       if (mounted) {
         setState(() => _rideStatus = 'arrived');
@@ -542,29 +690,46 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
     final enteredOtp = _otpController.text.trim();
     if (_rideOtpCode.isNotEmpty && enteredOtp != _rideOtpCode) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content:
-                Text('Enter the correct OTP from the customer to start ride.'),
-            backgroundColor: _red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('❌ Incorrect OTP, please ask the customer to confirm'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),);
       }
       return;
     }
     setState(() => _verifyingOtp = true);
     try {
-      await FirebaseFirestore.instance
-          .collection('rides')
-          .doc(widget.rideDocId)
+      // FIX (Phase 4a): same migration as _arriveTrip() above --
+      // 'in_progress' is a rapid, mid-ride transition, not a billing
+      // record, so it belongs in RTDB, not Firestore. rideOtpVerifiedAt
+      // moves with it since it's just a timestamp on the same transient
+      // transition, not something admin billing reports read.
+      await FirebaseDatabase.instance
+          .ref('active_rides/${widget.rideDocId}')
           .update({
         'status': 'in_progress',
-        'startedAt': FieldValue.serverTimestamp(),
-        'rideOtpVerifiedAt': FieldValue.serverTimestamp(),
+        'startedAt': ServerValue.timestamp,
+        'rideOtpVerifiedAt': ServerValue.timestamp,
+        'updatedAt': ServerValue.timestamp,
       });
       if (mounted) {
-        setState(() => _verifyingOtp = false);
+        // FIX (root cause of "OTP verified, Start Trip tapped, hero
+        // screen just sits on the same page"): _arriveTrip() right
+        // above this method optimistically sets _rideStatus locally
+        // right after its RTDB write — this method never did the same
+        // for the 'in_progress' transition, and (per the Phase 4a
+        // migration) neither Firestore nor any RTDB listener on this
+        // screen ever feeds 'in_progress' back in any other way. Local
+        // _rideStatus was silently stuck at 'arrived' forever after a
+        // successful Start Trip, so the UI never advanced past the OTP
+        // step to the drop-off/navigate controls, even though the RTDB
+        // write itself (now that active_rides has a rule — see the
+        // earlier database.rules.json fix) succeeded correctly.
+        setState(() {
+          _verifyingOtp = false;
+          _rideStatus = 'in_progress';
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Trip started! Navigate to destination'),
@@ -601,17 +766,112 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         return;
       }
 
-      final baseFare = (rideData?['baseFare'] as num?)?.toDouble() ?? 25.0;
-      final farePerKm = (rideData?['farePerKm'] as num?)?.toDouble() ?? 6.0;
       final tipAmount = (rideData?['tipAmount'] as num?)?.toDouble() ?? 0.0;
-      // Use CEO-mandated formula: ₹25 base (covers 1st km) + ₹6/km after
-      const double baseDistance = 1;
-      final double extraKm = _actualDistanceKm > baseDistance
-          ? (_actualDistanceKm - baseDistance)
-          : 0.0;
-      final double fareBeforeTip = _actualDistanceKm <= baseDistance
-          ? baseFare
-          : (baseFare + (extraKm * farePerKm)).roundToDouble();
+      final vehicleType =
+          (widget.ride.vehicleType ?? '').trim().toLowerCase();
+      final bool isBike = vehicleType == 'bike';
+
+      final double fareBeforeTip;
+      final double billedDistanceKm;
+      final double? bikePerKmUsed;
+
+      if (isBike) {
+        // ── Bike: FareRates (day/night) + distance-floor fix ────────
+        // Rate is resolved at COMPLETION time, not booking time, per
+        // the design decision that a ride crossing the day/night
+        // boundary bills at whatever rate is in effect when it ends.
+        //
+        // Distance is the greater of the hero's GPS-tracked
+        // _actualDistanceKm and the road-route distance captured at
+        // booking time (bike_booking_screen.dart writes
+        // routeDistanceKm). This was the confirmed root cause of a
+        // real fare-mismatch report: sparse GPS sampling / a
+        // 15m distanceFilter / app backgrounding can undercount actual
+        // distance travelled well below the true route length, which
+        // previously produced an artificially low final bill on a trip
+        // that was genuinely longer. Flooring at the route distance
+        // makes that undercounting unable to produce a bill lower than
+        // what the customer's own pre-ride estimate was based on.
+        final routeDistanceKm =
+            (rideData?['routeDistanceKm'] as num?)?.toDouble() ?? 0.0;
+        billedDistanceKm = math.max(_actualDistanceKm, routeDistanceKm);
+        bikePerKmUsed = FareRates.resolveBikePerKm(DateTime.now());
+        fareBeforeTip = FareRates.calculateBikeFare(
+          distanceKm: billedDistanceKm,
+          perKm: bikePerKmUsed,
+        );
+        // TEMP DEBUG — remove once Bug 1 (₹25 flat-fare regression) is
+        // confirmed fixed on a live retest. Prints every input the bike
+        // fare formula uses so a real device console can confirm actual
+        // runtime values instead of static code-reading.
+        debugPrint(
+          '[FARE DEBUG][bike] actualDistanceKm=$_actualDistanceKm '
+          'routeDistanceKm=$routeDistanceKm billedDistanceKm=$billedDistanceKm '
+          'perKmUsed=$bikePerKmUsed baseFare=${FareRates.bikeBaseFare} '
+          'baseDistanceKm=${FareRates.bikeBaseDistanceKm} '
+          'fareBeforeTip=$fareBeforeTip tipAmount=$tipAmount',
+        );
+      } else {
+        // ── Every other category: auto / cab / parcel / mini_truck /
+        // lorry / emergency_manpower ──────────────────────────────
+        // CONFIRMED BUG FIX: baseFare/farePerKm are now written for
+        // every non-bike category at booking time (bike_booking_screen
+        // .dart's _createRide()), using each category's real rate from
+        // RideModel.defaultFares — previously these fields were never
+        // written for non-bike rides at all, so this always silently
+        // fell back to hardcoded defaults (25.0 / 6.0 — bike's rate, not
+        // this category's real rate) that also disagreed with the
+        // booking-time baseDistance (2.0 in the old table vs 1.0 here).
+        // The ?? fallbacks stay in place only for pre-existing legacy
+        // ride docs created before the booking-time snapshot fix
+        // shipped — but they now read from the SAME central FareRates
+        // table used everywhere else (lib/config/fare_rates.dart)
+        // instead of a second, separately hardcoded set of numbers, so
+        // a legacy ride's fallback fare terms can never again disagree
+        // with what booking-time would have quoted for this category.
+        final baseFare = (rideData?['baseFare'] as num?)?.toDouble() ??
+            FareRates.baseFareFor(vehicleType);
+        final farePerKm = (rideData?['farePerKm'] as num?)?.toDouble() ??
+            FareRates.resolvePerKm(vehicleType, DateTime.now());
+        final double legacyBaseDistance =
+            (rideData?['baseDistance'] as num?)?.toDouble() ??
+                FareRates.baseDistanceKmFor(vehicleType);
+        // Same Option C distance-floor fix as the bike branch above,
+        // now extended to every other category: bill on whichever is
+        // larger, the hero's GPS-tracked distance or the road-route
+        // distance captured at booking time. Previously this branch had
+        // no floor at all, so GPS undercounting (sparse sampling, app
+        // backgrounding, a quick test ride) could collapse the bill to
+        // flat baseFare with zero distance charge regardless of the
+        // trip's real length.
+        final routeDistanceKm =
+            (rideData?['routeDistanceKm'] as num?)?.toDouble() ?? 0.0;
+        billedDistanceKm = math.max(_actualDistanceKm, routeDistanceKm);
+        bikePerKmUsed = null;
+        final double extraKm = billedDistanceKm > legacyBaseDistance
+            ? (billedDistanceKm - legacyBaseDistance)
+            : 0.0;
+        fareBeforeTip = billedDistanceKm <= legacyBaseDistance
+            ? baseFare
+            : (baseFare + (extraKm * farePerKm)).roundToDouble();
+        // TEMP DEBUG — remove once Bug 1 is confirmed fixed on a live
+        // retest. Prints every input the non-bike fare formula uses,
+        // including the raw rideData.baseFare/farePerKm/routeDistanceKm
+        // values, so Nizam's next console capture can confirm the fix
+        // (fields now populated, not null) with real numbers.
+        debugPrint(
+          '[FARE DEBUG][else:$vehicleType] actualDistanceKm=$_actualDistanceKm '
+          'rideData.baseFare=${rideData?['baseFare']} '
+          'rideData.farePerKm=${rideData?['farePerKm']} '
+          'rideData.routeDistanceKm=${rideData?['routeDistanceKm']} '
+          'resolvedBaseFare=$baseFare resolvedFarePerKm=$farePerKm '
+          'routeDistanceKm=$routeDistanceKm '
+          'legacyBaseDistance=$legacyBaseDistance extraKm=$extraKm '
+          'billedDistanceKm=$billedDistanceKm fareBeforeTip=$fareBeforeTip '
+          'tipAmount=$tipAmount',
+        );
+      }
+
       final double finalFare = fareBeforeTip + tipAmount;
 
       final fare = finalFare;
@@ -621,11 +881,43 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       const double commission = 0;
       final double netEarnings = fare;
       const double adminCommission = 0;
+
+      // FIX (Phase 4a): arrivedAt/startedAt now live only in RTDB's
+      // active_rides/{rideDocId} node (see _arriveTrip()/_startTrip()
+      // above) while the ride is in progress, and that node gets
+      // deleted right below once this trip is done -- so this is the
+      // last moment either timestamp is readable. Pull them into the
+      // FINAL Firestore write here so the permanent billing/history
+      // record for this ride still has a complete timeline, exactly as
+      // it did before this migration.
+      final activeRideRef =
+          FirebaseDatabase.instance.ref('active_rides/${widget.rideDocId}');
+      Timestamp? arrivedAt;
+      Timestamp? startedAt;
+      try {
+        final activeRideSnap = await activeRideRef.get();
+        final activeRideData = activeRideSnap.value;
+        if (activeRideData is Map) {
+          final arrivedMs = activeRideData['arrivedAt'] as int?;
+          final startedMs = activeRideData['startedAt'] as int?;
+          if (arrivedMs != null) {
+            arrivedAt = Timestamp.fromMillisecondsSinceEpoch(arrivedMs);
+          }
+          if (startedMs != null) {
+            startedAt = Timestamp.fromMillisecondsSinceEpoch(startedMs);
+          }
+        }
+      } catch (e) {
+        debugPrint('[HeroRideScreen] active_rides read-before-complete failed (non-fatal): $e');
+      }
+
       // Update ride status with real-time distance and final bill
       await rideRef.update({
         'status': 'completed',
         'completedAt': FieldValue.serverTimestamp(),
         'completedBy': user?.uid ?? '',
+        if (arrivedAt != null) 'arrivedAt': arrivedAt,
+        if (startedAt != null) 'startedAt': startedAt,
         'commission': commission,
         'netEarnings': netEarnings,
         'heroEarning': netEarnings,
@@ -634,9 +926,17 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         'actualFare': fareBeforeTip,
         'finalFare': finalFare,
         'tipAmount': tipAmount,
+        // Unchanged meaning: the raw GPS-tracked distance, exactly as
+        // before — never overwritten with the billed/floored value.
         'actualDistanceKm': _actualDistanceKm,
+        // Audit trail for the bike distance-floor logic above: what
+        // distance the bill actually used, and (bike only) which
+        // day/night rate was applied. Both null-safe for non-bike rides.
+        'billedDistanceKm': billedDistanceKm,
+        if (bikePerKmUsed != null) 'bikePerKmApplied': bikePerKmUsed,
         'paymentStatus': 'pending_collection',
       });
+      unawaited(activeRideRef.remove());
       await _cleanupLiveLocationNode();
 
       // ✅ FIX: Kill the ride notification when ride completes
@@ -703,9 +1003,14 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         },
         SetOptions(merge: true),
       );
+      // FIX (Step 1 leftover, found while doing Phase 4a in this same
+      // file): 'status': 'online' here was a Firestore presence write
+      // that survived the earlier WhatsApp-model presence migration —
+      // Firestore no longer tracks hero online/offline at all (RTDB's
+      // online_heroes/{uid} is the only source of truth now). Removed;
+      // isAvailable/activeRideId stay since those aren't presence flags.
       await heroRef.set(
         {
-          'status': 'online',
           'isAvailable': true,
           'activeRideId': null,
           'lastUpdated': FieldValue.serverTimestamp(),
@@ -714,6 +1019,12 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       );
       await FirebaseDatabase.instance
           .ref('live_locations/${widget.rideDocId}')
+          .remove();
+      // FIX (Phase 4a): dispute is a terminal outcome too (goes to
+      // Firestore above for admin review), so the transient RTDB status
+      // node has nothing left to track.
+      await FirebaseDatabase.instance
+          .ref('active_rides/${widget.rideDocId}')
           .remove();
       await FirebaseDatabase.instance
           .ref('online_heroes/${user.uid}')
@@ -755,7 +1066,47 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   }
 
   // ── Navigation ───────────────────────────────────────────────
-  Future<void> _markPaymentReceived() async {
+  // FIX (Nizam's "Self vs MyAllin1" payment-collection split): this
+  // used to be a single "BILL RECEIVED" button that always assumed the
+  // hero personally collected cash. Now the hero picks which of the two
+  // real-world outcomes happened before this method runs:
+  //   'self'     — hero collected cash/GPay/etc into their OWN hand or
+  //                account. Unchanged from the old behavior: fare is
+  //                credited to heroes/{uid}.walletBalance as the hero's
+  //                own earnings, AND the usage-charge (infra cost
+  //                recovery) is flushed from hero_wallets — the hero
+  //                really did receive money, so both ledgers move.
+  //   'myallin1' — customer paid straight to the company's own UPI
+  //                (PaymentConfig.companyUpiId), so the hero never
+  //                touched the money at all. heroes/{uid}.walletBalance
+  //                and hero_wallets are BOTH left untouched (crediting
+  //                "earnings" for cash the hero never received would be
+  //                wrong, and charging an infra fee out of a wallet
+  //                that received nothing would be unfair) — instead a
+  //                record goes to `company_payments_received` for the
+  //                Admin app to verify/reconcile (see
+  //                lib/screens/admin/payments_received_screen.dart).
+  // Deliberately "Fast mode" per Nizam's explicit instruction: no proof/
+  // reference-number field, hero visually confirms the customer's
+  // screen and taps. This is a trust-based control, same trust level as
+  // the pre-existing cash flow already had.
+  // NEW (Aug 12 2026 — Nizam's "Self" QR-collection flow: "self option
+  // um action nadakanum and same time popup open aagi... customer pay
+  // pannuratha hero oathutu qr pop corner la iruka close mark press
+  // pannitu hero payment recieve nu kudupparu"): tapping "PAID AS CASH
+  // (SELF)" now shows the hero's saved payment QR big enough for the
+  // customer to scan FIRST — _markPaymentReceived('self') (the actual
+  // wallet-credit + ride-settle write) only fires once the hero taps
+  // the popup's own close (X), i.e. after they've visually confirmed
+  // the customer actually paid. HeroPaymentQrPopup.show() awaits until
+  // that close tap, so this sequencing falls out naturally from await.
+  Future<void> _showSelfQrThenMarkPaid() async {
+    await HeroPaymentQrPopup.show(context);
+    if (!mounted) return;
+    await _markPaymentReceived('self');
+  }
+
+  Future<void> _markPaymentReceived(String method) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
@@ -766,8 +1117,12 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
           FirebaseFirestore.instance.collection('rides').doc(widget.rideDocId);
       final rideSnap = await rideRef.get();
       final rideData = rideSnap.data() ?? <String, dynamic>{};
-      // Idempotency guard: skip if already settled
-      if (rideData['paymentStatus'] == 'settled' || rideData['paymentStatus'] == 'paid') {
+      // Idempotency guard: skip if already settled or paid via wallet
+      // ('paid_by_wallet' already credited the hero in the customer's
+      // wallet transaction — crediting again here would double-pay).
+      if (rideData['paymentStatus'] == 'settled' ||
+          rideData['paymentStatus'] == 'paid' ||
+          rideData['paymentStatus'] == 'paid_by_wallet') {
         debugPrint('[HeroRideScreen] Payment already processed — skipping markPaymentReceived');
         return;
       }
@@ -784,21 +1139,12 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       const double commission = 0;
       // ZERO Commission for launch
       final double netEarnings = fare;
-      // Hero keeps 100% of the fare
-
-      final heroRef =
-          FirebaseFirestore.instance.collection('heroes').doc(user.uid);
-      final heroSnap = await heroRef.get();
-      final currentBalance =
-          (heroSnap.data()?['walletBalance'] as num?)?.toDouble() ??
-          0.0;
-      final totalEarnings =
-          (heroSnap.data()?['totalEarnings'] as num?)?.toDouble() ?? 0.0;
-      final totalRides = (heroSnap.data()?['totalRides'] as num?)?.toInt() ?? 0;
+      // Hero keeps 100% of the fare (only credited for the 'self' path)
 
       await rideRef.update({
         'status': 'paid',
         'paymentStatus': 'settled',
+        'paymentCollectionMethod': method, // 'self' | 'myallin1'
         'actualFare': rideFare,
         'tipAmount': tipAmount,
         'finalFare': fare,
@@ -807,39 +1153,167 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         'archivedAt': FieldValue.serverTimestamp(),
         'archivedForHero': true,
       });
-      await heroRef.set(
-        {
-          'status': 'online',
-          'isAvailable': true,
-          'activeRideId': null,
-          'walletBalance': currentBalance + netEarnings,
-          'totalEarnings': totalEarnings + netEarnings,
-          'totalRides': totalRides + 1,
-          'lastRideCompletedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
-      await FirebaseFirestore.instance.collection('wallet_transactions').add({
-        'heroId': user.uid,
-        'type': 'credit',
-        'amount': netEarnings,
-        'commission': commission,
-        'grossAmount': fare,
-        'balanceBefore': currentBalance,
-        'balanceAfter': currentBalance + netEarnings,
-        'rideId': widget.rideDocId,
-        'description': 'Payment collected for completed ride',
-        'timestamp': FieldValue.serverTimestamp(),
-       });
 
+      bool walletEligible = true;
+
+      if (method == 'myallin1') {
+        // Money already sits in the company UPI account — do NOT touch
+        // heroes/{uid}.walletBalance or hero_wallets at all. Just leave
+        // an admin-verifiable record.
+        await FirebaseFirestore.instance
+            .collection('company_payments_received')
+            .add({
+          'rideId': widget.rideDocId,
+          'heroId': user.uid,
+          'heroName': widget.ride.heroName ?? '',
+          'customerId': rideData['customerId'] ?? widget.ride.customerId,
+          'fare': rideFare,
+          'tip': tipAmount,
+          'amount': fare,
+          'paymentMethod': 'myallin1_upi',
+          'collectedAt': FieldValue.serverTimestamp(),
+          'verified': false,
+        });
+      } else {
+        // 'self' — hero physically collected the money. Unchanged from
+        // the original single-button behavior.
+        final heroRef =
+            FirebaseFirestore.instance.collection('heroes').doc(user.uid);
+        final heroSnap = await heroRef.get();
+        final currentBalance =
+            (heroSnap.data()?['walletBalance'] as num?)?.toDouble() ?? 0.0;
+        final totalEarnings =
+            (heroSnap.data()?['totalEarnings'] as num?)?.toDouble() ?? 0.0;
+        final totalRides =
+            (heroSnap.data()?['totalRides'] as num?)?.toInt() ?? 0;
+
+        // FIX (RTDB Phase 3 Step 1 cleanup leftover, found during Phase
+        // 4a work): this write used to also set 'status': 'online' on
+        // the heroes doc. Presence is no longer sourced from Firestore
+        // at all — online_heroes/{uid} in RTDB is the sole source of
+        // truth — so that field was stale/dead and stays removed here.
+        await heroRef.set(
+          {
+            'isAvailable': true,
+            'activeRideId': null,
+            'walletBalance': currentBalance + netEarnings,
+            'totalEarnings': totalEarnings + netEarnings,
+            'totalRides': totalRides + 1,
+            'lastRideCompletedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+        await FirebaseFirestore.instance
+            .collection('wallet_transactions')
+            .add({
+          'heroId': user.uid,
+          'type': 'credit',
+          'amount': netEarnings,
+          'commission': commission,
+          'grossAmount': fare,
+          'balanceBefore': currentBalance,
+          'balanceAfter': currentBalance + netEarnings,
+          'rideId': widget.rideDocId,
+          'description': 'Payment collected for completed ride',
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+      }
+
+      // APP INFRA COST RECOVERY (per Nizam's explicit instruction --
+      // REPLACES the flat % commission model entirely): no cut of the
+      // hero's fare is taken here at all. Instead, a minimal
+      // usage-proportional fee (minutes spent Online + this ride) is
+      // flushed from the in-memory accumulator to the hero's PREPAID
+      // wallet in ONE batched write -- see HeroUsageAccumulatorService
+      // / HeroWalletService.flushUsageCost() for the full rationale.
+      //
+      // FIX (Aug 11 2026 — Nizam's "Phase 1" revenue-leak audit fix):
+      // this used to run ONLY on the 'self' path, on the reasoning that
+      // a hero who never touched the customer's money (myallin1 path)
+      // shouldn't be charged out of a wallet that received nothing this
+      // ride. That reasoning conflated two SEPARATE wallets: the hero's
+      // own earnings (heroes/{uid}.walletBalance, 'self'-only, correctly
+      // untouched on myallin1 — the hero genuinely never held that cash)
+      // and the PREPAID infra-fee wallet (hero_wallets/{uid}.balance),
+      // which pays for OUR server/database load of dispatching and
+      // completing this ride — load that is IDENTICAL regardless of
+      // which payment method the customer used. Skipping the flush on
+      // myallin1 meant every company-UPI ride silently cost the platform
+      // real infra spend with zero fee recovery — a straightforward
+      // revenue leak, now closed by running this for both paths.
+      try {
+        // FIX (Dynamic Micro-Billing, Aug 11 2026): this method
+        // (_markPaymentReceived) is a SEPARATE method from
+        // _completeTrip() above — billedDistanceKm was a local
+        // variable scoped to that other method, not visible here,
+        // which is what the "Undefined name 'billedDistanceKm'"
+        // compiler error was pointing at. Recomputed locally instead,
+        // from the same rideData already fetched at the top of this
+        // method (actualDistanceKm/routeDistanceKm are both written to
+        // the rides doc by _completeTrip() before payment collection
+        // ever runs) with a fallback to this screen's own live-tracked
+        // _actualDistanceKm state field if the doc field is missing.
+        final billedDistanceKm = math.max(
+          (rideData['actualDistanceKm'] as num?)?.toDouble() ??
+              _actualDistanceKm,
+          (rideData['routeDistanceKm'] as num?)?.toDouble() ?? 0.0,
+        );
+        HeroUsageAccumulatorService().recordRideHandled(distanceKm: billedDistanceKm);
+        // Ride is over — stop the billable meter before consuming it so
+        // it cannot keep running into the hero's idle time.
+        HeroUsageAccumulatorService().stopBillableWork();
+        final activeMinutes =
+            HeroUsageAccumulatorService().consumeBillableMinutes();
+        final ridesHandled =
+            HeroUsageAccumulatorService().consumeRidesHandled();
+        final rideDistancesKm =
+            HeroUsageAccumulatorService().consumeRideDistances();
+        await HeroWalletService().flushUsageCost(
+          heroId: user.uid,
+          heroName: widget.ride.heroName,
+          activeMinutes: activeMinutes,
+          ridesHandled: ridesHandled,
+          rideDistancesKm: rideDistancesKm,
+        );
+        final walletSnap = await FirebaseFirestore.instance
+            .collection('hero_wallets')
+            .doc(user.uid)
+            .get();
+        walletEligible =
+            (walletSnap.data()?['isEligibleForRequests'] as bool?) ?? true;
+      } catch (e) {
+        debugPrint('[HeroRideScreen] Wallet usage-fee flush failed (non-fatal): $e');
+      }
+
+      // FIX (Phase 4a defensive cleanup): _completeTrip() already deletes
+      // active_rides/{rideDocId} in the normal flow, but this method can
+      // be reached via a separate payment-collection path. Removing here
+      // too is idempotent (no-op if already gone) and guarantees no
+      // stale transient-status node survives once payment is settled.
+      unawaited(
+        FirebaseDatabase.instance
+            .ref('active_rides/${widget.rideDocId}')
+            .remove(),
+      );
       await FirebaseDatabase.instance
           .ref('live_locations/${widget.rideDocId}')
           .remove();
       await FirebaseDatabase.instance
           .ref('online_heroes/${user.uid}')
-          .update({'isAvailable': true});
+          .update({'isAvailable': walletEligible});
       if (!mounted) {
         return;
+      }
+      if (!walletEligible) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Wallet balance low — recharge to keep receiving trip requests.',
+            ),
+            backgroundColor: _red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -878,8 +1352,8 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   }
 
   Future<void> _navigateToDestination() async {
-    final lat = widget.ride.dropLatitude;
-    final lng = widget.ride.dropLongitude;
+    final lat = _dropLatitude;
+    final lng = _dropLongitude;
     if (lat == null || lng == null) {
       return;
     }
@@ -906,73 +1380,6 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
   }
 
   // ── UI Builders ──────────────────────────────────────────────
-  Widget _buildStatusBadge() {
-    Color badgeColor;
-    String statusText;
-    switch (_rideStatus) {
-      case 'accepted':
-      case 'hero_assigned':
-        badgeColor = _gold;
-        statusText = 'Navigate to Pickup';
-        break;
-      case 'arriving':
-        badgeColor = _purple;
-        statusText = 'Arriving at Pickup';
-        break;
-      case 'arrived':
-        badgeColor = _purple;
-        statusText = 'Waiting at Pickup';
-        break;
-      case 'started':
-      case 'in_progress':
-        badgeColor = _green;
-        statusText = 'Navigate to Destination';
-        break;
-      case 'completed':
-        badgeColor = _muted;
-        statusText = 'Collect Payment';
-        break;
-      case 'paid':
-        badgeColor = _green;
-        statusText = 'Payment Received';
-        break;
-      default:
-        badgeColor = _muted;
-        statusText = 'Unknown Status';
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: badgeColor.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: badgeColor.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: badgeColor,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            statusText,
-            style: TextStyle(
-              color: badgeColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildActionButtons() {
     if (_rideStatus == 'paid') {
       return const SizedBox.shrink();
@@ -1085,26 +1492,61 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
               ),
             ),
             const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _markPaymentReceived,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _green,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+            // FIX (Nizam's "Self vs MyAllin1" split): a single "BILL
+            // RECEIVED" button couldn't tell whether the hero personally
+            // collected the money or the customer paid the company's own
+            // UPI directly — both need different wallet/admin handling
+            // (see _markPaymentReceived's header comment). Hero picks
+            // which actually happened; no proof/reference number asked
+            // for, per Nizam's explicit "Fast mode, trust the click".
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _showSelfQrThenMarkPaid,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'PAID AS CASH\n(SELF)',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        height: 1.2,
+                      ),
+                    ),
                   ),
                 ),
-                child: const Text(
-                  'BILL RECEIVED',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _markPaymentReceived('myallin1'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _purple,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'PAID TO\nMYALLIN1 (UPI)',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        height: 1.2,
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -1154,8 +1596,25 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           // Navigate Button
-          SizedBox(
+          // FIX (Aug 12 2026 — Nizam: wallet page's pink/purple gradient
+          // "nallarku so athayue... ride track and navigate pandra page
+          // kum vachcha hero app premium look vanthrum"): matches
+          // hero_wallet_screen.dart's balance-card gradient (same two
+          // colors, same topLeft→bottomRight direction) — the main CTA
+          // on this screen now carries the same premium identity instead
+          // of a flat _purple fill. ElevatedButton itself can't paint a
+          // gradient, so the gradient lives on a wrapping Container and
+          // the button underneath goes transparent.
+          Container(
             width: double.infinity,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [_purple, Color(0xFFFF4FA3)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: ElevatedButton.icon(
               onPressed: (isAccepted || isArrived)
                   ? _navigateToPickup
@@ -1169,7 +1628,8 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
                     const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: _purple,
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
@@ -1213,24 +1673,35 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
                       : (isArrived ? _startTrip : _completeTrip),
               style: ElevatedButton.styleFrom(
                 backgroundColor:
-                    isAccepted ? _purple : (isArrived ? _green : _gold),
+                    isAccepted ? _amber : (isArrived ? _green : _darkRed),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: Text(
-                isAccepted
-                    ? 'ARRIVED'
-                    : (isArrived
-                        ? (_verifyingOtp
-                            ? 'VERIFYING OTP...'
-                            : 'VERIFY OTP & START')
-                        : 'END RIDE'),
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+              // FIX (UI polish, Aug 11 2026 — Hero button text overflow
+              // bug): this button's label changes length across ride
+              // states ('ARRIVED' vs 'VERIFY OTP & START', 19 chars at
+              // fontSize 18 bold) with no overflow guard, so the longest
+              // state could wrap or crowd against the button edges on
+              // narrow phones. FittedBox scales the label to fit —
+              // shorter states like 'ARRIVED' still render at their
+              // natural size since FittedBox only shrinks.
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  isAccepted
+                      ? (_isCargoRide ? 'PARCEL PICKED' : 'ARRIVED')
+                      : (isArrived
+                          ? (_verifyingOtp
+                              ? 'VERIFYING OTP...'
+                              : 'VERIFY OTP & START')
+                          : (_isCargoRide ? 'DELIVERED' : 'END RIDE')),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
@@ -1251,11 +1722,17 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Status Badge
+          // FIX (Aug 12 2026 — Nizam: "current location nu kaaturathukku
+          // mela navigate to pickup nu oru dummy iruku atha remove
+          // pannu"): _buildStatusBadge() was a purely decorative pill
+          // (no onTap) that just repeated whatever the real "Navigate to
+          // Pickup"/"Navigate to Destination" button below already says
+          // and does — confusing since it LOOKS tappable sitting right
+          // next to the (actually interactive) call button. Removed;
+          // the call button now sits alone, right-aligned.
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              _buildStatusBadge(),
               IconButton(
                 onPressed: _callCustomer,
                 icon: const Icon(Icons.phone, color: _green),
@@ -1365,6 +1842,56 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
               ],
             ),
           ),
+          if (_isParcelRide && _recipientName.trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
+            // Recipient Info (parcel only) — who to hand the parcel to
+            // at drop-off. Hidden entirely if the field wasn't collected
+            // (e.g. an older ride doc from before this feature shipped).
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _surface,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.inventory_2_outlined,
+                      color: _purple, size: 20,),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Deliver To',
+                          style: TextStyle(color: _muted, fontSize: 10),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _recipientName,
+                          style: const TextStyle(
+                            color: _text,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (_recipientPhone.trim().isNotEmpty)
+                          Text(
+                            _recipientPhone,
+                            style: const TextStyle(
+                              color: _muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
 
           // Fare Display
@@ -1401,6 +1928,46 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (_missingRideDocId) {
+      return Scaffold(
+        backgroundColor: _bg,
+        appBar: AppBar(
+          backgroundColor: _surface,
+          title: const Text('Ride Error', style: TextStyle(color: _text)),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline_rounded, color: _red, size: 56),
+                const SizedBox(height: 16),
+                const Text(
+                  'Ride reference missing — contact support',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: _text, fontWeight: FontWeight.w700, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "This ride couldn't be linked to its booking record, "
+                  'so a trip OTP cannot be generated safely.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: _muted, fontSize: 13),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: ElevatedButton.styleFrom(backgroundColor: _purple),
+                  child: const Text('Go Back', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     // Map center based on status
     final mapCenter = _currentPosition != null
         ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
@@ -1428,9 +1995,9 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
           color: _gold,
         ),
       // Drop marker
-      if (widget.ride.dropLatitude != null && widget.ride.dropLongitude != null)
+      if (_dropLatitude != null && _dropLongitude != null)
         MapMarker(
-          point: LatLng(widget.ride.dropLatitude!, widget.ride.dropLongitude!),
+          point: LatLng(_dropLatitude!, _dropLongitude!),
           icon: Icons.location_on,
           color: _green,
         ),
@@ -1478,23 +2045,28 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
                       icon: const Icon(Icons.arrow_back, color: _text),
                     ),
                   ),
-                  // Ride ID badge
+                  // Ride ID badge — same wallet-card gradient as the
+                  // Navigate button above (Aug 12 2026 premium-look pass).
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: _surface,
+                      gradient: const LinearGradient(
+                        colors: [_purple, Color(0xFFFF4FA3)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _border),
                     ),
                     child: Text(
                       'Ride: ${widget.rideDocId.substring(0, 8)}...',
                       style: const TextStyle(
-                        color: _muted,
+                        color: Colors.white,
                         fontSize: 12,
                         fontFamily: 'monospace',
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),

@@ -3,6 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+// GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../services/auth_prompt_service.dart';
+import '../services/hive_cache.dart';
+
 // ============================================================
 //  CHECKOUT SCREEN — Allin1 Super App
 //  Coder 2.0 | Web-Safe | Zero external packages
@@ -16,14 +20,18 @@ class CheckoutScreen extends StatefulWidget {
 }
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
-  // ── Theme Constants ──────────────────────────────────────
-  static const Color _bgColor = Color(0xFF0D0D0D);
-  static const Color _cardColor = Color(0xFF1A1A1A);
+  // ── Theme Constants (Aug 20 2026 — Global Food Theme Overhaul) ──
+  // Recolored from the old dark theme to the brand's pure white +
+  // hot pink. This screen is currently dead code (route registered,
+  // never pushed — see the audit note in the file header) but stays
+  // brand-consistent if ever re-wired.
+  static const Color _bgColor = Color(0xFFFFFFFF);
+  static const Color _cardColor = Color(0xFFF8F8FF);
   static const Color _accentOrange = Color(0xFFFF6B35);
   static const Color _accentGold = Color(0xFFFFBB00);
-  static const Color _textPrimary = Color(0xFFFFFFFF);
-  static const Color _textSecondary = Color(0xFF9E9E9E);
-  static const Color _dividerColor = Color(0xFF2C2C2C);
+  static const Color _textPrimary = Color(0xFF1A1A2E);
+  static const Color _textSecondary = Color(0xFF9999BB);
+  static const Color _dividerColor = Color(0xFFEEEEF5);
   static const Color _successGreen = Color(0xFF4CAF50);
 
   // ── Dummy Order Data ─────────────────────────────────────
@@ -61,6 +69,28 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   double get _total => _subtotal + _deliveryFee + _platformFee;
 
   // ── Payment Processing ───────────────────────────────────
+  final int _coinsToUse = 0;
+
+  Future<bool> _canRedeemCoins(int requestedCoins) async {
+    if (requestedCoins <= 0) return true;
+
+    final todayKey = 'redeemed_${DateTime.now().toIso8601String().substring(0, 10)}';
+    final redeemedToday = (await HiveCache.get<int>(todayKey)) ?? 0;
+
+    if (redeemedToday + requestedCoins > 20) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You can only use up to 20 NJ Coins per day.'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return false;
+    }
+    return true;
+  }
 
   void _showPaymentSheet() {
     showModalBottomSheet<void>(
@@ -75,6 +105,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Future<void> _processPayment(String method) async {
+    // GUEST MODE (Aug 11 2026): first line — before the coin check, the
+    // sheet dismissal, and the processing overlay. Anything after this
+    // point either spends NJ Coins or shows a "payment processing"
+    // dialog, and neither should ever run for someone who cannot
+    // actually own an order. See auth_prompt_service.dart.
+    if (!await requireRealAuth(
+      context,
+      reason: 'Sign in to complete your order',
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
+    if (!await _canRedeemCoins(_coinsToUse)) return;
+
     // 1. Close the bottom sheet
     if (mounted) {
       Navigator.of(context).pop();
@@ -91,7 +136,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       Navigator.of(context).pop();
     }
 
-    // 5. Show success then navigate
+    // 5. Update daily coin usage counter
+    final todayKey = 'redeemed_${DateTime.now().toIso8601String().substring(0, 10)}';
+    final redeemedToday = (await HiveCache.get<int>(todayKey)) ?? 0;
+    // Explicit 24h ttl is REQUIRED. HiveCache.put() defaults to 30 minutes,
+    // which would reset this daily cap every half hour and let a customer
+    // redeem far more than the intended 20 NJ Coins per day.
+    await HiveCache.put(
+      todayKey,
+      redeemedToday + _coinsToUse,
+      ttl: const Duration(hours: 24),
+    );
+
+    // 6. Show success then navigate
     await Future<void>.delayed(const Duration(milliseconds: 150));
     if (mounted) {
       _showSuccessAndNavigate(method);
@@ -212,11 +269,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+              // FIX (UI standardization, Aug 11 2026): matches the
+              // 18sp title convention used app-wide instead of standing
+              // out at 22.
               const Text(
                 'Payment Successful!',
                 style: TextStyle(
                   color: _textPrimary,
-                  fontSize: 22,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.2,
                 ),
@@ -286,16 +346,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         leading: IconButton(
           icon: const Icon(
             Icons.arrow_back_ios_new_rounded,
-            color: Colors.white,
+            color: _textPrimary,
             size: 20,
           ),
           onPressed: () => Navigator.of(context).pop(),
         ),
+        // FIX (UI standardization, Aug 11 2026): app-bar titles are
+        // 18sp app-wide; this was 20.
         title: const Text(
           'Checkout',
           style: TextStyle(
-            color: Colors.white,
-            fontSize: 20,
+            color: _textPrimary,
+            fontSize: 18,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.3,
           ),
@@ -696,13 +758,14 @@ class _PaymentSheet extends StatefulWidget {
 }
 
 class _PaymentSheetState extends State<_PaymentSheet> {
-  static const Color _bgColor = Color(0xFF141414);
-  static const Color _cardColor = Color(0xFF1E1E1E);
+  // Recolored to the brand white + pink palette (Aug 20 2026).
+  static const Color _bgColor = Color(0xFFFFFFFF);
+  static const Color _cardColor = Color(0xFFF8F8FF);
   static const Color _accentOrange = Color(0xFFFF6B35);
   static const Color _accentGold = Color(0xFFFFBB00);
-  static const Color _textPrimary = Color(0xFFFFFFFF);
-  static const Color _textSecondary = Color(0xFF9E9E9E);
-  static const Color _dividerColor = Color(0xFF2A2A2A);
+  static const Color _textPrimary = Color(0xFF1A1A2E);
+  static const Color _textSecondary = Color(0xFF9999BB);
+  static const Color _dividerColor = Color(0xFFEEEEF5);
 
   String? _selectedMethod;
   bool _cardExpanded = false;
@@ -756,10 +819,12 @@ class _PaymentSheetState extends State<_PaymentSheet> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
+                        // FIX (UI standardization, Aug 11 2026): matches
+                        // the 18sp title convention used app-wide.
                         'Choose Payment',
                         style: TextStyle(
                           color: _textPrimary,
-                          fontSize: 20,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -949,7 +1014,7 @@ class _PaymentSheetState extends State<_PaymentSheet> {
               isSelected ? _accentOrange.withValues(alpha: 0.12) : _cardColor,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isSelected ? _accentOrange : const Color(0xFF2A2A2A),
+            color: isSelected ? _accentOrange : _dividerColor,
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -986,7 +1051,7 @@ class _PaymentSheetState extends State<_PaymentSheet> {
               isSelected ? _accentOrange.withValues(alpha: 0.08) : _cardColor,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isSelected ? _accentOrange : const Color(0xFF2A2A2A),
+            color: isSelected ? _accentOrange : _dividerColor,
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -1095,15 +1160,15 @@ class _PaymentSheetState extends State<_PaymentSheet> {
       obscureText: obscure,
       maxLength: maxLength,
       style: const TextStyle(
-        color: Colors.white,
+        color: _textPrimary,
         fontSize: 14,
       ),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: Color(0xFF555555), fontSize: 13),
-        prefixIcon: Icon(icon, color: const Color(0xFF555555), size: 18),
+        hintStyle: const TextStyle(color: _textSecondary, fontSize: 13),
+        prefixIcon: Icon(icon, color: _textSecondary, size: 18),
         filled: true,
-        fillColor: const Color(0xFF0D0D0D),
+        fillColor: _cardColor,
         counterText: '',
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
@@ -1111,11 +1176,11 @@ class _PaymentSheetState extends State<_PaymentSheet> {
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+          borderSide: const BorderSide(color: _dividerColor),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+          borderSide: const BorderSide(color: _dividerColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -1150,7 +1215,7 @@ class _PaymentSheetState extends State<_PaymentSheet> {
               isSelected ? _accentOrange.withValues(alpha: 0.08) : _cardColor,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isSelected ? _accentOrange : const Color(0xFF2A2A2A),
+            color: isSelected ? _accentOrange : _dividerColor,
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -1205,13 +1270,13 @@ class _PaymentSheetState extends State<_PaymentSheet> {
   Widget _miniCardBadge(String text) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: const Color(0xFF2A2A2A),
+          color: const Color(0xFFFF4FA3),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Text(
           text,
           style: const TextStyle(
-            color: Colors.white70,
+            color: Colors.white,
             fontSize: 9,
             fontWeight: FontWeight.bold,
           ),

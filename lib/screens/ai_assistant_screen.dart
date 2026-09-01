@@ -40,8 +40,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       _ChatMessage(
         role: 'assistant',
         text: widget.persona == AIPersona.hero
-            ? 'Vanakkam Hero. I am Guru AI. Ready to help you stay sharp, positive, and focused on your rides.'
-            : 'Vanakkam. I am Guru AI. I can help with rides, local services, NJ Tech offers, and quick decisions in Erode.',
+            ? 'Vanakkam Hero. I am Chitti AI. Ready to help you stay sharp, positive, and focused on your rides.'
+            : 'Vanakkam. I am Chitti AI. I can help with rides, local services, NJ Tech offers, and quick decisions in Erode.',
       ),
     ];
   }
@@ -68,6 +68,12 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     final reply = await _aiService.sendMessage(
       input,
       persona: widget.persona,
+      // FIX (AI State Mismatch bug): pass the same key this screen just
+      // validated as non-empty above — AIService used to re-resolve its
+      // own key from a different (legacy, since-deleted) storage
+      // location and would silently see it as empty even when this
+      // screen's own check passed.
+      apiKey: apiKey,
       history: _messages
           .where((message) => message.role == 'user' || message.role == 'assistant')
           .map(
@@ -106,7 +112,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         backgroundColor: const Color(0xFFFDF7FB),
         appBar: AppBar(
           title: Text(
-            'Guru AI',
+            'Chitti AI',
             style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
           ),
         ),
@@ -123,7 +129,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Guru AI needs configuration first.',
+                  'Chitti AI needs configuration first.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.outfit(
                     color: const Color(0xFF4A1236),
@@ -157,7 +163,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       backgroundColor: const Color(0xFFFDF7FB),
       appBar: AppBar(
         title: Text(
-          widget.persona == AIPersona.hero ? 'Guru AI for Heroes' : 'Guru AI',
+          widget.persona == AIPersona.hero ? 'Chitti AI for Heroes' : 'Chitti AI',
           style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
         ),
       ),
@@ -208,7 +214,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'For a 1-year Guru AI subscription, visit NJ TECH.',
+                  'For a 1-year Chitti AI subscription, visit NJ TECH.',
                   style: GoogleFonts.outfit(
                     color: const Color(0xFF412031),
                     fontWeight: FontWeight.w700,
@@ -247,7 +253,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Guru AI is live with your personal Groq key.',
+                  'Chitti AI is live with your personal Groq key.',
                   style: GoogleFonts.outfit(
                     color: const Color(0xFF412031),
                     fontWeight: FontWeight.w600,
@@ -320,7 +326,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                       fontWeight: FontWeight.w600,
                     ),
                     decoration: InputDecoration(
-                      hintText: 'Ask Guru AI anything',
+                      hintText: 'Ask Chitti AI anything',
                       hintStyle: GoogleFonts.outfit(
                         color: const Color(0xFF9A7084),
                       ),

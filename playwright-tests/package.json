@@ -1,0 +1,13 @@
+{
+  "name": "allin1-playwright-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Automated smoke tests for the Allin1 app ecosystem (Customer, Hero, Admin, Seller PWAs) — set up alongside Sentry error tracking per CTO's testing-automation plan.",
+  "scripts": {
+    "test": "playwright test",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}

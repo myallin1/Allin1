@@ -5,17 +5,24 @@
 import 'dart:async';
 
 import 'package:carousel_slider/carousel_slider.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
-// ── Theme tokens (dark) ─────────────────────────────────────────
-const Color _bBg = Color(0xFF0C0A14);
-const Color _bSurface = Color(0xFF15121F);
+// ── Theme tokens (Aug 20 2026 — Global Food Theme Overhaul) ─────
+// Recolored from the old dark navy palette to the brand's pure
+// white + hot pink. This screen is currently UNREACHABLE dead code
+// (never navigated to) but stays brand-consistent if ever re-wired.
+const Color _bBg = Color(0xFFFFFFFF);
+const Color _bSurface = Color(0xFFF8F8FF);
 const Color _bPink = Color(0xFFFF4FA3);
 const Color _bGold = Color(0xFFFFBB33);
 const Color _bOrange = Color(0xFFFF8A00);
 const Color _bGreen = Color(0xFF00E5A0);
+const Color _bText = Color(0xFF1A1A2E);
+const Color _bMuted = Color(0xFF9999BB);
 
 // ── Contact ──────────────────────────────────────────────────────
 const String _bPhone = '+918681869091';
@@ -109,7 +116,7 @@ class _BiriyaniMenuScreenState extends State<BiriyaniMenuScreen>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
-    _pulse = Tween<double>(begin: 1.0, end: 1.04)
+    _pulse = Tween<double>(begin: 1, end: 1.04)
         .animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
   }
 
@@ -163,14 +170,14 @@ class _BiriyaniMenuScreenState extends State<BiriyaniMenuScreen>
             backgroundColor: _bBg,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                  color: Colors.white, size: 20),
+                  color: Colors.white, size: 20,),
               onPressed: () => Navigator.pop(context),
             ),
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
+              background: DecoratedBox(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Color(0xFF1A0A2E), Color(0xFF0C0A14)],
+                    colors: [Color(0xFFFF4FA3), Color(0xFFBE2A7A)],
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                   ),
@@ -254,7 +261,7 @@ class _BiriyaniMenuScreenState extends State<BiriyaniMenuScreen>
                         decoration: BoxDecoration(
                           color: active
                               ? item.accent
-                              : Colors.white.withValues(alpha: 0.18),
+                              : _bPink.withValues(alpha: 0.25),
                           borderRadius: BorderRadius.circular(99),
                         ),
                       ),
@@ -299,10 +306,10 @@ class _BiriyaniMenuScreenState extends State<BiriyaniMenuScreen>
                       _BiriyaniCTAButton(
                         label: '📞  Call Now',
                         sublabel: _bPhone,
-                        gradient: LinearGradient(
+                        gradient: const LinearGradient(
                           colors: [
                             _bPink,
-                            const Color(0xFFFF8AC4),
+                            Color(0xFFFF8AC4),
                           ],
                         ),
                         onTap: _call,
@@ -360,12 +367,12 @@ class _BiriyaniCarouselCard extends StatelessWidget {
             children: [
               // Background image
               Positioned.fill(
-                child: Image.network(
+                child: CachedCloudImage(
                   item.imageUrl,
                   fit: BoxFit.cover,
                   loadingBuilder: (_, child, progress) => progress == null
                       ? child
-                      : Container(
+                      : ColoredBox(
                           color: _bSurface,
                           child: Center(
                             child: CircularProgressIndicator(
@@ -374,7 +381,7 @@ class _BiriyaniCarouselCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                  errorBuilder: (_, __, ___) => Container(
+                  errorBuilder: (_, __, ___) => ColoredBox(
                     color: _bSurface,
                     child: Center(
                       child: Text(
@@ -469,12 +476,19 @@ class _BiriyaniCarouselCard extends StatelessWidget {
       ),
     );
   }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<_BiriyaniItem>('item', item));
+    properties.add(DiagnosticsProperty<bool>('isActive', isActive));
+  }
 }
 
 // ── Info Panel ───────────────────────────────────────────────────
 class _BiriyaniInfoPanel extends StatelessWidget {
   final _BiriyaniItem item;
-  const _BiriyaniInfoPanel({super.key, required this.item});
+  const _BiriyaniInfoPanel({required this.item, super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -504,7 +518,7 @@ class _BiriyaniInfoPanel extends StatelessWidget {
               ),
               child: Center(
                 child: Text(item.emoji,
-                    style: const TextStyle(fontSize: 28)),
+                    style: const TextStyle(fontSize: 28),),
               ),
             ),
             const SizedBox(width: 16),
@@ -515,7 +529,7 @@ class _BiriyaniInfoPanel extends StatelessWidget {
                   Text(
                     item.name,
                     style: GoogleFonts.outfit(
-                      color: Colors.white,
+                      color: _bText,
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
                     ),
@@ -524,7 +538,7 @@ class _BiriyaniInfoPanel extends StatelessWidget {
                   Text(
                     item.tagline,
                     style: GoogleFonts.outfit(
-                      color: Colors.white54,
+                      color: _bMuted,
                       fontSize: 12,
                     ),
                   ),
@@ -552,6 +566,12 @@ class _BiriyaniInfoPanel extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<_BiriyaniItem>('item', item));
   }
 }
 
@@ -611,6 +631,15 @@ class _BiriyaniCTAButton extends StatelessWidget {
       ),
     );
   }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('label', label));
+    properties.add(StringProperty('sublabel', sublabel));
+    properties.add(DiagnosticsProperty<Gradient>('gradient', gradient));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+  }
 }
 
 // ── Why Choose Strip ────────────────────────────────────────────
@@ -642,7 +671,7 @@ class _WhyChooseStrip extends StatelessWidget {
                     e.$2,
                     textAlign: TextAlign.center,
                     style: GoogleFonts.outfit(
-                      color: Colors.white70,
+                      color: _bMuted,
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                     ),
@@ -655,3 +684,4 @@ class _WhyChooseStrip extends StatelessWidget {
     );
   }
 }
+

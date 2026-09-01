@@ -1,0 +1,48 @@
+# ================================================================
+# flutter_launcher_icons-hero.yaml — HERO flavor app icon (Android)
+# ================================================================
+# NEW (Aug 17 2026 — Nizam: "namma hero pwa and mobile app ku icon set
+# panniru... install kekkumbothum and install anthum home page visible
+# kum").
+#
+# WHY A SEPARATE FILE AND NOT THE pubspec.yaml BLOCK
+# pubspec.yaml already has a flutter_launcher_icons block, but it writes
+# ONE icon set shared by all four flavors (android/app/src/main/res).
+# The hero app needs its own. flutter_launcher_icons picks the flavor up
+# from this file's NAME — `flutter_launcher_icons-<flavor>.yaml` — and
+# writes to android/app/src/hero/res/ instead, which Gradle then uses
+# only for the hero flavor. The pubspec block is left untouched, so
+# customer/seller/admin keep the icon they have today.
+#
+# WHY THE SOURCE LIVES IN branding/ AND NOT assets/
+# pubspec.yaml declares `- assets/` wholesale, so ANY file under assets/
+# ships inside the app bundle. An icon source does not need to: this tool
+# reads it at BUILD time and emits the platform PNGs. Keeping it in
+# branding/ (outside assets/) means the 5.3 MB source costs the shipped
+# app exactly zero bytes, and app start-up is unaffected.
+#
+# WEB ICONS ARE NOT GENERATED HERE
+# `web:` is deliberately absent. All four flavors share one web/ folder,
+# so letting this write web/icons/ would overwrite the customer app's
+# icons. The hero web icons are pre-generated into web/icons/hero/ and
+# referenced by web/manifests/manifest_hero.json, which deploy_web.ps1
+# already swaps in per flavor.
+#
+# RUN
+#   dart run flutter_launcher_icons -f flutter_launcher_icons-hero.yaml
+# ================================================================
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "branding/hero_app_icon.png"
+
+  # Adaptive icon: Android 8+ crops the foreground to a circle/squircle
+  # depending on the launcher. A white background plus an inset
+  # foreground keeps the logo inside the safe zone instead of having its
+  # edges clipped — the same 78% inset used for the maskable web icons.
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "branding/hero_app_icon.png"
+  adaptive_icon_foreground_inset: 20
+
+  # Below Android 8 there is no adaptive icon, so ship the plain one.
+  min_sdk_android: 21

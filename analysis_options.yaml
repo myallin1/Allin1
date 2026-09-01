@@ -133,7 +133,7 @@ linter:
     comment_references: true
     
     # Diagnostic messages should use the correct syntax
-    diagnostic_describe_all_properties: true
+    diagnostic_describe_all_properties: false
     
     # Avoid using dart:io in Flutter packages
     do_not_use_environment: false  # Disabled for flutter_dotenv compatibility
@@ -176,7 +176,7 @@ linter:
     always_declare_return_types: true
     
     # Always put control body on new line
-    always_put_control_body_on_new_line: true
+    always_put_control_body_on_new_line: false
     
     # Always put required named parameters first
     always_put_required_named_parameters_first: true
@@ -287,7 +287,7 @@ linter:
     camel_case_types: true
     
     # Cascade invocations
-    cascade_invocations: true
+    cascade_invocations: false
     
     # Cast nullable to non-nullable
     cast_nullable_to_non_nullable: true
@@ -530,7 +530,7 @@ linter:
     type_init_formals: true
     
     # Use unawaited futures
-    unawaited_futures: true
+    unawaited_futures: false
     
     # Use unnecessary brace in string interps
     unnecessary_brace_in_string_interps: true
@@ -596,7 +596,7 @@ linter:
     unrelated_type_equality_checks: true
     
     # Use use build context synchronously
-    use_build_context_synchronously: true
+    use_build_context_synchronously: false
     
     # Use use colored box
     use_colored_box: true

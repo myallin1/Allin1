@@ -30,8 +30,15 @@ class WalletService {
 
       return UserWalletModel.fromFirestore(doc.data()!, userId);
     } catch (e) {
+      // FIX: this used to swallow every failure (network blip, permission
+      // error, deserialization issue) and return a zero-balance 'temp'
+      // wallet — identical to a user who genuinely has no wallet yet.
+      // A transient Firestore error would make a user's real balance
+      // silently vanish from the UI with no error indicator. Rethrow so
+      // callers (e.g. a FutureBuilder) can show a real "couldn't load
+      // wallet" + retry state instead of a fake zero balance.
       debugPrint('Get wallet error: $e');
-      return const UserWalletModel(userId: 'temp');
+      rethrow;
     }
   }
 
@@ -74,11 +81,25 @@ class WalletService {
         wallet: await getUserWallet(),
       );
     } catch (e) {
+      // FIX: this used to always return the generic 'Payment failed',
+      // hiding whether the real cause was insufficient balance, daily
+      // limit, or a genuine backend/network failure — support couldn't
+      // tell these apart from the message alone. Surface the real
+      // error text (still falls back to a friendly default wallet on
+      // the getUserWallet() call inside, which now itself rethrows on
+      // real failures — catch that separately so a wallet-fetch error
+      // here doesn't mask the original payment error).
       debugPrint('Spend coins error: $e');
+      UserWalletModel wallet;
+      try {
+        wallet = await getUserWallet();
+      } catch (_) {
+        wallet = const UserWalletModel(userId: 'temp');
+      }
       return WalletResponse(
         success: false,
-        message: 'Payment failed',
-        wallet: await getUserWallet(),
+        message: 'Payment failed: $e',
+        wallet: wallet,
       );
     }
   }
@@ -289,8 +310,15 @@ class WalletService {
         };
       }).toList();
     } catch (e) {
+      // FIX: this query combines a 'userId' equality filter with
+      // .orderBy('createdAt') (and sometimes a second 'type' equality
+      // filter) — a composite-index query. If the index isn't deployed
+      // or is rebuilding, Firestore throws failed-precondition, which
+      // this used to swallow into an empty list — indistinguishable
+      // from "no transactions yet". Rethrow so the UI can show a real
+      // error state instead of a fake empty history.
       debugPrint('Get transactions error: $e');
-      return [];
+      rethrow;
     }
   }
 }

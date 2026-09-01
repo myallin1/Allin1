@@ -206,7 +206,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         ),
         title: Text(
           'Register as $_userTypeDisplayName',
-          style: GoogleFonts.poppins(color: kText),
+          style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: kText),
         ),
         centerTitle: true,
       ),
@@ -234,7 +234,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     const SizedBox(width: 8),
                     Text(
                       _userTypeDisplayName,
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.outfit(
                         color: _userTypeColor,
                         fontWeight: FontWeight.w600,
                       ),
@@ -470,7 +470,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       )
                     : Text(
                         'Create Account',
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.outfit(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),

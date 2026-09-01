@@ -2,6 +2,239 @@
 <html lang="en">
 
 <head>
+  <!-- ================================================================
+       REPEAT-VISIT DETECTION — MUST STAY FIRST IN <head>
+       ================================================================
+       FIX (Aug 11 2026, Nizam's 3rd report — "2nd open la splash
+       animation STILL playing"):
+
+       ROOT CAUSE: this check previously lived in a <script> near the
+       BOTTOM of <body>. By the time it ran and added `.minimal`, the
+       browser had already parsed the CSS, built the splash element and
+       STARTED its animations. On a fast desktop that window is
+       invisible; on a budget phone it is long enough to actually watch
+       the shuffle play before it gets suppressed. The logic was never
+       wrong — it was just too late.
+
+       Running it here, before ANY stylesheet or markup is parsed, sets
+       the class on <html> so the very first style resolution already
+       knows this is a repeat visit. There is then no frame in which an
+       animation can play.
+
+       Deliberately inline and blocking (no defer/async): it must
+       complete before CSS is applied, and it is a few microseconds of
+       localStorage work.
+  -->
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem('allin1_web_splash_seen') === '1') {
+          document.documentElement.className += ' a1-repeat-visit';
+        }
+        localStorage.setItem('allin1_web_splash_seen', '1');
+      } catch (e) {
+        /* private mode / storage blocked — fall through to full splash */
+      }
+
+      // ============================================================
+      // FIRST-FRAME LATCH — must be registered HERE, in <head>
+      // ============================================================
+      // FIX (Aug 11 2026 — Nizam: "splash reappears twice after the home
+      // page loads and blocks the app for ~3 seconds"):
+      //
+      // ROOT CAUSE — a race that our own caching work made WORSE. The
+      // `flutter-first-frame` listener lived in a <script> near the
+      // BOTTOM of <body>. Once main.dart.js started being served from
+      // cache (stale-while-revalidate), Flutter began booting fast
+      // enough to FIRE that event before the listener existed. The
+      // listener then never ran, `firstFrameFired` stayed false forever,
+      // and the two safety timers below fired against a perfectly
+      // healthy app:
+      //     8s  -> "Taking longer than usual" + Retry button over the UI
+      //     20s -> window.location.reload()
+      // The reload re-showed the splash, Flutter booted fast again, the
+      // race repeated — which is exactly the "reappears twice, blocks
+      // interaction" symptom. The safety net designed to rescue a stuck
+      // boot was bricking a successful one.
+      //
+      // Latching the flag on `window` from <head> means the event can
+      // never be missed, no matter how fast Flutter paints.
+      window.__a1FirstFrame = false;
+      window.addEventListener('flutter-first-frame', function () {
+        window.__a1FirstFrame = true;
+      });
+    })();
+  </script>
+
+  <!-- ================================================================
+       PWA BOOT-TIME VERSION CHECK — MUST STAY IN <head>, AFTER THE
+       REPEAT-VISIT LATCH ABOVE
+       ================================================================
+       FIX (Aug 20 2026 — Nizam: "ovvoru time pwa open pannumbothu
+       hosting la irunthu download pannuchuna namma hosting bandwith
+       theenthurum"):
+
+       WHAT THIS DOES:
+       On every app open (repeat visit only — first visit is a fresh
+       download anyway), this block fires BEFORE Flutter boots:
+
+         1. Fetch /version.json with a cache-buster (~200 bytes, no-cache).
+            This is the ONLY file that ever touches Firebase Hosting on a
+            repeat open. Everything else (index.html, flutter_bootstrap.js,
+            main.dart.js, fonts, canvaskit) is now served 100% from the
+            Service Worker cache — see pwa_fallback_sw.js's isAppShell guard.
+
+         2. If the fetched version matches what was stored in localStorage
+            on the previous open — NO update, NO network traffic, flutter
+            boots straight from cache. Total Firebase Hosting bytes: ~200.
+
+         3. If the fetched version is DIFFERENT — a new deploy happened.
+            Show "Updating app..." on the splash screen, purge all SW
+            caches, then do ONE window.location.reload(). That reload fetches
+            the fresh build (the SW cache was just cleared, so it's a real
+            network fetch). After that reload the version is stored and
+            subsequent opens are back to pure cache.
+
+       WHY ONLY version.json AND NOT index.html:
+       The previous design (network-first for index.html) was correct as
+       an update-detection mechanism, but it cost a full index.html
+       (~67KB) download on every single open. version.json is ~200 bytes
+       and contains exactly the same information needed to decide whether
+       a reload is warranted. This replaces that network hit with a ~330x
+       smaller one, while achieving the exact same result.
+
+       NOTE: This block runs on EVERY open (first-visit OR repeat) but
+       the cache-purge + reload branch only fires when the version actually
+       changes. First-visit: version stored, no reload. Repeat-visit same
+       version: no reload. Repeat-visit new version: update splash + reload.
+  ================================================================ -->
+  <script>
+    (function () {
+      var A1_VERSION_KEY = 'allin1_web_build_version';
+      var A1_UPDATING_KEY = 'allin1_web_updating';
+
+      // ── Helper: update the splash status text if the element exists ──
+      function setSplashStatus(msg) {
+        try {
+          var el = document.querySelector('.splash-status');
+          if (el) el.textContent = msg;
+        } catch (e) {}
+      }
+
+      // ── If we just did an update-reload, clear the flag and done ──
+      // (This open IS the fresh load after a cache purge.)
+      try {
+        if (sessionStorage.getItem(A1_UPDATING_KEY) === '1') {
+          sessionStorage.removeItem(A1_UPDATING_KEY);
+          // Store the version we're now running (fetched on the previous
+          // open, stored before the reload) so the next open compares correctly.
+          // Nothing else to do — SW install() will repopulate the cache as
+          // files are fetched by Flutter bootstrap.
+          return;
+        }
+      } catch (e) {}
+
+      // ── Fetch version.json in the background (non-blocking) ──
+      // We kick this off immediately in <head> so the HTTP round-trip
+      // overlaps with HTML parsing. By the time Flutter finishes booting
+      // (hundreds of ms later), the result is almost always ready.
+      var isLocalhost =
+        location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      if (isLocalhost) return; // dev builds: skip entirely
+
+      try {
+        var storedVersion = localStorage.getItem(A1_VERSION_KEY);
+
+        fetch('/version.json?t=' + Date.now(), {
+          cache: 'no-store',
+          headers: { 'cache-control': 'no-cache' }
+        })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (body) {
+            if (!body) return;
+            var build   = (body['build_number'] || '').toString();
+            var version = (body['version']       || '').toString();
+            if (!build && !version) return;
+            var current = version + '+' + build;
+
+            // Store for future opens (even first visit — baseline).
+            try { localStorage.setItem(A1_VERSION_KEY, current); } catch (e) {}
+
+            if (!storedVersion) {
+              // First-ever visit or localStorage was cleared. Treat as
+              // up-to-date; no reload needed.
+              return;
+            }
+
+            if (current === storedVersion) {
+              // Same version — 100% cache, nothing to do.
+              return;
+            }
+
+            // ── NEW VERSION DETECTED ─────────────────────────────────
+            // Show update message on splash immediately.
+            setSplashStatus('⬆️ Updating Allin1...');
+            try { document.documentElement.classList.add('a1-updating'); } catch(e) {}
+
+            // Prevent the existing flutter-first-frame listener from
+            // hiding the splash before the reload happens.
+            window.__a1Updating = true;
+            // FAILSAFE (Aug 28 2026): the reload below is gated on a
+            // caches/service-worker purge that can hang indefinitely on
+            // a just-unlocked phone. If it does, the first-frame handler
+            // has already returned early to keep the splash up and the
+            // 8s boot watchdog does nothing (Flutter DID paint), so the
+            // splash spins forever. Reload unconditionally after 5s.
+            setTimeout(function () {
+              if (window.__a1Updating) {
+                try { sessionStorage.setItem(A1_UPDATING_KEY, '1'); } catch (e) {}
+                window.location.reload();
+              }
+            }, 5000);
+
+            // Purge all SW caches so the reload fetches fresh files.
+            var purge = (typeof caches !== 'undefined' && caches.keys)
+              ? caches.keys().then(function (keys) {
+                  return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+                })
+              : Promise.resolve();
+
+            // Also unregister/re-register the SW so it installs fresh.
+            var swPurge = ('serviceWorker' in navigator)
+              ? navigator.serviceWorker.getRegistrations().then(function (regs) {
+                  return Promise.all(regs
+                    .filter(function (r) {
+                      var u = (r.active || r.waiting || r.installing || {}).scriptURL || '';
+                      // Keep firebase-messaging-sw.js — it handles push, not caching.
+                      return !u.endsWith('/firebase-messaging-sw.js');
+                    })
+                    .map(function (r) { return r.unregister(); })
+                  );
+                })
+              : Promise.resolve();
+
+            Promise.all([purge, swPurge]).then(function () {
+              // Mark so the NEXT boot (the one after reload) knows it
+              // is the fresh load and skips the version-check block.
+              try { sessionStorage.setItem(A1_UPDATING_KEY, '1'); } catch (e) {}
+              // Brief pause so the user sees the "Updating..." message.
+              setTimeout(function () { window.location.reload(); }, 800);
+            }).catch(function () {
+              // Cache purge failed (shouldn't happen, but be safe).
+              try { sessionStorage.setItem(A1_UPDATING_KEY, '1'); } catch (e) {}
+              setTimeout(function () { window.location.reload(); }, 800);
+            });
+          })
+          .catch(function () {
+            // Offline or version.json unreachable — serve from cache as-is.
+            // Do NOT set updating flag or reload; just open normally.
+          });
+      } catch (e) {
+        // localStorage / fetch not available (private mode, etc.) — proceed normally.
+      }
+    })();
+  </script>
+
   <!--
     ================================================================
     Allin1 Super App - நம்ம ஊரு ஆப்
@@ -18,9 +251,9 @@
   <meta name="supported-color-schemes" content="dark light">
 
   <!-- Primary Meta Tags -->
-  <title>NJ BAPX · Allin1 — نم்ம ஊரு ஆப்</title>
-  <meta name="title" content="NJ BAPX · Allin1 — Erode's Super App">
-  <meta name="description" content="Allin1 Super App — Food, Grocery, Bike Taxi & Tech in Erode">
+  <title>₹50,000,00,00,000 (ஐம்பதாயிரம் கோடி) பொருளாதாரப் புரட்சித் திட்டம்! | MyAllin1</title>
+  <meta name="title" content="₹50,000,00,00,000 (ஐம்பதாயிரம் கோடி) பொருளாதாரப் புரட்சித் திட்டம்! | MyAllin1">
+  <meta name="description" content="MyAllin1 — ஈரோடின் சொந்த சூப்பர் ஆப். பைக் டாக்சி, உணவு, மளிகை, SOS உதவி — எல்லா சேவைகளும் ஒரே ஆப்பில்!">
   <meta name="keywords"
     content="Allin1, food delivery, grocery, bike taxi, tech accessories, Tamil, NJ TECH, online shopping, 16th Road, Fresh">
   <meta name="author" content="NJ TECH">
@@ -62,9 +295,9 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://erode-super-app.njtech.in/">
   <meta property="og:site_name" content="Allin1 Super App">
-  <meta property="og:title" content="Allin1 Super App - Your All-in-One Commerce Platform">
+  <meta property="og:title" content="₹50,000,00,00,000 (ஐம்பதாயிரம் கோடி) பொருளாதாரப் புரட்சித் திட்டம்! | MyAllin1">
   <meta property="og:description"
-    content="Order food from 16th Road, groceries from Allin1 Fresh, tech from NJ TECH, or book a bike taxi. Voice-first AI assistant in Tamil & English.">
+    content="MyAllin1 — ஈரோடின் சொந்த சூப்பர் ஆப். பைக் டாக்சி, உணவு, மளிகை, SOS உதவி — எல்லா சேவைகளும் ஒரே ஆப்பில்!">
   <meta property="og:image" content="https://erode-super-app.njtech.in/og-image.png">
   <meta property="og:image:alt" content="Allin1 Super App Dashboard showing Food, Grocery, Tech, and Bike Taxi services">
   <meta property="og:image:width" content="1200">
@@ -104,6 +337,21 @@
   <link rel="dns-prefetch" href="https://fonts.googleapis.com">
   <link rel="dns-prefetch" href="https://www.google-analytics.com">
 
+  <!-- Erode Offers video (Aug 28 2026): the YouTube iframe player is
+       only created lazily when a customer actually taps "Watch Offer
+       Video" (see showPremiumVideoModal), so it costs nothing on pages
+       that never open one. But when it IS opened, the DNS+TLS handshake
+       to these three hosts was previously paid cold at that exact
+       moment. Warming the connection here means it overlaps with the
+       rest of the page load instead of the customer's tap, so the
+       video starts noticeably sooner. -->
+  <link rel="preconnect" href="https://www.youtube.com">
+  <link rel="preconnect" href="https://i.ytimg.com">
+  <link rel="preconnect" href="https://www.google.com">
+  <link rel="dns-prefetch" href="https://www.youtube.com">
+  <link rel="dns-prefetch" href="https://i.ytimg.com">
+  <link rel="dns-prefetch" href="https://www.google.com">
+
   <!-- Note: NotoSansTamil font is loaded via Google Fonts CSS below, not local file -->
 
   <meta name="google-signin-client_id" content="357526153693-02b0behmsf3k720jujg3e8j82frj04q7.apps.googleusercontent.com">
@@ -118,7 +366,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: #0A0A12;
+      background: #FFFFFF;
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -132,17 +380,270 @@
       pointer-events: auto;
     }
 
+    /* Instant teardown: no fade, no compositing work, gone the frame
+       Flutter paints. */
+    .splash-screen.instant-hide {
+      display: none !important;
+    }
+
+    /* ================================================================
+       CUSTOM "Install MyAllin1" BANNER — Tricolor theme
+       ================================================================
+       Aug 11 2026 (Nizam): the browser's default install chip is generic
+       and easy to ignore. We intercept beforeinstallprompt and show this
+       instead, then hand back to the native prompt on tap.
+       Pure CSS + the existing PWA icon — no extra downloads.
+       Tricolor is used as a restrained accent bar (saffron/white/green)
+       rather than a full-colour wash: a national flag rendered as
+       decoration reads as cheap, as a precise stripe it reads as
+       intentional. */
+    .a1-install {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      z-index: 1000000;
+      background: #FFFFFF;
+      border-radius: 20px;
+      box-shadow: 0 12px 34px rgba(20, 8, 20, 0.22);
+      overflow: hidden;
+      transform: translateY(140%);
+      transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+      font-family: 'Noto Sans Tamil', system-ui, sans-serif;
+    }
+    .a1-install.show { transform: translateY(0); }
+
+    /* The Tricolor bar. */
+    .a1-install-flag {
+      height: 4px;
+      background: linear-gradient(
+        to right,
+        #FF9933 0%, #FF9933 33.3%,
+        #FFFFFF 33.3%, #FFFFFF 66.6%,
+        #138808 66.6%, #138808 100%
+      );
+    }
+
+    .a1-install-body {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 13px 14px;
+    }
+    .a1-install-icon {
+      width: 46px; height: 46px;
+      border-radius: 13px;
+      flex: 0 0 auto;
+      object-fit: cover;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.14);
+    }
+    .a1-install-text { flex: 1 1 auto; min-width: 0; }
+    .a1-install-title {
+      font-size: 15px; font-weight: 800; color: #14121F;
+      line-height: 1.2;
+    }
+    .a1-install-sub {
+      font-size: 11.5px; color: #6B7280; margin-top: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .a1-install-btn {
+      flex: 0 0 auto;
+      border: none;
+      border-radius: 12px;
+      padding: 10px 16px;
+      font-size: 13px; font-weight: 800; color: #fff;
+      background: linear-gradient(135deg, #FF4FA3 0%, #FF92C8 100%);
+      cursor: pointer;
+    }
+    .a1-install-close {
+      flex: 0 0 auto;
+      border: none; background: transparent;
+      color: #9CA3AF; font-size: 20px; line-height: 1;
+      padding: 4px 6px; cursor: pointer;
+    }
+
+    /* ================================================================
+       COLD-BOOT SPLASH (Aug 11 2026 — Nizam's "smart HTML splash")
+       ================================================================
+       Shown ONLY on a first/cold load, where the 5.9 MB main.dart.js
+       download genuinely takes seconds and there is nothing else to
+       look at. Pure CSS — no JS timers driving frames, no images to
+       download — because anything this splash needs to fetch competes
+       for bandwidth with the very bundle it is masking.
+
+       Design intent: three service icons shuffle/pulse in sequence
+       (bike, bag, bolt — the app's three core jobs), then the brand
+       mark settles in. Motion is on a slow, calm curve; fast/jittery
+       animation makes waiting feel longer, not shorter. */
+    /* ================================================================
+       COLD-BOOT SPLASH — restored original design (Nizam's preference,
+       Aug 11 2026): white dots bouncing at the TOP of the screen, brand
+       mark + title + subtitle centred below.
+       Replaces the 3-tile shuffle, which he preferred not to keep.
+       ================================================================ */
+    /* ================================================================
+       CATEGORY-ICON SHUFFLE PRELOADER (Aug 12 2026 — CTO mandate:
+       "Splash Screen Overhaul & UX Animation" / "The Category Icons
+       Preloader")
+       ================================================================
+       Replaces the plain bouncing dots with a staggered fade+scale-in
+       of the app's four core service categories (bike taxi, food,
+       parcel/grocery, tools/services) — the same "illusion of the app
+       loading in the background" the CTO asked for, built as pure
+       inline SVG + CSS keyframes so it costs ZERO extra network
+       requests (no image downloads, no JS driving frames) — matching
+       this file's own long-standing design principle: anything this
+       splash needs to fetch competes for bandwidth with the very
+       bundle it is masking.
+
+       NOTE for whoever touches this next: a 3-icon "tile shuffle" was
+       tried once before (Aug 11 2026) and reverted back to plain dots
+       at Nizam's own request at the time — that revert was a temporary
+       fallback while the video splash and triple-rebuild bug were still
+       unresolved, not a rejection of the concept. Now that both of
+       those are fixed (see main_customer.dart), this is the intended
+       permanent design. If this ever gets reverted again, put a NEW
+       comment here (don't just delete this one) so the next person
+       knows why. */
+    /* ============================================================
+       ROUTE-DRAW SPLASH (Aug 12 2026 — CEO/CTO: replace the MP4 video
+       splashes with "a highly classy, ultra-lightweight pure HTML/CSS/
+       SVG animation... a map/route line draws itself dynamically, and
+       minimal app-related icons pop up along the route").
+
+       100% inline SVG + CSS keyframes: ZERO network requests, ~3KB of
+       markup, and it renders before main.dart.js has even been parsed.
+       Replaces both the old 4-chip shuffle here AND the 2.1MB
+       app_splash.mp4 that hero/seller/admin used to stream on web.
+
+       Container class name (.splash-icons) is DELIBERATELY reused so
+       every existing suppression rule keeps working untouched —
+       .a1-repeat-visit .splash-icons, .splash-screen.minimal
+       .splash-icons and .splash-screen.resolving .splash-icons all
+       still apply with no edits. Repeat visitors therefore still get
+       the instant, animation-free splash.
+       ============================================================ */
+    .splash-icons {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 380px;
+      margin-top: 18px;
+      width: 100%;
+    }
+    .a1-route {
+      width: 320px;
+      height: 380px;
+      overflow: visible;
+      transform: scale(1.35);
+      margin: 20px 0;
+    }
+
+    /* The road underlay — a soft, static guide the live route draws on
+       top of, so the line never appears to travel through empty space. */
+    .a1-route-bed {
+      fill: none;
+      stroke: rgba(255, 79, 163, 0.16);
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+
+    /* The drawing line itself. 1400 is a safe overestimate of the new TN full boundary path. */
+    .a1-route-line {
+      fill: none;
+      stroke: url(#a1RouteGrad);
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-dasharray: 1400;
+      stroke-dashoffset: 1400;
+      animation: a1RouteDraw 6s ease-in-out infinite;
+    }
+    @keyframes a1RouteDraw {
+      0%   { stroke-dashoffset: 1400; }
+      55%  { stroke-dashoffset: 0; }
+      85%  { stroke-dashoffset: 0; opacity: 1; }
+      100% { stroke-dashoffset: 0; opacity: 0; }
+    }
+
+    /* Waypoint pins pop in as the line reaches them. Each --d is tuned
+       to land just after the stroke passes that x-position. */
+    .a1-stop {
+      opacity: 0;
+      transform-box: fill-box;
+      transform-origin: center bottom;
+      animation: a1StopPop 6s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+      animation-delay: var(--d, 0s);
+    }
+    @keyframes a1StopPop {
+      0%, 5%  { opacity: 0; transform: translateY(6px) scale(0.4); }
+      10%     { opacity: 1; transform: translateY(-2px) scale(1.12); }
+      15%, 85% { opacity: 1; transform: translateY(0) scale(1); }
+      100%    { opacity: 0; transform: translateY(-4px) scale(0.9); }
+    }
+
+    /* Origin + destination markers: always-on anchors so the animation
+       reads as "a journey", not a line with a gap at each end. */
+    .a1-pulse {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: a1Pulse 6s ease-in-out infinite;
+    }
+    @keyframes a1Pulse {
+      0%, 100% { opacity: 0.55; transform: scale(0.85); }
+      50%      { opacity: 1;    transform: scale(1.15); }
+    }
+
+    /* The rider travelling the route. offset-path is the clean way to
+       follow the exact same curve; browsers without it (very old) simply
+       show the vehicle parked at the origin, which still looks
+       intentional rather than broken. */
+    .a1-rider {
+      offset-path: path("M 330,40 C 320,100 370,160 370,220 C 320,230 290,260 320,290 C 280,310 240,400 170,450 C 150,410 140,320 160,260 C 80,240 40,200 50,140 C 60,100 150,80 170,70 C 220,50 280,30 330,40 Z");
+      offset-rotate: auto;
+      animation: a1Ride 6s ease-in-out infinite;
+    }
+    @keyframes a1Ride {
+      0%       { offset-distance: 0%;   opacity: 0; }
+      10%      { opacity: 1; }
+      55%      { offset-distance: 100%; opacity: 1; }
+      70%      { offset-distance: 100%; opacity: 1; }
+      100%     { offset-distance: 100%; opacity: 0; }
+    }
+
+    /* Respect the OS "reduce motion" setting — required for
+       accessibility, and it also spares low-end devices the compositing
+       work on the very first frame of the app. */
+    @media (prefers-reduced-motion: reduce) {
+      .a1-route-line { animation: none; stroke-dashoffset: 0; }
+      .a1-stop       { animation: none; opacity: 1; }
+      .a1-rider      { animation: none; offset-distance: 100%; }
+      .a1-pulse      { animation: none; opacity: 1; }
+    }
+
+
+    /* Resolve: once Flutter signals first frame we fade the whole
+       splash out (see the flutter-first-frame listener). Kept as a
+       transform+opacity transition only — both are GPU-composited, so
+       the fade cannot stutter even while Flutter is doing its heavy
+       first layout on the main thread. */
+    /* Cold-boot fade-out on resolve. Targets the icon row (the only
+       animated element now). */
+    .splash-screen.resolving .splash-icons {
+      opacity: 0;
+      transition: opacity 0.28s ease;
+    }
+
     .splash-logo {
       width: 120px;
       height: 120px;
-      background: linear-gradient(135deg, #7B6FE0 0%, #E07C6F 100%);
-      border-radius: 26px;
+      background: linear-gradient(135deg, #FF4FA3 0%, #FF92C8 100%);
+      border-radius: 28px;
       display: flex;
       justify-content: center;
       align-items: center;
       font-size: 64px;
-      box-shadow: 0 20px 60px rgba(123, 111, 224, 0.5),
-        0 0 40px rgba(123, 111, 224, 0.3);
+      box-shadow: 0 20px 60px rgba(255, 79, 163, 0.4),
+        0 0 40px rgba(255, 79, 163, 0.25);
       animation: logoPulse 2.5s ease-in-out infinite;
       position: relative;
       overflow: hidden;
@@ -162,55 +663,155 @@
       animation: shimmer 2.5s ease-in-out infinite;
     }
 
+    .splash-title-wrapper {
+      width: 350px;
+      margin: 50px auto 0;
+      text-align: left;
+    }
     .splash-title {
-      margin-top: 28px;
       font-family: 'Noto Sans Tamil', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      font-size: 28px;
-      font-weight: 700;
-      background: linear-gradient(135deg, #9B8FF0 0%, #E07C6F 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      letter-spacing: 0.5px;
-      text-align: center;
+      font-size: 26px;
+      font-weight: 800;
+      color: #4A1236;
+      letter-spacing: 0.3px;
+      display: inline-block;
+      overflow: hidden;
+      white-space: nowrap;
+      border-right: 3px solid #FF4FA3;
+      animation: typing 3.5s ease-in-out infinite;
+    }
+
+    @keyframes typing {
+      0% { max-width: 0; }
+      40% { max-width: 100%; }
+      80% { max-width: 100%; opacity: 1; border-color: transparent; }
+      100% { max-width: 100%; opacity: 0; border-color: transparent; }
     }
 
     .splash-subtitle {
       margin-top: 10px;
-      font-size: 12px;
-      color: #7777A0;
-      letter-spacing: 1.4px;
-      text-transform: uppercase;
-      font-weight: 500;
+      font-size: 14px;
+      color: #FF4FA3;
+      font-weight: 700;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                   'Noto Sans Tamil', system-ui, sans-serif;
+      letter-spacing: 0.2px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
       text-align: center;
+    }
+
+    /* The heart was a bare &#10084; glyph, so it inherited the line's
+       colour and rendered as a pink/mauve outline instead of the red
+       heart Nizam expects. Coloured explicitly, and the emoji-variation
+       selector is dropped in the markup so it stays a TEXT glyph we can
+       colour rather than a platform emoji we cannot. */
+    .a1-heart {
+      color: #E53935;
+      font-weight: 400;
+      /* Optical alignment: the glyph sits high in its em box. */
+      display: inline-block;
+      transform: translateY(0.5px);
     }
 
     .splash-tagline {
       margin-top: 6px;
       font-size: 10px;
-      color: #7B6FE0;
+      color: #C77DA6;
       font-weight: 600;
       letter-spacing: 0.8px;
       text-align: center;
     }
 
     .splash-loader {
-      margin-top: 40px;
-      width: 48px;
-      height: 48px;
-      border: 3px solid rgba(123, 111, 224, 0.15);
-      border-top-color: #7B6FE0;
+      margin-top: 28px;
+      width: 34px;
+      height: 34px;
+      border: 3px solid rgba(255, 79, 163, 0.15);
+      border-top-color: #FF4FA3;
       border-radius: 50%;
       animation: spin 1s linear infinite;
-      box-shadow: 0 0 20px rgba(123, 111, 224, 0.3);
+      box-shadow: 0 0 20px rgba(255, 79, 163, 0.25);
     }
 
+    /* Aug 28 2026 (Nizam: "loading text and bottom text color namma pink
+       la ila and font neat ah ila"). Was #8A4E72 — a muted mauve that
+       read as grey-brown next to the pink spinner, not as our brand at
+       all. Both lines now use the brand pink #FF4FA3 (the exact value
+       the loader ring already uses, so the three elements finally match)
+       and set the font stack EXPLICITLY. They were inheriting whatever
+       the UA default was, which is what made them look unpolished:
+       -apple-system/Segoe UI are the system faces that render crisply at
+       these small sizes, with antialiasing hinted and a touch of
+       letter-spacing so 12px does not look cramped. */
     .splash-status {
-      margin-top: 20px;
-      font-size: 12px;
-      color: #7777A0;
-      font-weight: 500;
+      margin-top: 14px;
+      font-size: 12.5px;
+      color: #FF4FA3;
+      font-weight: 600;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                   'Noto Sans Tamil', system-ui, sans-serif;
+      letter-spacing: 0.3px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
       animation: fadeInOut 2s ease-in-out infinite;
+    }
+
+    /* ==============================================================
+       SPLASH: logo on plain white (Aug 28 2026)
+       ==============================================================
+       REMOVED: the tricolour smoke glow (.a1-glow-wrap / .a1-glow /
+       @keyframes a1Smoke). Nizam: "logo varrapa screen white ah
+       iruktum, color glowing remove pannu".
+
+       The new logo carries the tricolour itself, so the animated
+       saffron/green haze behind it was competing with the artwork
+       rather than framing it. The screen is now exactly what the
+       .splash-screen rule already set: solid #FFFFFF.
+
+       Deleting it also removes two full-viewport compositor layers
+       that animated for the whole of a cold boot — on the weak Erode
+       connections this splash exists to cover, that is time given back
+       to the Flutter engine download.
+    */
+    .a1-splash-core {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .a1-splash-logo {
+      width: 200px;
+      height: auto;
+      /* Fades in rather than popping, so a slow decode doesn't show as
+         a flash of empty white. */
+      animation: a1LogoIn 900ms ease-out both;
+    }
+
+    @keyframes a1LogoIn {
+      from { opacity: 0; transform: scale(0.94); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+
+    .a1-splash-foot {
+      position: absolute;
+      bottom: 38px;
+      left: 0;
+      right: 0;
+      z-index: 1;
+      text-align: center;
+    }
+
+    /* Respect the OS "reduce motion" setting: the glow settles at a
+       readable mid-state instead of breathing. */
+    @media (prefers-reduced-motion: reduce) {
+      .a1-splash-logo { animation: none; }
+    }
+
+    @media (max-width: 380px) {
+      .a1-splash-logo { width: 158px; }
     }
 
     @keyframes logoPulse {
@@ -276,15 +877,17 @@
       }
     }
 
-    /* Dark mode support */
+    /* Splash is a fixed white/pink brand look regardless of system
+       light/dark preference — see BrandedLoadingScreen (Flutter side)
+       for the matching design this mirrors. */
     @media (prefers-color-scheme: light) {
       .splash-screen {
-        background: linear-gradient(135deg, #F5F5FA 0%, #FFFFFF 50%, #F5F5FA 100%);
+        background: #FFFFFF;
       }
 
       .splash-subtitle,
       .splash-status {
-        color: #666680;
+        color: #FF4FA3;
       }
     }
   </style>
@@ -292,6 +895,16 @@
   <!-- Google Fonts -->
   <link rel="stylesheet"
     href="https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;500;600;700&display=swap">
+
+  <!-- cropperjs — required by the image_cropper package's Web
+       implementation (Aug 12 2026, Hero Payment QR upload). Only used
+       by hero_register_screen.dart / hero_payment_qr_screen.dart's
+       crop-to-square step; every other app/screen is unaffected. Kept
+       here (not per-flavor) since web/index.html is shared across all
+       4 flavors' web builds — a small CDN CSS+JS pair costs nothing on
+       screens that never open the cropper. -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
 
   <!-- Structured Data (JSON-LD) -->
   <script type="application/ld+json">
@@ -394,196 +1007,377 @@
            build/app/outputs/flutter-apk/app-customer-release.apk  →  customer_app.apk
            build/app/outputs/flutter-apk/app-hero-release.apk      →  hero_app.apk
            build/app/outputs/flutter-apk/app-admin-release.apk     →  admin_app.apk
-      3. Drop all 3 files into:  web/   (same folder as this index.html)
-      4. Run:  firebase deploy
-      5. Done! All 3 download buttons below immediately serve the new APKs.
+      3. FIX: instead of manual renaming/dropping, upload the release
+         APKs (allin1-customer.apk / allin1-hero.apk / allin1-admin.apk)
+         to the myallin1/Allin1-update-release GitHub repo's latest
+         release (see build_apk_release.ps1 at repo root). The buttons
+         below point at /releases/latest/download/... so they always
+         serve the newest release automatically.
     ================================================================
   -->
 
-  <!-- APK Download Floating Banner (hidden until Flutter frame, shown on landing) -->
-  <div id="apk-download-bar" style="
-    display: none;
-    position: fixed;
-    bottom: 80px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: linear-gradient(135deg, #1A1A26 0%, #20202E 100%);
-    border: 1px solid rgba(255,79,163,0.35);
-    border-radius: 18px;
-    padding: 16px 20px;
-    max-width: 360px;
-    width: calc(100% - 40px);
-    box-shadow: 0 8px 32px rgba(255,79,163,0.18);
-    z-index: 88888;
-    font-family: 'Segoe UI', sans-serif;
-  ">
-    <p style="margin:0 0 12px 0; color:#EEEEF5; font-size:13px; font-weight:700; text-align:center;">
-      📲 Download NJ TECH Apps
-    </p>
-    <div style="display:flex; flex-direction:column; gap:8px;">
-      <a href="https://github.com/myallin1/Allin1-update-release/releases/download/v1.0.0/customer_app.apk" download="customer_app.apk" style="
-        display:flex; align-items:center; justify-content:center; gap:8px;
-        background:linear-gradient(135deg,#FF4FA3,#BE2A7A);
-        color:#fff; text-decoration:none; font-size:13px; font-weight:700;
-        padding:10px 16px; border-radius:12px;">
-        🛒 Download Customer App
-      </a>
-      <a href="https://github.com/myallin1/Allin1-update-release/releases/download/v1.0.0/hero_app.apk" download="hero_app.apk" style="
-        display:flex; align-items:center; justify-content:center; gap:8px;
-        background:linear-gradient(135deg,#7B6FE0,#5A50C8);
-        color:#fff; text-decoration:none; font-size:13px; font-weight:700;
-        padding:10px 16px; border-radius:12px;">
-        🏍️ Download Hero App
-      </a>
-      <!-- Admin APK excluded from public banner — distributed separately -->
-    </div>
-    <button id="apk-bar-dismiss" style="
-      display:block; margin:10px auto 0; background:transparent;
-      border:none; color:#7777A0; font-size:11px; cursor:pointer;">
-      Dismiss
-    </button>
-  </div>
+  <!-- ================================================================
+       APK Download Floating Banner — REMOVED (Nizam: "ovvoru thadava
+       app open pannumbothum bottom la download customer app and hero
+       app nu kaatuthu, customer update pannunalum kaata kudathu").
+       This repeated every 24h via a localStorage dismiss timestamp,
+       which read as "shows every time I open the app" to customers.
+       Deleted outright rather than just widened to a longer/forever
+       dismiss window — this banner was redundant with the styled
+       "Install MyAllin1" PWA prompt further below (#a1-install), which
+       already offers the install path without nagging on every visit.
+       Since web/index.html is shared by all four flavors (customer,
+       hero, seller, admin — see deploy_web.ps1's header comment), this
+       single removal takes it off every app at once.
+  ================================================================ -->
+  <!-- ================================================================
+       OLD PWA install prompt REMOVED (Aug 11 2026 — Nizam: "both the
+       new Tricolor banner AND the old install button are showing at
+       the same time").
 
-  <script>
-    // T3: Show APK download bar after Flutter first frame so it doesn't
-    // block the splash screen. Dismisses for 24h via localStorage.
-    window.addEventListener('flutter-first-frame', function () {
-      var bar = document.getElementById('apk-download-bar');
-      var dismissed = localStorage.getItem('apk-bar-dismissed');
-      var dismissedAt = parseInt(dismissed || '0', 10);
-      var now = Date.now();
-      if (!dismissed || (now - dismissedAt) > 86400000) {
-        setTimeout(function () {
-          if (bar) bar.style.display = 'block';
-        }, 3000);
-      }
-    });
-    var dismissBtn = document.getElementById('apk-bar-dismiss');
-    if (dismissBtn) {
-      dismissBtn.addEventListener('click', function () {
-        var bar = document.getElementById('apk-download-bar');
-        if (bar) bar.style.display = 'none';
-        localStorage.setItem('apk-bar-dismissed', String(Date.now()));
-      });
-    }
-  </script>
-  <!-- PWA Install Prompt -->
-  <div id="pwa-install-prompt" class="pwa-prompt"
-    style="display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #1A1A26 0%, #20202E 100%); border: 1px solid rgba(123, 111, 224, 0.3); border-radius: 16px; padding: 20px; max-width: 340px; box-shadow: 0 10px 40px rgba(0,0,0,0.4); z-index: 99999;">
-    <div class="pwa-prompt-content">
-      <div style="display: flex; align-items: center; margin-bottom: 12px;">
-        <div
-          style="width: 40px; height: 40px; background: linear-gradient(135deg, #7B6FE0 0%, #E07C6F 100%); border-radius: 12px; display: flex; justify-content: center; align-items: center; font-size: 24px; margin-right: 12px;">
-          🛒</div>
-        <div>
-          <h3
-            style="margin: 0; font-size: 16px; font-weight: 700; color: #EEEEF5; font-family: 'Noto Sans Tamil', sans-serif;">
-            Install App</h3>
-          <p style="margin: 2px 0 0 0; font-size: 11px; color: #7777A0;">Get the full experience</p>
-        </div>
-      </div>
-      <ul style="margin: 0 0 16px 0; padding-left: 20px; font-size: 12px; color: #9B9BC7;">
-        <li style="margin-bottom: 4px;">✓ Works offline</li>
-        <li style="margin-bottom: 4px;">✓ Fast loading</li>
-        <li style="margin-bottom: 4px;">✓ No app store needed</li>
-      </ul>
-      <div style="display: flex; gap: 10px;">
-        <button id="pwa-install-btn"
-          style="flex: 1; background: linear-gradient(135deg, #7B6FE0 0%, #9B8FF0 100%); color: white; border: none; border-radius: 10px; padding: 12px 16px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: 'Noto Sans Tamil', sans-serif;">Install</button>
-        <button id="pwa-dismiss-btn"
-          style="flex: 1; background: transparent; color: #7777A0; border: 1px solid rgba(123, 111, 224, 0.3); border-radius: 10px; padding: 12px 16px; font-size: 14px; font-weight: 500; cursor: pointer; font-family: 'Noto Sans Tamil', sans-serif;">Later</button>
-      </div>
+       There were TWO independent beforeinstallprompt listeners in this
+       file, each rendering its own banner — the old dark card here, and
+       the new Tricolor one further down. Both called preventDefault(),
+       so the browser suppressed its native chip and showed two custom
+       UIs instead of none.
+
+       IMPORTANT: the old block also owned trackInstall(), which
+       increments `poster_qr_pwa_installs` for the QR poster campaign.
+       That logic has been PORTED into the new banner rather than
+       deleted — removing this block without porting it would have
+       silently killed poster-campaign install tracking with no error.
+  ================================================================ -->
+
+  <!-- ================================================================
+       Splash Screen  (rebuilt Aug 19 2026, per Nizam)
+       ================================================================
+       REMOVED: the India route-map SVG (route line, waypoints, bike
+       icon, four animating riders) and the bottom "MyAllin1 by NJ TECH
+       & BAPX" title.
+
+       REPLACED WITH: the Myallin1 SuperApp logo, sitting in a saffron
+       and green glow that spreads out from behind it like smoke, with
+       the spinner and loading text directly BELOW the logo, and only
+       "Made with in Erode" kept at the bottom.
+
+       WHY THIS IS CHEAP ENOUGH TO RUN ON THE FIRST FRAME
+       This is the very first thing painted, while the Flutter engine
+       and Firebase are still loading, on budget Android phones. So the
+       glow is built from exactly two radial-gradient layers animated
+       ONLY on transform/opacity - both GPU-composited properties that
+       never trigger layout or paint. Animating width/height or the
+       gradient stops themselves would repaint a full-screen element
+       every frame and actively slow down the boot it is covering.
+
+       The old riders used `offset-distance` (CSS Motion Path), which
+       forces a geometry recalculation per frame and is the single most
+       expensive thing that was on this screen.
+  ================================================================ -->
+  <div class="splash-screen visible" id="splash-screen" role="progressbar" aria-label="Allin1 Super App loading">
+
+    <!-- Logo + spinner + status, as one centred stack -->
+    <div class="a1-splash-core">
+      <!-- WebP first, PNG fallback (Aug 19 2026).
+           The PNG is 147 KB; the same image as WebP at the size this
+           is actually drawn (416x512, enough for 2x on a 200px box) is
+           18 KB. That is an 8x saving on an asset marked
+           fetchpriority="high", i.e. one that competes with the
+           Flutter engine download for the very first bytes of a cold
+           load. On a weak Erode connection that difference is the
+           logo appearing about a second sooner.
+           <picture> degrades safely: any browser that doesn't take
+           the WebP simply uses the <img> below it. -->
+      <picture>
+        <source srcset="icons/splash_logo.webp" type="image/webp" />
+        <img class="a1-splash-logo" src="splash_logo.png"
+             width="200" height="244"
+             alt="Myallin1 SuperApp" fetchpriority="high" decoding="async" />
+      </picture>
+      <div class="splash-loader" aria-hidden="true"></div>
+      <div class="splash-status">Loading...</div>
+    </div>
+
+    <!-- Bottom line - the only text Nizam wanted kept -->
+    <div class="a1-splash-foot">
+      <div class="splash-subtitle">Made with <span class="a1-heart">&#10084;</span> in Erode</div>
     </div>
   </div>
 
-  <!-- PWA Install Script -->
+  <!-- Custom "Install MyAllin1" banner (hidden until the browser tells
+       us the app is actually installable — see the beforeinstallprompt
+       handler below). -->
+  <div class="a1-install" id="a1-install" role="dialog"
+       aria-label="Install MyAllin1">
+    <div class="a1-install-flag"></div>
+    <div class="a1-install-body">
+      <img class="a1-install-icon" id="a1-install-icon"
+           src="icons/Icon-customer-192.png" alt="MyAllin1" />
+      <div class="a1-install-text">
+        <div class="a1-install-title">Install MyAllin1</div>
+        <div class="a1-install-sub">Faster, works offline &middot; Made in Erode</div>
+      </div>
+      <button class="a1-install-btn" id="a1-install-btn" type="button">Install</button>
+      <button class="a1-install-close" id="a1-install-close" type="button"
+              aria-label="Not now">&times;</button>
+    </div>
+  </div>
+
   <script>
+    // ================================================================
+    // Custom install prompt (Aug 11 2026 — Nizam's Tricolor banner)
+    // ================================================================
+    // Chrome fires `beforeinstallprompt` ONLY when the app genuinely
+    // meets installability criteria (manifest + SW + not already
+    // installed). We preventDefault() to suppress the browser's own
+    // generic chip, stash the event, and show our banner instead. The
+    // native prompt can only be triggered from a real user gesture, so
+    // our Install button calls .prompt() directly inside the click
+    // handler — deferring it (setTimeout, await, etc.) would make the
+    // browser silently discard it.
     (function () {
       var deferredPrompt = null;
-      var pwaPrompt = document.getElementById('pwa-install-prompt');
-      var installBtn = document.getElementById('pwa-install-btn');
-      var dismissBtn = document.getElementById('pwa-dismiss-btn');
+      var banner = document.getElementById('a1-install');
+      var btn = document.getElementById('a1-install-btn');
+      var closeBtn = document.getElementById('a1-install-close');
+      var DISMISS_KEY = 'allin1_install_dismissed_at';
+      // Re-ask after 7 days rather than never — a customer who dismissed
+      // once while busy shouldn't lose the option permanently, but
+      // nagging on every visit is how banners get hated.
+      var RE_ASK_MS = 7 * 24 * 60 * 60 * 1000;
 
-      // Check if already dismissed
-      if (localStorage.getItem('pwa-dismissed') === 'true') {
-        pwaPrompt.style.display = 'none';
+      // PORTED from the old (now removed) install prompt — increments
+      // `poster_qr_pwa_installs` on app_usage_stats/funnel when the
+      // install came from a ?source=poster_campaign link. This feeds the
+      // Admin "Customer Usage Tracking" funnel; deleting the old block
+      // without carrying this across would have silently zeroed that
+      // metric. Uses the Firestore REST commit endpoint directly because
+      // this runs before Flutter (and therefore the Firestore SDK) has
+      // booted. keepalive:true so it still completes if the page is
+      // navigating away as the install proceeds.
+      function trackInstall() {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          if (params.get('source') === 'poster_campaign') {
+            var body = {
+              writes: [{
+                update: { name: 'projects/erode-super-app/databases/(default)/documents/app_usage_stats/funnel', fields: {} },
+                updateMask: { fieldPaths: [] },
+                updateTransforms: [
+                  { fieldPath: 'poster_qr_pwa_installs', increment: { integerValue: '1' } },
+                  { fieldPath: 'updatedAt', setToServerValue: 'REQUEST_TIME' }
+                ]
+              }]
+            };
+            fetch('https://firestore.googleapis.com/v1/projects/erode-super-app/databases/(default)/documents:commit', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+              keepalive: true
+            }).catch(function(){});
+          }
+        } catch (e) {}
       }
 
-      // Listen for install prompt
+      function recentlyDismissed() {
+        try {
+          var t = parseInt(localStorage.getItem(DISMISS_KEY) || '0', 10);
+          return t > 0 && (Date.now() - t) < RE_ASK_MS;
+        } catch (e) { return false; }
+      }
+
+      // ================================================================
+      // ROOT CAUSE FIX (Aug 17 2026) — "hero pwa open anathum hero pwa
+      // install pandra button kaatala, seller kum kaatala, admin kum
+      // kaatala, only customer pwa kulla pona mattum install kaatuthu".
+      // ================================================================
+      // This was an EVENT-ORDER RACE, not a manifest or flavor problem
+      // (all four manifests are structurally identical and valid, and
+      // all four register the same service worker).
+      //
+      // The old code registered its 'flutter-first-frame' listener
+      // INSIDE the 'beforeinstallprompt' handler. flutter-first-frame
+      // fires exactly ONCE. So the banner could only ever appear if
+      // Chrome delivered beforeinstallprompt BEFORE Flutter painted:
+      //
+      //   beforeinstallprompt -> then first-frame   = banner shows
+      //   first-frame -> then beforeinstallprompt   = listener attached
+      //                                               to an event that
+      //                                               already fired,
+      //                                               banner NEVER shows
+      //
+      // Which order you get depends on how long the app takes to paint.
+      // CUSTOMER is by far the heaviest bundle and the slowest first
+      // frame, so beforeinstallprompt almost always won that race and
+      // the banner worked. HERO, SELLER and ADMIN are smaller and paint
+      // sooner, so they usually lost it — and silently showed nothing.
+      // The symptom looked flavor-specific; the cause was just speed.
+      //
+      // Fixed by removing the nesting: both events now set a flag and
+      // call one shared function, so the banner appears whichever order
+      // they arrive in.
+      var firstFrameSeen = false;
+      var bannerShown = false;
+
+      function maybeShowInstallBanner() {
+        if (bannerShown) return;
+        if (!banner || !deferredPrompt) return;
+        if (!firstFrameSeen) return;
+        if (recentlyDismissed()) return;
+        bannerShown = true;
+        // Still held back a beat after first paint — showing it over the
+        // splash would cover the boot the user is waiting on, and on a
+        // budget phone it competes for layout work during the most
+        // expensive moment of startup.
+        setTimeout(function () {
+          if (banner && deferredPrompt) banner.classList.add('show');
+        }, 1200);
+      }
+
+      window.addEventListener('flutter-first-frame', function () {
+        firstFrameSeen = true;
+        maybeShowInstallBanner();
+      });
+
       window.addEventListener('beforeinstallprompt', function (e) {
         e.preventDefault();
         deferredPrompt = e;
-        // Show prompt after 10 seconds
-        setTimeout(function () {
-          if (localStorage.getItem('pwa-dismissed') !== 'true') {
-            pwaPrompt.style.display = 'block';
-            pwaPrompt.classList.add('visible');
-          }
-        }, 10000);
+        maybeShowInstallBanner();
       });
 
-      // Handle install button click
-      if (installBtn) {
-        installBtn.addEventListener('click', function () {
-          if (deferredPrompt) {
-            deferredPrompt.prompt();
-            deferredPrompt.userChoice.then(function (choiceResult) {
-              if (choiceResult.outcome === 'accepted') {
-                pwaPrompt.style.display = 'none';
-              }
-              deferredPrompt = null;
-            });
-          }
+      if (btn) {
+        btn.addEventListener('click', function () {
+          if (!deferredPrompt) return;
+          if (banner) banner.classList.remove('show');
+          deferredPrompt.prompt();
+          deferredPrompt.userChoice.then(function (choiceResult) {
+            if (choiceResult && choiceResult.outcome === 'accepted') {
+              trackInstall();
+            }
+            // Cleared either way: the event is single-use, and Chrome
+            // will fire a fresh one later if the app is still
+            // installable.
+            deferredPrompt = null;
+          });
         });
       }
 
-      // Handle dismiss button click
-      if (dismissBtn) {
-        dismissBtn.addEventListener('click', function () {
-          pwaPrompt.style.display = 'none';
-          localStorage.setItem('pwa-dismissed', 'true');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', function () {
+          if (banner) banner.classList.remove('show');
+          try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch (e) {}
         });
       }
 
-      // Hide on app installed
+      // Installed (via our banner or the browser menu) — never show it
+      // again this session.
       window.addEventListener('appinstalled', function () {
-        pwaPrompt.style.display = 'none';
-        localStorage.removeItem('pwa-dismissed');
+        deferredPrompt = null;
+        if (banner) banner.classList.remove('show');
+        try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch (e) {}
       });
     })();
   </script>
-
-  <!-- Splash Screen -->
-  <div class="splash-screen visible" id="splash-screen" role="progressbar" aria-label="Allin1 Super App loading">
-    <div class="splash-logo" aria-hidden="true" style="background:none;box-shadow:none;border-radius:20px;width:110px;height:110px;display:flex;align-items:center;justify-content:center;">
-      <img src="assets/assets/images/bapx_nj_logo.gif" width="100" height="100"
-        style="border-radius:20px;object-fit:contain;"
-        onerror="this.style.display='none'">
-    </div>
-    <div class="splash-title" style="background:linear-gradient(135deg,#FFD700,#FF6B35);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;">NJ BAPX</div>
-    <div class="splash-subtitle" style="color:#7777A0;font-size:13px;">my allin1 · Erode</div>
-    <div class="splash-tagline">Powered by NJ TECH</div>
-    <div class="splash-loader" aria-hidden="true"></div>
-    <div class="splash-status">Loading...</div>
-  </div>
 
   <!-- Splash Screen Script -->
   <script>
     (function () {
       var splash = document.getElementById('splash-screen');
       var status = document.querySelector('.splash-status');
+      var retryBtn = document.getElementById('splash-retry-btn');
+      // Seeded from the <head> latch — if Flutter already painted before
+      // this script ran, we must know about it immediately rather than
+      // waiting for an event that has already been and gone.
+      var firstFrameFired = window.__a1FirstFrame === true;
 
-      // Update status text
+      // Belt-and-braces: even if BOTH the latch and the event somehow
+      // failed, a rendered Flutter app puts its own host element in the
+      // DOM. Checking for it means we can never reload a working app.
+      function flutterHasPainted() {
+        return window.__a1FirstFrame === true ||
+          firstFrameFired ||
+          !!document.querySelector('flutter-view, flt-glass-pane, flt-scene-host');
+      }
+
+      // FIX (Aug 11 2026 — Nizam's "2nd open pannumbothu 2 type
+      // animations varuthu, app slow feel aaguthu"): this HTML splash is
+      // SEPARATE from the Flutter-side splash video (which we already
+      // made first-launch-only in main_customer.dart). It used to render
+      // the full branded screen — logo, title, subtitle, spinner AND a
+      // status line cycling through 4 different messages every 800ms — on
+      // EVERY single PWA open. Two of those messages ("Loading
+      // resources...", "Almost ready...") are exactly the two "different
+      // animations" reported, and the cycling text is what makes a fast
+      // boot still FEEL slow: motion on screen reads as "still working".
+      //
+      // Repeat opens now get a bare, static splash: same background so
+      // there's no white flash, but no logo, no text, no spinner, no
+      // interval timer. Flutter still needs a moment to boot (we can't
+      // remove that), but nothing animates, so it reads as instant rather
+      // than as a loading screen. The full branded splash is preserved
+      // for the first-ever visit, where it's genuinely doing useful work
+      // covering a cold download.
+      var isRepeatVisit = false;
+      try {
+        isRepeatVisit = localStorage.getItem('allin1_web_splash_seen') === '1';
+        localStorage.setItem('allin1_web_splash_seen', '1');
+      } catch (e) {
+        // localStorage blocked (private mode / strict settings) — fall
+        // back to the full splash rather than breaking boot.
+        isRepeatVisit = false;
+      }
+
+      var statusInterval = null;
+      if (splash) splash.classList.add('coldboot');
+
+      // The animated, branded experience runs on every visit now.
       var statuses = ['Initializing...', 'Loading resources...', 'Preparing app...', 'Almost ready...'];
       var index = 0;
-      var statusInterval = setInterval(function () {
+      statusInterval = setInterval(function () {
         index = (index + 1) % statuses.length;
         if (status) status.textContent = statuses[index];
       }, 800);
 
       // Hide splash when Flutter is ready
       window.addEventListener('flutter-first-frame', function () {
+        firstFrameFired = true;
+        window.__a1FirstFrame = true;
         clearInterval(statusInterval);
+
+        // FIX (Aug 28 2026): clear the auto-retry latch on a SUCCESSFUL
+        // boot. It was set before a recovery reload and then never
+        // removed, so one slow boot permanently disabled the watchdog's
+        // reload for the rest of the PWA session — every later stuck
+        // boot in that session just sat on "Network is very slow" with
+        // no recovery at all. Cleared here, the self-heal is available
+        // again the next time it is genuinely needed.
+        try { sessionStorage.removeItem('autoRetried'); } catch (e) {}
+
+        // FIX (Aug 20 2026 — version-update flow): if an update was
+        // detected in <head>'s version-check block, window.__a1Updating
+        // is true and a page reload is already queued. Keep the splash
+        // visible (it's showing "Updating Allin1...") so the user sees
+        // the update message rather than a flash of the old app UI.
+        if (window.__a1Updating) {
+          return; // reload will happen in ~800ms; leave splash in place
+        }
+
+        // HARDENED (Aug 11 2026): on a REPEAT visit tear the splash down
+        // synchronously — no fade, no 400ms transition, no extra frame.
+        // The splash exists on repeat boots only to cover main.dart.js
+        // parse; the instant that's done it must be gone, not gracefully
+        // dissolving. Returning early also skips the 400ms setTimeout
+        // below entirely.
+        if (isRepeatVisit) {
+          if (splash) {
+            splash.classList.add('instant-hide');
+            splash.style.display = 'none';
+          }
+          return;
+        }
+
+        // Cold boot only: let the shuffle settle rather than being cut
+        // mid-animation.
+        if (splash) splash.classList.add('resolving');
         if (splash) {
           splash.classList.add('hidden');
           splash.classList.remove('visible');
@@ -593,52 +1387,458 @@
         }
       }, { once: true });
 
-      // Fallback: hide after 8 seconds
+      // FIX (black/white-screen-stuck audit, per Nizam's request): this
+      // used to unconditionally HIDE the splash after 8 seconds no
+      // matter what — including when Flutter genuinely failed to boot
+      // (slow/dropped network mid-download on a weak Erode connection,
+      // a JS exception, low-memory phone killing the tab's script).
+      // Since <body> has no background color of its own, hiding the
+      // splash in that failure case left a literally blank white page
+      // with NO error, NO retry — just silence forever, matching
+      // exactly what Nizam reported ("black/white screen la
+      // ninnuruthu"). Now: if flutter-first-frame never fired by 8s,
+      // keep the splash visible and swap the loader for a Retry button
+      // instead of hiding into a dead page.
       setTimeout(function () {
+        // Guarded by flutterHasPainted(), not the local flag alone — the
+        // flag could be stale if the event fired before this script ran.
+        if (flutterHasPainted()) return;
         clearInterval(statusInterval);
-        if (splash && splash.classList.contains('visible')) {
-          splash.classList.add('hidden');
-          splash.classList.remove('visible');
-          setTimeout(function () {
-            splash.style.display = 'none';
-          }, 400);
+        if (status) status.textContent = 'Taking longer than usual to load.';
+        
+        // Automatic background retry instead of manual button.
+        // We only do this if it's a repeat visit, because on a repeat visit
+        // Hive Cache / pwa_fallback_sw are ready, so a reload can successfully
+        // open the app offline. If it's a first visit, reloading just spins again.
+        // FIX: Also disable this on localhost, since DDC compilation can easily 
+        // exceed 20 seconds and we don't want to abort the compiler.
+        var isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        if (isRepeatVisit && !isLocalhost) {
+          setTimeout(function() {
+            if (!flutterHasPainted()) {
+              // Prevent infinite reload loop on slow networks
+              var hasAutoRetried = sessionStorage.getItem('autoRetried') === 'true';
+              if (!hasAutoRetried) {
+                sessionStorage.setItem('autoRetried', 'true');
+                if (status) status.textContent = 'Retrying connection...';
+                window.location.reload();
+              } else {
+                if (status) status.textContent = 'Network is very slow. Please wait...';
+              }
+            }
+          }, 12000); // Wait 12 more seconds (total 20s) before auto-reloading ONE TIME
         }
       }, 8000);
+
+      // ── PWA BACK-BUTTON GUARD ──────────────────────────────────
+      // FIX (Aug 11 2026 — Nizam: "mobile la iruka back option press
+      // panni back pona app close agi reopen aguthu apayum splash
+      // varrathunala delay aaguthu"):
+      //
+      // ROOT CAUSE: in an installed PWA, Android's hardware Back maps to
+      // browser Back. Flutter pushes a browser-history entry for NAMED
+      // routes, but most of this app navigates with Navigator.push() +
+      // MaterialPageRoute, which does NOT add one. So browser history
+      // often holds just the single initial entry — meaning the very
+      // first hardware-Back press navigates AWAY from the app entirely,
+      // closing the PWA. Reopening then pays the full cold-boot cost
+      // (splash + Flutter bootstrap), which is the delay reported. The
+      // in-app back arrow was unaffected because it drives Flutter's own
+      // Navigator directly, never touching browser history — exactly
+      // matching "screen back button works, phone back button doesn't".
+      //
+      // FIX: seed one extra history entry at boot, and on every popstate
+      // immediately push it back. Hardware Back then always lands on our
+      // sentinel instead of exiting, and Flutter's own PopScope handlers
+      // (see dashboard_screen.dart's exit-confirmation dialog) stay in
+      // control of what Back actually means. Deliberately NOT applied to
+      // plain browser tabs — only to the installed/standalone PWA, since
+      // trapping Back in a normal tab would break the user's expectation
+      // of navigating back to whatever page they came from.
+      try {
+        var isStandalone =
+          window.matchMedia('(display-mode: standalone)').matches ||
+          window.navigator.standalone === true;
+        if (isStandalone) {
+          history.pushState({ allin1Guard: true }, '');
+          window.addEventListener('popstate', function () {
+            // Re-arm the sentinel so the next Back press is also caught.
+            history.pushState({ allin1Guard: true }, '');
+          });
+        }
+      } catch (e) {
+        // History API unavailable — degrade to previous behaviour rather
+        // than breaking boot.
+      }
+
+      setTimeout(function () {
+        if (!flutterHasPainted()) {
+          console.warn('[PWA] App is taking exceptionally long to boot. Waiting for user to click Retry if needed.');
+        }
+      }, 20000);
     })();
   </script>
 
   <!-- ── PWA Auto-Update: Force fresh code on new deploy ──────────── -->
   <script>
-    // ── WebGL context loss recovery: force repaint on resume ──
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        window.dispatchEvent(new Event('resize'));
-      }
-    });
+    // ── WebGL context loss recovery & Secure Task Switcher ──
+    // FIX (Aug 20 2026 — Nizam: "pwa lock panni reopen pannuna loading
+    // nu athe page laye nikkuthu no response"):
+    //
+    // ROOT CAUSE: when the device was unlocked (visible), the old code
+    // waited 450ms then added .hidden (opacity:0 + visibility:hidden)
+    // and only set display:none after ANOTHER 400ms transition. On slow
+    // phones this 850ms total window races against the CanvasKit resize
+    // events and can leave the splash permanently blocking the UI if
+    // the display:none setTimeout is dropped by the browser's timer
+    // throttling (which Chrome throttles on page-visibility-change for
+    // pages that are being "hidden" even briefly).
+    //
+    // FIX: use instant-hide (display:none !important) instead of the
+    // slow fade chain on resume. The splash was only up for a fraction
+    // of a second anyway (just to cover the WebGL black-flash), so
+    // a graceful fade-out here adds nothing but risk. The resize events
+    // still run first to restore CanvasKit, THEN the splash is nuked.
+    // ── ROOT CAUSE FIX (Aug 28 2026 — Nizam: "mobile lock pannitu pwa
+    //    open pannua splash screen laye app suththitrukku") ──────────
+    //
+    // The old resume handler had ONE path back from the splash:
+    //
+    //     if (window.__a1FirstFrame === true) setTimeout(hide, 200);
+    //
+    // Both halves of that line are a gap.
+    //
+    // GAP 1 — the flag, not the DOM. `hidden` raised the splash on EVERY
+    // backgrounding, including one that happens mid cold-boot. Lock the
+    // screen while Flutter is still booting and Android FREEZES the page
+    // (Page Lifecycle), so `flutter-first-frame` can fire during the
+    // frozen window, or the latch can be missed entirely. On unlock
+    // __a1FirstFrame is still false, the branch is skipped, and nothing
+    // else in the file ever takes the splash down again — the 8s
+    // watchdog had already run (its timer was queued at boot and drains
+    // on resume) and the `flutter-first-frame` listener is {once:true}
+    // and already spent. Result: a fully-booted, fully-interactive app
+    // sitting underneath a splash that spins forever. That is the exact
+    // report. Hiding is now driven by flutterHasPainted() — the DOM
+    // check for a real <flutter-view>/<flt-glass-pane> — so a painted
+    // app is never left covered because an event was missed.
+    //
+    // GAP 2 — a single throttled timer. One setTimeout(200) was the only
+    // scheduled hide. Chrome throttles/coalesces timers around a
+    // freeze-resume transition, and a dropped one meant the splash never
+    // came down. The hide is now idempotent and re-driven from a painted
+    // frame, a webglcontextrestored event, and three timed backstops, so
+    // any ONE of them succeeding is enough. Belt and braces, all cheap.
+    //
+    // GAP 3 — only one event was listened to. A PWA resumed from the
+    // Android lock screen can come back through bfcache (`pageshow`
+    // persisted) or the Page Lifecycle `resume` event without a clean
+    // visibilitychange pair. All four entry points now feed one handler.
+    //
+    // GAP 4 (Nizam: "switch and lockscreen time la delay agakudathu,
+    // udane open aganum jet speed la") — the old handler paid a FLAT
+    // 200ms before uncovering the app on EVERY resume. That wait exists
+    // for exactly one reason: CanvasKit can lose its WebGL context while
+    // the screen is off, and uncovering before the context is rebuilt
+    // shows a black canvas. But the context is NOT always lost — a plain
+    // app-switch usually keeps it — so every resume was being charged
+    // 200ms to insure against a case that often did not happen.
+    //
+    // We now MEASURE instead of guessing, via webglcontextlost /
+    // webglcontextrestored on the real canvas:
+    //   context intact (app switch, recents tap) -> uncover on the next
+    //     painted frame, ~16-32ms; reads as instant.
+    //   context lost (the lock-screen case) -> uncover the moment
+    //     webglcontextrestored fires: faster than 200ms on a quick GPU,
+    //     and SAFER than 200ms on a slow one.
+    // The splash therefore covers the real load gap and nothing more,
+    // which is the brief.
+    (function () {
+      function splashEl() { return document.querySelector('.splash-screen'); }
 
-    if ('serviceWorker' in navigator) {
-      let refreshing = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (refreshing) return;
-        refreshing = true;
-        window.location.reload();
-      });
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/flutter_service_worker.js')
-          .then(reg => {
-            reg.addEventListener('updatefound', () => {
-              const newWorker = reg.installing;
-              if (newWorker) {
-                newWorker.addEventListener('statechange', () => {
-                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    if (confirm('🚀 New version available! Tap OK to update.')) {
-                      newWorker.postMessage({ action: 'skipWaiting' });
-                    }
-                  }
-                });
-              }
-            });
+      // -- WebGL context tracking --------------------------------
+      // Registered in the CAPTURE phase on document: Flutter's <canvas>
+      // is created inside <flutter-view> long after this script runs and
+      // is replaced on resize, so we can never hold a direct reference
+      // to it. These two events do not bubble, but they DO capture.
+      var glLost = false;
+      var glWaiters = [];
+      document.addEventListener('webglcontextlost', function () {
+        glLost = true;
+      }, true);
+      document.addEventListener('webglcontextrestored', function () {
+        glLost = false;
+        var w = glWaiters; glWaiters = [];
+        for (var i = 0; i < w.length; i++) { try { w[i](); } catch (e) {} }
+      }, true);
+
+      function flutterHasPainted() {
+        return window.__a1FirstFrame === true ||
+          !!document.querySelector('flutter-view, flt-glass-pane, flt-scene-host');
+      }
+
+      // Idempotent, unconditional teardown. No fade: the splash on a
+      // resume is only covering the WebGL repaint, and a transition is
+      // one more thing that can be throttled into never finishing.
+      function hideSplash() {
+        var splash = splashEl();
+        if (!splash) return;
+        splash.classList.add('instant-hide');
+        splash.classList.remove('visible', 'resolving');
+        splash.style.display = 'none';
+        splash.style.opacity = '';
+      }
+      // Exposed so the cold-boot script and any future caller share one
+      // implementation rather than re-deriving the class dance.
+      window.__a1HideSplash = hideSplash;
+
+      // Uncover the app as soon as it is genuinely safe to, and not one
+      // millisecond later. `attempt` is idempotent and re-checks that
+      // Flutter has painted, so it can never uncover a blank canvas and
+      // it does not matter how many times it runs.
+      function hideWhenPainted() {
+        function attempt() {
+          if (!flutterHasPainted()) return;
+          hideSplash();
+        }
+
+        if (glLost) {
+          // Lock-screen case: the GPU dropped the context. Uncover the
+          // instant it is back rather than after a fixed guess.
+          glWaiters.push(function () {
+            try { requestAnimationFrame(attempt); } catch (e) { attempt(); }
           });
+        } else {
+          // Common case (app switch, recents tap): context intact, so
+          // there is nothing to wait for. Two rAFs = one real painted
+          // frame, ~16-32ms. This is the "jet speed" path.
+          try {
+            requestAnimationFrame(function () { requestAnimationFrame(attempt); });
+          } catch (e) { attempt(); }
+        }
+
+        // Backstops only - these never run first in a healthy resume.
+        // They exist because a throttled/dropped timer, or a
+        // contextrestored event that never arrives, must not be able to
+        // strand the splash again. 1200ms is well past any real repaint.
+        setTimeout(attempt, 400);
+        setTimeout(attempt, 1200);
+        setTimeout(attempt, 2500);
+      }
+
+      function onResume() {
+        // Force CanvasKit to rebuild its WebGL context before we reveal
+        // the canvas — unchanged from before, this part worked.
+        window.dispatchEvent(new Event('resize'));
+        setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 80);
+        setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 200);
+
+        if (flutterHasPainted()) {
+          hideWhenPainted();
+          return;
+        }
+
+        // Not painted yet — we are still genuinely cold-booting. Do
+        // NOTHING here on purpose. The splash is already up and doing
+        // its job, and the existing 8s/20s boot watchdog further up this
+        // file already owns the "boot never finished" recovery. Adding a
+        // second reload path here would race that watchdog and could
+        // restart a slow-but-progressing download on a weak Erode
+        // connection, making the very problem worse. The stuck-splash
+        // bug was never in this branch: it was a PAINTED app being left
+        // covered, which hideWhenPainted() above now handles.
+      }
+
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') {
+          // Privacy screen in the task switcher + cover for the WebGL
+          // context-loss flash. Only raise it over an app that has
+          // actually painted: doing this mid cold-boot used to clobber
+          // the inline styles the boot path relies on, and the splash is
+          // already on screen at that point anyway.
+          if (!flutterHasPainted()) return;
+          var splash = splashEl();
+          if (splash) {
+            splash.classList.remove('hidden', 'resolving', 'instant-hide');
+            splash.classList.add('visible');
+            splash.style.display = 'flex';
+            splash.style.opacity = '1';
+          }
+        } else if (document.visibilityState === 'visible') {
+          onResume();
+        }
+      });
+
+      // bfcache restore — an installed PWA coming back from the Android
+      // lock screen frequently arrives here and NOT through a
+      // visibilitychange pair.
+      window.addEventListener('pageshow', function (e) {
+        if (e.persisted) onResume();
+      });
+
+      // Page Lifecycle: fired when Chrome unfreezes a frozen page.
+      document.addEventListener('resume', function () { onResume(); });
+
+      // Last resort — a standalone PWA regaining window focus.
+      window.addEventListener('focus', function () {
+        if (document.visibilityState === 'visible') hideWhenPainted();
+      });
+    })();
+
+    // ── Update detection lives in Dart now ──────────────────────────
+    //
+    // This block used to watch service-worker update events and set
+    // window.allin1UpdateAvailable for the in-app UPDATE button to
+    // read. That approach is dead:
+    //
+    //   * Flutter's current service worker UNREGISTERS ITSELF on
+    //     activate (verified on the deployed file) and has no fetch
+    //     handler, so it can never report an update.
+    //   * `--pwa-strategy` is deprecated and being removed, so
+    //     service-worker caching is not something to build on.
+    //
+    // The console showed the consequence directly:
+    //   "[PWA] update check failed: InvalidStateError: Failed to
+    //    update a ServiceWorker ... The object is in an invalid state."
+    //
+    // web_version_checker.dart now compares /version.json against the
+    // build this tab loaded with. No service worker involved, nothing
+    // deprecated, identical behaviour on every Flutter version.
+    //
+    // flutter_service_worker.js is still NOT registered here — it has
+    // no fetch handler and self-unregisters on activate, and that
+    // self-unregister ALSO force-navigates/reloads every client it
+    // controls, which caused a mobile blank-screen-after-update bug
+    // right after a fresh deploy. Still never registered.
+    //
+    // FIX (Aug 8 2026 — "namma pwa vayum mobile app mari... net ilana
+    // open agamattingithu"): pwa_fallback_sw.js used to be genuinely
+    // inert (fetch listener registered but never respondWith()'d, zero
+    // caching) purely to satisfy Chrome's installability check while
+    // side-stepping the stale-cache bug above. It now does real,
+    // network-first offline caching of the app shell — see that file's
+    // own top-of-file comment for exactly how it avoids reintroducing
+    // either the stale-forever bug or the force-reload-mid-boot bug.
+    // Net effect: online behaviour is unchanged (always the freshest
+    // deploy), but the app shell now also opens with zero network,
+    // like an installed native app.
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        // ================================================================
+        // ROOT CAUSE FIX (Aug 17 2026) — "seller app localhost la run
+        // aiduchu but romba nerama front screen laye suthittu iruku"
+        // ================================================================
+        // Symptom: localhost:5000 sits on the splash forever. DevTools
+        // shows ~2000 requests, every one "Pending", and — the tell —
+        // "0 B transferred / 0 B resources". Console shows
+        // "DDC is about to load 2009/2009 scripts with pool size = 1000".
+        //
+        // Why: `flutter run` serves a DEBUG build compiled by DDC, which
+        // is not one main.dart.js but ~2000 individual .dart.lib.js
+        // modules. This service worker's default branch below calls
+        // event.respondWith(...) for EVERY same-origin GET, and on each
+        // one it clones the response and does a cache.put(). That design
+        // is correct and cheap in production (one big bundle, a handful
+        // of files) but on a DDC build it means ~2000 requests are all
+        // funnelled through the single service-worker thread, each
+        // paying a Cache Storage write, on top of the browser's 6
+        // concurrent connections per HTTP/1.1 origin. The worker becomes
+        // the bottleneck and the boot effectively never finishes. The
+        // "0 B transferred" is the fingerprint of requests being served
+        // through a service worker rather than straight from the network.
+        //
+        // Fix: do not run the PWA worker on localhost at all. Same guard
+        // and same reasoning as the boot-watchdog's isLocalhost check
+        // further up this file, which already exists precisely because
+        // "DDC compilation can easily exceed 20 seconds".
+        //
+        // NOTHING IS REMOVED: this is a dev-machine-only guard. On
+        // my-allin1.web.app (and any real host) every line below runs
+        // exactly as before — offline app shell, cache-first heavy
+        // bundles, stale-worker self-heal, FCM worker. Only a developer
+        // hitting localhost skips it, and a developer does not need
+        // offline caching of a build they are actively recompiling.
+        //
+        // It also actively UNREGISTERS any worker already installed on
+        // localhost from previous runs — without this, the worker that
+        // is already controlling this origin keeps intercepting today's
+        // requests no matter what we skip registering now. That is why
+        // the app kept hanging across restarts.
+        const isLocalhost =
+          location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+        if (isLocalhost) {
+          navigator.serviceWorker.getRegistrations().then((regs) => {
+            for (const reg of regs) {
+              console.warn('[PWA] localhost dev build — unregistering service worker:', reg.active?.scriptURL || '(installing)');
+              reg.unregister();
+            }
+            // Drop the caches too: a cache populated by an earlier
+            // production visit to this same origin can otherwise serve a
+            // stale main.dart.js over today's DDC modules.
+            if (window.caches && caches.keys) {
+              caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+            }
+          }).catch(() => {});
+          return;
+        }
+
+        // ROOT CAUSE FIX (Aug 8 2026) — "selfie camera MissingPluginException
+        // persists even after a completely fresh rebuild + redeploy".
+        //
+        // The comments above explain why flutter_service_worker.js is no
+        // longer *registered* going forward. What they missed: any
+        // browser/device that visited this site BEFORE that change was
+        // made already has that old worker installed, active, and
+        // controlling every navigation on this origin. A service worker's
+        // fetch handler intercepts requests BEFORE they ever reach the
+        // network or respect Cache-Control headers — so Firebase Hosting's
+        // "no-cache" header on main.dart.js (see firebase.json) is
+        // completely bypassed. The old worker just keeps serving its own
+        // precached main.dart.js from whatever build was live when it was
+        // installed, forever, on that one device — regardless of how many
+        // times the app gets rebuilt and redeployed, and regardless of a
+        // manual hard-reload (a controlling service worker survives those
+        // too; only DevTools "Unregister" or Clear Site Data removes it).
+        // That precached bundle can predate camera/image_picker even being
+        // added to pubspec.yaml, which is exactly the MissingPluginException
+        // signature reported here.
+        //
+        // Fix: self-heal on load. Enumerate every registration for this
+        // origin and unregister anything that ISN'T pwa_fallback_sw.js —
+        // this only ever needs to fire once per affected device, after
+        // which only the intentionally-inert fallback worker remains.
+        //
+        // FIX (Aug 10 2026 — root cause of "Hero PWA never receives
+        // background ride/service pings"): this loop used to treat
+        // firebase-messaging-sw.js (which did not exist as a file until
+        // this same fix) the same as any other "stale" worker and
+        // unregistered it on every page load, before it ever had a
+        // chance to receive a push. Carved out an explicit exception —
+        // this is the ONLY other worker this origin intentionally runs.
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          for (const reg of regs) {
+            const url = reg.active?.scriptURL || reg.waiting?.scriptURL || reg.installing?.scriptURL || '';
+            if (!url.endsWith('/pwa_fallback_sw.js') && !url.endsWith('/firebase-messaging-sw.js')) {
+              console.warn('[PWA] Unregistering stale service worker:', url);
+              reg.unregister();
+            }
+          }
+        }).catch((err) => {
+          console.warn('[PWA] Could not enumerate service worker registrations:', err);
+        });
+
+        navigator.serviceWorker.register('/pwa_fallback_sw.js')
+          .catch(err => console.warn('[PWA] fallback service worker registration failed:', err));
+
+        // FIX (same root cause as above): firebase-messaging-sw.js must
+        // be explicitly registered too — Firebase Messaging's web SDK
+        // does NOT auto-register it, unlike some other Firebase web
+        // features. Registered at the default scope ('/'), same as
+        // pwa_fallback_sw.js; both can coexist since Firebase Messaging
+        // only intercepts push events, never fetch, so there is no
+        // routing conflict between the two workers.
+        navigator.serviceWorker.register('/firebase-messaging-sw.js')
+          .catch(err => console.warn('[PWA] firebase-messaging-sw.js registration failed:', err));
       });
     }
   </script>

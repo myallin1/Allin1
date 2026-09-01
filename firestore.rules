@@ -1,0 +1,1702 @@
+rules_version = '2';
+
+// ================================================================
+// Allin1 Super App — Firestore Security Rules
+// ================================================================
+// Isolation: Food/Grocery catalog & orders ONLY.
+// Bike Taxi pipeline remains on RTDB — these rules do NOT govern
+// ride data.
+//
+// Role model (via Firebase Auth custom claims):
+//   - {admin: true}        → Super Admin (full read/write)
+//   - {sellerId: "xxx"}    → Seller (own data only)
+//   - No claims            → Customer (read-only catalog, create orders)
+// ================================================================
+
+// ── Helper Functions ───────────────────────────────────────────
+
+function isAuth() {
+  return request.auth != null;
+}
+
+// NEW (Aug 11 2026 — Guest Mode): isAuth() above is satisfied by
+// ANONYMOUS users too, and as of Guest Mode every customer is signed in
+// anonymously from the first frame (main_customer.dart ->
+// AuthService.ensureGuestSession()). Without this helper, every guest
+// would have had exactly the same write access as a registered customer,
+// and since anonymous accounts are free and unlimited to create, that is
+// also a denial-of-wallet risk against the Spark daily quota.
+//
+// isRealUser() means "signed in with a real, contactable identity"
+// (Google today). Use it on CREATE/UPDATE for anything that costs money,
+// dispatches a hero, or needs someone we can phone about the order.
+// Do NOT use it on reads — guests must be able to browse the whole
+// catalogue freely, which is the entire point of Guest Mode.
+// HARDENED (Aug 11 2026, after the "hero never receives the booking"
+// incident): sign_in_provider describes how the CURRENT SESSION was
+// established, not what the account can now do. A guest who upgrades via
+// linkWithCredential keeps the same session — so their token can still
+// report 'anonymous' even though the account is now a full Google
+// account. Judging them on that claim alone denied every booking write,
+// and because ride_search_screen._createRideInRTDB() writes the rides
+// doc BEFORE creating active_ride_requests, the denial aborted the whole
+// RTDB dispatch: no hero_pings were ever written and the hero app showed
+// nothing at all.
+//
+// auth_service.dart now re-signs-in after linking so the provider claim
+// is correct, but the rule must not depend on that alone — a stale token
+// in flight, or any future flow that links without re-auth, would break
+// bookings again.
+//
+// email / phone_number are the reliable signal: a purely anonymous token
+// carries NEITHER, and any real identity carries at least one. Checked
+// with `in` first because reading an absent key errors out.
+function isRealUser() {
+  return request.auth != null
+    && (
+      request.auth.token.firebase.sign_in_provider != 'anonymous'
+      || ('email' in request.auth.token && request.auth.token.email != null)
+      || ('phone_number' in request.auth.token
+          && request.auth.token.phone_number != null)
+    );
+}
+
+function isAdmin() {
+  return isAuth() && request.auth.token.admin == true;
+}
+
+// FIX: the app has never had a mechanism to set a `sellerId` custom
+// claim on a seller's Firebase Auth token — that requires the Admin
+// SDK (a Cloud Function or a backend script), and this project has no
+// deployed Cloud Function for it (Spark plan has no Cloud Functions).
+// Every seller registers with their OWN Firebase Auth uid as the
+// sellers/{sellerId} document ID (see SellerModel / createSellerProfile
+// call sites — id: uid). So "isSellerOwner" was comparing a claim that
+// literally never exists, meaning EVERY seller create/update was
+// silently denied for every seller, always — this is the root cause
+// of the "Failed to save: permission-denied" error on seller
+// registration. Ownership is now checked directly against
+// request.auth.uid instead of a nonexistent custom claim.
+function isSellerOwner(sellerId) {
+  return isAuth() && request.auth.uid == sellerId;
+}
+
+// ================================================================
+// TOP-LEVEL COLLECTIONS
+// ================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Forward-looking admin provisioning path: an entry in the admins
+    // collection grants access even without a custom claim set. Mirrors
+    // the same flexible check used by the (currently undeployable)
+    // manageHeroApproval Cloud Function's assertAdmin(). Declared here
+    // (not at file top-level) because $(database) is only bound inside
+    // this match block — a prior version at top-level compiled with an
+    // "invalid variable name: database" warning and silently no-opped.
+    function isAdminViaCollection() {
+      return isAuth() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isAdminAny() {
+      return isAdmin() || isAdminViaCollection();
+    }
+
+    // Seller-earnings audit, Phase 1 — server-side idempotency +
+    // ownership check for crediting a seller's pendingPayouts (and for
+    // the matching wallet_transactions ledger entry). Declared here for
+    // the same $(database)-binding reason as isAdminViaCollection()
+    // above. Reads the linked service_requests/{reqId} doc's
+    // PRE-transaction committed state — a client's Firestore Transaction
+    // can never make this see its own in-flight writes, which is exactly
+    // what makes this a real idempotency gate rather than a formality:
+    // once _completeAndCreditSeller() (service_request_service.dart) has
+    // successfully committed `earningsCredited: true` for a request, any
+    // later attempt — retried, forged, or otherwise — evaluates this
+    // function against that already-true value and is rejected.
+    function creditableRequest(reqId, sellerId) {
+      let req = get(/databases/$(database)/documents/service_requests/$(reqId)).data;
+      // .get(key, default) rather than bare field access on both of
+      // these: non-food requestTypes (hero_booking/custom_order/
+      // grocery_order) have no `details.sellerId` key at all, and any
+      // service_requests doc written before this fix has no
+      // `earningsCredited` key either — a bare `req.details.sellerId` or
+      // `req.earningsCredited` would throw on those instead of failing
+      // this check cleanly.
+      return req.details.get('sellerId', null) == sellerId
+        && req.get('earningsCredited', false) != true
+        && (req.assignedHeroId == request.auth.uid || isAdminAny());
+    }
+
+    // ==============================================================
+    // ADMINS COLLECTION
+    // ==============================================================
+    // FIX (root cause of "admin app whatsapp-model notifications never
+    // arrive when closed/locked", per Nizam's request): this collection
+    // had NO rule block at all anywhere in this file — every read/write
+    // to admins/{uid} was silently hitting the file's implicit default
+    // deny. That meant main_admin.dart could never save the signed-in
+    // admin's FCM token to admins/{uid}.fcmToken (needed so the new
+    // notifyAdminOnNewRide/notifyAdminOnNewServiceRequest Cloud
+    // Functions have somewhere to read a token FROM), on top of the
+    // Admin app itself never having had any FCM/background-notification
+    // code to begin with. An existing admin can read/update their own
+    // doc (fcmToken sync); any admin can manage the full collection
+    // (provisioning new admins, same pattern as isAdminAny() elsewhere).
+    match /admins/{adminId} {
+      allow read: if isAdminAny();
+      allow update: if isAdminAny() && (isAdmin() || request.auth.uid == adminId);
+      allow create, delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // ADMIN_AI_ACTIONS COLLECTION (Chitti AI Co-Pilot Audit Trail)
+    // ==============================================================
+    match /admin_ai_actions/{actionId} {
+      allow read, create, update: if isAdminAny();
+      allow delete: if isAdmin();
+    }
+
+    // ==============================================================
+    // AFFILIATE_CODES COLLECTION (Aug 12 2026 — Affiliate QR Generator)
+    // ==============================================================
+    // Admin creates/deletes codes (metadata: type/label/createdBy).
+    // Any authenticated session — including the anonymous guest session
+    // every customer already has from boot (see isAuth() comment above)
+    // — may touch a code doc, but ONLY to increment its 'scans'/'signups'
+    // counters (AffiliateService.logScanIfPending() /
+    // attributeConversionIfPending()). affectedKeys().hasOnly([...])
+    // means a scan/signup write can never smuggle in a change to
+    // type/label/createdBy, so this stays safe even though it's the one
+    // collection in this file writable by an unregistered visitor.
+    match /affiliate_codes/{code} {
+      allow read: if isAdminAny();
+
+      // CUSTOMER SELF-REFERRAL (Aug 13 2026): a real (non-anonymous)
+      // customer may create exactly one campaign doc representing their
+      // own referral link. Locked down so a customer can only ever
+      // create a record ABOUT THEMSELVES, of the customer_referral type,
+      // with both counters starting at zero — they cannot mint a
+      // pre-inflated campaign, impersonate another user, or create the
+      // admin poster types. Reads stay admin-only, so one customer can
+      // never enumerate anyone else's referral performance.
+      allow create: if isAdminAny()
+        || (isRealUser()
+            && request.resource.data.ownerUid == request.auth.uid
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.code == code
+            && request.resource.data.scans == 0
+            && request.resource.data.signups == 0
+            && request.resource.data.active == true
+            // TYPE AND DESTINATION ARE PINNED AS A PAIR — do not split
+            // these into two independent checks.
+            //
+            // Aug 17 2026: extended from customer-only to also allow a
+            // hero to mint a hero-referral code (Nizam: "heros avanga
+            // innoru heros ah refer panna"). A hero referral MUST point
+            // at the hero app: a would-be hero sent to the customer app
+            // lands somewhere with no hero registration at all, so the
+            // referral is silently wasted.
+            //
+            // Keeping the pair bound is what stops a customer minting a
+            // 'hero_referral' aimed at the customer app, or anyone
+            // pointing either type at an arbitrary URL and turning our
+            // own domain into a redirector.
+            && (
+                 (request.resource.data.type == 'customer_referral'
+                  && request.resource.data.destination == 'https://my-allin1.web.app/')
+                 ||
+                 (request.resource.data.type == 'hero_referral'
+                  && request.resource.data.destination == 'https://hero-allin1.web.app/')
+               ));
+      allow update: if isAdminAny()
+        || (isAuth()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['scans', 'signups']));
+      allow delete: if isAdminAny();
+    }
+
+    match /affiliate_links/{linkId} {
+      allow read: if true; // public redirect
+      allow create: if isAuth(); // customers create this along with affiliate_codes
+      allow update, delete: if isAdminAny();
+    }
+
+    // NEW (Aug 12 2026 — affiliate LEADS, per Nizam's request for an
+    // exportable list of who actually signed up through each QR).
+    // Contains contact details (phone/email), so reads are strictly
+    // admin-only — a hero/customer/seller must never be able to list
+    // other people's contact information.
+    //
+    // Writes: a signed-in user may create/update ONLY their own lead
+    // row (docId == their uid, enforced below), which is exactly what
+    // AffiliateService.recordLeadIfPending() does at signup. They can
+    // never write a row on someone else's behalf, and they can never
+    // read the collection back. Deletes are admin-only so a user can't
+    // erase their own attribution after converting.
+    // NEW (Aug 13 2026 — dynamic QR redirect, see web/q/index.html).
+    // PUBLIC READ is intentional and safe: this collection holds ONLY
+    // {destination, active} per code. It is the minimum a scanner's
+    // browser must know to be forwarded, and it is deliberately kept
+    // SEPARATE from affiliate_codes (which holds campaign names, scan
+    // counts and createdBy, and stays admin-only). Nothing here is
+    // sensitive, and nothing here can be enumerated usefully — a reader
+    // must already know the exact 6-char code, which they only get by
+    // physically scanning the printed QR.
+    //
+    // Writes are admin-only, so a scanner can never repoint a campaign.
+    match /qr_links/{code} {
+      allow read: if true;
+
+      // Admin may point a campaign anywhere (that is the whole point of
+      // the dynamic poster QRs).
+      allow create, update, delete: if isAdminAny();
+
+      // CUSTOMER SELF-REFERRAL (Aug 13 2026): a signed-in real customer
+      // may create their own link doc so their share/QR works without
+      // an admin generating it.
+      //
+      // *** OPEN-REDIRECT GUARD — do not relax this. ***
+      // The /q/ page follows whatever `destination` it finds here. If a
+      // customer could set that freely, anyone with an account could
+      // create my-allin1.web.app/q/?c=XXX pointing at a phishing site
+      // and hand out a link that looks like ours — our own domain
+      // laundering their scam. So a non-admin writer may ONLY pin the
+      // destination to our app root, and may not write any other field.
+      // Update/delete stay admin-only, so an existing link can never be
+      // repointed by a customer after the fact.
+      // FIX (Aug 18 2026 — "Refer a Hero" always failing with a
+      // misleading "please sign in" even for a fully signed-in hero):
+      // this create rule only ever whitelisted the CUSTOMER app URL.
+      // ensureMyReferralCode() writes affiliate_codes/{code} (already
+      // hero-aware, see above) AND qr_links/{code} for every referral —
+      // a hero-referral write here was pinned to
+      // 'https://my-allin1.web.app/' and got silently permission-denied,
+      // which the client's catch-all mapped to "sign in required".
+      // Widened to accept the same hero-app destination that
+      // affiliate_codes already allows, keeping the open-redirect guard
+      // intact — still only these two exact, hardcoded URLs, nothing
+      // caller-supplied.
+      allow create: if isRealUser()
+        && (request.resource.data.destination == 'https://my-allin1.web.app/'
+            || request.resource.data.destination == 'https://hero-allin1.web.app/')
+        && request.resource.data.active == true;
+    }
+
+    // NEW (Aug 13 2026 — per-scan analytics behind the QR dashboard).
+    // PUBLIC CREATE, because the scan is logged by the unauthenticated
+    // /q/ redirect page before the visitor has any session at all (they
+    // may never even open the app). This is the one genuinely open
+    // write surface in this ruleset, so it is tightly shaped:
+    //   * create only — no update, no delete, ever.
+    //   * the document must carry exactly the expected keys, so it can
+    //     never be used as free-form storage.
+    //   * string lengths are capped so a single write cannot be inflated.
+    // NOTE (be honest about the limits): `ts` is CLIENT-supplied — the
+    // /q/ page sends its own clock, because an unauthenticated REST
+    // write cannot use FieldValue.serverTimestamp(). It is shape-checked
+    // as a timestamp but NOT trustworthy to the second, and a determined
+    // actor could POST fake scan rows for a code they physically
+    // scanned. That is an acceptable trade for marketing-funnel counts
+    // (the same exposure every public QR analytics product has); it is
+    // explicitly NOT suitable for billing or anything money-adjacent.
+    // Reads are admin-only: a scanner can add a row but can never list
+    // the collection back or learn anything about other people's scans.
+    match /affiliate_scans/{scanId} {
+      allow read: if isAdminAny();
+      allow delete: if isAdminAny();
+      allow update: if false;
+      allow create: if
+        request.resource.data.keys().hasOnly(['code', 'os', 'isUnique', 'ref', 'ts'])
+        && request.resource.data.code is string
+        && request.resource.data.code.size() > 0
+        && request.resource.data.code.size() <= 32
+        && request.resource.data.os is string
+        && request.resource.data.os.size() <= 16
+        && request.resource.data.isUnique is bool
+        && request.resource.data.ref is string
+        && request.resource.data.ref.size() <= 256
+        && request.resource.data.ts is timestamp;
+    }
+
+    match /affiliate_leads/{leadId} {
+      allow read: if isAdminAny();
+      allow create, update: if isAdminAny()
+        || (isAuth()
+            && request.auth.uid == leadId
+            && request.resource.data.uid == request.auth.uid);
+    }
+
+    match /chitti_appointments/{appointmentId} {
+      allow read: if isAdminAny();
+      allow create: if isAdminAny();
+      allow update, delete: if isAdminAny();
+    }
+
+    match /chitti_screening_debug_logs/{logId} {
+      allow read: if isAdminAny();
+      allow create: if isAdminAny();
+      allow update, delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // CUSTOM HOTELS COLLECTION
+    // ==============================================================
+    match /custom_hotels/{sellerId} {
+      allow read: if isAuth();
+      allow write: if isSellerOwner(sellerId) || isAdminAny();
+      
+      match /items/{itemId} {
+        allow read: if isAuth();
+        allow write: if isSellerOwner(sellerId) || isAdminAny();
+      }
+    }
+
+    // ==============================================================
+    // CUSTOM HOTEL ORDERS COLLECTION (Aug 20 2026 audit fix CRITICAL-1)
+    // ==============================================================
+    // FIX (root cause of "custom hotel checkout always fails"): the
+    // CTO-mandated custom_hotel_orders collection (written by
+    // CustomHotelService.placeOrder / linkServiceRequest in
+    // lib/services/custom_hotel_service.dart) had NO rules block, so
+    // every write fell through to the file's catch-all `if false`
+    // deny — the customer's "Place Order" tap died with
+    // permission-denied BEFORE the service_requests dispatch doc was
+    // ever created, so neither seller, admin, nor hero ever saw the
+    // order. Every other order collection has a block; this one was
+    // missed because it was added in the same change that introduced
+    // the checkout pipeline.
+    //
+    // The order doc carries BOTH owner keys at top level: customerId
+    // (who placed it) and sellerId (whose hotel it is) — see
+    // placeOrder()'s payload. So ownership is checked structurally on
+    // both axes:
+    //   - create:  only a REAL (non-guest) customer can place, and the
+    //              payload's customerId must be their own uid (mirrors
+    //              the service_requests create gate — guests may browse
+    //              but never spend).
+    //   - read:    the ordering customer, the owning seller, or admin.
+    //   - update:  the customer may ONLY attach the serviceRequestId
+    //              (linkServiceRequest's merge) — a hasOnly() pin
+    //              exactly like service_requests Clause 6, so a
+    //              customer can't silently edit prices/amounts on
+    //              their own receipt; the owning seller or admin may
+    //              update (e.g. future kitchen status marks).
+    //   - delete:  admin only.
+    // ==============================================================
+    match /custom_hotel_orders/{orderId} {
+      allow create: if isRealUser()
+        && request.resource.data.customerId == request.auth.uid
+        || isAdminAny();
+
+      allow read: if isAdminAny()
+        || (isAuth() && resource.data.customerId == request.auth.uid)
+        || (isAuth() && resource.data.sellerId == request.auth.uid);
+
+      allow update: if isAdminAny()
+        || (isAuth() && resource.data.sellerId == request.auth.uid)
+        || (isAuth()
+            && resource.data.customerId == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['serviceRequestId', 'updatedAt']));
+
+      allow delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // SELLERS COLLECTION
+    // ==============================================================
+    // Customers:   read only
+    // Seller:      read + write own document
+    // Admin:       full access
+    // ==============================================================
+    match /sellers/{sellerId} {
+
+      // Read: any authenticated user can read seller profiles
+      allow read: if isAuth();
+
+      // Write: only the owning seller or an admin.
+      // FIX (seller approval gate rollout): this used to check only
+      // isAdmin() (the {admin: true} custom claim), which this Spark-plan
+      // app has NO mechanism to ever set (no Cloud Functions/Admin SDK —
+      // same root cause documented on isSellerOwner() above). The actual
+      // admin app authenticates via an admins/{uid} Firestore document
+      // (isAdminViaCollection()), exactly like heroes/rides/
+      // service_requests already correctly check via isAdminAny(). Sellers
+      // was the one collection still left on the dead isAdmin()-only
+      // check, which meant admin_seller_approval_screen.dart's brand-new
+      // Approve/Reject buttons (writing status -> 'active'/'rejected' on
+      // sellers/{sellerId}, a doc the admin does NOT own) would have
+      // failed with permission-denied for every real admin account.
+      //
+      // FIX (seller-earnings audit, Phase 1 — "seller can arbitrarily
+      // edit their own money"): `isSellerOwner(sellerId)` used to grant
+      // that seller unrestricted write access to every field on their
+      // own doc, walletBalance/pendingPayouts/totalSettled included —
+      // nothing stopped a seller's client from self-crediting an
+      // arbitrary payout. `create` still needs the seller to be able to
+      // write their own onboarding profile in one `.set()`
+      // (createSellerProfile → SellerModel.toJson()), so it's value-
+      // locked instead of field-locked: every financial field must start
+      // at exactly 0. `update` is split into three non-overlapping
+      // clauses below so a normal profile edit (isOpen toggle, etc.), the
+      // seller's own ₹5 accept-fee debit, and a hero/admin's earnings
+      // credit are each scoped to exactly the fields and values they
+      // need and nothing else.
+      allow create: if isAdminAny()
+        || (isSellerOwner(sellerId)
+            && request.resource.data.walletBalance == 0
+            && request.resource.data.pendingPayouts == 0
+            && request.resource.data.totalSettled == 0);
+
+      // Clause B: normal profile fields — every financial field is
+      // simply absent from this allow-list, so it can never appear in
+      // the diff no matter what a seller's client sends.
+      allow update: if isAdminAny()
+        || (isSellerOwner(sellerId)
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly([
+                   'id', 'name', 'shopName', 'category', 'subCategory',
+                   'hotelType', 'address', 'latitude', 'longitude', 'phone',
+                   'rating', 'isOpen', 'estimatedPrepTimeMin', 'status',
+                   'imageUrl', 'coverImageUrl', 'emoji', 'metadata',
+                   'businessVertical', 'city', 'role', 'hours',
+                   'fcmToken', 'fcmTokenUpdatedAt', 'updatedAt'
+                 ]))
+        // Clause C: the seller's own ₹5 platform-fee debit
+        // (advanceSellerStage → 'accepted'). Locked to EXACTLY that
+        // field pair and EXACTLY a -5.0 delta — a seller's client can
+        // never use this clause to move their own balance any other
+        // way, up or down.
+        || (isSellerOwner(sellerId)
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['walletBalance', 'totalFeesDeducted', 'updatedAt'])
+            // .get(..., 0) default — same reasoning as Clause D below:
+            // a legacy seller doc created before these fields existed on
+            // SellerModel must not throw on its very first debit.
+            && request.resource.data.walletBalance == resource.data.get('walletBalance', 0) - 5.0
+            && request.resource.data.totalFeesDeducted == resource.data.get('totalFeesDeducted', 0) + 5.0)
+        // Clause D: earnings credit on order completion
+        // (_completeAndCreditSeller in service_request_service.dart).
+        // Deliberately NOT isSellerOwner-gated — this is the assigned
+        // HERO (or admin) crediting the SELLER's doc, a genuinely
+        // different party. creditableRequest() is the real gate: it
+        // requires the linked service_requests doc to belong to this
+        // seller, to not already be credited, and to be assigned to the
+        // caller (or the caller to be admin) — see its definition above
+        // for why that check can't be bypassed by a retry.
+        || (isAuth()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['pendingPayouts', 'lastCreditedRequestId', 'updatedAt'])
+            // resource.data.get(..., 0) rather than a bare field access:
+            // no seller doc has ever had `pendingPayouts` written before
+            // this fix (confirmed — it was read-only dead weight on the
+            // dashboard's Payouts card), so a bare
+            // `resource.data.pendingPayouts` would throw on every
+            // EXISTING seller's very first credit, since the field is
+            // simply absent from their stored document.
+            && request.resource.data.pendingPayouts > resource.data.get('pendingPayouts', 0)
+            && request.resource.data.lastCreditedRequestId is string
+            && creditableRequest(request.resource.data.lastCreditedRequestId, sellerId));
+
+      allow delete: if isAdminAny();
+
+      // ── Wallet Transactions Ledger (seller-earnings audit, Phase 1) ──
+      // sellers/{sellerId}/wallet_transactions/{txnId} — the immutable
+      // audit trail behind every walletBalance/pendingPayouts mutation.
+      // Both writers (the seller's own fee debit, the hero/admin's
+      // earnings credit) use a DETERMINISTIC doc id
+      // (`${requestId}_fee` / `${requestId}_credit` — see
+      // service_request_service.dart), so a duplicate write for the same
+      // order hits Firestore's create-vs-update disambiguation: the doc
+      // already exists, so it's evaluated as an `update` — and there is
+      // no `allow update` clause here at all, for anyone but admin. That
+      // makes a double-write structurally impossible, independent of any
+      // idempotency check in the Dart code that produced it.
+      match /wallet_transactions/{txnId} {
+        allow read: if isAdminAny() || isSellerOwner(sellerId);
+
+        allow create: if isAdminAny()
+          || (isAuth()
+              && request.resource.data.keys()
+                   .hasOnly(['requestId', 'sellerId', 'amount', 'type', 'createdAt'])
+              && request.resource.data.sellerId == sellerId
+              && (
+                   (request.resource.data.type == 'platform_fee'
+                     && isSellerOwner(sellerId)
+                     && request.resource.data.amount == -5.0)
+                || (request.resource.data.type == 'order_credit'
+                     && request.resource.data.amount > 0
+                     && creditableRequest(request.resource.data.requestId, sellerId))
+              ));
+
+        allow update, delete: if isAdminAny();
+      }
+
+      // ── Menu Items Subcollection ──────────────────────────────
+      // Customers:   read only
+      // Seller:      full control over own subcollection
+      // Admin:       full access
+      // ──────────────────────────────────────────────────────────
+      match /menu_items/{itemId} {
+
+        // Read: any authenticated user
+        allow read: if isAuth();
+
+        // Write: owning seller or admin — same isAdminAny() fix as above.
+        allow create: if isAdminAny() || isSellerOwner(sellerId);
+        allow update: if isAdminAny() || isSellerOwner(sellerId);
+        allow delete: if isAdminAny() || isSellerOwner(sellerId);
+      }
+
+      // ── Mobile Listings Subcollection ─────────────────────────
+      // NEW (Aug 18 2026 — Allin1 Mobile Hub). Phones a mobile-vertical
+      // seller has for sale: sellers/{sellerId}/mobile_listings/{id}.
+      //
+      // Same permission shape as menu_items above, deliberately: read
+      // for any authenticated user (customers browse every shop's
+      // stock), write only for the owning seller or an admin. Because
+      // listings live UNDER the owning seller's document, ownership is
+      // structural — a seller cannot write into another shop's stock
+      // even by forging a sellerId field in the payload.
+      //
+      // NOTE the customer browse path uses collectionGroup(
+      // 'mobile_listings'), which is matched by THIS rule via the
+      // {sellerId} wildcard — collection-group reads are allowed
+      // because `allow read: if isAuth()` here has no document-owner
+      // condition. Adding an owner check to read would silently break
+      // the entire customer-facing grid.
+      // ──────────────────────────────────────────────────────────
+      match /mobile_listings/{listingId} {
+
+        allow read: if isAuth();
+
+        allow create: if isAdminAny() || isSellerOwner(sellerId);
+        allow update: if isAdminAny() || isSellerOwner(sellerId);
+        allow delete: if isAdminAny() || isSellerOwner(sellerId);
+      }
+    }
+
+    // ==============================================================
+    // HEROES COLLECTION
+    // ==============================================================
+    // FIX: was admin-only for read+write, which was flagged at the time
+    // as leaving "a hero updating their own profile" unaddressed. Now
+    // filled in — needed for hero_register_screen.dart's own-doc create
+    // AND its duplicate-phone-number check (a registering hero must be
+    // able to see whether another uid already used their phone number,
+    // which requires broad read — mirrors the sellers collection's same
+    // broad-authenticated-read pattern).
+    //
+    // Write is deliberately NOT fully open even for a hero's own doc:
+    // create must start as 'pending' (no self-approving on signup), and
+    // update may NOT change approvalStatus at all (no self-approving
+    // later either) — only admin can flip that field. This is the same
+    // approval-bypass class of bug fixed earlier in _HeroSetupGate
+    // (main_hero.dart); do not loosen this without re-reading that fix.
+    // ==============================================================
+    match /heroes/{heroId} {
+      allow read: if isAuth();
+
+      allow create: if isAdminAny()
+        || (isAuth() && request.auth.uid == heroId
+            && request.resource.data.approvalStatus == 'pending');
+
+      // FIX (Aug 8 2026 — registration submit "permission-denied"):
+      // hero_login_screen.dart pre-creates heroes/{uid} at first sign-in
+      // (identity-sync merge that never touches approvalStatus), so by
+      // the time hero_register_screen.dart's _submitRegistration() runs
+      // its heroes/{uid}.set() with approvalStatus:'pending', the doc
+      // already exists — Firestore classifies that as an UPDATE, not a
+      // create. The old rule required
+      // request.resource.data.approvalStatus == resource.data.approvalStatus,
+      // which is 'pending' == null (missing field) on that pre-created
+      // stub -> false -> every hero's first-ever registration submit was
+      // rejected. Added an explicit exception: a hero may complete their
+      // OWN initial registration (set approvalStatus to 'pending') as
+      // long as an admin hasn't already decided it (i.e. it isn't
+      // currently 'approved' or 'rejected') — this still blocks a hero
+      // from self-approving or reversing a rejection, which was the
+      // actual point of this rule.
+      allow update: if isAdminAny()
+        || (isAuth() && request.auth.uid == heroId
+            && (request.resource.data.approvalStatus == resource.data.approvalStatus
+                || (request.resource.data.approvalStatus == 'pending'
+                    && resource.data.approvalStatus != 'approved'
+                    && resource.data.approvalStatus != 'rejected')));
+
+      allow delete: if isAdminAny();
+
+      // FIX (permissions audit): heroes/{heroId}/documents subcollection
+      // (hero_document_screen.dart's own KYC re-upload metadata) had zero
+      // coverage — a Firestore subcollection does NOT inherit its parent
+      // doc's rule, it needs its own explicit match. Owner or admin only.
+      match /documents/{docId} {
+        allow read, write: if isAdminAny() || (isAuth() && request.auth.uid == heroId);
+      }
+    }
+
+    // ==============================================================
+    // FOOD ORDERS COLLECTION
+    // ==============================================================
+    // Customer:    create orders, read own orders
+    // Seller:      read orders for their shop, update status
+    // Admin:       full access
+    // ==============================================================
+    match /food_orders/{orderId} {
+
+      // ── Create ────────────────────────────────────────────────
+      // Any REAL (non-anonymous) signed-in user can place an order.
+      // The customerId in the document MUST match the requestor's UID.
+      // GUEST MODE (Aug 11 2026): isAuth() -> isRealUser(). A guest may
+      // browse every shop and menu (read rules below unchanged) but must
+      // sign in at checkout — an order placed under an anonymous uid has
+      // no phone number and no way for the seller to contact anyone.
+      allow create: if isRealUser()
+        && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.sellerId is string
+        && request.resource.data.sellerId != null;
+
+      // ── Read ──────────────────────────────────────────────────
+      // Customers can only read their own orders.
+      // Sellers can read orders for their shop (sellerId == their uid —
+      // same custom-claim fix as isSellerOwner() above).
+      // Admins can read everything.
+      allow read: if isAdmin()
+        || (isAuth() && resource.data.customerId == request.auth.uid)
+        || (isAuth() && resource.data.sellerId == request.auth.uid);
+
+      // ── Update ────────────────────────────────────────────────
+      // Customers: can only cancel if status is 'placed'
+      // Sellers:   can update status of their own orders
+      // Admins:    full access
+      allow update: if isAdmin()
+        || (isAuth() && resource.data.sellerId == request.auth.uid)
+        || (isAuth()
+            && resource.data.customerId == request.auth.uid
+            && resource.data.status == 'placed'
+            && request.resource.data.status == 'cancelled');
+
+      // ── Delete ────────────────────────────────────────────────
+      // Orders are never deleted in production — admin only for cleanup.
+      allow delete: if isAdmin();
+    }
+
+    // ==============================================================
+    // RIDES COLLECTION (Bike Taxi — Firestore mirror)
+    // ==============================================================
+    // FIX: had ZERO rule here at all (fell through to default-deny),
+    // discovered while building the admin usage-billing report, which
+    // needs to read completed rides. Conservative fix: admin gets full
+    // access; a hero/customer can read only their own ride (bonus fix —
+    // hero_history_screen.dart / ride_history_screen.dart query this
+    // collection by heroId/customerId and would have hit the same
+    // default-deny). Write stays admin-only here since live ride state
+    // is primarily on RTDB per this file's own header note — not
+    // widening write access without first confirming which client
+    // flows actually need to write directly to this Firestore mirror.
+    // ==============================================================
+    match /rides/{rideId} {
+      allow read: if isAdminAny()
+        || (isAuth() && resource.data.heroId == request.auth.uid)
+        || (isAuth() && resource.data.customerId == request.auth.uid);
+
+      // FIX (root cause of "Server Busy" appearing on every single
+      // ride booking, instantly, not just under genuine Firestore
+      // quota/outage conditions): this collection was write:
+      // isAdminAny()-only, but bike_booking_screen.dart's customer app
+      // writes the ride doc DIRECTLY to rides/{rideId} at booking time
+      // (rideRef.set({customerId: user.uid, ...})) as the customer, not
+      // an admin. Every customer's ride-creation write has been hitting
+      // permission-denied immediately, caught by the .catchError() a
+      // few hundred ms after the customer was already optimistically
+      // navigated to the "Finding a Hero" search screen -- which is
+      // exactly the reported symptom (dialog stacks on top of the
+      // search screen the instant a booking is made, not only during
+      // real outages). Now allows the customer to create/update their
+      // own ride doc (ownership pinned by customerId, can't be
+      // reassigned to someone else's uid on update), same isAdminAny()
+      // full access preserved, and a hero can update a ride they're
+      // assigned to (accept/status/complete) without needing admin.
+      // GUEST MODE (Aug 11 2026): isAuth() -> isRealUser() on every
+      // write clause here. Two separate reasons:
+      //  1. customerId clause: a ride booked by an anonymous guest has
+      //     no contactable phone number — the hero cannot call them.
+      //  2. heroId clauses: `request.resource.data.heroId ==
+      //     request.auth.uid` lets ANY signed-in uid claim ANY ride by
+      //     writing its own uid into heroId. That was already loose, but
+      //     Guest Mode makes the attacking identity free and unlimited to
+      //     mint, so it is now gated too. Real heroes always sign in with
+      //     a real account, so this costs them nothing.
+      allow create: if isAdminAny()
+        || (isRealUser() && request.resource.data.customerId == request.auth.uid);
+      allow update: if isAdminAny()
+        || (isRealUser() && resource.data.customerId == request.auth.uid
+            && request.resource.data.customerId == request.auth.uid)
+        || (isRealUser() && resource.data.heroId == request.auth.uid)
+        || (isRealUser() && request.resource.data.heroId == request.auth.uid);
+      allow delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // COMPANY_PAYMENTS_RECEIVED COLLECTION
+    // ==============================================================
+    // NEW (Nizam's "Self vs MyAllin1" payment-split): written by
+    // hero_ride_screen.dart's _markPaymentReceived('myallin1') when a
+    // customer pays the company's own MyAllin1 UPI directly (money
+    // never touches the hero's wallet). Read/verify by Admin's new
+    // payments_received_screen.dart. A hero may create their OWN
+    // collection record (heroId pinned to their own uid, can't write
+    // as someone else); only admin can update (the "Verify" action) or
+    // delete.
+    match /company_payments_received/{docId} {
+      allow read: if isAdminAny()
+        || (isAuth() && resource.data.heroId == request.auth.uid);
+      // GUEST MODE: heroes are always real accounts — isRealUser().
+      allow create: if isAdminAny()
+        || (isRealUser() && request.resource.data.heroId == request.auth.uid);
+      allow update, delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // SERVICE_REQUESTS COLLECTION (Broadcast Order System)
+    // ==============================================================
+    // hero_booking / custom_order / custom_food_order / grocery_order /
+    // catalog_food_order — see service_request_service.dart. FIX: this
+    // collection had NO rule at all here (fell through to the
+    // default-deny catch-all below), even though the app has been
+    // writing to it since the broadcast-order system was built. Adding
+    // real coverage now rather than leaving it to depend on whatever
+    // is (or isn't) live in the Firebase console outside this repo.
+    // Customer:  create own request, read own request(s).
+    // Hero:      read/update only a request assigned to them —
+    //            includes the "accept" transition itself, where the
+    //            hero writes their own uid into assignedHeroId for the
+    //            first time (resource.data.assignedHeroId is still
+    //            null at that point, so we check the INCOMING value).
+    // Admin:     full access (dispatch screens, tracking, cleanup).
+    // ==============================================================
+    match /service_requests/{requestId} {
+      // GUEST MODE (Aug 11 2026): isAuth() -> isRealUser(). This is the
+      // single most important gate in this file — every broadcast order
+      // (hero booking, custom order, food, grocery, catalog food) lands
+      // here and pings real heroes to ride out to a real address. A guest
+      // may open and fill in every one of those screens; the guard fires
+      // at submit (see requireRealAuth() in auth_prompt_service.dart).
+      // FIX (post-fix audit — "customer create rule has no field
+      // allow-list"): this used to check ONLY customerId, matching the
+      // create-time equivalent of a bug the update rule below was
+      // already hardened against (see Clause 6's comment on hasOnly()).
+      // Without this, an authenticated customer could create a
+      // service_requests doc with status:'completed', an already-set
+      // assignedHeroId, or a sellerStage past 'new' — skipping the
+      // entire dispatch lifecycle at the source. createServiceRequest()
+      // (service_request_service.dart) is the SINGLE creation point for
+      // every requestType (hero_booking/custom_order/catalog_food_order/
+      // custom_hotel_order/grocery_order) and always writes exactly this
+      // field set with exactly these initial values, so this allow-list
+      // is not a guess — it mirrors that function's actual `.set()` call
+      // verbatim.
+      allow create: if isRealUser()
+        && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+             'requestId', 'requestType', 'customerId', 'customerName',
+             'customerPhone', 'details', 'status', 'assignedHeroId',
+             'assignedHeroName', 'assignedHeroPhone', 'assignmentMethod',
+             'city', 'sellerStage', 'sellerStageAt', 'earningsCredited',
+             'createdAt', 'updatedAt'
+           ])
+        && request.resource.data.status == 'pending'
+        && request.resource.data.assignedHeroId == null
+        && request.resource.data.assignedHeroName == null
+        && request.resource.data.assignedHeroPhone == null
+        && request.resource.data.assignmentMethod == null
+        && request.resource.data.sellerStageAt == null
+        && request.resource.data.earningsCredited == false
+        && (request.resource.data.sellerStage == null
+            || request.resource.data.sellerStage == 'new');
+
+      // FIX (root cause of "seller never sees catalog food orders"):
+      // seller_detail_screen.dart's checkout writes catalog/menu food
+      // orders here (requestType 'catalog_food_order') with the
+      // seller's uid nested at details.sellerId, intending to reuse
+      // this collection's hero-dispatch mechanism for delivery — but
+      // this read rule never had a clause letting the SELLER read
+      // their own incoming orders back, only admin/customer/assigned-
+      // hero. Added the details.sellerId ownership clause so
+      // seller_dashboard_screen.dart's new catalog-orders listener can
+      // actually read what it queries for.
+      allow read: if isAdminAny()
+        || (isAuth() && resource.data.customerId == request.auth.uid)
+        || (isAuth() && resource.data.assignedHeroId == request.auth.uid)
+        || (isAuth() && resource.data.details.sellerId == request.auth.uid);
+
+      // FIX (F-3 correction, audit 2026-08-07 — the prior "fix" here was
+      // verified WRONG and would have broken every hero's ability to
+      // accept a new request): acceptServiceRequest()
+      // (service_request_service.dart) writes assignedHeroId DIRECTLY
+      // from the accepting hero's own client — there is no admin-
+      // dispatched accept path for hero_booking/custom_order/
+      // custom_food_order/grocery_order. A rule that only lets an
+      // ALREADY-assigned hero keep assignedHeroId unchanged blocks the
+      // very first accept, since resource.data.assignedHeroId is null
+      // at that point, matching neither the hero nor customer clause.
+      //
+      // Correct fix — four strictly isolated clauses:
+      //   1. Admin: full update access.
+      //   2. First-time accept ("claim"): assignedHeroId is currently
+      //      unset/null, and the new value equals the caller's own uid.
+      //      This is the ONLY way assignedHeroId may move away from
+      //      null — an already-assigned request can never be reclaimed
+      //      this way, since resource.data.assignedHeroId == null fails
+      //      once a hero has accepted it. Closes the original hijack
+      //      vector (stealing/reassigning an ALREADY-assigned request)
+      //      while keeping the real accept flow working.
+      //   3. Already-assigned hero: may update progress fields (status,
+      //      paymentStatus, etc.) but cannot change assignedHeroId or
+      //      customerId.
+      //   4. Customer-owner: may update payment/rating fields on their
+      //      own request but cannot change assignedHeroId or
+      //      customerId — no self-assigning, no ownership transfer.
+      // FIX (Recovery System, Aug 11 2026): releaseServiceRequest()
+      // (service_request_service.dart) — the hero's "give this task
+      // back" escape hatch, used both by the pre-existing 'Release
+      // Task' button and the new Incomplete/Stuck Tasks hub — writes
+      // assignedHeroId: null. Clause 3 above pins assignedHeroId
+      // UNCHANGED for an already-assigned hero, so that write was being
+      // silently rejected as permission-denied with no other clause to
+      // fall back on. This narrow 5th clause allows exactly one
+      // transition: the currently-assigned hero may null out
+      // assignedHeroId ONLY together with moving status to
+      // 'admin_review' (the same status markTimeoutIfStillPending()
+      // already uses, so this surfaces on admin_new_orders_screen.dart's
+      // AWAITING ASSIGNMENT section for free). customerId still cannot
+      // change. No other field-combination is opened by this clause.
+      allow update: if isAdminAny()
+        || (isAuth()
+            && resource.data.assignedHeroId == null
+            && request.resource.data.assignedHeroId == request.auth.uid
+            && request.resource.data.customerId == resource.data.customerId)
+        || (isAuth()
+            && resource.data.assignedHeroId == request.auth.uid
+            && request.resource.data.assignedHeroId == resource.data.assignedHeroId
+            && request.resource.data.customerId == resource.data.customerId)
+        || (isAuth()
+            && resource.data.assignedHeroId == request.auth.uid
+            && request.resource.data.assignedHeroId == null
+            && request.resource.data.status == 'admin_review'
+            && request.resource.data.customerId == resource.data.customerId)
+        || (isAuth()
+            && resource.data.customerId == request.auth.uid
+            && request.resource.data.assignedHeroId == resource.data.assignedHeroId
+            && request.resource.data.customerId == resource.data.customerId)
+
+      // ── Clause 6: SELLER kitchen progress (Aug 17 2026 seller audit) ──
+      // Root cause of "seller app is just a dummy app": the seller could
+      // READ their incoming orders (see the details.sellerId read clause
+      // above) but had NO update clause at all, so the seller's own order
+      // cards could never carry a working Accept / Preparing / Food Ready
+      // button — every such button in the app lives on the DEAD
+      // food_orders pipeline instead. The seller could only watch.
+      //
+      // This opens exactly one thing: the seller's own kitchen stage, on
+      // their own orders. It is deliberately a SEPARATE field from
+      // `status`, which stays owned by the hero/admin dispatch state
+      // machine — a seller must never be able to move an order to
+      // 'hero_assigned' or 'completed', and hasOnly() below guarantees
+      // they cannot touch status, assignedHeroId, customerId, details,
+      // requestType or anything else. Purely additive: every existing
+      // clause above is untouched.
+        || (isAuth()
+            && resource.data.details.sellerId == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['sellerStage', 'sellerStageAt', 'updatedAt', 'status', 'pingExpiresAt'])
+            && (!('status' in request.resource.data.diff(resource.data).affectedKeys()) ||
+                (resource.data.status == 'awaiting_seller' && request.resource.data.status == 'pinging')));
+
+      allow delete: if isAdminAny();
+    }
+
+
+    // ==============================================================
+    // LOCATION_SEARCH_LOGS COLLECTION (demand monitoring)
+    // ==============================================================
+    // FIX: new collection, per Nizam's request — bike_booking_screen.dart
+    // logs every customer address search here (fire-and-forget) so admin
+    // can see where in Erode demand clusters, compared against heroes'
+    // preferredWorkLocation. Write-only for customers (no read/update/
+    // delete — these are analytics logs, not something a customer needs
+    // back), full access for admin's demand-monitoring screen.
+    // ==============================================================
+    match /location_search_logs/{logId} {
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdminAny();
+      allow update, delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // CANCELLATION_ANALYTICS COLLECTION (Cancellation Reason Analytics,
+    // Aug 11 2026, per Nizam — "we are losing valuable business data
+    // on WHY customers cancel")
+    // ==============================================================
+    // Write-only for customers (same shape as location_search_logs
+    // above) — one doc per cancellation with a reason, written from
+    // rides' inline cancel updates (which also stamp cancellationReason
+    // directly onto the rides doc itself, since that doc survives) and
+    // from ServiceRequestService.cancelServiceRequest() (whose
+    // service_requests doc gets DELETED on cancel, so this collection
+    // is the only place that reason survives for analytics).
+    // ==============================================================
+    match /cancellation_analytics/{logId} {
+      allow create: if isAuth() && request.resource.data.customerId == request.auth.uid;
+      allow read: if isAdminAny();
+      allow update, delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // HERO_SESSIONS COLLECTION (Hero Earnings & Online Time Monitor,
+    // Aug 11 2026, per Nizam)
+    // ==============================================================
+    // One doc per online→offline cycle, written by hero_home_screen.dart
+    // right when a hero goes offline (batched, same cadence as the
+    // usage-fee flush — never per-minute). A hero may create/read only
+    // their own session logs (the new hero_earnings_screen.dart fetch
+    // query); no update/delete from the client — these are an
+    // append-only history, same as location_search_logs.
+    // ==============================================================
+    match /hero_sessions/{sessionId} {
+      allow create: if isAuth() && request.resource.data.heroId == request.auth.uid;
+      allow read: if isAdminAny()
+        || (isAuth() && resource.data.heroId == request.auth.uid);
+      allow update, delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // APP_USAGE_STATS COLLECTION (single "funnel" doc — per Nizam's
+    // request, Customer Usage Tracking admin feature)
+    // ==============================================================
+    // Tracks 3 lightweight counters: how many times the pre-login PWA
+    // landing page loaded, how many times each app's APK download link
+    // was tapped, and (read separately via a Firestore count()
+    // aggregation on `users`, not stored here) how many actually signed
+    // up. Deliberately UNAUTHENTICATED-writable — the whole point is
+    // measuring visitors who haven't logged in yet, landing_page.dart
+    // runs before any sign-in. Scoped tightly: a write may only ever
+    // touch the known counter field names (enforced via affectedKeys()
+    // below), so even an anonymous abuser can only inflate a vanity
+    // metric, never write arbitrary data. Read is admin-only.
+    // ==============================================================
+    // COLLECTION GROUP: transactions  (Aug 11 2026)
+    // ==============================================================
+    // FIX (root cause of "Usage Fee Ledger firestore permission"):
+    // usage_fee_ledger_screen.dart reads every hero's wallet ledger via
+    // collectionGroup('transactions'). A collection-GROUP query is NOT
+    // authorized by the nested `match /hero_wallets/{heroId}/transactions
+    // /{txnId}` rule further down this file — Firestore requires a
+    // separate rule whose path begins with the recursive wildcard
+    // `{path=**}` for group queries, otherwise every such query is
+    // denied outright regardless of the nested rule. Admin-only read:
+    // this spans EVERY hero's private ledger, so it must never be
+    // readable by a hero (who keeps their own per-hero read access via
+    // the nested rule). No write access here at all — writes continue to
+    // go through the nested rule's ownership checks.
+    match /{path=**}/transactions/{txnId} {
+      allow read: if isAdminAny();
+    }
+
+    // ==============================================================
+    // UX_AUDIT_REPORTS COLLECTION
+    // ==============================================================
+    // FIX (Nizam's report — "UX report la cloud firestore permission
+    // ila"): this collection had ZERO rule coverage anywhere in this
+    // file, so it fell through to the default-deny at the bottom and
+    // admin_ux_audit_screen.dart could never read it. Same bug class as
+    // the heroes/rides/users gaps fixed earlier. Admin-only both ways —
+    // these are internal QA-bot findings, never customer-facing.
+    // ==============================================================
+    // APP_BUG_REPORTS COLLECTION  (Aug 11 2026 — AI Bug Reporting)
+    // ==============================================================
+    // Filed by the customer app's AI agent when a customer reports
+    // something broken (see guru_chat_screen.dart's _actOnReportBug).
+    //
+    // create: any signed-in user, but ONLY a report pinned to their own
+    // uid — so a report can never be filed in someone else's name. No
+    // read for customers: bug reports are an internal queue, and letting
+    // customers list them would expose other people's uids and their
+    // free-text descriptions (which often contain personal detail).
+    //
+    // update/delete are admin-only: the report is an immutable record of
+    // what the customer actually said. Admin flips `status` as they
+    // triage; nobody rewrites the original description.
+    match /app_bug_reports/{reportId} {
+      // GUEST MODE: a bug report from an anonymous uid is unactionable —
+      // admin has nobody to follow up with — and this collection is a
+      // free, unlimited, unauthenticated write target otherwise.
+      allow create: if isRealUser()
+        && request.resource.data.reportedBy == request.auth.uid;
+      allow read, update, delete: if isAdminAny();
+    }
+
+    match /ux_audit_reports/{reportId} {
+      allow read, write: if isAdminAny();
+    }
+
+    // NEW (Aug 28 2026 — Chitti price/market enquiries).
+    //
+    // A customer asks Chitti what a display costs; Chitti shows a
+    // market reference and files this so a human at NJ Tech can quote
+    // the real rate. Deliberately NOT service_requests: that collection
+    // dispatches a Hero, and nobody should be riding out for a price
+    // question.
+    //
+    // Same shape as app_bug_reports above and for the same reason — an
+    // enquiry from an anonymous uid carries no phone number, so there
+    // is nobody to call back, and the collection would otherwise be an
+    // unlimited unauthenticated write target.
+    // An approved seller, for the enquiry monitor below.
+    //
+    // A price enquiry is asked BEFORE any shop is chosen, so there is
+    // no sellerId on the document to scope by — which means this grants
+    // every approved seller sight of every open enquiry. That is the
+    // intent (Nizam: monitored on "seller and admin phone"), not an
+    // oversight: whoever can quote the rate first should be able to.
+    // `approved` is required so a pending or rejected registration
+    // cannot read customer phone numbers.
+    function isApprovedSeller() {
+      return isAuth()
+        && exists(/databases/$(database)/documents/sellers/$(request.auth.uid))
+        && get(/databases/$(database)/documents/sellers/$(request.auth.uid)).data.status == 'approved';
+    }
+
+    match /chitti_enquiries/{enquiryId} {
+      allow create: if isRealUser()
+        && request.resource.data.customerId == request.auth.uid;
+      // The customer may see their own. Admins and approved sellers see
+      // all open ones — without this the seller-side monitor renders
+      // "couldn't load", which on this screen reads as "no leads": the
+      // most damaging possible lie, since the customer was already told
+      // NJ Tech would call them back.
+      allow read: if isAdminAny()
+        || isApprovedSeller()
+        || (isRealUser() && resource.data.customerId == request.auth.uid);
+      // Sellers may close a lead they answered, but may not delete it —
+      // deletion is what the admin's own audit trail depends on.
+      allow update: if isAdminAny() || isApprovedSeller();
+      allow delete: if isAdminAny();
+    }
+
+    match /app_usage_stats/{docId} {
+      allow read: if isAdminAny();
+      // Scoped to docId == 'funnel' only: the landing page visitor (who
+      // hasn't signed in yet) can create or increment ONLY the single known
+      // funnel tracking document — not an arbitrary number of new docs.
+      // Before this fix: `allow create: if true` let any anonymous requester
+      // spam-create unlimited documents in this collection.
+      // UPDATED (Aug 11 2026 — customer demand tracking): 'customer_demand'
+      // joins 'funnel' as a second known, explicitly-allowlisted doc id
+      // (written by UsageTrackingService's demand counters). Still a
+      // closed allowlist of exactly two ids — an anonymous requester
+      // cannot spam-create arbitrary documents here, which was the
+      // original point of scoping this rule.
+      allow create: if docId == 'funnel' || docId == 'customer_demand';
+      allow update: if (docId == 'funnel'
+              && request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly([
+                    'landingPageVisits',
+                    'download_customer',
+                    'download_hero',
+                    'download_admin',
+                    'download_seller',
+                    'poster_qr_scans',
+                    'poster_qr_pwa_installs',
+                    // Per-day counter buckets (daily.<yyyy-MM-dd>.<field>)
+                    // added Aug 11 2026 so the admin Usage Tracking screen
+                    // can offer real date/month ranges — the lifetime
+                    // totals above carry no time dimension to filter on.
+                    'daily',
+                    'updatedAt',
+                  ]))
+          // customer_demand holds nested COUNTER MAPS whose inner keys are
+          // dynamic by nature (place/hotel names can't be enumerated in a
+          // rule), so the allowlist is enforced at the top-level category
+          // names instead — a writer still can't introduce arbitrary
+          // top-level fields, only inflate counts inside these four known
+          // buckets. Same trust level as the funnel counters above: worst
+          // case an abuser skews a vanity metric, never writes real data.
+          || (docId == 'customer_demand'
+              && request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly([
+                    'places',
+                    'hotels',
+                    'vehicles',
+                    'services',
+                    // Written only by the admin-triggered one-time
+                    // historical backfill (UsageTrackingService
+                    // .backfillFromHistory) as its idempotence marker.
+                    'backfilledAt',
+                    'updatedAt',
+                  ]));
+      allow delete: if isAdminAny();
+    }
+
+
+    // ==============================================================
+    // HEROES_PENDING COLLECTION (legacy admin-side mirror)
+    // ==============================================================
+    // FIX: zero rule coverage (same class of bug as heroes/rides/
+    // service_requests/users above), discovered from the EXACT reported
+    // symptom — HeroApprovalsScreen._approveHero()/_rejectHero() both
+    // read this collection (pendingRef.get()) before writing the actual
+    // approval, to mirror the update here if a legacy doc exists. That
+    // read fell to default-deny and threw permission-denied, which is
+    // why every single Approve/Reject click failed even for a properly
+    // provisioned admin account. Admin-only, matches how this
+    // collection is actually used (nothing else in the app writes here).
+    // ==============================================================
+    match /heroes_pending/{heroId} {
+      allow read, write: if isAdminAny();
+    }
+
+    // ==============================================================
+    // USERS COLLECTION (cross-app profile/session doc)
+    // ==============================================================
+    // FIX: another zero-coverage collection (same class of bug as
+    // heroes/rides/service_requests above) — fell through to the
+    // default-deny catch-all despite being written to constantly:
+    // ProfileSetupScreen._completeSetup(), AuthService.completeProfileSetup(),
+    // SessionService, AND hero_register_screen.dart's own users/{uid}
+    // sync (added alongside the merged registration form) all write
+    // here. Every one of those writes had been silently denied. Owner
+    // (own uid) gets full read/write; admin gets read for support/lookup
+    // tooling — write stays owner-only since nothing server-side should
+    // need to edit another user's profile doc.
+    // ==============================================================
+    match /users/{userId} {
+      allow read: if isAdminAny() || (isAuth() && request.auth.uid == userId);
+      allow create: if isAuth() && request.auth.uid == userId;
+      allow update: if isAuth() && request.auth.uid == userId;
+      allow delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // SOS_KYC_REQUESTS COLLECTION (one-time SOS activation gate)
+    // ==============================================================
+    // NEW (per Nizam's request): customers must verify KYC once before
+    // their SOS button works, to stop casual/unwanted 3-tap presses
+    // from wasting a safety feature meant for genuine emergencies.
+    // sos_kyc_verification_screen.dart submits this once; sos_screen.dart
+    // reads its own status to decide whether to show the live SOS
+    // button or the "verify to activate" gate; admin's Cus SOS Approval
+    // tab reviews and approves/rejects. Doc ID == the customer's own
+    // uid, so there is at most one request per customer. A rejected
+    // customer may resubmit (status must go rejected -> pending, never
+    // straight to approved — only admin can set approved).
+    // ==============================================================
+    match /sos_kyc_requests/{uid} {
+      allow read: if isAdminAny() || (isAuth() && request.auth.uid == uid);
+      allow create: if isAuth() && request.auth.uid == uid
+        && request.resource.data.status == 'pending';
+      allow update: if isAdminAny()
+        || (isAuth() && request.auth.uid == uid
+            && resource.data.status == 'rejected'
+            && request.resource.data.status == 'pending');
+      allow delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // SOS_ALERTS COLLECTION (emergency safety feature)
+    // ==============================================================
+    // FIX (permissions audit, CRITICAL): zero rule coverage — sos_screen.dart
+    // (customer) and hero_sos_screen.dart (hero) both write an SOS alert
+    // with the sender's own uid as userId; super_admin_home_screen.dart's
+    // LIVE SOS banner reads active alerts and resolves them; hero_home_screen.dart
+    // also reads active alerts (nearby-hero visibility). This is a safety
+    // feature that was silently failing end-to-end with permission-denied
+    // — the single most important gap found in this audit. Any
+    // authenticated user may create their own alert (userId == their
+    // uid) and read active alerts (needed for the hero-visibility
+    // feature — an SOS alert is not private data the way a chat message
+    // would be); only admin may resolve/update/delete.
+    // ==============================================================
+    match /sos_alerts/{alertId} {
+      allow read: if isAuth();
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+
+      // FIX (Aug 29 2026 — Emergency Responder dispatch, Nizam's spec):
+      // sos_dispatch_service.dart's claim()/resolveNoProblem()/
+      // escalateNoAnswer() are called DIRECTLY from a hero's own client
+      // — there is no Cloud Function relaying these writes — so
+      // "only admin may update" (the original rule, from when this
+      // collection was just a read-only alert board) silently rejected
+      // every one of them. Same two-clause claim shape already proven
+      // on service_requests/{requestId} just above: a "first claim"
+      // clause that only fires while nobody owns the alert yet, and a
+      // "current claimant" clause for everything that happens after.
+      // userId (whose emergency this is) can never change either way.
+      allow update: if isAdminAny()
+        || (isAuth()
+            && resource.data.get('claimedByHeroId', null) == null
+            && request.resource.data.claimedByHeroId == request.auth.uid
+            && request.resource.data.userId == resource.data.userId)
+        || (isAuth()
+            && resource.data.get('claimedByHeroId', null) == request.auth.uid
+            && request.resource.data.userId == resource.data.userId);
+
+      allow delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // WALLET_TRANSACTIONS COLLECTION (ledger)
+    // ==============================================================
+    // FIX (permissions audit, per Nizam's request): zero rule coverage
+    // — same class of bug as heroes/rides/service_requests/users found
+    // earlier — despite being actively written by customer payment
+    // debits (payment_screen.dart), hero ride-earning credits
+    // (hero_ride_screen.dart / wallet_service.dart), and read by
+    // AdminDashboardScreen's "Recent Transactions" + Top-Up feature.
+    // Every one of those was silently falling to default-deny. Owner
+    // (userId OR heroId matches their own uid) can read their own
+    // transactions and create one for themselves; only admin can
+    // create for an arbitrary user (Top-Up) or edit/delete — this is a
+    // financial ledger, so no client update/delete at all.
+    // ==============================================================
+    match /wallet_transactions/{txnId} {
+      allow read: if isAdminAny()
+        || (isAuth() && resource.data.userId == request.auth.uid)
+        || (isAuth() && resource.data.heroId == request.auth.uid);
+      // GUEST MODE: money ledger — real accounts only.
+      allow create: if isAdminAny()
+        || (isRealUser() && request.resource.data.userId == request.auth.uid)
+        || (isRealUser() && request.resource.data.heroId == request.auth.uid);
+      allow update, delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // PAYMENT_ORDERS (PhonePe gateway integration — see
+    // functions/phonepeCreateOrder.ts / phonepeWebhook.ts /
+    // phonepeCheckStatus.ts): one doc per gateway checkout attempt,
+    // keyed by merchantTransactionId. createPhonePeOrder() (Admin SDK)
+    // is the only writer of 'created'/'failed'; phonepeWebhook.ts
+    // (Admin SDK, checksum-verified server-to-server callback) is the
+    // ONLY thing allowed to write 'paid'. No client write at all —
+    // unlike service_requests.paymentStatus (hero/customer self-report
+    // for the cash/UPI-QR flow), a gateway-verified payment must never
+    // be settable by the client, or the whole point of moving off
+    // client-side UPI-intent trust is defeated.
+    // ==============================================================
+    match /payment_orders/{orderId} {
+      allow read: if isAdminAny() || (isAuth() && resource.data.customerId == request.auth.uid);
+      allow write: if false; // Cloud Functions only (Admin SDK bypasses rules).
+    }
+
+    // ==============================================================
+    // HERO_WALLETS / HERO_WALLET_TRANSACTIONS / WALLET_RECHARGE_REQUESTS
+    // (Revenue Master Plan — prepaid commission wallet, per Nizam's
+    // explicit "NO Cloud Functions" constraint: Spark plan doesn't
+    // support them, so every balance mutation is a plain client-side
+    // Firestore transaction from HeroWalletService. These rules are the
+    // strongest access control available without server code — they
+    // cannot verify a submitted commission amount was computed
+    // correctly (there's no trusted server to recompute it), but they
+    // do lock down WHO can touch WHOSE wallet and WHICH collections a
+    // client can write at all, same as every other collection in this
+    // file. Deliberately a SEPARATE collection from wallet_transactions
+    // above (that ledger is the hero's own collected-cash earnings
+    // bookkeeping — unrelated).
+    //
+    // hero_wallets/{heroId}: owner reads/writes their own doc (recharge
+    // auto-credit + commission debit both happen from the Hero App
+    // itself); admin can do anything (claw-back on reject, manual
+    // corrections). No other uid may touch someone else's wallet.
+    // ==============================================================
+    match /hero_wallets/{heroId} {
+      allow read: if isAdminAny() || (isAuth() && request.auth.uid == heroId);
+      // GUEST MODE: wallet balance mutation — real accounts only.
+      allow create, update: if isAdminAny()
+        || (isRealUser() && request.auth.uid == heroId);
+      allow delete: if isAdminAny();
+
+      // hero_wallets/{heroId}/transactions/{txnId}: immutable ledger,
+      // same "no client update/delete" pattern as wallet_transactions
+      // above. Owner can append their own recharge/commission_debit
+      // entries; admin can append clawback entries during reject.
+      match /transactions/{txnId} {
+        allow read: if isAdminAny() || (isAuth() && request.auth.uid == heroId);
+        allow create: if isAdminAny()
+          || (isRealUser() && request.auth.uid == heroId
+              && request.resource.data.heroId == heroId);
+        allow update, delete: if isAdminAny();
+      }
+    }
+
+    // wallet_recharge_requests/{requestId}: a hero creates their own
+    // request (status must start 'pending' — no self-approving at
+    // creation, same guard pattern as heroes/{heroId} above); only
+    // admin may update it afterward (approve/reject) — a hero can never
+    // flip their own request to 'approved'.
+    match /wallet_recharge_requests/{requestId} {
+      allow read: if isAdminAny()
+        || (isAuth() && resource.data.heroId == request.auth.uid);
+      // GUEST MODE: money movement — real accounts only.
+      allow create: if isRealUser()
+        && request.resource.data.heroId == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow update: if isAdminAny();
+      allow delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // ADS / PLATFORMSETTINGS / SETTINGS (app-wide config, read-only
+    // for regular users)
+    // ==============================================================
+    // FIX (permissions audit): all 3 had zero rule coverage. ads is
+    // read by every app (earn hub, category_gateway_service — active
+    // promo banners) and written only by AdminAdsManagementScreen.
+    // platformSettings/settings hold fare + commission config every
+    // app's booking screens read (category_gateway_service,
+    // fare_management_screen) and only Commission/Fare admin screens
+    // write. Public config, not user data — safe to be broadly
+    // readable, admin-only writable.
+    // ==============================================================
+    match /ads/{adId} {
+      allow read: if isAuth();
+      allow write: if isAdminAny();
+    }
+    match /platformSettings/{docId} {
+      allow read: if isAuth();
+      allow write: if isAdminAny();
+    }
+    match /settings/{docId} {
+      allow read: if isAuth();
+      allow write: if isAdminAny();
+    }
+
+    // ==============================================================
+    // CREDENTIALS / CREDENTIALCATEGORIES (personal password manager)
+    // ==============================================================
+    // FIX (permissions audit): zero rule coverage — credentials_screen.dart
+    // / credential_detail_screen.dart / credential_service.dart let a
+    // user store their own credentials (userId-owned) and optionally
+    // share one with another uid via a sharedWith array; admin's
+    // CredentialsAdminScreen reads/writes across all users' docs for
+    // support tooling. Owner or a uid in sharedWith may read; only the
+    // owner or admin may write.
+    // ==============================================================
+    match /credentials/{credId} {
+      allow read: if isAdminAny()
+        || (isAuth() && resource.data.userId == request.auth.uid)
+        || (isAuth() && request.auth.uid in resource.data.get('sharedWith', []));
+      allow create: if isAdminAny()
+        || (isAuth() && request.resource.data.userId == request.auth.uid);
+      allow update, delete: if isAdminAny()
+        || (isAuth() && resource.data.userId == request.auth.uid);
+    }
+    match /credentialCategories/{catId} {
+      allow read: if isAdminAny() || (isAuth() && resource.data.userId == request.auth.uid);
+      allow create: if isAdminAny()
+        || (isAuth() && request.resource.data.userId == request.auth.uid);
+      allow update, delete: if isAdminAny()
+        || (isAuth() && resource.data.userId == request.auth.uid);
+    }
+
+    // ==============================================================
+    // ADMINCREDENTIALS COLLECTION (internal admin-only vault)
+    // ==============================================================
+    // FIX (permissions audit): zero rule coverage. Purely internal to
+    // CredentialsAdminScreen / admin_credential_service.dart — no
+    // regular-user code path touches this collection at all.
+    // ==============================================================
+    match /adminCredentials/{credId} {
+      allow read, write: if isAdminAny();
+    }
+
+    // ==============================================================
+    // TASK_COMPLETIONS COLLECTION (Earn Hub ad-task submissions)
+    // ==============================================================
+    // FIX (permissions audit): zero rule coverage — task_service.dart /
+    // rewards_hub_screen.dart let a user submit a completion (pending
+    // approval) and read their own submission history; admin's Task
+    // Approvals screen reads/approves/rejects across all users.
+    // Approval/rejection changes status + credits coins, so update is
+    // admin-only — a user cannot self-approve their own task.
+    // ==============================================================
+    match /task_completions/{completionId} {
+      allow read: if isAdminAny() || (isAuth() && resource.data.userId == request.auth.uid);
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // CAPTAINS COLLECTION (legacy — CaptainScreen / hero_screen.dart)
+    // ==============================================================
+    // FIX (permissions audit): zero rule coverage. hero_screen.dart
+    // (CaptainScreen) appears to be superseded by HeroDashboardShell /
+    // hero_home_screen.dart for the live hero flow, but it's still
+    // reachable code that writes its own captains/{uid} doc, and
+    // task_approvals_screen.dart does a read-only lookup here. Same
+    // ownership shape as heroes: owner or admin.
+    // ==============================================================
+    match /captains/{captainId} {
+      allow read: if isAdminAny() || isAuth();
+      allow create, update: if isAdminAny()
+        || (isAuth() && request.auth.uid == captainId);
+      allow delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // COIN_TRANSACTIONS / WITHDRAWAL_REQUESTS (Earn Hub wallet)
+    // ==============================================================
+    // FIX (permissions audit): zero coverage — earn_dashboard_screen.dart
+    // creates/reads its own coin_transactions and withdrawal_requests
+    // (both userId-owned); admin_coin_credit_screen.dart approves/
+    // rejects across all users. Same ledger pattern as wallet_transactions
+    // above — user can create/read their own, only admin can change status.
+    // ==============================================================
+    match /coin_transactions/{txnId} {
+      allow read: if isAdminAny() || (isAuth() && resource.data.userId == request.auth.uid);
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdminAny();
+    }
+    match /withdrawal_requests/{reqId} {
+      allow read: if isAdminAny() || (isAuth() && resource.data.userId == request.auth.uid);
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // SELLEROVERRIDES COLLECTION (per-seller commission override)
+    // ==============================================================
+    // FIX (permissions audit): zero coverage — platform_settings_service.dart
+    // is only ever driven from commission_settings_screen.dart (admin).
+    // No regular-user code path touches this at all.
+    // ==============================================================
+    match /sellerOverrides/{storeId} {
+      allow read, write: if isAdminAny();
+    }
+
+    // ==============================================================
+    // NOTIFICATIONS COLLECTION (per-user notification feed)
+    // ==============================================================
+    // FIX (permissions audit): zero coverage — notifications_screen.dart /
+    // hero_screen.dart / hero_home_screen.dart's _storeIncomingNotification
+    // all create/read/mark-read a notification tagged with the
+    // recipient's own userId. Owner-only, same shape as users/wallet_transactions.
+    // ==============================================================
+    match /notifications/{notifId} {
+      allow read, update, delete: if isAdminAny()
+        || (isAuth() && resource.data.userId == request.auth.uid);
+      // Aug 17 2026: admin may create a notification FOR ANOTHER USER.
+      // Needed for the wallet top-up reminder (Nizam: "yella hero kum
+      // push messege anupiklam") — on the Spark plan there are no Cloud
+      // Functions, so the fan-out is written client-side from the admin
+      // app. Without this clause the userId check below pinned every
+      // create to the SENDER's own uid, so an admin could only ever
+      // notify themselves.
+      //
+      // Ordinary users keep the original restriction: they may still
+      // only create notifications addressed to themselves.
+      allow create: if isAdminAny()
+        || (isAuth() && request.resource.data.userId == request.auth.uid);
+    }
+
+    // ==============================================================
+    // ORDERS COLLECTION (legacy cart_screen.dart / order_tracking_screen.dart)
+    // ==============================================================
+    // FIX (permissions audit): zero coverage — customerId-owned, same
+    // shape as food_orders above (this looks like an older/parallel
+    // order path that predates food_orders; left as its own collection
+    // rather than merged, since that's a data-migration decision beyond
+    // the scope of a permissions audit).
+    // ==============================================================
+    match /orders/{orderId} {
+      allow read: if isAdminAny() || (isAuth() && resource.data.customerId == request.auth.uid);
+      // GUEST MODE (Aug 11 2026): create/update gated to real accounts,
+      // same reasoning as food_orders. Read is deliberately left on
+      // isAuth() — an anonymous uid can only ever match customerId on a
+      // doc it created, and it can no longer create one.
+      allow create: if isRealUser() && request.resource.data.customerId == request.auth.uid;
+      allow update: if isAdminAny() || (isRealUser() && resource.data.customerId == request.auth.uid);
+      allow delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // AFFILIATE_TASKS COLLECTION (Earn Hub task catalog)
+    // ==============================================================
+    // FIX (permissions audit): zero coverage — read-only public catalog
+    // (task_provider.dart / task_service.dart just read active tasks),
+    // admin-managed.
+    // ==============================================================
+    match /affiliate_tasks/{taskId} {
+      allow read: if isAuth();
+      allow write: if isAdminAny();
+    }
+
+    // ==============================================================
+    // CREDENTIALACCESS COLLECTION (credential-sharing grant records)
+    // ==============================================================
+    // FIX (permissions audit): zero coverage — credential_service.dart
+    // grants/revokes sharing access between two specific uids
+    // (ownerId/accessorId). Either party may read; only the owner or
+    // admin may write.
+    // ==============================================================
+    match /credentialAccess/{accessId} {
+      allow read: if isAdminAny()
+        || (isAuth() && resource.data.ownerId == request.auth.uid)
+        || (isAuth() && resource.data.accessorId == request.auth.uid);
+      allow create: if isAdminAny() || (isAuth() && request.resource.data.ownerId == request.auth.uid);
+      allow update, delete: if isAdminAny() || (isAuth() && resource.data.ownerId == request.auth.uid);
+    }
+
+    // ==============================================================
+    // QUIZ_PARTICIPANTS COLLECTION (Mega Quiz contest entries)
+    // ==============================================================
+    // FIX (permissions audit): zero coverage — mega_quiz_screen.dart
+    // keys entries by a hashed Aadhaar (not uid) and needs to READ
+    // (duplicate-check query) before creating its own entry. No
+    // update/delete from the client — entries are immutable once
+    // submitted; admin manages the contest.
+    // ==============================================================
+    match /quiz_participants/{participantId} {
+      allow read: if isAuth();
+      // FIX (F-2, audit 2026-08-07): was `allow create: if isAuth()` with no
+      // ownership pin — any authenticated user could submit an entry with an
+      // arbitrary userId field, potentially submitting as another user's
+      // hashed Aadhaar identity. Pinned to request.auth.uid so a user can
+      // only ever create an entry tagged with their own uid.
+      allow create: if isAuth()
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdminAny();
+    }
+
+
+    // ==============================================================
+    // DB_USAGE_STATS COLLECTION (per-app Firestore usage monitor)
+    // ==============================================================
+    // FIX: new collection for DbUsageTracker (lib/services/
+    // db_usage_tracker.dart) — each of the 4 apps (customer/hero/admin/
+    // seller) flushes its in-memory read/write counters here every ~3
+    // minutes as a single merged doc keyed by {app}_{yyyy-mm-dd}, so
+    // admin's DB Monitor screen can see which app is driving Firestore
+    // usage. Any authenticated app instance may write (these are
+    // anonymous usage counters, not user data — no ownership check
+    // needed, same reasoning as location_search_logs). Only admin can
+    // read, since this is an internal ops metric, not user-facing data.
+    // ==============================================================
+    match /db_usage_stats/{statId} {
+      allow create, update: if isAuth();
+      allow read: if isAdminAny();
+      allow delete: if isAdminAny();
+    }
+
+    // Erode Offers — local shop offers shown in customer app's
+    // Rewards > Erode Offers tab. Any authenticated customer can read
+    // (needed for the offers list + detail page); only admins can
+    // create/edit/delete/toggle-active from AdminErodeOffersScreen.
+    match /erode_offers/{offerId} {
+      allow read: if isAuth();
+      allow write: if isAdminAny();
+    }
+
+    // Gift Coupons — the scratch-card reward flow (per Nizam):
+    // a paid service mints a LOCKED coupon (onServicePaidCreateCoupon
+    // Cloud Function), an admin sets what's inside from the Gift
+    // Coupons screen (Overview > Manage), and once the unlock timer
+    // runs out the customer scratches it open (scratchGiftCoupon).
+    //
+    // NO CUSTOMER WRITES EXIST HERE AT ALL — deliberately. Minting a
+    // coupon, revealing the gift, and spending it are each worth real
+    // money, and each is done by a Cloud Function running as Admin SDK
+    // (which bypasses these rules). A customer with a patched app or a
+    // fast device clock therefore has nothing to attack: they can read
+    // their own coupons and nothing more. In particular the gift
+    // itself is only ever delivered by scratchGiftCoupon's response
+    // after a SERVER-clock check, never inferred from a doc read.
+    match /gift_coupons/{couponId} {
+      // Normal minting is the Cloud Function's job; this clause only
+      // covers an admin issuing one by hand.
+      allow create: if isAdminAny()
+        && request.resource.data.customerId is string;
+
+      // A customer may read only their own coupons; admin reads all
+      // (the Gift Coupons management list).
+      allow read: if isAdminAny()
+        || (isAuth() && resource.data.customerId == request.auth.uid);
+
+      // Admin sets the gift ('awaiting_gift' -> 'ready') and marks an
+      // item gift handed over ('scratched' -> 'claimed'). Every other
+      // transition belongs to a Cloud Function.
+      allow update: if isAdminAny();
+
+      allow delete: if isAdminAny();
+    }
+
+    // gift_coupon_gifts — THE SEALED ENVELOPE.
+    //
+    // What is actually inside a coupon lives here, NOT on the
+    // gift_coupons doc, for one reason: a customer can read their own
+    // gift_coupons doc (they must — that's how the card and its
+    // countdown render). If the gift were stored there, anyone running
+    // a patched client could read the prize before scratching and spoil
+    // the whole mechanic. Money was never at risk either way (redeeming
+    // needs status 'scratched', which only a Cloud Function sets after
+    // a server-clock check) — but the surprise was, and the surprise IS
+    // the feature.
+    //
+    // Admin writes here when arming a card; scratchGiftCoupon (Admin
+    // SDK, bypasses these rules) reads it and copies the gift onto the
+    // customer-visible doc at the moment of the reveal. No customer
+    // read clause exists here at all, deliberately.
+    match /gift_coupon_gifts/{couponId} {
+      allow read, write: if isAdminAny();
+    }
+
+    // tutorial_videos — "how it works" clips for the Hero app, the Hero
+    // PWA and the Customer app (Aug 29 2026). Same shape as ads/
+    // erode_offers above: anyone signed in can read, only admin writes.
+    //
+    // READ IS DELIBERATELY isAuth() AND NOT RESTRICTED FURTHER. The
+    // single most important place these play is the hero ONBOARDING
+    // form — a person who is not a hero yet, has no heroes/{uid} doc and
+    // no approval, watching "how to register". Any rule keyed on hero
+    // status would deny exactly the reader the videos exist for.
+    // Nothing sensitive is stored: a title and a public YouTube link.
+    match /tutorial_videos/{videoId} {
+      allow read: if isAuth();
+      allow write: if isAdminAny();
+    }
+
+    // ==============================================================
+    // system_settings — Zero-Budget Escape Hatch (Aug 12 2026, CTO's
+    // "Migration Notice Board" mandate): a single doc,
+    // system_settings/app_status, read by every app (customer/hero/
+    // seller/admin) via a live listener from the moment it boots. When
+    // `migrationUrl` is ever populated, all 4 apps lock their UI behind
+    // a full-screen notice pointing customers at wherever the business
+    // has moved — the whole point is that this MUST still work even if
+    // this Firebase project is later abandoned/deleted, so read access
+    // is as wide as this project's model allows: every isAuth() session,
+    // INCLUDING anonymous guests (every customer is anonymously signed
+    // in from boot under Guest Mode — see AuthService.ensureGuestSession()
+    // — so restricting this to real accounts would leave the majority of
+    // customer-app sessions unable to see the notice at all). Write is
+    // admin-only — this is a kill-switch, not user data.
+    // ==============================================================
+    match /system_settings/{docId} {
+      allow read: if isAuth();
+      allow write: if isAdminAny();
+    }
+
+
+
+    // ==============================================================
+    // DEFAULT DENY (catch-all safety net)
+    // ==============================================================
+    // Any collection not explicitly matched above is denied by
+    // default. This ensures Food pipeline isolation — no accidental
+    // reads/writes to Bike Taxi RTDB collections from Firestore.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

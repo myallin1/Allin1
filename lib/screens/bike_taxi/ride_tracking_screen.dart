@@ -11,6 +11,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -18,10 +19,19 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../config/fare_rates.dart';
+import '../../config/payment_config.dart';
 import '../../models/ride_model.dart';
+import '../../utils/otp_utils.dart';
+import '../../services/app_minimizer_service.dart';
+import '../../services/chitti_nudge_service.dart';
+import '../../services/chitti_order_memory_service.dart';
+import '../../services/chitti_overlay_service.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../payment_screen.dart';
 import 'bike_booking_screen.dart';
+import '../location_picker_screen.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 class RideTrackingScreen extends StatefulWidget {
   final RideModel ride;
@@ -55,7 +65,25 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   static const Color _muted = Color(0xFF8F5A78);
   static const Color _border = Color(0x33FF4FA3);
 
+  bool get _isCargoRide {
+    final type = (widget.ride.vehicleType ?? '').trim().toLowerCase();
+    return type == 'lorry' || type == 'mini_truck';
+  }
+
   String _rideStatus = 'arriving';
+  // FIX (Phase 4a, WhatsApp/Uber-model active-ride migration): 'arrived'
+  // and 'in_progress' no longer get written to Firestore's rides doc at
+  // all — hero_ride_screen.dart writes them straight to RTDB's
+  // active_rides/{rideDocId} node now (see _listenActiveRideStatus
+  // below), so Firestore's status field jumps straight from whatever it
+  // was at creation to 'completed'/'paid'/'dispute'/'cancelled'. These
+  // two fields let the effective _rideStatus combine both sources
+  // correctly: RTDB wins while the active_rides node exists (it holds
+  // the CURRENT truth for an in-flight ride), Firestore's status wins
+  // once that node is gone (deleted by the hero the moment the ride
+  // reaches a final state — see _cleanupActiveRideStatusNode below).
+  String _firestoreRideStatus = 'arriving';
+  String? _activeRideRtdbStatus;
   bool _completed = false;
   String? _paymentStatus;
   double? _captainLat;
@@ -75,11 +103,17 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   double? _tipAmount;
   double? _remainingDistanceKm;
   int? _remainingEtaMinutes;
+  // NEW (Aug 25 2026 — "Priority 2: Proactive Nudges"). One-shot per
+  // ride, not a timer-based cooldown — a ride never repeats, so there
+  // is nothing to re-arm. Guards against re-firing on every subsequent
+  // location update once the ETA has already crossed the threshold.
+  bool _etaNudgeSent = false;
 
   // RTDB live GPS tracking (Zero-Read Rule)
   StreamSubscription<DatabaseEvent>? _captainLocationSub;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
       _rideDocSubscription;
+  StreamSubscription<DatabaseEvent>? _activeRideStatusSub;
   final MapController _trackingMapController = MapController();
   bool _trackingMapReady = false;
   bool _pendingTrackingFit = false;
@@ -99,29 +133,51 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   String? _rideErrorMessage;
   DateTime? _lastRouteDrawAt;
 
-  // ─── LOCAL DETERMINISTIC OTP GENERATOR (NO DB REQUIRED) ───
-  String _generateLocalOtp(String docId) {
-    if (docId.isEmpty) return '1234';
-    final hash = docId.hashCode.abs();
-    return (1000 + (hash % 9000)).toString(); // Generates 1000-9999
-  }
-  // ──────────────────────────────────────────────────────────
-
-  void _returnToRootSafely() {
+  // FIX (back-button depth audit, per Nizam's request): same silent
+  // no-op bug as bike_booking_screen.dart's _returnToRootSafely — when
+  // canPop() is false (this screen ended up as the sole root route,
+  // e.g. restored directly on app resume), back-press did nothing at
+  // all instead of confirming exit.
+  //
+  // UPDATED (Aug 18 2026 — Turbo App navigation audit, cross-verified
+  // with Gemini): matches the same fix in bike_booking_screen.dart —
+  // this predated the "System Back Button Overhaul" CTO mandate and was
+  // never migrated, so a hard SystemNavigator.pop() (real app close)
+  // could still fire right after a ride, the single most common moment
+  // to hit this screen's root state. Now minimizes instead, same as
+  // every other app root.
+  Future<void> _returnToRootSafely() async {
     if (!mounted) {
       return;
     }
     final navigator = Navigator.of(context);
     if (navigator.canPop()) {
-      navigator.popUntil((route) => route.isFirst);
+      navigator.pop();
+      return;
     }
+    if (kIsWeb) {
+      // A browser tab cannot minimize itself to the OS home screen — no
+      // such API exists. Show the "use your device's Home button" hint
+      // once per session, then silently swallow further back-presses.
+      if (AppMinimizer.consumeWebHintOnce()) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Press your device's Home button to minimize"),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+    unawaited(AppMinimizer.moveToBackground());
   }
 
-  bool get _isPaymentSettled =>
-      _paymentStatus == 'completed' ||
-      _paymentStatus == 'paid' ||
-      _paymentStatus == 'paid_by_wallet' ||
-      _paymentStatus == 'paid_offline_p2p';
+  bool get _isPaymentSettled {
+    final status = _paymentStatus?.trim() ?? '';
+    // Added 'settled' and 'confirmed' to sync with Hero and Admin app updates
+    return ['completed', 'paid', 'paid_by_wallet', 'paid_offline_p2p', 'settled', 'confirmed'].contains(status);
+  }
 
   LatLng? _pickupTarget() {
     if (widget.ride.pickupLatitude == null ||
@@ -144,38 +200,6 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       return LatLng(widget.ride.pickupLatitude!, widget.ride.pickupLongitude!);
     }
     return null;
-  }
-
-  ({double lat, double lng})? _extractHeroCoordinates(
-      Map<String, dynamic> data,) {
-    final rawLoc = data['currentLocation'];
-    if (rawLoc is Map) {
-      final loc = Map<String, dynamic>.from(rawLoc);
-      final nestedLat = (loc['latitude'] ??
-          loc['lat'] ??
-          data['latitude'] ??
-          data['lat']) as num?;
-      final nestedLng = (loc['longitude'] ??
-          loc['lng'] ??
-          data['longitude'] ??
-          data['lng']) as num?;
-      if (nestedLat != null && nestedLng != null) {
-        return (lat: nestedLat.toDouble(), lng: nestedLng.toDouble());
-      }
-    }
-
-    final flatLat = (data['captainLat'] ??
-        data['heroLat'] ??
-        data['latitude'] ??
-        data['lat']) as num?;
-    final flatLng = (data['captainLng'] ??
-        data['heroLng'] ??
-        data['longitude'] ??
-        data['lng']) as num?;
-    if (flatLat == null || flatLng == null) {
-      return null;
-    }
-    return (lat: flatLat.toDouble(), lng: flatLng.toDouble());
   }
 
   String _normalizeHeroVehicleType(String? value) {
@@ -216,6 +240,38 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     final etaMinutes = (meters / 250).ceil().clamp(1, 90);
     _remainingDistanceKm = distanceKm;
     _remainingEtaMinutes = etaMinutes;
+  }
+
+  // NEW (Aug 25 2026 — "Priority 2: Proactive Nudges", ETA trigger).
+  // Scoped to the hero heading to PICKUP only (not mid-ride ETA-to-drop
+  // — the customer is already in the ride at that point, so there's
+  // nothing useful to tell them). One-shot per ride via _etaNudgeSent,
+  // not a timer: a ride never repeats, so there's nothing to re-arm.
+  void _maybeNudgeEtaNear() {
+    if (_etaNudgeSent) return;
+    final etaMinutes = _remainingEtaMinutes;
+    if (etaMinutes == null || etaMinutes > 2) return;
+    if (_rideStatus == 'in_progress' || _rideStatus == 'started') return;
+    _etaNudgeSent = true;
+    unawaited(_fireEtaNudge(etaMinutes));
+  }
+
+  Future<void> _fireEtaNudge(int etaMinutes) async {
+    // perTypeCooldown: Duration.zero — uniqueness for THIS ride is
+    // already guaranteed by _etaNudgeSent above; the global cooldown
+    // and daily cap in ChittiNudgeService still apply on top, so this
+    // doesn't bypass any of the shared anti-spam rules, it just doesn't
+    // add a SECOND, redundant per-ride cooldown on top of the one
+    // already enforced here.
+    final allowed = await ChittiNudgeService.instance.tryFire(
+      'ride_eta_near',
+      perTypeCooldown: Duration.zero,
+    );
+    if (!allowed) return;
+    final minsWord = etaMinutes == 1 ? 'min' : 'mins';
+    unawaited(ChittiOverlayService.instance.showNudge(
+      'Your Hero is about $etaMinutes $minsWord away!',
+    ));
   }
 
   void _fitTrackingCamera() {
@@ -304,6 +360,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       vehicleType: normalizedVehicle,
     );
     _refreshTrackingMetrics(heroLat, heroLng);
+    _maybeNudgeEtaNear();
 
     final target = _routeTargetForStatus();
     final now = DateTime.now();
@@ -421,6 +478,26 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       return;
     }
     _handledPaidFlow = true;
+    // FIX (Aug 25 2026 — "Chitti never dances"). ChittiCompanion's
+    // completeService() has existed since Aug 19 2026 but was never
+    // called from anywhere in the app — the dance mood it drives was
+    // fully built and completely dead code. This is the ride-completion
+    // half of wiring it up; see service_request_payment_screen.dart for
+    // the food/grocery half. No-ops safely when the companion isn't
+    // showing (web, or hero/seller/admin) — see completeService()'s own
+    // isShowing guard.
+    unawaited(ChittiOverlayService.instance.completeService());
+    // NEW (Aug 25 2026 — Super Chitti Phase 1, Step 2: Hive Order
+    // Memory). Fire-and-forget on purpose — see
+    // ChittiOrderMemoryService.record()'s own contract: a memory-write
+    // failure must never block ride closure.
+    final dropAddress = widget.ride.dropAddress?.trim();
+    unawaited(ChittiOrderMemoryService.record(
+      service: widget.ride.vehicleType ?? 'bike',
+      summary: (dropAddress != null && dropAddress.isNotEmpty)
+          ? 'ride to $dropAddress'
+          : 'a ride',
+    ));
     if (!mounted) return;
     final rating = await showDialog<int>(
       context: context,
@@ -458,9 +535,13 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       }
     }
     if (!mounted) return;
+    // Keep the dashboard (first route) so back-press from BikeBookingScreen
+    // returns to the dashboard's own tabs/exit-confirm instead of making
+    // BikeBookingScreen the new stack root (which was causing back to hit
+    // an unexpected "Leave the app?" prompt right after finishing a ride).
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const BikeBookingScreen()),
-      (route) => false,
+      (route) => route.isFirst,
     );
   }
 
@@ -469,11 +550,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       return;
     }
     _hasNavigatedToPayment = true;
-    final tip = _tipAmount ?? 0;
-    final baseToCharge = _lockedFare ??
-        widget.ride.estimatedFare?.toDouble() ??
-        _calculateFareFromDistance(widget.ride.distanceKm ?? 0);
-    final amount = baseToCharge + tip;
+    final amount = _totalToCollect();
     try {
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
@@ -487,6 +564,19 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     } catch (e) {
       _hasNavigatedToPayment = false;
       debugPrint('[RideTrackingScreen] Payment navigation failed: $e');
+      // FIX (Step 2, infrastructure audit — silent failures): this used
+      // to fail silently with only a debugPrint, so the customer would
+      // just sit on the tracking screen with no payment button and no
+      // idea why. Now surfaces it so they know to retry.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open the payment screen. Please try again.'),
+            backgroundColor: Color(0xFFFF5252),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -517,18 +607,69 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       );
     } catch (e) {
       debugPrint('Payment intent update failed: $e');
+      // FIX (Step 2, infrastructure audit — silent failures): this write
+      // (recording which payment method the customer picked) used to
+      // fail with only a debugPrint. Now the customer sees it instead of
+      // assuming their selection went through when it didn't.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not save your payment method. Please try again.'),
+            backgroundColor: Color(0xFFFF5252),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _openGenericUpi() async {
     await _selectPaymentMethod('upi');
-    const candidateUris = <String>[
-      'upi://pay',
-      'upi://',
+
+    // FIX (infrastructure audit, Step 1 — UPI routing, HIGH priority):
+    // this used to launch a completely BARE `upi://pay` with no payee,
+    // no amount, no reference — the intent opened whatever UPI app was
+    // installed with nothing pre-filled, forcing the customer to scan
+    // the hero's own personal QR code manually instead of paying the
+    // company account. Now builds the exact same fully-parameterized
+    // deeplink payment_screen.dart's (already-correct) _launchUpi()
+    // uses, via the shared lib/config/payment_config.dart — same VPA,
+    // same payee name, and the amount comes from _totalToCollect(),
+    // this screen's own single source of truth for "what the customer
+    // actually owes" (already used for the on-screen total display —
+    // see that method's own comment for why it's preferred over the
+    // stale pre-ride estimate).
+    // FIX (Aug 10 2026 — same root cause fixed in payment_screen.dart's
+    // _launchUpi(): a bare `upi://pay` scheme cannot be opened by a
+    // browser at all, so this screen's customer-side UPI button was
+    // silently failing on the PWA every time, same as the other
+    // payment entry point). On web, lead with the `intent://` form —
+    // see payment_config.dart's buildUpiIntentUri() for why this is
+    // what actually triggers Android Chrome's native "Pay with
+    // GPay/PhonePe/..." app chooser with the amount pre-filled.
+    final primaryUri = kIsWeb
+        ? PaymentConfig.buildUpiIntentUri(
+            amount: _totalToCollect(),
+            referenceId: widget.rideDocId,
+          )
+        : PaymentConfig.buildUpiUri(
+            amount: _totalToCollect(),
+            referenceId: widget.rideDocId,
+          );
+
+    // Bare `upi://` kept ONLY as a last-resort fallback — some UPI
+    // apps' intent filters are registered narrower than others and
+    // may not match the fully-parameterized URI on every device/OS
+    // version; opening the app at all (even with nothing pre-filled)
+    // is still better than the "No UPI apps installed" dead end below.
+    // Not meaningful on web (browsers can't open bare custom schemes
+    // regardless), so only added as a fallback candidate on native.
+    final candidateUris = <Uri>[
+      primaryUri,
+      if (!kIsWeb) Uri.parse('upi://'),
     ];
 
-    for (final candidate in candidateUris) {
-      final uri = Uri.parse(candidate);
+    for (final uri in candidateUris) {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
         return;
@@ -553,9 +694,10 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     WidgetsBinding.instance.addObserver(this);
     
     // ✅ Set local OTP immediately upon screen load
-    _rideOtp = _generateLocalOtp(widget.rideDocId); 
+    _rideOtp = generateLocalOtp(widget.rideDocId); 
     
     _rideStatus = widget.ride.status ?? _rideStatus;
+    _firestoreRideStatus = _rideStatus;
     _captainName = widget.ride.heroName;
     _captainBike = widget.ride.heroVehicleNumber;
     _captainPhone = widget.ride.heroPhone;
@@ -564,6 +706,39 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       _finalFare = widget.ride.estimatedFare?.toDouble();
     }
     _bindRideDocument();
+    _listenActiveRideStatus();
+  }
+
+  // FIX (Phase 4a): live-streams the hero's transient ride-status writes
+  // (arrived/in_progress) straight from RTDB's active_rides/{rideDocId}
+  // node instead of Firestore — see the _firestoreRideStatus/
+  // _activeRideRtdbStatus comment above for why both sources exist and
+  // how they combine. When the node is missing entirely (ride not yet
+  // arrived, or already completed and cleaned up), this defers to
+  // whatever Firestore's _firestoreRideStatus already says.
+  void _listenActiveRideStatus() {
+    if (widget.rideDocId.isEmpty) {
+      return;
+    }
+    _activeRideStatusSub = FirebaseDatabase.instance
+        .ref('active_rides/${widget.rideDocId}')
+        .onValue
+        .listen((event) {
+      if (!mounted) {
+        return;
+      }
+      final raw = event.snapshot.value;
+      final rtdbStatus = raw is Map ? raw['status'] as String? : null;
+      if (_activeRideRtdbStatus == rtdbStatus) {
+        return;
+      }
+      setState(() {
+        _activeRideRtdbStatus = rtdbStatus;
+        _rideStatus = rtdbStatus ?? _firestoreRideStatus;
+      });
+    }, onError: (Object e) {
+      debugPrint('[RideTrackingScreen] active_rides listener error: $e');
+    });
   }
 
   @override
@@ -602,6 +777,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     WidgetsBinding.instance.removeObserver(this);
     _rideDocSubscription?.cancel();
     _captainLocationSub?.cancel();
+    _activeRideStatusSub?.cancel();
     _disposeMoveAnimation();
     super.dispose();
   }
@@ -643,7 +819,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     _rideDocSubscription = FirebaseFirestore.instance
         .collection('rides')
         .doc(widget.rideDocId)
-        .snapshots()
+        .trackedSnapshots()
         .listen(
       _handleRideDocument,
       onError: (Object error) {
@@ -755,6 +931,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     if (currentCustomerUid == null || rideCustomerId != currentCustomerUid) {
       _rideDocSubscription?.cancel();
       _captainLocationSub?.cancel();
+      _activeRideStatusSub?.cancel();
       setState(() {
         _rideErrorMessage = 'This ride is not linked to your account.';
         _isRideLoading = false;
@@ -783,7 +960,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     );
     
     // ✅ Always use local deterministic OTP based on rideDocId
-    final nextRideOtp = _generateLocalOtp(widget.rideDocId); 
+    final nextRideOtp = generateLocalOtp(widget.rideDocId); 
     
     final nextCaptainLat = ((data['captainLat'] ??
             data['heroLat'] ??
@@ -818,7 +995,8 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     }
 
     setState(() {
-      _rideStatus = nextStatus;
+      _firestoreRideStatus = nextStatus;
+      _rideStatus = _activeRideRtdbStatus ?? nextStatus;
       _paymentStatus = nextPaymentStatus;
       _lockedFare = nextLockedFare;
       _finalFare = nextFinalFare;
@@ -905,6 +1083,48 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
             '🛰️ Hero location updated (RTDB): ${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}',);
       }
     });
+  }
+
+  Future<void> _changeDestination() async {
+    final picked = await Navigator.push<PickedLocation>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          initialCenter: LatLng(widget.ride.dropLatitude ?? widget.ride.pickupLatitude ?? 0.0, widget.ride.dropLongitude ?? widget.ride.pickupLongitude ?? 0.0),
+          title: 'Update Destination',
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+
+    double distMeters = Geolocator.distanceBetween(
+      widget.ride.pickupLatitude ?? 0.0, widget.ride.pickupLongitude ?? 0.0,
+      picked.lat, picked.lng
+    );
+    double distKm = distMeters / 1000.0;
+    double roadDistKm = distKm * 1.3;
+
+    double newFare = RideModel.calculateFare(roadDistKm, widget.ride.vehicleType ?? 'bike');
+
+    try {
+      await FirebaseFirestore.instance.collection('rides').doc(widget.ride.id).update({
+        'dropAddress': picked.name,
+        'dropLatitude': picked.lat,
+        'dropLongitude': picked.lng,
+        'distanceKm': roadDistKm,
+        'routeDistanceKm': roadDistKm,
+        'distance_km': roadDistKm,
+        'fare': newFare,
+        'estimatedFare': newFare,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Destination updated! Fare recalculated.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update destination')));
+      }
+    }
   }
 
   @override
@@ -1049,7 +1269,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   Widget _arrivalBanner() {
     final String title =
         _rideStatus == 'started' || _rideStatus == 'in_progress'
-            ? 'Ride started'
+            ? (_isCargoRide ? 'Goods picked up' : 'Ride started')
             : 'Driver arriving...';
 
     return Container(
@@ -1117,10 +1337,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
 
   Widget _completedBanner() {
     final tip = _tipAmount ?? 0;
-    final baseToCharge = _lockedFare ??
-        widget.ride.estimatedFare?.toDouble() ??
-        _calculateFareFromDistance(widget.ride.distanceKm ?? 0);
-    final absoluteTotal = baseToCharge + tip;
+    final absoluteTotal = _totalToCollect();
     final fareBeforeTip = absoluteTotal - tip;
     return Container(
       width: double.infinity,
@@ -1243,10 +1460,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
 
   Widget _paymentSheet() {
     final tip = _tipAmount ?? 0;
-    final baseToCharge = _lockedFare ??
-        widget.ride.estimatedFare?.toDouble() ??
-        _calculateFareFromDistance(widget.ride.distanceKm ?? 0);
-    final absoluteTotal = baseToCharge + tip;
+    final absoluteTotal = _totalToCollect();
     final fareBeforeTip = absoluteTotal - tip;
     return Container(
       width: double.infinity,
@@ -1278,8 +1492,8 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
           ),
           const SizedBox(height: 6),
           Text(
-            'ரைடரின் Paytm Soundbox-ஐ ஸ்கேன் செய்து பணம் செலுத்தவும்.',
-            style: GoogleFonts.notoSansTamil(
+            "Scan the rider's Paytm Soundbox to pay.",
+            style: GoogleFonts.outfit(
               fontSize: 13,
               color: _muted,
             ),
@@ -1489,7 +1703,12 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
           children: [
             _rRow('🔴', 'Pickup', widget.ride.pickupAddress ?? ''),
             const SizedBox(height: 10),
-            _rRow('🟢', 'Drop', widget.ride.dropAddress ?? ''),
+            _rRow('🟢', 'Drop', widget.ride.dropAddress ?? '', trailing: IconButton(
+              icon: const Icon(Icons.edit_location_alt_rounded, size: 18, color: _gold),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              onPressed: _changeDestination,
+            )),
             const Divider(color: _border, height: 20),
             if (_tipAmount != null && _tipAmount! > 0) ...[
               Row(
@@ -1735,13 +1954,39 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     }
   }
 
+  // ── Confirmed-bug fix: total-to-collect must prefer the hero's real,
+  // completion-time computed total (_finalFare = fareBeforeTip + tip,
+  // written by hero_ride_screen.dart's _completeTrip()) over the stale
+  // pre-ride estimate. Previously every caller below independently
+  // computed `(_lockedFare ?? estimatedFare ?? calculated) + tip` and
+  // NEVER looked at _finalFare at all — since 'lockedFare' is never
+  // actually written anywhere in this codebase, this always fell
+  // through to the stale pre-ride estimate, producing a different
+  // number than what the hero's Collect Payment screen shows (which
+  // correctly uses actualFare + tip). _finalFare already includes tip
+  // — do NOT add tip again on top of it once the ride is completed.
+  double _totalToCollect() {
+    final finalFare = _finalFare;
+    if (finalFare != null && finalFare > 0) {
+      return finalFare;
+    }
+    final tip = _tipAmount ?? 0;
+    final baseToCharge = _actualFare ??
+        _lockedFare ??
+        widget.ride.estimatedFare?.toDouble() ??
+        _calculateFareFromDistance(widget.ride.distanceKm ?? 0);
+    return baseToCharge + tip;
+  }
+
+  // FIX: this was a bike-only hardcoded fallback (baseFare 25 /
+  // baseDistance 1 / perKm 6) applied regardless of the ride's actual
+  // vehicleType — a 6th disagreeing fare table, and wrong for every
+  // non-bike category. Now delegates to the single central
+  // lib/config/fare_rates.dart source of truth, keyed by this ride's
+  // real vehicleType.
   double _calculateFareFromDistance(double km) {
-    if (km <= 0) return 25;
-    const double baseFare = 25;
-    const double baseDistance = 1;
-    const double perKm = 6;
-    if (km <= baseDistance) return baseFare;
-    return (baseFare + ((km - baseDistance) * perKm)).roundToDouble();
+    if (km <= 0) return FareRates.minFareFor(widget.ride.vehicleType ?? 'bike');
+    return FareRates.calculateFare(widget.ride.vehicleType ?? 'bike', km);
   }
 
   double _bearingBetween(LatLng start, LatLng end) {
@@ -1754,7 +1999,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     return (math.atan2(y, x) * 180 / math.pi + 360) % 360;
   }
 
-  Widget _rRow(String dot, String lbl, String txt) => Row(
+  Widget _rRow(String dot, String lbl, String txt, {Widget? trailing}) => Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(dot, style: const TextStyle(fontSize: 11)),
@@ -1782,6 +2027,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
               ],
             ),
           ),
+          if (trailing != null) trailing,
         ],
       );
 }

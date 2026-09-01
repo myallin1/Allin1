@@ -19,6 +19,33 @@ class OlaMapsProvider extends MapProvider {
   static const String _placesHost = 'api.olamaps.io';
   static const String _placesBasePath = '/places/v1';
 
+  // Ola Vector Tiles (MapLibre-style) -- surgical addition per Nizam's
+  // instruction to render Ola's real interactive map instead of the raster
+  // OSM proxy `getTileUrl` below (which stays completely untouched as the
+  // silent fallback path when vector style loading fails or the key is
+  // missing/rate-limited).
+  //
+  // {key} is a literal placeholder -- vector_map_tiles' StyleReader
+  // substitutes it with the `apiKey` value passed alongside this URI. We
+  // never string-interpolate the raw key ourselves, matching this file's
+  // existing convention of never logging/exposing the key value directly.
+  static const String _vectorStyleUriTemplate =
+      'https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json?api_key={key}';
+
+  /// URI to hand to `vector_map_tiles`' `StyleReader(uri: ..., apiKey: ...)`.
+  /// Returns null when there's no usable key, so callers can skip the
+  /// vector-tile attempt entirely and fall straight to OSM.
+  String? get vectorStyleUri => vectorStyleUriFor(apiKey);
+
+  /// Static variant so callers that only have the raw key string (e.g. the
+  /// map widget, which reads `ApiConfig.olaMapsApiKey` directly) can build
+  /// the same URI without constructing a full provider instance.
+  static String? vectorStyleUriFor(String apiKey) {
+    final trimmed = apiKey.trim();
+    if (trimmed.isEmpty || trimmed.length < 16) return null;
+    return _vectorStyleUriTemplate;
+  }
+
   @override
   String getTileUrl(int x, int y, int z) {
     return 'https://tile.openstreetmap.org/$z/$x/$y.png';
@@ -29,23 +56,42 @@ class OlaMapsProvider extends MapProvider {
     return apiKey.isNotEmpty && apiKey.length >= 16;
   }
 
+  // Default bias point, used only when no live centre is supplied.
+  static const double _defaultBiasLat = 11.3410;
+  static const double _defaultBiasLng = 77.7171;
+
   @override
-  Future<List<Map<String, dynamic>>> search(String query) async {
+  Future<List<Map<String, dynamic>>> search(String query) => searchNear(query);
+
+  /// Autocomplete biased around [center] — pass the customer's live
+  /// location so results follow whatever city they are actually in.
+  ///
+  /// This used to hardcode Erode twice: a '11.3410,77.7171' location
+  /// param AND a ', Erode, Tamil Nadu' suffix glued onto the query. The
+  /// suffix in particular actively hurt results — it turned a search for
+  /// a local shop into a search for that shop *in a text string that
+  /// already says Erode*, which Ola then had to disambiguate. The
+  /// location+radius bias alone does the same job properly, and works
+  /// unchanged when we open in a second city.
+  Future<List<Map<String, dynamic>>> searchNear(
+    String query, {
+    LatLng? center,
+  }) async {
     final trimmedQuery = query.trim();
     if (trimmedQuery.isEmpty) return [];
     if (apiKey.isEmpty) return [];
 
+    final biasLat = center?.latitude ?? _defaultBiasLat;
+    final biasLng = center?.longitude ?? _defaultBiasLng;
+
     try {
-      final erodeBiasedQuery = trimmedQuery.toLowerCase().contains('erode')
-          ? trimmedQuery
-          : '$trimmedQuery, Erode, Tamil Nadu';
       final autocompleteUri = Uri.https(
         _placesHost,
         '$_placesBasePath/autocomplete',
         <String, String>{
-          'input': erodeBiasedQuery,
+          'input': trimmedQuery,
           'api_key': apiKey,
-          'location': '11.3410,77.7171',
+          'location': '$biasLat,$biasLng',
           'radius': '40000',
         },
       );
@@ -58,27 +104,35 @@ class OlaMapsProvider extends MapProvider {
         final predictions = _extractPlaceList(data);
         final results = <Map<String, dynamic>>[];
 
+        // Predictions that already carry coordinates are free. Ones that
+        // don't need a follow-up geocode call — those used to run one
+        // after another inside this loop, up to 8 sequential HTTP
+        // round-trips at a 10s timeout each, on every keystroke batch.
+        // That alone could make autocomplete feel broken. Now they run
+        // together, and only for the few that actually need it.
+        final needsGeocode = <String>[];
         for (final item in predictions.take(8)) {
           final parsed = _parsePlaceResult(item);
           if (parsed != null) {
             results.add(parsed);
             continue;
           }
-
           final label = _extractDisplayText(item);
-          if (label == null || label.trim().isEmpty) continue;
+          if (label != null && label.trim().isNotEmpty) {
+            needsGeocode.add(label);
+          }
+        }
 
-          final geocoded = await _geocodeAddress(
-            label.toLowerCase().contains('erode')
-                ? label
-                : '$label, Erode, Tamil Nadu',
+        if (needsGeocode.isNotEmpty) {
+          final geocoded = await Future.wait(
+            needsGeocode.take(4).map(_geocodeAddress),
           );
-          if (geocoded != null) results.add(geocoded);
+          results.addAll(geocoded.whereType<Map<String, dynamic>>());
         }
 
         if (results.isNotEmpty) return _dedupeResults(results);
 
-        final geocoded = await _geocodeAddress(erodeBiasedQuery);
+        final geocoded = await _geocodeAddress(trimmedQuery);
         return geocoded == null ? [] : <Map<String, dynamic>>[geocoded];
       }
 
@@ -136,7 +190,7 @@ class OlaMapsProvider extends MapProvider {
     }
   }
 
-  List<dynamic> _extractPlaceList(dynamic data) {
+  List<dynamic> _extractPlaceList(data) {
     if (data is List) return data;
     if (data is! Map) return const [];
 
@@ -159,7 +213,7 @@ class OlaMapsProvider extends MapProvider {
   }
 
   Map<String, dynamic>? _parsePlaceResult(
-    dynamic item, {
+    item, {
     LatLng? fallbackPoint,
   }) {
     if (item is! Map) return null;
@@ -181,7 +235,7 @@ class OlaMapsProvider extends MapProvider {
     };
   }
 
-  String? _extractDisplayText(dynamic item) {
+  String? _extractDisplayText(item) {
     if (item is! Map) return null;
 
     for (final key in const <String>[
@@ -210,7 +264,7 @@ class OlaMapsProvider extends MapProvider {
     return null;
   }
 
-  String? _extractPrimaryText(dynamic item) {
+  String? _extractPrimaryText(item) {
     if (item is! Map) return null;
     for (final key in const <String>['name', 'main_text', 'title']) {
       final value = item[key]?.toString().trim();
@@ -229,7 +283,7 @@ class OlaMapsProvider extends MapProvider {
     return null;
   }
 
-  double? _extractLatitude(dynamic item) {
+  double? _extractLatitude(item) {
     if (item is! Map) return null;
     final coordinates = item['geometry']?['coordinates'];
     return _asDouble(item['lat']) ??
@@ -239,7 +293,7 @@ class OlaMapsProvider extends MapProvider {
         _asDouble(_coordinateAt(coordinates, 1));
   }
 
-  double? _extractLongitude(dynamic item) {
+  double? _extractLongitude(item) {
     if (item is! Map) return null;
     final coordinates = item['geometry']?['coordinates'];
     return _asDouble(item['lng']) ??
@@ -252,14 +306,14 @@ class OlaMapsProvider extends MapProvider {
         _asDouble(_coordinateAt(coordinates, 0));
   }
 
-  dynamic _coordinateAt(dynamic coordinates, int index) {
+  dynamic _coordinateAt(coordinates, int index) {
     if (coordinates is List && coordinates.length > index) {
       return coordinates[index];
     }
     return null;
   }
 
-  double? _asDouble(dynamic value) {
+  double? _asDouble(value) {
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value.trim());
     return null;

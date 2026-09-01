@@ -3,11 +3,18 @@
 // Allin1 Super App - Hero Configuration
 // ================================================================
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+ import '../../services/localization_service.dart';
  import '../../services/map_service.dart';
+ import '../../services/theme_service.dart';
+ import '../ai_settings_screen.dart';
+ import 'hero_payment_qr_screen.dart';
 
 class HeroSettingsScreen extends StatefulWidget {
   const HeroSettingsScreen({super.key});
@@ -26,13 +33,12 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
   bool _notificationsEnabled = true;
   bool _rideAlertsEnabled = true;
   String _selectedMapProvider = 'Ola Maps';
-  String _selectedLanguage = 'English';
-
-  static const List<Map<String, String>> _languageOptions = <Map<String, String>>[
-    {'code': 'english', 'name': 'English'},
-    {'code': 'tamil', 'name': 'Tamil'},
-    {'code': 'thanglish', 'name': 'Thanglish'},
-  ];
+  // Language selection now reads/writes through the app-wide
+  // LocalizationService (Provider) — see _buildLanguageSettings()
+  // below. The old 'hero_language_code' shared_preferences key and
+  // _selectedLanguage field were never actually read by anything that
+  // changed displayed text, so picking a language here used to be a
+  // dead-end button.
 
   static const List<Map<String, String>> _mapProviderOptions = <Map<String, String>>[
     {'code': 'ola', 'name': 'Ola Maps'},
@@ -53,9 +59,6 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
         _rideAlertsEnabled = prefs.getBool('hero_ride_alerts_enabled') ?? true;
         _selectedMapProvider = _getMapProviderNameFromCode(
           prefs.getString('hero_map_provider') ?? 'ola',
-        );
-        _selectedLanguage = _getLanguageNameFromCode(
-          prefs.getString('hero_language_code') ?? 'english',
         );
       });
     } catch (e) {
@@ -95,14 +98,6 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
       orElse: () => _mapProviderOptions[0],
     );
     return match['code']!;
-  }
-
-  String _getLanguageNameFromCode(String code) {
-    final match = _languageOptions.firstWhere(
-      (opt) => opt['code'] == code,
-      orElse: () => _languageOptions[0],
-    );
-    return match['name']!;
   }
 
 
@@ -177,9 +172,32 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
             const SizedBox(height: 12),
             _buildMapProviderSettings(),
             const SizedBox(height: 28),
+            // NEW (Aug 12 2026 — Nizam: "Hero app setting kulla payment
+            // qr nu oru new option create pannu"): lets an already
+            // registered hero view/replace/remove their saved payment
+            // QR any time, without going back through the whole
+            // registration form. See hero_payment_qr_screen.dart.
+            _buildSectionHeader('Payment QR'),
+            const SizedBox(height: 12),
+            _buildPaymentQrSettings(),
+            const SizedBox(height: 28),
+            // NEW (Aug 28 2026 - Nizam: "mobile la chitti innum girl
+            // voice la than pesuran"). This screen was the only place
+            // to open the voice picker, and it was wired into the
+            // CUSTOMER app's routes only - so a Hero had no way to
+            // audition their phone's actual voice list and pin a male
+            // one by ear, whatever the automatic heuristic guessed.
+            _buildSectionHeader("Chitti's Voice"),
+            const SizedBox(height: 12),
+            _buildChittiVoiceSettings(),
+            const SizedBox(height: 28),
             _buildSectionHeader('Language & Region'),
             const SizedBox(height: 12),
             _buildLanguageSettings(),
+            const SizedBox(height: 28),
+            _buildSectionHeader('Theme'),
+            const SizedBox(height: 12),
+            _buildThemeSettings(),
             const SizedBox(height: 28),
             _buildSectionHeader('About'),
             const SizedBox(height: 12),
@@ -204,7 +222,7 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
   }
 
   Widget _buildNotificationSettings() {
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(20),
@@ -224,7 +242,7 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
             title: 'All Notifications',
             subtitle: 'Enable all push notifications',
             value: _notificationsEnabled,
-             onChanged: (bool val) {
+             onChanged: (val) {
                setState(() => _notificationsEnabled = val);
                _saveSetting('hero_notifications_enabled', val);
              },
@@ -235,12 +253,111 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
             title: 'Ride Alerts',
             subtitle: 'Sound + vibration for new rides',
             value: _rideAlertsEnabled,
-            onChanged: (bool val) {
+            onChanged: (val) {
               setState(() => _rideAlertsEnabled = val);
               _saveSetting('hero_ride_alerts_enabled', val);
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildChittiVoiceSettings() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _pink.withValues(alpha: 0.2)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12FF4FA3),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ListTile(
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: _pink.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(Icons.record_voice_over_rounded,
+              color: _pink, size: 22),
+        ),
+        title: Text(
+          'Voice & Tone',
+          style: GoogleFonts.outfit(
+            color: _text,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        subtitle: Text(
+          "Pick which of your phone's installed voices Chitti uses",
+          style: GoogleFonts.outfit(
+            color: _muted,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right_rounded, color: _muted),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute<void>(builder: (_) => const AiSettingsScreen()),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaymentQrSettings() {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _pink.withValues(alpha: 0.2)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12FF4FA3),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ListTile(
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: _pink.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(Icons.qr_code_2_rounded, color: _pink, size: 22),
+        ),
+        title: Text(
+          'Your Payment QR',
+          style: GoogleFonts.outfit(
+            color: _text,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        subtitle: Text(
+          'View, replace, or remove the QR customers scan to pay you',
+          style: GoogleFonts.outfit(
+            color: _muted,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right_rounded, color: _muted),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute<void>(builder: (_) => const HeroPaymentQrScreen()),
+        ),
       ),
     );
   }
@@ -281,13 +398,13 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
       trailing: Switch(
         value: value,
         onChanged: onChanged,
-        activeColor: _pink,
+        activeThumbColor: _pink,
       ),
     );
   }
 
   Widget _buildMapProviderSettings() {
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(20),
@@ -315,7 +432,7 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
     return RadioListTile<String>(
       value: providerName,
       groupValue: _selectedMapProvider,
-       onChanged: (String? val) {
+       onChanged: (val) {
          if (val != null) {
            _switchMapProvider(val);
          }
@@ -347,14 +464,18 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
         ),
       ),
       secondary: isSelected
-          ? Icon(Icons.check_circle_rounded, color: _pink, size: 20)
-          : Icon(Icons.circle_outlined, color: _muted, size: 20),
+          ? const Icon(Icons.check_circle_rounded, color: _pink, size: 20)
+          : const Icon(Icons.circle_outlined, color: _muted, size: 20),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
     );
   }
 
   Widget _buildLanguageSettings() {
-    return Container(
+    // Reactive: rebuilds automatically if the language is ever changed
+    // from elsewhere (e.g. another screen using the same
+    // LocalizationService instance).
+    final currentCode = context.watch<LocalizationService>().languageCode;
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(20),
@@ -369,27 +490,28 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
       ),
       child: Column(
         children: [
-          _buildLanguageTile('English', 'English'),
+          _buildLanguageTile('en', 'English', currentCode),
           const Divider(height: 1, indent: 56, endIndent: 16),
-          _buildLanguageTile('Tamil', 'தமிழ்'),
+          _buildLanguageTile('ta', 'தமிழ்', currentCode),
           const Divider(height: 1, indent: 56, endIndent: 16),
-          _buildLanguageTile('Thanglish', 'Tanglish (Tamil + English)'),
+          _buildLanguageTile('tg', 'Tanglish (Tamil + English)', currentCode),
+          const Divider(height: 1, indent: 56, endIndent: 16),
+          _buildLanguageTile('hi', 'हिन्दी (Hindi)', currentCode),
         ],
       ),
     );
   }
 
-  Widget _buildLanguageTile(String code, String displayName) {
-    final isSelected = _selectedLanguage == displayName;
+  Widget _buildLanguageTile(String code, String displayName, String currentCode) {
+    final isSelected = currentCode == code;
     return RadioListTile<String>(
-      value: displayName,
-      groupValue: _selectedLanguage,
-       onChanged: (String? val) {
-         if (val != null) {
-           setState(() => _selectedLanguage = val);
-           _saveStringSetting('hero_language_code', code);
-         }
-       },
+      value: code,
+      groupValue: currentCode,
+      onChanged: (val) {
+        if (val != null) {
+          unawaited(context.read<LocalizationService>().setLanguage(val));
+        }
+      },
       title: Text(
         displayName,
         style: GoogleFonts.outfit(
@@ -399,8 +521,68 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
         ),
       ),
       secondary: isSelected
-          ? Icon(Icons.check_circle_rounded, color: _pink, size: 20)
-          : Icon(Icons.circle_outlined, color: _muted, size: 20),
+          ? const Icon(Icons.check_circle_rounded, color: _pink, size: 20)
+          : const Icon(Icons.circle_outlined, color: _muted, size: 20),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+    );
+  }
+
+  static const List<Map<String, String>> _themeOptions = <Map<String, String>>[
+    {'key': 'pink_white', 'label': 'Pink & White'},
+    {'key': 'dark_purple', 'label': 'Dark Purple'},
+    {'key': 'system_dark', 'label': 'System Dark'},
+    {'key': 'system_light', 'label': 'System Light'},
+    {'key': 'multicolor', 'label': 'Multicolor'},
+  ];
+
+  Widget _buildThemeSettings() {
+    // Reactive: rebuilds automatically when the theme changes.
+    final currentKey = context.watch<ThemeService>().themeKey;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _pink.withValues(alpha: 0.2)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12FF4FA3),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < _themeOptions.length; i++) ...[
+            if (i > 0) const Divider(height: 1, indent: 56, endIndent: 16),
+            _buildThemeTile(_themeOptions[i]['key']!, _themeOptions[i]['label']!, currentKey),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildThemeTile(String key, String label, String currentKey) {
+    final isSelected = currentKey == key;
+    return RadioListTile<String>(
+      value: key,
+      groupValue: currentKey,
+      onChanged: (val) {
+        if (val != null) {
+          unawaited(context.read<ThemeService>().setTheme(val));
+        }
+      },
+      title: Text(
+        label,
+        style: GoogleFonts.outfit(
+          color: _text,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      secondary: isSelected
+          ? const Icon(Icons.check_circle_rounded, color: _pink, size: 20)
+          : const Icon(Icons.circle_outlined, color: _muted, size: 20),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
     );
   }

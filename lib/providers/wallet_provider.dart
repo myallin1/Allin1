@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/user_wallet_model.dart';
+import '../services/firestore_usage_tracking.dart';
 
 class WalletProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -37,7 +38,7 @@ class WalletProvider extends ChangeNotifier {
     notifyListeners();
 
     _walletSubscription =
-        _firestore.collection('users').doc(userId).snapshots().listen(
+        _firestore.collection('users').doc(userId).trackedSnapshots().listen(
       (snapshot) {
         if (snapshot.exists) {
           _wallet =

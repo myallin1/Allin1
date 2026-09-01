@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="ta" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  
+  <title>myallin1 — ஈரோட்டின் முதல் சூப்பர் ஆப் | ரைடு, உணவு, மளிகை, E-Seva & Chitti AI</title>
+  <meta name="title" content="myallin1 — ஈரோட்டின் முதல் சூப்பர் ஆப் | ரைடு, உணவு, மளிகை, E-Seva & Chitti AI">
+  <meta name="description" content="Hero Booking, Taxi & Bike, Food Delivery, Grocery, Mobiles, E-Seva & 24/7 SOS — எல்லாம் ஈரோட்டுக்கான ஒரே சூப்பர் ஆப்பில். 0 MB Storage, 0% கமிஷன்!">
+  <meta name="keywords" content="myallin1, erode super app, erode bike taxi, erode food delivery, erode grocery, chitti ai, eseva erode, zero commission erode">
+  <meta name="author" content="NJ TECH">
+  <meta name="theme-color" content="#c2357c">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://my-allin1.web.app">
+  
+  <!-- PWA & Mobile Favicon -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Crect width='24' height='24' rx='6' fill='%23c2357c'/%3E%3Cpath d='M4 12L12 4L20 12L12 20L4 12Z' stroke='%23fc4a9f' stroke-width='2.2' stroke-linejoin='round'/%3E%3Ccircle cx='12' cy='12' r='3.2' fill='%23FFFFFF'/%3E%3C/svg%3E">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+Tamil:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Senior Developer Modular CSS -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/animations.css">
+</head>
+<body>
+
+  <!-- Accessible Skip Link -->
+  <a href="#mainContent" class="skip-link">உள்ளடக்கத்திற்கு செல்</a>
+
+  <!-- =========================================================================
+       NAVIGATION BAR
+       ========================================================================= -->
+  <header class="nav-wrapper">
+    <div class="wrap">
+      <nav class="nav-bar" aria-label="முக்கிய வழிசெலுத்தல்">
+        <a href="#" class="brand-container" aria-label="myallin1 Home">
+          <span class="brand-mark-box">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 12L12 4L20 12L12 20L4 12Z" stroke="#FFFFFF" stroke-width="2.2" stroke-linejoin="round"/>
+              <circle cx="12" cy="12" r="3.2" fill="#FFFFFF"/>
+            </svg>
+          </span>
+          <span>myallin1</span>
+        </a>
+
+        <div class="nav-menu-links">
+          <a href="#services">சேவைகள்</a>
+          <a href="#chitti-ai">Chitti AI</a>
+          <a href="#calculator">சேமிப்பு கணக்கு</a>
+          <a href="#how">எப்படி வேலை செய்யுது?</a>
+          <a href="#hero-program">Hero வருமானம்</a>
+          <a href="#testimonials">Reviews</a>
+        </div>
+
+        <div class="nav-actions">
+          <button type="button" class="btn btn-qr open-qr-modal" aria-label="போனில் திறக்க QR Scan">
+            <span class="btn-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+            </span>
+            <span>QR Scan</span>
+          </button>
+          
+          <a href="https://my-allin1.web.app" class="btn btn-primary" target="_blank" rel="noopener">
+            <span class="btn-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 17L17 7M17 7H9M17 7V15"/></svg>
+            </span>
+            <span>ஆப்-ஐ திற</span>
+          </a>
+
+          <button type="button" class="nav-burger-btn" id="navBurgerBtn" aria-label="மெனுவை திற">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 6H20M4 12H20M4 18H20"/></svg>
+          </button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Mobile Drawer -->
+  <div class="mobile-drawer" id="mobileDrawer" role="dialog" aria-modal="true" aria-label="மொபைல் மெனு">
+    <div class="mobile-drawer-header">
+      <div class="brand-container" style="color: #fff;">
+        <span class="brand-mark-box"><svg viewBox="0 0 24 24" fill="none"><path d="M4 12L12 4L20 12L12 20L4 12Z" stroke="#fff" stroke-width="2.2"/><circle cx="12" cy="12" r="3.2" fill="#fff"/></svg></span>
+        <span>myallin1</span>
+      </div>
+      <button type="button" class="mobile-drawer-close" id="drawerCloseBtn" aria-label="மெனுவை மூடு">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <nav class="mobile-drawer-nav">
+      <a href="#services">சேவைகள் <span>→</span></a>
+      <a href="#chitti-ai">Chitti Voice AI <span>→</span></a>
+      <a href="#calculator">சேமிப்பு கணக்கீடு <span>→</span></a>
+      <a href="#how">எப்படி Use பண்றது? <span>→</span></a>
+      <a href="#hero-program">Hero-வா சேரு (0% Commission) <span>→</span></a>
+      <a href="#testimonials">ஈரோடு மக்களின் கருத்து <span>→</span></a>
+      <a href="#download">Download APK <span>→</span></a>
+    </nav>
+    <div class="mobile-drawer-footer">
+      <a href="https://my-allin1.web.app" class="btn btn-primary" style="width: 100%;">
+        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 17L17 7M17 7H9M17 7V15"/></svg></span>
+        <span>My Allin1-ஐ உடனே திற</span>
+      </a>
+      <a href="https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-customer.apk" class="btn btn-ghost" style="width: 100%;" download>
+        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4V15M12 15L8 11M12 15L16 11M5 19H19"/></svg></span>
+        <span>Android APK Download</span>
+      </a>
+    </div>
+  </div>
+
+  <main id="mainContent">
+
+    <!-- =========================================================================
+         1. HERO SECTION (Ref: Layout Structure from User Image 1 & 2)
+         ========================================================================= -->
+    <section class="hero-section">
+      <div class="hero-glow-bg"></div>
+      <div class="wrap">
+        
+        <div class="hero-header-block">
+          <div class="eyebrow">
+            <span class="pulse-dot"></span>
+            <span>ஈரோட்டின் முதல் உள்ளூர் சூப்பர் ஆப் • Powered by NJ TECH</span>
+          </div>
+
+          <h1>உங்க ஊரு இப்போ <em>ஒரே ஆப்பில்</em> ஓடுது.</h1>
+          
+          <p class="hero-subtext tamil-text">
+            Hero Booking, Taxi &amp; Bike, Food Delivery, Grocery, Mobiles, E-Seva &amp; Chitti Voice AI — ஈரோட்டு மக்களுக்காக, இங்கேயே வாழும் இளைஞர்களால் உருவாக்கப்பட்ட ஒரே சூப்பர் ஆப்.
+          </p>
+
+          <div class="btn-row" style="justify-content: center;">
+            <a href="https://my-allin1.web.app" class="btn btn-primary" target="_blank" rel="noopener">
+              <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 17L17 7M17 7H9M17 7V15"/></svg></span>
+              <span class="btn-text">
+                <span>My Allin1-ஐ திற</span>
+                <span class="btn-sub">உடனடி வெப் ஆப் (0 MB Storage)</span>
+              </span>
+            </a>
+
+            <a href="https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-customer.apk" class="btn btn-ghost" download>
+              <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 4V15M12 15L8 11M12 15L16 11M5 19H19"/></svg></span>
+              <span class="btn-text">
+                <span>Android APK</span>
+                <span class="btn-sub">100% Genuine Direct Download</span>
+              </span>
+            </a>
+          </div>
+
+          <div class="trust-bar" style="justify-content: center;">
+            <div class="trust-item"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3L20 6.5V11.5C20 16 16.5 20 12 21C7.5 20 4 16 4 11.5V6.5L12 3Z" stroke="currentColor" stroke-width="2"/><path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2"/></svg><span>100% Verified Local App</span></div>
+            <div class="trust-item"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M9 12H15M12 9V15" stroke="currentColor" stroke-width="2"/></svg><span>Install தேவையில்லை (0 MB)</span></div>
+            <div class="trust-item"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 6H16" stroke="currentColor" stroke-width="2"/></svg><span>Budget Phone-லும் Super Smooth</span></div>
+          </div>
+        </div>
+
+        <!-- 4-Card Hero Showcase (Ref: User Image 1 & 2 Structure) -->
+        <div class="diet-hero-showcase reveal">
+          
+          <!-- Left 2 Cards -->
+          <div class="feature-cards-col">
+            <div class="floating-feature-card">
+              <div class="feature-icon-bubble">🛵</div>
+              <div class="feature-card-content">
+                <h4>Taxi &amp; Transportation</h4>
+                <p>பைக் டாக்சி, ஆட்டோ, கார் மற்றும் லாரி வாடகை — 0% surge கட்டணத்தில்.</p>
+              </div>
+            </div>
+
+            <div class="floating-feature-card">
+              <div class="feature-icon-bubble">🍲</div>
+              <div class="feature-card-content">
+                <h4>Food Genie</h4>
+                <p>ஈரோடு பிரா ரோடு, பள்ளிபாளையம் ஸ்பெஷல் உணவுகள் சுடச்சுட வீட்டு வாசலில்.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Central Phone (Ref: Authentic App UI Screenshots) -->
+          <div class="phone-center-stage">
+            <div class="phone-hardware-pink">
+              <div class="phone-screen-pink">
+                <div class="phone-dynamic-notch"></div>
+                
+                <div class="phone-app-bar">
+                  <div class="phone-app-logo">
+                    <span class="phone-app-logo-mark"><svg viewBox="0 0 24 24" fill="none" width="12" height="12"><path d="M4 12L12 4L20 12L12 20L4 12Z" stroke="#fff" stroke-width="2.5"/><circle cx="12" cy="12" r="3" fill="#fff"/></svg></span>
+                    <span>myallin1</span>
+                  </div>
+                  <span class="phone-app-location">
+                    <span class="pulse-dot" style="width: 5px; height: 5px;"></span>
+                    ஈரோடு Central
+                  </span>
+                </div>
+
+                <!-- Phone Switcher Tabs -->
+                <div class="mockup-tabs" role="tablist">
+                  <button type="button" class="mockup-tab-btn active" data-tab="hero">🦸 Hero</button>
+                  <button type="button" class="mockup-tab-btn" data-tab="ride">🚗 Taxi</button>
+                  <button type="button" class="mockup-tab-btn" data-tab="mobiles">📱 Mobiles</button>
+                  <button type="button" class="mockup-tab-btn" data-tab="food">🍲 Food</button>
+                  <button type="button" class="mockup-tab-btn" data-tab="grocery">🛒 Mart</button>
+                  <button type="button" class="mockup-tab-btn" data-tab="chitti">🤖 Chitti AI</button>
+                </div>
+
+                <div class="mockup-body">
+                  <!-- View: Hero Booking -->
+                  <div class="mockup-view active" id="view-hero">
+                    <div class="app-service-row">
+                      <div class="app-service-title">🦸 Hero Booking</div>
+                      <div class="app-service-sub">Hire a Hero for any tasks &amp; local deliveries</div>
+                      <div class="app-mini-icons-row">
+                        <div class="app-mini-pill-btn"><span class="emoji">🦸‍♀️</span><span>Female Hero</span></div>
+                        <div class="app-mini-pill-btn"><span class="emoji">🚀</span><span>Speed Task</span></div>
+                        <div class="app-mini-pill-btn"><span class="emoji">⚡</span><span>Electrician</span></div>
+                      </div>
+                    </div>
+                    <div class="app-service-row">
+                      <div class="app-service-title">⭐ Featured Shop</div>
+                      <div class="app-service-sub"><b>Erode Fresh</b> • Fresh Daily Groceries (Open)</div>
+                    </div>
+                  </div>
+
+                  <!-- View: Taxi & Transportation -->
+                  <div class="mockup-view" id="view-ride">
+                    <div class="app-service-row">
+                      <div class="app-service-title">🚗 Taxi &amp; Transportation</div>
+                      <div class="app-service-sub">Bike, Auto, Cab, Parcel &amp; Rent</div>
+                      <div class="app-mini-icons-row">
+                        <div class="app-mini-pill-btn"><span class="emoji">🛵</span><span>Bike Taxi</span></div>
+                        <div class="app-mini-pill-btn"><span class="emoji">🛺</span><span>Auto</span></div>
+                        <div class="app-mini-pill-btn"><span class="emoji">🚖</span><span>Cab</span></div>
+                        <div class="app-mini-pill-btn"><span class="emoji">🚚</span><span>Lorry</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- View: Mobiles & Electronics -->
+                  <div class="mockup-view" id="view-mobiles">
+                    <div class="app-service-row">
+                      <div class="app-service-title">📱 Mobiles &amp; Gadgets</div>
+                      <div class="app-service-sub">New &amp; used phones, repair, best offers</div>
+                      <div class="app-mini-icons-row">
+                        <div class="app-mini-pill-btn"><span class="emoji">🔋</span><span>Battery</span></div>
+                        <div class="app-mini-pill-btn"><span class="emoji">📲</span><span>Screen Fix</span></div>
+                        <div class="app-mini-pill-btn"><span class="emoji">📹</span><span>CCTV</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- View: Food Delivery -->
+                  <div class="mockup-view" id="view-food">
+                    <div class="app-service-row">
+                      <div class="app-service-title">🍲 Food Delivery</div>
+                      <div class="app-service-sub">Order from ANY shop in Erode!</div>
+                      <div class="app-mini-icons-row">
+                        <div class="app-mini-pill-btn"><span class="emoji">🍛</span><span>Biryani</span></div>
+                        <div class="app-mini-pill-btn"><span class="emoji">🥞</span><span>Parotta</span></div>
+                        <div class="app-mini-pill-btn"><span class="emoji">🍔</span><span>Burger</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- View: Grocery Order -->
+                  <div class="mockup-view" id="view-grocery">
+                    <div class="app-service-row">
+                      <div class="app-service-title">🛒 Grocery Order</div>
+                      <div class="app-service-sub">Type your list or snap a photo</div>
+                      <div class="app-mini-icons-row">
+                        <div class="app-mini-pill-btn"><span class="emoji">🥦</span><span>Veggie</span></div>
+                        <div class="app-mini-pill-btn"><span class="emoji">🥛</span><span>Aavin Milk</span></div>
+                        <div class="app-mini-pill-btn"><span class="emoji">🍪</span><span>Snacks</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- View: Chitti Voice AI -->
+                  <div class="mockup-view" id="view-chitti">
+                    <div class="chitti-bubble-chat">
+                      <div class="chitti-header"><span>🤖 Chitti Super Hero Voice AI</span></div>
+                      <div class="chitti-message">"Vanakkam! I'm your Super Hero. Ask me anything about rides, deliveries or services in Erode."</div>
+                      <div class="chitti-prompts">
+                        <button type="button" class="chitti-prompt-chip">🛵 "Book a bike taxi in Erode"</button>
+                        <button type="button" class="chitti-prompt-chip">📦 "Send a parcel across town"</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mockup-footer">
+                  <a href="https://my-allin1.web.app" class="mockup-action-btn" target="_blank" rel="noopener">
+                    <span id="mockupActionText">Hire a Hero (உடனடி உதவி)</span>
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  </a>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- Right 2 Cards -->
+          <div class="feature-cards-col">
+            <div class="floating-feature-card">
+              <div class="feature-icon-bubble">🦸‍♂️</div>
+              <div class="feature-card-content">
+                <h4>Hero Task Booking</h4>
+                <p>எலக்ட்ரீஷியன், பிளம்பர், வீட்டு வேலைகள் மற்றும் பார்சல் அனுப்புதல்.</p>
+              </div>
+            </div>
+
+            <div class="floating-feature-card">
+              <div class="feature-icon-bubble">📜</div>
+              <div class="feature-card-content">
+                <h4>E-Seva Online Services</h4>
+                <p>PAN, ஆதார், பாஸ்போர்ட், சான்றிதழ்கள் — வரிசையில் நிற்காமல் எளிய உதவி.</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- =========================================================================
+         2. HORIZONTAL CATEGORY TICKER STRIP (Ref: User Image 2)
+         ========================================================================= -->
+    <div class="category-ticker-strip">
+      <div class="category-ticker-inner">
+        <span class="category-pill"><span class="pill-dot"></span>🦸 Hero Booking</span>
+        <span class="category-pill"><span class="pill-dot"></span>🛵 Taxi &amp; Bike Rides</span>
+        <span class="category-pill"><span class="pill-dot"></span>🍲 Food Delivery</span>
+        <span class="category-pill"><span class="pill-dot"></span>🛒 Grocery &amp; Fresh Mart</span>
+        <span class="category-pill"><span class="pill-dot"></span>📱 Mobiles &amp; Electronics</span>
+        <span class="category-pill"><span class="pill-dot"></span>🚗 Car Wash &amp; Spares</span>
+        <span class="category-pill"><span class="pill-dot"></span>🏗️ Constructions &amp; Plans</span>
+        <span class="category-pill"><span class="pill-dot"></span>🖨️ Designing &amp; Printing</span>
+        <span class="category-pill"><span class="pill-dot"></span>📜 E-Seva Govt Services</span>
+        <span class="category-pill"><span class="pill-dot"></span>🤖 Chitti Voice AI</span>
+      </div>
+    </div>
+
+    <!-- =========================================================================
+         3. FLASH DEAL SECTION WITH COUNTDOWN (Ref: User Image 4 Marketly)
+         ========================================================================= -->
+    <section class="wrap" style="padding: 1.5rem 0;">
+      <div class="flash-deal-banner reveal">
+        <div class="flash-deal-left">
+          <div class="flash-deal-icon">⚡</div>
+          <div class="flash-deal-text">
+            <h4>Erode Launch Offer: 1 Year Free Chitti AI Subscription!</h4>
+            <p>Visit NJ TECH or register on MyAllin1 today to unlock zero platform fees &amp; free Chitti AI.</p>
+          </div>
+        </div>
+
+        <div class="flash-countdown" aria-label="Countdown Timer">
+          <div class="countdown-box"><div class="countdown-num tabular-nums" id="dealDays">02</div><div class="countdown-label">Days</div></div>
+          <span style="font-weight: 800;">:</span>
+          <div class="countdown-box"><div class="countdown-num tabular-nums" id="dealHours">14</div><div class="countdown-label">Hours</div></div>
+          <span style="font-weight: 800;">:</span>
+          <div class="countdown-box"><div class="countdown-num tabular-nums" id="dealMins">35</div><div class="countdown-label">Mins</div></div>
+          <span style="font-weight: 800;">:</span>
+          <div class="countdown-box"><div class="countdown-num tabular-nums" id="dealSecs">40</div><div class="countdown-label">Secs</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================================
+         4. LEADERSHIP & LOCAL PRIDE SECTION
+         ========================================================================= -->
+    <section class="wrap">
+      <div class="section-head reveal">
+        <div class="eyebrow"><span class="pulse-dot"></span><span>மாண்புமிகு தலைவர்கள்</span></div>
+        <h2>ஈரோட்டின் பெருமைக்குரிய தலைமை</h2>
+        <p class="tamil-text">நம் ஈரோடு மாவட்டத்தின் தொடர் முன்னேற்றத்தையும் உள்ளூர் மக்களின் நலனையும் வழிநடத்தும் பெருமைமிகு தலைவர்களுக்கு myallin1 சார்பாக மரியாதை.</p>
+      </div>
+
+      <div class="leadership-grid">
+        <div class="leader-card-item reveal">
+          <div class="leader-avatar-frame">
+            <img src="data:image/webp;base64,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" alt="மாண்புமிகு முதலமைச்சர் திரு. ஜோசப் விஜய்">
+          </div>
+          <div>
+            <span class="leader-role-tag">மாண்புமிகு முதலமைச்சர்</span>
+            <div class="leader-name-text">திரு. ஜோசப் விஜய்</div>
+            <p style="font-size: 0.85rem; color: var(--ink-secondary); margin-top: 0.35rem;">தமிழ்நாட்டின் வளர்ச்சி மற்றும் மக்கள் நல திட்டங்களை முன்னெடுக்கும் தலைவர்.</p>
+          </div>
+        </div>
+
+        <div class="leader-card-item reveal reveal-delay-1">
+          <div class="leader-avatar-frame">
+            <img src="data:image/webp;base64,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" alt="மாண்புமிகு அமைச்சர் திரு. விஜய் பாலாஜி">
+          </div>
+          <div>
+            <span class="leader-role-tag">மாண்புமிகு அமைச்சர்</span>
+            <div class="leader-name-text">திரு. விஜய் பாலாஜி</div>
+            <p style="font-size: 0.85rem; color: var(--ink-secondary); margin-top: 0.35rem;">தொழில்நுட்பம், உள்கட்டமைப்பு மற்றும் வேலைவாய்ப்பு மேம்பாட்டின் வழிகாட்டி.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================================
+         5. ECONOMIC IMPACT (₹50,000 Crore Erode Local Wealth Retention)
+         ========================================================================= -->
+    <section class="wrap" id="impact">
+      <div class="impact-banner reveal">
+        <div class="impact-top-content">
+          <div class="eyebrow eyebrow-dark"><span class="pulse-dot"></span><span>பொருளாதாரப் புரட்சித் திட்டம்</span></div>
+          <h2>₹50,000 கோடி ஈரோட்டு பணத்தை ஈரோட்டிலேயே சுழலவைப்போம்!</h2>
+          <p class="tamil-text">
+            அதிக கமிஷன் வசூலிக்கும் வெளி நிறுவன ஆப்-கள், ரைடு மற்றும் உணவுக்கு மக்கள் செலவழிக்கும் தொகையில் பெரும் பகுதியை வெளியேற்றுகின்றன. myallin1 0% கமிஷன் மாடலில் 100% வருமானத்தை ஈரோட்டு மக்களின் கைகளிலேயே தக்கவைக்கிறது!
+          </p>
+        </div>
+
+        <div class="impact-stats-grid">
+          <div class="stat-tile">
+            <div class="stat-number tabular-nums">0%</div>
+            <div class="stat-desc">டிரைவர் &amp; ரைடர் வருமானத்தில் இருந்து Commission</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-number tabular-nums">10+</div>
+            <div class="stat-desc">சேவைகள் — ரைடு, உணவு, மளிகை, E-Seva முதல் Chitti AI வரை</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-number tabular-nums">₹0</div>
+            <div class="stat-desc">மழை &amp; பீக் ஹவர் Surge கட்டணம் முற்றிலும் இல்லை</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-number tabular-nums">100%</div>
+            <div class="stat-desc">ஈரோடு உள்ளூர் இளைஞர்களால் உருவாக்கப்பட்ட தொழில்நுட்பம்</div>
+          </div>
+        </div>
+
+        <div class="comparison-container">
+          <div style="font-family: var(--font-display); font-weight: 800; font-size: 1.08rem; color: #fff; margin-bottom: 1rem;">
+            📊 தேசிய ஆப்-களுக்கும் myallin1-க்கும் உள்ள உண்மை ஒப்பீடு:
+          </div>
+          <div class="comparison-grid">
+            <div class="compare-cell" style="font-weight: 800; color: #fff;">அம்சங்கள் (Feature)</div>
+            <div class="compare-cell" style="font-weight: 700; color: rgba(255,255,255,0.6);">தேசிய கார்ப்பரேட் ஆப்-கள்</div>
+            <div class="compare-cell" style="font-weight: 800; color: #fff;">myallin1 (ஈரோடு)</div>
+
+            <div class="compare-cell">டிரைவர் கமிஷன்</div>
+            <div class="compare-cell bad">25% - 30% பிடித்தம்</div>
+            <div class="compare-cell good">0% கமிஷன் (முழு வருமானம்)</div>
+
+            <div class="compare-cell">Surge கூடுதல் கட்டணம்</div>
+            <div class="compare-cell bad">2x - 3x மடங்கு கூடுதல்</div>
+            <div class="compare-cell good">₹0 Surge Guarantee</div>
+
+            <div class="compare-cell">Phone Storage &amp; RAM</div>
+            <div class="compare-cell bad">150 MB+ போன் மெமரி</div>
+            <div class="compare-cell good">0 MB (Browser Web App)</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================================
+         6. CHITTI AI VOICE ASSISTANT SPOTLIGHT
+         ========================================================================= -->
+    <section class="wrap" id="chitti-ai">
+      <div class="calculator-card reveal" style="background: linear-gradient(135deg, #ffffff, var(--bg-canvas));">
+        <div class="calc-grid">
+          <div>
+            <div class="eyebrow"><span class="pulse-dot"></span><span>Tamil &amp; English Voice AI</span></div>
+            <h2 style="margin-top: 0.5rem;">"வணக்கம்! நான் உங்கள் Super Hero Chitti AI"</h2>
+            <p class="tamil-text" style="margin-top: 0.75rem;">
+              எழுதி தேட வேண்டிய அவசியமில்லை — மைக்கை தொட்டு பேசினால் போதும்! பைக் டாக்சி புக் செய்ய, உணவு ஆர்டர் செய்ய, அல்லது ஈரோடு கடைகள் பற்றி தெரிந்துகொள்ள வாய்ஸ் மூலமாகவே உடனே உதவுகிறது.
+            </p>
+            <div class="btn-row" style="margin-top: 1.5rem;">
+              <a href="https://my-allin1.web.app" class="btn btn-primary" target="_blank" rel="noopener">
+                <span class="btn-icon">🎙️</span>
+                <span>Chitti AI-யுடன் பேசிப்பாருங்கள்</span>
+              </a>
+            </div>
+          </div>
+
+          <div style="background: #FFFFFF; border: 1px solid var(--line-strong); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
+            <div style="font-size: 0.85rem; font-weight: 800; color: var(--brand-berry); margin-bottom: 0.75rem;">💡 Chitti AI-யிடம் நீங்கள் கேட்கக்கூடியவை:</div>
+            <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+              <div style="background: var(--brand-pink-light); border: 1px solid var(--line-regular); border-radius: var(--radius-pill); padding: 0.5rem 1rem; font-size: 0.84rem; font-weight: 700; color: var(--brand-berry);">🛵 "பெருந்துறை ரோடு போக உடனே பைக் டாக்சி புக் பண்ணு"</div>
+              <div style="background: var(--brand-pink-light); border: 1px solid var(--line-regular); border-radius: var(--radius-pill); padding: 0.5rem 1rem; font-size: 0.84rem; font-weight: 700; color: var(--brand-berry);">🍛 "பிரா ரோடு ஸ்பெஷல் மட்டன் பிரியாணி ஆர்டர் செய்"</div>
+              <div style="background: var(--brand-pink-light); border: 1px solid var(--line-regular); border-radius: var(--radius-pill); padding: 0.5rem 1rem; font-size: 0.84rem; font-weight: 700; color: var(--brand-berry);">📦 "ஈரோடு பஸ் ஸ்டாண்டிலிருந்து பார்சல் அனுப்ப வேண்டும்"</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================================
+         7. SAVINGS CALCULATOR
+         ========================================================================= -->
+    <section class="wrap" id="calculator">
+      <div class="calculator-card reveal">
+        <div class="calc-grid">
+          <div class="calc-controls">
+            <div class="eyebrow"><span class="pulse-dot"></span><span>நேரடி சேமிப்பு கணக்கீடு</span></div>
+            <h2>நீங்கள் மாதத்திற்கு எவ்வளவு சேமிப்பீர்கள்?</h2>
+            <p class="tamil-text">தேசிய ஆப்-களில் நீங்கள் செலுத்தும் கமிஷன் மற்றும் கூடுதல் Surge கட்டணங்களை myallin1 எப்படி குறைக்கிறது என்று பாருங்கள்:</p>
+
+            <div class="calc-slider-group">
+              <div class="calc-slider-head">
+                <span>வாராந்திர ரைடுகள் (Weekly Rides):</span>
+                <span class="calc-slider-val" id="calcRidesVal">6 ரைட்ஸ்</span>
+              </div>
+              <input type="range" class="calc-range" id="calcRidesInput" min="0" max="25" value="6" step="1" aria-label="வாராந்திர ரைடுகள்">
+            </div>
+
+            <div class="calc-slider-group">
+              <div class="calc-slider-head">
+                <span>வாராந்திர உணவு ஆர்டர்கள் (Weekly Orders):</span>
+                <span class="calc-slider-val" id="calcFoodVal">3 ஆர்டர்ஸ்</span>
+              </div>
+              <input type="range" class="calc-range" id="calcFoodInput" min="0" max="15" value="3" step="1" aria-label="வாராந்திர உணவு ஆர்டர்கள்">
+            </div>
+          </div>
+
+          <div class="calc-result-box">
+            <span class="calc-result-label">மதிப்பிடப்பட்ட மாதாந்திர சேமிப்பு (Monthly Savings)</span>
+            <div class="calc-result-amount tabular-nums" id="calcSavingsAmount">₹1,870</div>
+            <div class="calc-result-sub tabular-nums" id="calcSavingsAnnual">வருடத்திற்கு ₹22,440 வரை உங்கள் சேமிப்பு!</div>
+            
+            <a href="https://my-allin1.web.app" class="btn btn-ghost" target="_blank" rel="noopener" style="width: 100%; border-color: transparent;">
+              <span>இப்போதே சேமிக்க தொடங்குங்கள்</span>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 17L17 7M17 7H9M17 7V15"/></svg>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================================
+         8. COMPREHENSIVE SERVICES BENTO GRID (All Authentic Modules)
+         ========================================================================= -->
+    <section id="services" class="wrap">
+      <div class="section-head reveal">
+        <div class="eyebrow"><span class="pulse-dot"></span><span>10+ சேவைகள் ஒரே கூரையின் கீழ்</span></div>
+        <h2>ஈரோட்டுக்கு தேவையான எல்லாமே ஒரே இடத்தில்.</h2>
+        <p class="tamil-text">எல்லா தேவைகளுக்கும் தனித்தனி ஆப் தேவையில்லை — myallin1 மட்டும் போதும்!</p>
+      </div>
+
+      <div class="bento-grid">
+        <!-- 1. Hero Booking -->
+        <div class="bento-card reveal">
+          <div class="bento-icon-box">🦸</div>
+          <span class="bento-tag">Instant Assistance</span>
+          <h3>Hero Booking</h3>
+          <p class="tamil-text">எலக்ட்ரீஷியன், பிளம்பர், வீட்டு வேலைகள், பார்சல் மற்றும் உடனடி டெலிவரிக்கு அருகிலுள்ள ஹீரோவை புக் செய்யுங்கள்.</p>
+        </div>
+
+        <!-- 2. Taxi & Transportation -->
+        <div class="bento-card reveal reveal-delay-1">
+          <div class="bento-icon-box">🛵</div>
+          <span class="bento-tag">0% Surge Fares</span>
+          <h3>Taxi &amp; Transportation</h3>
+          <p class="tamil-text">பைக் டாக்சி, ஆட்டோ, கார், பார்சல் வண்டி மற்றும் லாரி வாடகை — ஈரோடு அரசு கட்டண விகிதத்தில்.</p>
+        </div>
+
+        <!-- 3. Food Delivery -->
+        <div class="bento-card reveal reveal-delay-2">
+          <div class="bento-icon-box">🍛</div>
+          <span class="bento-tag">Any Shop in Erode</span>
+          <h3>Food Delivery (Food Genie)</h3>
+          <p class="tamil-text">ஈரோட்டின் எந்த புகழ்பெற்ற ஹோட்டலில் இருந்தும் சூடான சுவையான உணவு உங்கள் வீட்டு வாசலுக்கு.</p>
+        </div>
+
+        <!-- 4. Grocery Order -->
+        <div class="bento-card reveal">
+          <div class="bento-icon-box">🥦</div>
+          <span class="bento-tag">Fresh &amp; Fast</span>
+          <h3>Grocery &amp; Fresh Mart</h3>
+          <p class="tamil-text">உங்கள் மளிகை பட்டியலை டைப் செய்யுங்கள் அல்லது போட்டோ எடுத்து அனுப்புங்கள் — 30 நிமிடங்களில் டெலிவரி.</p>
+        </div>
+
+        <!-- 5. Mobiles & Electronics -->
+        <div class="bento-card reveal reveal-delay-1">
+          <div class="bento-icon-box">📱</div>
+          <span class="bento-tag">Doorstep Warranty</span>
+          <h3>Mobiles &amp; Electronic Services</h3>
+          <p class="tamil-text">புதிய &amp; பழைய போன்கள், ஸ்கிரீன் ரிப்பேர், பேட்டரி மாற்றுதல், லேப்டாப் &amp; CCTV சேவைகள்.</p>
+        </div>
+
+        <!-- 6. E-Seva Online Services -->
+        <div class="bento-card reveal reveal-delay-2">
+          <div class="bento-icon-box">📜</div>
+          <span class="bento-tag">Govt Services Online</span>
+          <h3>E-Seva Online Services</h3>
+          <p class="tamil-text">PAN, ஆதார், பாஸ்போர்ட், வாக்காளர் அடையாள அட்டை மற்றும் அரசு சான்றிதழ்கள் — வரிசையில் நிற்காமல் எளிய உதவி.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================================
+         9. HOW IT WORKS & HERO ONBOARDING
+         ========================================================================= -->
+    <section id="how" class="wrap">
+      <div class="section-head reveal">
+        <div class="eyebrow"><span class="pulse-dot"></span><span>எளிமையான 3 படிகள்</span></div>
+        <h2>ஆரம்பிக்கலாம் வாங்க! Install தேவையில்லை.</h2>
+      </div>
+
+      <div class="steps-grid">
+        <div class="step-card reveal">
+          <span class="step-badge">01</span>
+          <h3>ஆப்-ஐ திறக்கவும் (1-Tap)</h3>
+          <p class="tamil-text">"My Allin1-ஐ திற" பட்டனை தொடுங்கள் — Android அல்லது iPhone Browser-ல் உடனே திறக்கும்.</p>
+        </div>
+        <div class="step-card reveal reveal-delay-1">
+          <span class="step-badge">02</span>
+          <h3>30 வினாடிகளில் Sign up</h3>
+          <p class="tamil-text">உங்கள் போன் நம்பர் கொடுத்து OTP மூலம் உடனடியாக உள்நுழையுங்கள்.</p>
+        </div>
+        <div class="step-card reveal reveal-delay-2">
+          <span class="step-badge">03</span>
+          <h3>உடனே ஆர்டர் / ரைடு செய்</h3>
+          <p class="tamil-text">ரைடு, உணவு, மளிகை அல்லது அவசர உதவி — எதுவேண்டுமானாலும் ஒரே டச்-ல் தொடங்குங்கள்!</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Hero Driver Banner -->
+    <section id="hero-program" class="wrap">
+      <div class="hero-partner-banner reveal">
+        <div>
+          <div class="eyebrow eyebrow-dark"><span class="pulse-dot" style="background:#fff;"></span><span>Hero Driver &amp; Partner Program</span></div>
+          <h2 style="margin-top: 0.75rem;">உங்க பைக் / கார்-ஐ தினசரி வருமானமா மாத்துங்க!</h2>
+          <p class="tamil-text" style="margin-top: 0.75rem;">0% கமிஷன் மாடலில் உங்கள் உழைப்பின் 100% வருமானமும் உங்களுக்கே சொந்தம்.</p>
+
+          <div class="btn-row" style="margin-top: 1.5rem;">
+            <a href="https://hero-allin1.web.app" class="btn btn-ghost" target="_blank" rel="noopener">
+              <span class="btn-icon">🏍️</span>
+              <span>Hero-வாக Register செய்</span>
+            </a>
+            <a href="https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-hero.apk" class="btn btn-ghost" style="background: rgba(255,255,255,0.15); color: #fff;" download>
+              <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4V15M12 15L8 11M12 15L16 11M5 19H19"/></svg></span>
+              <span>Hero APK Download</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="hero-partner-stats-card">
+          <div class="partner-row"><span>உங்கள் உழைப்பில் பிடித்தம்</span><b>0% Commission</b></div>
+          <div class="partner-row"><span>சம்பாதிக்கும் வழிகள்</span><b>Ride + Delivery + Courier</b></div>
+          <div class="partner-row"><span>Daily Payouts</span><b>நேரடியாக வங்கி கணக்கிற்கு</b></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================================
+         10. REVIEWS & DOWNLOAD OPTIONS
+         ========================================================================= -->
+    <section id="testimonials" class="wrap">
+      <div class="section-head reveal">
+        <div class="eyebrow"><span class="pulse-dot"></span><span>உள்ளூர் மக்களின் குரல்</span></div>
+        <h2>ஈரோடு மக்கள் myallin1 பற்றி என்ன சொல்கிறார்கள்?</h2>
+      </div>
+
+      <div class="bento-grid">
+        <div class="testimonial-card reveal">
+          <div class="test-stars">★★★★★</div>
+          <p class="test-quote tamil-text">"பெருந்துறை ரோட்டிலிருந்து பஸ் ஸ்டாண்ட் போக வழக்கமா ஆட்டோக்காரங்க ₹120 கேப்பாங்க. myallin1 பைக் டாக்சில ₹35-ல முடிஞ்சது. App install பண்ணாமலே புக் ஆனது சூப்பர்!"</p>
+          <div class="test-author"><div class="test-avatar">ரா</div><div><div class="test-name">ராம்குமார்</div><div class="test-loc">திண்டல், ஈரோடு</div></div></div>
+        </div>
+
+        <div class="testimonial-card reveal reveal-delay-1">
+          <div class="test-stars">★★★★★</div>
+          <p class="test-quote tamil-text">"myallin1 Hero-வா சேர்ந்த பிறகு ஒரு ரூபாய் கூட கமிஷன் எடுக்காம முழு பணமும் நமக்கு கிடைக்குது. நம்ம ஊரு ஆப்-க்கு எப்பவும் சப்போர்ட்!"</p>
+          <div class="test-author"><div class="test-avatar">ச</div><div><div class="test-name">சக்திவேல்</div><div class="test-loc">வீரப்பஞ்சத்திரம் (Hero Driver)</div></div></div>
+        </div>
+
+        <div class="testimonial-card reveal reveal-delay-2">
+          <div class="test-stars">★★★★★</div>
+          <p class="test-quote tamil-text">"Food Genie மற்றும் E-Seva ஆன்லைன் சேவைகள் மிக அருமை. வீட்டில் இருந்தே தேவையான சான்றிதழ் வேலைகளை முடிக்க முடிந்தது."</p>
+          <div class="test-author"><div class="test-avatar">க</div><div><div class="test-name">கவிதா பிரகாஷ்</div><div class="test-loc">சோலார், ஈரோடு</div></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Download Section -->
+    <section id="download" class="wrap">
+      <div class="download-section-box reveal">
+        <div class="download-content">
+          <div class="eyebrow eyebrow-dark"><span class="pulse-dot"></span><span>எல்லா சாதனங்களிலும்</span></div>
+          <h2>ஒரு நிமிடத்தில் உங்கள் போனில் myallin1.</h2>
+          <p class="tamil-text">Play Store கமிஷன் தடைகள் இல்லாமல் நேரடியாகவும், பாதுகாப்பாகவும் அதிகாரப்பூர்வமாக வழங்கப்படுகிறது.</p>
+          <div class="btn-row" style="margin-top: 1rem;">
+            <a href="https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-customer.apk" class="btn btn-primary" download>
+              <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 4V15M12 15L8 11M12 15L16 11M5 19H19"/></svg></span>
+              <span>Android APK Download</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="download-cards-col">
+          <div class="download-card-tile">
+            <div class="download-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg></div>
+            <div class="download-card-info">
+              <h4>Android Users</h4>
+              <p>நேரடி APK பதிவிறக்கம் செய்து நிறுவலாம் அல்லது Chrome-ல் my-allin1.web.app திறந்து "Add to Home Screen" செய்யலாம்.</p>
+            </div>
+          </div>
+          <div class="download-card-tile">
+            <div class="download-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></div>
+            <div class="download-card-info">
+              <h4>iPhone &amp; Safari Users</h4>
+              <p>Safari Browser-ல் திறந்து Share ஐகானை தொட்டு "Add to Home Screen" செய்தால் ஆப் போல உடனே சேமிக்கப்படும்.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- =========================================================================
+       FOOTER
+       ========================================================================= -->
+  <footer>
+    <div class="wrap">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <div class="brand-container">
+            <span class="brand-mark-box"><svg viewBox="0 0 24 24" fill="none"><path d="M4 12L12 4L20 12L12 20L4 12Z" stroke="#fff" stroke-width="2.2"/><circle cx="12" cy="12" r="3.2" fill="#fff"/></svg></span>
+            <span>myallin1</span>
+          </div>
+          <p class="tamil-text">நம்ம ஊரு... நம்ம ஆப்! ஈரோடு, தமிழ்நாட்டு மக்களுக்காக NJ TECH பெருமையுடன் உருவாக்கிய உள்ளூர் சூப்பர் ஆப்.</p>
+        </div>
+
+        <div class="footer-nav-col">
+          <h5>சேவைகள்</h5>
+          <a href="#services">Hero Booking</a>
+          <a href="#services">பைக் &amp; கார் டாக்சி</a>
+          <a href="#services">Food Delivery</a>
+          <a href="#services">மளிகை டெலிவரி</a>
+          <a href="#services">E-Seva Online</a>
+        </div>
+
+        <div class="footer-nav-col">
+          <h5>இணைப்புகள்</h5>
+          <a href="#hero-program">Hero Driver பதிவு</a>
+          <a href="https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-customer.apk">Customer APK</a>
+          <a href="https://my-allin1.web.app/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>
+          <a href="https://my-allin1.web.app/terms.html" target="_blank" rel="noopener">Terms of Service</a>
+        </div>
+
+        <div class="footer-nav-col">
+          <h5>தொடர்பு</h5>
+          <a href="mailto:support@myallin1.com">support@myallin1.com</a>
+          <span style="font-size: 0.85rem; color: var(--ink-muted); margin-top: 0.4rem;">ஈரோடு, தமிழ்நாடு, இந்தியா</span>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <span>© <span id="currentYear">2026</span> myallin1 by NJ TECH. அனைத்து உரிமைகளும் பாதுகாக்கப்பட்டவை.</span>
+        <span>Made with ❤️ in Erode City</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Sticky Mobile Bar -->
+  <aside class="mobile-sticky-bar" aria-label="Mobile Action Bar">
+    <div class="mobile-sticky-info">
+      <div class="mobile-sticky-logo">
+        <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><path d="M4 12L12 4L20 12L12 20L4 12Z" stroke="#fff" stroke-width="2.5"/><circle cx="12" cy="12" r="3" fill="#fff"/></svg>
+      </div>
+      <div class="mobile-sticky-text">
+        <span class="mobile-sticky-title">myallin1 Super App</span>
+        <span class="mobile-sticky-sub">0 MB Storage • 0% Commission</span>
+      </div>
+    </div>
+    <div class="mobile-sticky-actions">
+      <a href="https://my-allin1.web.app" class="mobile-sticky-btn btn-primary" target="_blank" rel="noopener">
+        <span>ஆப்-ஐ திற</span>
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17L17 7M17 7H9M17 7V15"/></svg>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Live Toast Container -->
+  <div class="toast-container" id="liveToastContainer"></div>
+
+  <!-- QR Modal -->
+  <div class="modal-overlay" id="qrModal" role="dialog" aria-modal="true" aria-labelledby="qrModalTitle">
+    <div class="modal-dialog">
+      <button type="button" class="modal-close" id="qrModalClose" aria-label="மூடு">✕</button>
+      <div class="eyebrow"><span class="pulse-dot"></span><span>Desktop to Mobile</span></div>
+      <h3 id="qrModalTitle" style="margin-top: 0.5rem;">போனில் myallin1-ஐ திறக்க QR Scan செய்யவும்</h3>
+      <div class="qr-box">
+        <div class="qr-code-img">
+          <svg viewBox="0 0 100 100" width="100%" height="100%">
+            <rect width="100" height="100" fill="#FFFFFF"/>
+            <rect x="5" y="5" width="28" height="28" fill="#c2357c" rx="4"/>
+            <rect x="9" y="9" width="20" height="20" fill="#FFFFFF" rx="2"/>
+            <rect x="13" y="13" width="12" height="12" fill="#fc4a9f" rx="2"/>
+            <rect x="67" y="5" width="28" height="28" fill="#c2357c" rx="4"/>
+            <rect x="71" y="9" width="20" height="20" fill="#FFFFFF" rx="2"/>
+            <rect x="75" y="13" width="12" height="12" fill="#fc4a9f" rx="2"/>
+            <rect x="5" y="67" width="28" height="28" fill="#c2357c" rx="4"/>
+            <rect x="9" y="71" width="20" height="20" fill="#FFFFFF" rx="2"/>
+            <rect x="13" y="75" width="12" height="12" fill="#fc4a9f" rx="2"/>
+            <rect x="42" y="42" width="16" height="16" fill="#fc4a9f" rx="3"/>
+            <circle cx="50" cy="50" r="4" fill="#FFFFFF"/>
+            <rect x="38" y="8" width="6" height="6" fill="#c2357c"/>
+            <rect x="48" y="8" width="6" height="6" fill="#c2357c"/>
+            <rect x="58" y="8" width="6" height="6" fill="#c2357c"/>
+            <rect x="38" y="20" width="6" height="6" fill="#c2357c"/>
+            <rect x="48" y="26" width="6" height="6" fill="#c2357c"/>
+            <rect x="58" y="20" width="6" height="6" fill="#c2357c"/>
+            <rect x="8" y="38" width="6" height="6" fill="#c2357c"/>
+            <rect x="20" y="38" width="6" height="6" fill="#c2357c"/>
+            <rect x="8" y="48" width="6" height="6" fill="#c2357c"/>
+            <rect x="68" y="38" width="6" height="6" fill="#c2357c"/>
+            <rect x="80" y="38" width="6" height="6" fill="#c2357c"/>
+            <rect x="74" y="48" width="6" height="6" fill="#c2357c"/>
+            <rect x="86" y="48" width="6" height="6" fill="#c2357c"/>
+            <rect x="38" y="68" width="6" height="6" fill="#c2357c"/>
+            <rect x="48" y="68" width="6" height="6" fill="#c2357c"/>
+            <rect x="58" y="68" width="6" height="6" fill="#c2357c"/>
+            <rect x="48" y="78" width="6" height="6" fill="#c2357c"/>
+            <rect x="38" y="86" width="6" height="6" fill="#c2357c"/>
+            <rect x="58" y="86" width="6" height="6" fill="#c2357c"/>
+          </svg>
+        </div>
+        <span style="font-size: 0.78rem; font-weight: 700; color: var(--brand-berry); margin-top: 0.65rem;">https://my-allin1.web.app</span>
+      </div>
+      <a href="https://my-allin1.web.app" class="btn btn-primary" target="_blank" rel="noopener" style="width: 100%;">
+        <span>நேரடியாக திற</span>
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 17L17 7M17 7H9M17 7V15"/></svg>
+      </a>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/app.js"></script>
+  <script src="js/cro.js"></script>
+  <script src="js/pwa.js"></script>
+</body>
+</html>

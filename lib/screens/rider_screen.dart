@@ -26,7 +26,7 @@ class RiderScreen extends StatelessWidget {
         backgroundColor: kSurface,
         title: Text(
           'Rider Dashboard',
-          style: GoogleFonts.spaceGrotesk(color: kText),
+          style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: kText),
         ),
       ),
       body: SingleChildScrollView(
@@ -63,7 +63,7 @@ class _Hero extends StatelessWidget {
         children: [
           Text(
             'Rider command center',
-            style: GoogleFonts.spaceGrotesk(
+            style: GoogleFonts.outfit(
               color: kText,
               fontSize: 24,
               fontWeight: FontWeight.w700,
@@ -154,7 +154,7 @@ class _EarningsCard extends StatelessWidget {
           ),
           Text(
             '₹ 1,250',
-            style: GoogleFonts.spaceGrotesk(
+            style: GoogleFonts.outfit(
               color: kGold,
               fontWeight: FontWeight.w700,
             ),
@@ -180,7 +180,7 @@ class _FeatureList extends StatelessWidget {
       children: [
         Text(
           'Rider Features',
-          style: GoogleFonts.spaceGrotesk(
+          style: GoogleFonts.outfit(
             color: kText,
             fontSize: 18,
             fontWeight: FontWeight.w700,

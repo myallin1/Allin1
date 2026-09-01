@@ -4,14 +4,26 @@ class UpdateService {
 
   static final UpdateService _instance = UpdateService._internal();
 
-  static const String customerArm64Url =
-      'https://github.com/myallin1/Allin1-update-release/releases/latest/download/customer-arm64.apk';
-  static const String customerV7aUrl =
-      'https://github.com/myallin1/Allin1-update-release/releases/latest/download/customer-armeabi-v7a.apk';
-  static const String heroArm64Url =
-      'https://github.com/myallin1/Allin1-update-release/releases/latest/download/hero-arm64.apk';
-  static const String heroV7aUrl =
-      'https://github.com/myallin1/Allin1-update-release/releases/latest/download/hero-armeabi-v7a.apk';
+  // FIX (root cause of "update link shows the app isn't there"): these
+  // used to point at customer-arm64.apk / customer-armeabi-v7a.apk /
+  // hero-arm64.apk / hero-armeabi-v7a.apk — architecture-split filenames
+  // that were never actually uploaded. The real release
+  // (github.com/myallin1/Allin1-update-release) only ever contains one
+  // universal APK per app: allin1-customer.apk, allin1-hero.apk,
+  // allin1-admin.apk. Every download attempt 404'd against the real
+  // release. Point at the filenames that are actually uploaded — see
+  // NEW_RELEASE_CHECKLIST.md for the exact steps to publish a release
+  // these URLs will find.
+  static const String customerApkUrl =
+      'https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-customer.apk';
+  static const String heroApkUrl =
+      'https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-hero.apk';
+  static const String adminApkUrl =
+      'https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-admin.apk';
+  // NEW (Universal Side Tray Banner mandate): Seller app's own APK,
+  // matching the same release-filename convention as the other 3.
+  static const String sellerApkUrl =
+      'https://github.com/myallin1/Allin1-update-release/releases/latest/download/allin1-seller.apk';
 
   bool isUpdatePayload(Map<String, dynamic> data) {
     final explicit = _asBool(data['update_available']);
@@ -22,8 +34,26 @@ class UpdateService {
         _stringValue(data['version_name']).isNotEmpty;
   }
 
+  // FIX (per Nizam's bug report — "Hero app la check for update kudutha
+  // Hero update agama Customer app update agi athukulla kutitu
+  // poiduthu"): every appVariant case here already resolves to the
+  // correct distinct URL (verified: hero -> allin1-hero.apk, customer
+  // -> allin1-customer.apk, no mix-up in this switch). The actual
+  // mechanism is almost certainly Android's browser/download-manager
+  // reusing a cached response or a previously-downloaded file with a
+  // similar name/path when the exact same GitHub "latest" URL was hit
+  // before for a different app — appending a cache-busting query
+  // param forces every tap to be treated as a genuinely new download,
+  // never silently reopening whatever the last APK on disk was.
   String fallbackApkUrl(String appVariant) {
-    return appVariant == 'hero' ? heroV7aUrl : customerV7aUrl;
+    final base = switch (appVariant) {
+      'hero' => heroApkUrl,
+      'admin' => adminApkUrl,
+      'seller' => sellerApkUrl,
+      _ => customerApkUrl,
+    };
+    final cacheBust = DateTime.now().millisecondsSinceEpoch;
+    return '$base?v=$cacheBust';
   }
 
   Map<String, dynamic> buildNotificationPayload({

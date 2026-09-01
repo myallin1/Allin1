@@ -11,6 +11,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/video_warmup_service.dart';
+import '../../models/mobile_models.dart' show youtubeVideoId;
+import '../mobiles/listing_video_player.dart'
+import '../../services/firestore_usage_tracking.dart';
+    show showPremiumVideoModal, VideoThumbnail;
+
 // ── Theme ─────────────────────────────────────────────────────
 const Color _bg = Color(0xFF0A0A12);
 const Color _surface = Color(0xFF12121E);
@@ -82,6 +88,13 @@ class _FunTask {
 
 class _LocalAd {
   final String id, emoji, shop, offer, category, phone, actionUrl;
+
+  /// Raw YouTube URL exactly as the admin pasted it, or '' when this ad
+  /// has no video. Never trusted directly — always resolved through
+  /// youtubeVideoId() before anything is rendered, so a malformed link
+  /// degrades to "no video" instead of a dead player.
+  final String videoUrl;
+
   final int? coinsReward;
   final Color color;
   const _LocalAd({
@@ -93,8 +106,12 @@ class _LocalAd {
     required this.phone,
     required this.actionUrl,
     required this.color,
+    this.videoUrl = '',
     this.coinsReward,
   });
+
+  /// Resolved 11-char YouTube id, or null when there's no playable video.
+  String? get videoId => youtubeVideoId(videoUrl);
 
   factory _LocalAd.fromFirestore(String docId, Map<String, dynamic> d) =>
       _LocalAd(
@@ -105,6 +122,7 @@ class _LocalAd {
         category: d['category'] as String? ?? 'General',
         phone: d['phone'] as String? ?? '',
         actionUrl: d['actionUrl'] as String? ?? '',
+        videoUrl: d['videoUrl'] as String? ?? '',
         coinsReward: (d['coinsReward'] as num?)?.toInt(),
         color: Color(d['color'] as int? ?? 0xFF6C63FF),
       );
@@ -171,7 +189,7 @@ const _financeCards = [
     id: 'kotak_811',
     emoji: '🏦',
     bank: 'Kotak 811 Zero Balance Account',
-    tagline: 'Get 1 FREE Ride Pass on completion!',
+    tagline: 'Get 10,000 Coins on completion!',
     subtitle: 'Fully digital savings account. '
         'Open in 2 mins. No minimum balance required.',
     coins: '10,000',
@@ -324,6 +342,9 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
   Map<String, String> _taskStatuses = {};
   // Key: adId, Value: pending/approved/rejected
 
+  /// Guards the one-time video warm-up — see the carousel builder.
+  bool _videosWarmed = false;
+
   @override
   void initState() {
     super.initState();
@@ -467,6 +488,8 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
 
   @override
   void dispose() {
+    // A WebView held open for a page nobody is on is pure cost.
+    VideoWarmupService.instance.dispose();
     _tabCtrl.dispose();
     _carouselTimer?.cancel();
     super.dispose();
@@ -1169,7 +1192,7 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
                               Expanded(
                                 child: Text(
                                   'Aadhaar + PAN Video KYC mandatory to get '
-                                  '1 Free Ride Pass. Just installing the app '
+                                  '10,000 Coins. Just installing the app '
                                   'will NOT give rewards.',
                                   style: GoogleFonts.notoSansTamil(
                                     fontSize: 9,
@@ -1450,25 +1473,25 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
             child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
               Text('🎮 Quick Wins', style: GoogleFonts.outfit(
-                  fontSize: 15, color: _text, fontWeight: FontWeight.w800)),
+                  fontSize: 15, color: _text, fontWeight: FontWeight.w800,),),
               Text('Fast coins while waiting for rides',
-                  style: GoogleFonts.outfit(fontSize: 10, color: _muted)),
-            ]),
+                  style: GoogleFonts.outfit(fontSize: 10, color: _muted),),
+            ],),
           ),
           ..._funTasks.map(_buildFunCard),
           const SizedBox(height: 24),
           _rewardsSectionHeader('🪙 Paytm Scratchcards',
-              'Win real cashback every day!', _gold),
+              'Win real cashback every day!', _gold,),
           const SizedBox(height: 10),
           _buildPaytmScratchSection(),
           const SizedBox(height: 24),
           _rewardsSectionHeader('🎁 Accessories Gift Cards',
-              'Exclusive NJ Tech goodies & vouchers', _purple),
+              'Exclusive NJ Tech goodies & vouchers', _purple,),
           const SizedBox(height: 10),
           _buildAccessoriesGiftSection(),
           const SizedBox(height: 24),
           _rewardsSectionHeader('🧠 30-Days Quiz Challenge',
-              'Answer daily — climb the leaderboard!', _orange),
+              'Answer daily — climb the leaderboard!', _orange,),
           const SizedBox(height: 10),
           _buildQuizSection(),
           const SizedBox(height: 20),
@@ -1626,7 +1649,7 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
           .where('isActive', isEqualTo: true)
           .orderBy('createdAt', descending: true)
           .limit(10)
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (context, snap) {
         // Loading
         if (snap.connectionState == ConnectionState.waiting) {
@@ -1657,6 +1680,44 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
                   d.id, d.data()! as Map<String, dynamic>,),
             )
             .toList();
+        // WARM-UP (Aug 28 2026 — Nizam: "reward page kulla vanthathume
+        // videos net-la irunthu load agikatum ... takkunu play agurathu,
+        // ready-yum irukum 1st time").
+        //
+        // Two different things, and the second one is the big one:
+        //   • every thumbnail is precached, so the cards are already
+        //     drawn by the time the carousel reaches them;
+        //   • ONE player is built and cued, which pulls YouTube's
+        //     player JavaScript into the WebView's HTTP cache.
+        // That second effect is not limited to the warmed video — once
+        // those assets are cached, EVERY video in this carousel starts
+        // faster, including ones the customer scrolls to later.
+        //
+        // Only one player, deliberately: see the lazy-player note above
+        // and video_warmup_service.dart. Ten hidden WebViews would trade
+        // a short wait for an out-of-memory kill on the phones most of
+        // Erode actually uses.
+        if (!_videosWarmed) {
+          _videosWarmed = true;
+          final videoIds = ads
+              .map((a) => a.videoId)
+              .whereType<String>()
+              .toList(growable: false);
+          if (videoIds.isNotEmpty) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              VideoWarmupService.instance.warm(videoIds.first);
+              // Rebuild so VideoWarmupHost below actually mounts the
+              // player — without this it stays a SizedBox.shrink and
+              // nothing loads.
+              setState(() {});
+              unawaited(
+                VideoWarmupService.precacheThumbnails(context, videoIds),
+              );
+            });
+          }
+        }
+
         final idx = _carouselIdx % ads.length;
         final ad = ads[idx];
 
@@ -1671,9 +1732,13 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
         });
         return Container(
           margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          // The warm player is mounted here, 1x1 and invisible. A
+          // platform view downloads nothing until it is laid out, so it
+          // needs a real box in the tree rather than Offstage.
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const VideoWarmupHost(),
               Row(
                 children: [
                   Text(
@@ -1735,8 +1800,94 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
                         width: 1.5,
                       ),
                     ),
-                    child: Row(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
+                        // ── VIDEO AD BANNER ──────────────────────
+                        // Only built when the admin actually attached a
+                        // playable YouTube link. Everything below is a
+                        // static thumbnail (YouTube's free hqdefault
+                        // endpoint) — NO player, no WebView, is created
+                        // while the carousel is merely scrolling past.
+                        // The real player is spun up inside the modal
+                        // only after a deliberate tap, and torn down
+                        // when the sheet closes. That lazy discipline is
+                        // what keeps this affordable on the low-end
+                        // Android phones most of Erode is on.
+                        if (ad.videoId != null) ...[
+                          GestureDetector(
+                            // Swallows the tap so the parent card's
+                            // "open actionUrl in an external browser"
+                            // handler never fires here — tapping a video
+                            // must play the video, in-app.
+                            onTap: () => showPremiumVideoModal(
+                              context,
+                              videoId: ad.videoId!,
+                              title: ad.shop,
+                              subtitle: ad.offer,
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: AspectRatio(
+                                aspectRatio: 16 / 9,
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    VideoThumbnail(videoId: ad.videoId!),
+                                    // Scrim keeps the play badge legible
+                                    // over a bright video frame.
+                                    Container(
+                                      color: Colors.black
+                                          .withValues(alpha: 0.25),
+                                    ),
+                                    Center(
+                                      child: Container(
+                                        width: 52,
+                                        height: 52,
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFFFF0000),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.play_arrow_rounded,
+                                          color: Colors.white,
+                                          size: 32,
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      left: 10,
+                                      bottom: 10,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black
+                                              .withValues(alpha: 0.6),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          '▶ Watch & Earn',
+                                          style: GoogleFonts.outfit(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        Row(
+                          children: [
                         // Shop icon
                         Container(
                           width: 58,
@@ -1892,6 +2043,8 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
                             ],
                           ),
                         ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -1932,9 +2085,9 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
   Widget _rewardsSectionHeader(String title, String sub, Color color) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(title, style: GoogleFonts.outfit(
-            fontSize: 15, color: _text, fontWeight: FontWeight.w800)),
+            fontSize: 15, color: _text, fontWeight: FontWeight.w800,),),
         Text(sub, style: GoogleFonts.outfit(fontSize: 10, color: _muted)),
-      ]);
+      ],);
 
   // ── Paytm Scratch Cards ──────────────────────────────────────
   Widget _buildPaytmScratchSection() {
@@ -1960,7 +2113,7 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
               Text(emoji, style: const TextStyle(fontSize: 28)),
               const SizedBox(height: 6),
               Text(amount, style: GoogleFonts.outfit(
-                  color: col, fontSize: 12, fontWeight: FontWeight.w800)),
+                  color: col, fontSize: 12, fontWeight: FontWeight.w800,),),
               const SizedBox(height: 2),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1969,13 +2122,13 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(tag, style: TextStyle(
-                    color: col, fontSize: 8, fontWeight: FontWeight.w700)),
+                    color: col, fontSize: 8, fontWeight: FontWeight.w700,),),
               ),
-            ]),
+            ],),
           ),
         ),
       );
-    }).toList());
+    }).toList(),);
   }
 
   // ── Accessories Gift Cards ────────────────────────────────────
@@ -2012,12 +2165,12 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                 Text(name, style: GoogleFonts.outfit(
-                    color: _text, fontSize: 11, fontWeight: FontWeight.w700),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                    color: _text, fontSize: 11, fontWeight: FontWeight.w700,),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,),
                 Text(card, style: TextStyle(
-                    color: col, fontSize: 9, fontWeight: FontWeight.w600)),
-              ])),
-            ]),
+                    color: col, fontSize: 9, fontWeight: FontWeight.w600,),),
+              ],),),
+            ],),
           ),
         );
       }).toList(),
@@ -2047,32 +2200,32 @@ class _RewardsHubScreenState extends State<RewardsHubScreen>
           Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(level, style: GoogleFonts.outfit(
-                color: _text, fontSize: 13, fontWeight: FontWeight.w800)),
-            Text(days, style: TextStyle(color: _muted, fontSize: 11)),
-          ])),
+                color: _text, fontSize: 13, fontWeight: FontWeight.w800,),),
+            Text(days, style: const TextStyle(color: _muted, fontSize: 11)),
+          ],),),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text('🪙 $reward', style: GoogleFonts.outfit(
-                color: col, fontSize: 11, fontWeight: FontWeight.w800)),
+                color: col, fontSize: 11, fontWeight: FontWeight.w800,),),
             const SizedBox(height: 4),
             GestureDetector(
               onTap: () => _snack('Quiz for $level starts soon! 🧠', col),
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 5),
+                    horizontal: 12, vertical: 5,),
                 decoration: BoxDecoration(
                   color: col,
                   borderRadius: BorderRadius.circular(8),
                   boxShadow: [BoxShadow(
-                      color: col.withValues(alpha: 0.35), blurRadius: 6)],
+                      color: col.withValues(alpha: 0.35), blurRadius: 6,),],
                 ),
                 child: Text('Play Now', style: GoogleFonts.outfit(
                     color: Colors.black, fontSize: 10,
-                    fontWeight: FontWeight.w800)),
+                    fontWeight: FontWeight.w800,),),
               ),
             ),
-          ]),
-        ]),
+          ],),
+        ],),
       );
-    }).toList());
+    }).toList(),);
   }
 }

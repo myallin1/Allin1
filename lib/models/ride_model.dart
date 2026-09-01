@@ -1,3 +1,5 @@
+import '../config/fare_rates.dart';
+
 enum RideStatus {
   searching,
   heroAssigned,
@@ -73,46 +75,35 @@ class RideModel {
     this.heroLng,
   });
 
-  // Fare calculation: Base fare + per-km rate with free distance and minimum fare
-  static const Map<String, Map<String, double>> defaultFares = {
-    'bike': {'baseFare': 25.0, 'perKm': 6.0, 'baseDistance': 1.0},
-    'auto': {'baseFare': 30.0, 'perKm': 8.0, 'baseDistance': 1.0},
-    'cab': {'baseFare': 50.0, 'perKm': 12.0, 'baseDistance': 1.0},
-    'parcel': {'baseFare': 40.0, 'perKm': 8.0, 'baseDistance': 1.0},
-  };
+  // Fare calculation: Base fare + per-km rate with free distance and minimum fare.
+  //
+  // FIX: this used to be its own hardcoded table (independently
+  // disagreeing with lib/config/fare_rates.dart and
+  // category_gateway_service.dart's _getDefaultRideFares()). Per
+  // Nizam's single-source-of-truth decision, the numbers now come
+  // from FareRates — this getter just re-shapes them into the
+  // `{'baseFare', 'perKm', 'baseDistance'}` map callers already
+  // expect (e.g. the `.containsKey()` check in bike_booking_screen
+  // .dart and the booking-time Firestore snapshot write).
+  static Map<String, Map<String, double>> get defaultFares => {
+        for (final category in FareRates.categories)
+          category: FareRates.legacyMapFor(category),
+      };
 
-  /// Calculates the estimated fare for a ride based on distance and vehicle type.
-  /// Standard logic: baseFare covers the first [baseDistance] km.
-  /// Additional distance is charged at [perKm].
+  /// Calculates the estimated fare for a ride based on distance and
+  /// vehicle type. Delegates to the single central FareRates.calculateFare()
+  /// — see lib/config/fare_rates.dart. [fares] is accepted only for
+  /// backward source compatibility with older call sites that used to
+  /// pass a Firestore-sourced override map; per Nizam's MVP decision
+  /// fare math is no longer Firestore-driven, so this parameter is now
+  /// ignored.
   static double calculateFare(
     double distanceKm,
     String vehicleType, {
+    @Deprecated('Fare math is no longer Firestore-driven; this is ignored.')
     Map<String, dynamic>? fares,
   }) {
-    if (distanceKm <= 0) return 0;
-
-    // Use provided fares or fallback to hardcoded defaults
-    final vehicleFares = fares?[vehicleType] as Map<String, dynamic>? ??
-        defaultFares[vehicleType] ??
-        defaultFares['bike']!;
-
-    final baseFare = (vehicleFares['baseFare'] as num?)?.toDouble() ?? 25.0;
-    final perKm = (vehicleFares['perKm'] as num?)?.toDouble() ?? 10.0;
-    final baseDistance = (vehicleFares['baseDistance'] as num?)?.toDouble() ?? 2.0;
-
-    double calculatedFare;
-    if (distanceKm <= baseDistance) {
-      // Within base distance - charge base fare only
-      calculatedFare = baseFare;
-    } else {
-      // After base distance - charge per km for the excess distance
-      calculatedFare = baseFare + ((distanceKm - baseDistance) * perKm);
-    }
-
-    // Apply minimum fare and round to nearest whole number for display
-    const double minFare = 20;
-    final finalFare = calculatedFare < minFare ? minFare : calculatedFare;
-    return finalFare.roundToDouble();
+    return FareRates.calculateFare(vehicleType, distanceKm);
   }
 
   // Get status as display string

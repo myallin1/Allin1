@@ -1,0 +1,36 @@
+{
+  "name": "SellerAllin1 · Seller",
+  "short_name": "SellerAllin1",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0C0A14",
+  "theme_color": "#FF4FA3",
+  "description": "Allin1 Seller App — manage your shop, menu and orders in Erode",
+  "orientation": "portrait-primary",
+  "prefer_related_applications": false,
+  "categories": ["business", "shopping"],
+  "icons": [
+    {
+      "src": "icons/Icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/Icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/Icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/Icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

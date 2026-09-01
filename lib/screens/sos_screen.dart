@@ -7,6 +7,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/auth_service.dart';
+import 'sos_kyc_verification_screen.dart';
+import '../services/firestore_usage_tracking.dart';
+
 class SosScreen extends StatefulWidget {
   const SosScreen({super.key});
 
@@ -107,10 +111,15 @@ class _SosScreenState extends State<SosScreen> {
         ),
       );
 
+      // FIX (audit: customer/hero number wiring — SOS is life-safety, so
+      // this matters more than most): user.phoneNumber is only populated
+      // by real phone-OTP auth, not a Google-Sign-In customer's typed-in
+      // signup number (which lives in Firestore users/{uid}.phoneNumber).
+      final resolvedUserPhone = await AuthService().resolveCustomerPhone(user);
       await FirebaseFirestore.instance.collection('sos_alerts').add({
         'userId': user.uid,
         'userName': user.displayName ?? user.email ?? 'Customer',
-        'userPhone': user.phoneNumber ?? '',
+        'userPhone': resolvedUserPhone,
         'location': GeoPoint(position.latitude, position.longitude),
         'status': 'active',
         'timestamp': FieldValue.serverTimestamp(),
@@ -170,7 +179,7 @@ class _SosScreenState extends State<SosScreen> {
           children: [
             _buildTrustHeader(),
             const SizedBox(height: 28),
-            _buildSosCard(),
+            _buildSosGateOrCard(),
             const SizedBox(height: 22),
             _buildPoliceButton(),
             const SizedBox(height: 18),
@@ -227,6 +236,197 @@ class _SosScreenState extends State<SosScreen> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // NEW (per Nizam's request): the SOS button used to fire instantly on
+  // a 3-tap gesture with zero verification — easy to trigger by
+  // accident/misuse, wasting a safety feature meant for real
+  // emergencies. Now gated behind a one-time KYC verification
+  // (sos_kyc_requests/{uid}), reviewed by admin's Cus SOS Approval tab.
+  // Real-time listener so the button unlocks the instant admin
+  // approves, without the customer needing to reopen the app.
+  // NEW (Aug 11 2026 — Nizam's request): legal-deterrent banner shown
+  // ABOVE the KYC gate, so the consequence of misuse is the first thing
+  // a customer reads on this screen rather than something buried after
+  // they've already verified.
+  //
+  // NOTE FOR REVIEW: the specific figures below (₹50,000 / 3 months) were
+  // supplied by Nizam and are stated here verbatim at his explicit
+  // instruction. I could not verify them against a specific Indian
+  // statute — worth a lawyer's confirmation before/soon after launch,
+  // since this is customer-facing text asserting a legal penalty. The
+  // surrounding claims (identity/location/time are logged, account ban)
+  // are all factually true of this app's own behaviour.
+  Widget _buildMisuseWarning() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4F6),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFFFB3C6), width: 1.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.gavel_rounded, color: Color(0xFFD11A4A), size: 26),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'WARNING: SOS Misuse is a Punishable Offence',
+                  style: GoogleFonts.outfit(
+                    color: const Color(0xFFD11A4A),
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w900,
+                    height: 1.25,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'This emergency network is strictly for real emergencies. '
+                  'Raising a false SOS alert can lead to a penalty of '
+                  '₹50,000 and imprisonment of up to 3 months, along with a '
+                  'permanent ban from this app.\n\n'
+                  'Your identity, live location and the exact time are '
+                  'recorded with every SOS you send.',
+                  style: GoogleFonts.outfit(
+                    color: const Color(0xFF7A2138),
+                    fontSize: 12.5,
+                    height: 1.45,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSosGateOrCard() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return _buildSosCard();
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('sos_kyc_requests')
+          .doc(user.uid)
+          .trackedSnapshots(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CircularProgressIndicator(color: _red)),
+          );
+        }
+        final data = snap.data?.data();
+        final status = data?['status'] as String?;
+
+        if (status == 'approved') {
+          return _buildSosCard();
+        }
+        // Every not-yet-approved state shows the misuse warning above the
+        // card. Deliberately NOT shown once approved: at that point the
+        // customer has already read and accepted it during verification,
+        // and someone in a real emergency should see the SOS button
+        // immediately, not a wall of legal text.
+        if (status == 'pending') {
+          return Column(children: [
+            _buildMisuseWarning(),
+            _buildKycStatusCard(
+            icon: Icons.hourglass_top_rounded,
+            color: _darkRed,
+            title: 'Verification Pending',
+            message: 'Your SOS KYC details are with admin for review. '
+                'This is a one-time check — once approved, your SOS button '
+                'activates permanently.',
+            ),
+          ],);
+        }
+        if (status == 'rejected') {
+          final reason = data?['rejectionReason'] as String? ?? '';
+          return Column(children: [
+            _buildMisuseWarning(),
+            _buildKycStatusCard(
+              icon: Icons.error_outline_rounded,
+              color: _red,
+              title: 'Verification Rejected',
+              message: reason.isNotEmpty
+                  ? 'Reason: $reason\n\nPlease correct and resubmit.'
+                  : 'Please correct your details and resubmit.',
+              actionLabel: 'Resubmit KYC',
+            ),
+          ],);
+        }
+        // Not submitted yet.
+        return Column(children: [
+          _buildMisuseWarning(),
+          _buildKycStatusCard(
+            icon: Icons.verified_user_outlined,
+            color: _pink,
+            title: 'Verify KYC to Activate SOS',
+            message: 'For your safety and to prevent misuse of this emergency '
+                'network, please verify your identity once before using SOS.',
+            actionLabel: 'Start Verification',
+          ),
+        ],);
+      },
+    );
+  }
+
+  Widget _buildKycStatusCard({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String message,
+    String? actionLabel,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: const Color(0xFFFFD2E6)),
+        boxShadow: [
+          BoxShadow(color: color.withValues(alpha: 0.14), blurRadius: 28, offset: const Offset(0, 14)),
+        ],
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 56),
+          const SizedBox(height: 14),
+          Text(title,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(color: _navy, fontSize: 18, fontWeight: FontWeight.w900),),
+          const SizedBox(height: 8),
+          Text(message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.notoSansTamil(color: const Color(0xFF7A4B63), fontSize: 13, height: 1.4),),
+          if (actionLabel != null) ...[
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: () => Navigator.push(context,
+                    MaterialPageRoute<void>(builder: (_) => const SosKycVerificationScreen()),),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _pink,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                child: Text(actionLabel,
+                    style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700),),
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -3,14 +3,13 @@
 // Allin1 Super App - Allin1
 // ================================================================
 
-import 'dart:io';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+import '../services/cloudinary_upload_service.dart';
 
 const Color kSurface = Color(0xFF0D0D18);
 const Color kCard = Color(0xFF141420);
@@ -266,28 +265,28 @@ class _CaptainDocumentScreenState extends State<CaptainDocumentScreen> {
           TextFormField(
             controller: _accountController,
             keyboardType: TextInputType.number,
-            style: GoogleFonts.roboto(color: kText),
+            style: GoogleFonts.outfit(color: kText),
             decoration: _buildInputDecoration('Account Number'),
             validator: (v) => v!.isEmpty ? 'Required' : null,
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _ifscController,
-            style: GoogleFonts.roboto(color: kText),
+            style: GoogleFonts.outfit(color: kText),
             decoration: _buildInputDecoration('IFSC Code'),
             validator: (v) => v!.isEmpty ? 'Required' : null,
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _bankNameController,
-            style: GoogleFonts.roboto(color: kText),
+            style: GoogleFonts.outfit(color: kText),
             decoration: _buildInputDecoration('Bank Name'),
             validator: (v) => v!.isEmpty ? 'Required' : null,
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _upiController,
-            style: GoogleFonts.roboto(color: kText),
+            style: GoogleFonts.outfit(color: kText),
             decoration: _buildInputDecoration('UPI ID (Optional)'),
           ),
         ],
@@ -347,6 +346,7 @@ class _CaptainDocumentScreenState extends State<CaptainDocumentScreen> {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.image,
+        withData: true,
       );
 
       if (result != null && result.files.isNotEmpty) {
@@ -354,6 +354,9 @@ class _CaptainDocumentScreenState extends State<CaptainDocumentScreen> {
         final user = FirebaseAuth.instance.currentUser;
         if (user == null) {
           throw Exception('User not logged in');
+        }
+        if (file.bytes == null) {
+          throw Exception('Could not read file data');
         }
 
         // Show uploading indicator
@@ -366,15 +369,17 @@ class _CaptainDocumentScreenState extends State<CaptainDocumentScreen> {
           });
         }
 
-        // Upload to Firebase Storage
-        final storageRef = FirebaseStorage.instance.ref(
-          'hero_documents/${user.uid}/$docType/${file.name}',
+        // Upload to Cloudinary (replaces Firebase Storage — Storage
+        // now requires the Blaze plan to create a bucket at all).
+        final downloadUrl = await CloudinaryUploadService().uploadImageBytes(
+          file.bytes!,
+          fileName: file.name,
+          folder: 'hero_documents/${user.uid}/$docType',
+          // Higher than the 100KB default — same reasoning as
+          // hero_register_screen.dart: these are ID documents admin
+          // must read to verify, so keep a bit more clarity.
+          targetBytes: CloudinaryUploadService.kDocumentTargetBytes,
         );
-
-        // Upload file
-        final uploadTask = storageRef.putFile(File(file.path!));
-        final snapshot = await uploadTask;
-        final downloadUrl = await snapshot.ref.getDownloadURL();
 
         // Save to Firestore
         final docRef = FirebaseFirestore.instance
@@ -449,11 +454,27 @@ class _CaptainDocumentScreenState extends State<CaptainDocumentScreen> {
       final heroRef =
           FirebaseFirestore.instance.collection('heroes').doc(user.uid);
 
+      // FIX (audit: customer/hero number wiring): this used to write
+      // 'phone': user.phoneNumber ?? '' unconditionally — for a hero
+      // whose FirebaseAuth session has no phoneNumber (Google sign-in),
+      // that silently WIPED an already-correct 'phone' value on the
+      // heroes/{uid} doc (merge:true still overwrites a key that's
+      // present, even with an empty string). Now falls back to whatever
+      // is already stored on the doc before ever writing an empty value.
+      final existingHeroSnap = await heroRef.get();
+      final existingHeroData = existingHeroSnap.data();
+      final resolvedHeroPhone = (user.phoneNumber?.trim().isNotEmpty ?? false)
+          ? user.phoneNumber!.trim()
+          : ((existingHeroData?['phone'] as String?)?.trim().isNotEmpty ?? false)
+              ? (existingHeroData!['phone'] as String).trim()
+              : ((existingHeroData?['phoneNumber'] as String?)?.trim() ?? '');
+
       // Update main hero document
       await heroRef.set(
         {
           'name': user.displayName ?? '',
-          'phone': user.phoneNumber ?? '',
+          'phone': resolvedHeroPhone,
+          'phoneNumber': resolvedHeroPhone,
           'upiId': _upiController.text.trim(),
           'documentsSubmitted': true,
           'verificationStatus': 'under_review',

@@ -22,17 +22,45 @@
         }
       }
     },
-    "signals": {
+    "active_service_requests": {
       ".read": "auth != null",
-      ".write": "auth != null"
+      ".write": "auth != null",
+      "$requestId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
     },
-    "pending_rides": {
+    "active_rides": {
       ".read": "auth != null",
-      ".write": "auth != null"
+      ".write": "auth != null",
+      "$rideId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
     },
-    "ride_signals": {
+    "hero_service_pings": {
       ".read": "auth != null",
-      ".write": "auth != null"
+      ".write": "auth != null",
+      "$heroId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "$requestId": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      }
+    },
+    "seller_pings": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$sellerId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "$requestId": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      }
     },
     "online_heroes": {
       ".read": "auth != null",
@@ -51,6 +79,20 @@
     "dispute_reports": {
       ".read": "auth != null",
       "$reportId": {
+        ".write": "auth != null"
+      }
+    },
+    "hero_status_updates": {
+      ".read": "auth != null",
+      "$heroId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "sos_alerts": {
+      ".read": "auth != null",
+      "$uid": {
+        ".read": "auth != null",
         ".write": "auth != null"
       }
     }

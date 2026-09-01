@@ -6,9 +6,20 @@
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
 import '../screens/seller_detail_screen.dart';
 import '../services/category_gateway_service.dart';
+import '../services/theme_service.dart';
+import 'cached_cloud_image.dart';
+
+// ── Brand palette (Aug 20 2026 — Global Food Theme Overhaul) ───────
+// Shop cards were dark (0xFF1A1A2A) — recolored for the white/pink
+// category screen; food accent switched from red to hot pink.
+const Color _kPink = Color(0xFFFF4FA3);
+const Color _kSurface = Color(0xFFF8F8FF);
+const Color _kText = Color(0xFF1A1A2E);
+const Color _kMuted = Color(0xFF9999BB);
 
 class SellerCard extends StatelessWidget {
   final Map<String, dynamic> seller;
@@ -28,28 +39,34 @@ class SellerCard extends StatelessWidget {
     final isOpen = _isOpen();
     final metadata = _getMetadata();
 
+    // NEW (Nizam: "photo realistic theme la intha mari tiles varanum" —
+    // reference was a Swiggy/Zomato-style big-photo restaurant card).
+    // Reuses this SAME card's existing data (seller['imageUrl'] /
+    // ['coverImageUrl'], both already written by SellerModel.toJson() —
+    // no backend change) and existing tap-through to SellerDetailScreen
+    // (which already has live menu + cart). Falls back to the normal
+    // small-icon row below whenever the theme isn't Photo Realistic OR
+    // this particular seller has no photo yet, so nothing regresses for
+    // sellers who haven't uploaded one.
+    final iconTheme = context.watch<ThemeService>().iconThemeKey;
+    final coverUrl = (seller['coverImageUrl'] as String?)?.trim();
+    final imgUrl = (seller['imageUrl'] as String?)?.trim();
+    final photoUrl = (coverUrl != null && coverUrl.isNotEmpty)
+        ? coverUrl
+        : (imgUrl != null && imgUrl.isNotEmpty)
+            ? imgUrl
+            : null;
+    if (iconTheme == 'photo_realistic' && photoUrl != null) {
+      return _buildPhotoCard(context, config, isOpen, metadata, photoUrl);
+    }
+
     return GestureDetector(
-      onTap: () {
-        if (onTap != null) {
-          onTap!();
-        } else {
-          // Default navigation to SellerDetailScreen
-          Navigator.push(
-            context,
-            MaterialPageRoute<void>(
-              builder: (_) => SellerDetailScreen(
-                seller: seller,
-                category: category,
-              ),
-            ),
-          );
-        }
-      },
+      onTap: () => _handleTap(context),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A2A),
+          color: _kSurface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: config.primaryColor.withValues(alpha: 0.3),
@@ -96,7 +113,7 @@ class SellerCard extends StatelessWidget {
                           style: GoogleFonts.outfit(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
-                            color: const Color(0xFFEEEEF5),
+                            color: _kText,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -117,7 +134,7 @@ class SellerCard extends StatelessWidget {
                         _getRating(),
                         style: GoogleFonts.outfit(
                           fontSize: 12,
-                          color: const Color(0xFFEEEEF5),
+                          color: _kText,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -126,7 +143,7 @@ class SellerCard extends StatelessWidget {
                         '•',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Color(0xFF7777A0),
+                          color: _kMuted,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -135,7 +152,7 @@ class SellerCard extends StatelessWidget {
                           metadata,
                           style: GoogleFonts.outfit(
                             fontSize: 11,
-                            color: const Color(0xFF7777A0),
+                            color: _kMuted,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -151,7 +168,7 @@ class SellerCard extends StatelessWidget {
             const Icon(
               Icons.arrow_forward_ios,
               size: 14,
-              color: Color(0xFF7777A0),
+              color: _kMuted,
             ),
           ],
         ),
@@ -164,7 +181,7 @@ class SellerCard extends StatelessWidget {
     switch (category) {
       case Category.food:
         return const _SellerCardConfig(
-          primaryColor: Color(0xFFFF5252),
+          primaryColor: Color(0xFFFF4FA3),
         );
       case Category.grocery:
         return const _SellerCardConfig(
@@ -187,6 +204,141 @@ class SellerCard extends StatelessWidget {
           primaryColor: Color(0xFF00BCD4),
         );
     }
+  }
+
+  // Shared by both card layouts (small-icon row and photo card) so the
+  // named-route/RouteBreadcrumbObserver behaviour stays identical
+  // regardless of which theme drew the card that was tapped.
+  void _handleTap(BuildContext context) {
+    if (onTap != null) {
+      onTap!();
+      return;
+    }
+    // Default navigation to SellerDetailScreen. Named route + primitive
+    // arguments (Aug 19 2026) so RouteBreadcrumbObserver can
+    // persist/restore this on cold start — see main_customer.dart
+    // '/food_shop_detail' onGenerateRoute.
+    final sellerId = seller['id'] as String?;
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        settings: RouteSettings(
+          name: '/food_shop_detail',
+          arguments: sellerId == null
+              ? null
+              : <String, dynamic>{
+                  'sellerId': sellerId,
+                  'categoryName': category.name,
+                },
+        ),
+        builder: (_) => SellerDetailScreen(
+          seller: seller,
+          category: category,
+        ),
+      ),
+    );
+  }
+
+  // ── Photo Realistic theme: big-photo card (Swiggy/Zomato-style
+  // reference, reimplemented in our own pink/white brand rather than
+  // copied) ───────────────────────────────────────────────────────
+  Widget _buildPhotoCard(BuildContext context, _SellerCardConfig config,
+      bool isOpen, String metadata, String photoUrl) {
+    return GestureDetector(
+      onTap: () => _handleTap(context),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border:
+              Border.all(color: config.primaryColor.withValues(alpha: 0.18)),
+          boxShadow: [
+            BoxShadow(
+              color: config.primaryColor.withValues(alpha: 0.12),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              children: [
+                CachedCloudImage(
+                  photoUrl,
+                  width: double.infinity,
+                  height: 140,
+                  fit: BoxFit.cover,
+                  cacheWidth: 480,
+                  errorWidget: Container(
+                    width: double.infinity,
+                    height: 140,
+                    color: config.primaryColor.withValues(alpha: 0.1),
+                    child: Center(
+                      child: Text(_getShopEmoji(),
+                          style: const TextStyle(fontSize: 40)),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: _buildStatusBadge(isOpen),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    seller['shopName'] as String? ?? 'Unknown Shop',
+                    style: GoogleFonts.outfit(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: _kText,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Text('⭐', style: TextStyle(fontSize: 12)),
+                      const SizedBox(width: 4),
+                      Text(
+                        _getRating(),
+                        style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: _kText,
+                            fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text('•',
+                          style: TextStyle(fontSize: 12, color: _kMuted)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          metadata,
+                          style:
+                              GoogleFonts.outfit(fontSize: 11, color: _kMuted),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ── Helper: Shop Emoji ───────────────────────────────────────

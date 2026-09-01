@@ -1,0 +1,90 @@
+/* ==========================================================================
+   ANIMATIONS & KEYFRAMES - PINK LUXURY THEME
+   ========================================================================== */
+
+/* ---------- Scroll Reveal Animations ---------- */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  filter: blur(4px);
+  transition: opacity 0.8s var(--ease-smooth),
+              transform 0.8s var(--ease-smooth),
+              filter 0.8s var(--ease-smooth);
+  will-change: opacity, transform, filter;
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+
+.reveal-delay-1 { transition-delay: 0.1s; }
+.reveal-delay-2 { transition-delay: 0.2s; }
+.reveal-delay-3 { transition-delay: 0.3s; }
+.reveal-delay-4 { transition-delay: 0.4s; }
+
+/* ---------- Pulse Animations ---------- */
+@keyframes pulse-pink {
+  0% {
+    box-shadow: 0 0 0 0 rgba(252, 74, 159, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(252, 74, 159, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(252, 74, 159, 0);
+  }
+}
+
+@keyframes pulse-green {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Floating Badges Micro Animation */
+.float-subtle {
+  animation: floating-subtle 4s ease-in-out infinite alternate;
+}
+
+@keyframes floating-subtle {
+  0% { transform: translateY(0px); }
+  100% { transform: translateY(-6px); }
+}
+
+/* Pulse Glow */
+.glow-pulse {
+  animation: glow-pulse-anim 3s ease-in-out infinite alternate;
+}
+
+@keyframes glow-pulse-anim {
+  0% { box-shadow: 0 4px 14px rgba(252, 74, 159, 0.35); }
+  100% { box-shadow: 0 12px 32px rgba(252, 74, 159, 0.65); }
+}
+
+/* Reduced Motion Mode */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+}

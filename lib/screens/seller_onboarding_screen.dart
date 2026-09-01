@@ -1,21 +1,30 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/city_config.dart';
+import '../config/food_categories.dart';
 import '../models/food_models.dart';
 import '../services/food_seller_service.dart';
-import 'seller_menu_setup_screen.dart';
+import '../services/location_service.dart';
+import 'seller_pending_screen.dart';
 
-const Color _bg = Color(0xFF08080F);
-const Color _surface = Color(0xFF0D0D18);
-const Color _card = Color(0xFF141420);
-const Color _card2 = Color(0xFF1A1A28);
+const Color _bg = Color(0xFFF7FAF8);
+const Color _surface = Color(0xFFFFFFFF);
+const Color _card = Color(0xFFFFFFFF);
+const Color _card2 = Color(0xFFF1F6F3);
 const Color _teal = Color(0xFF11998E);
 const Color _tealLight = Color(0xFF38EF7D);
-const Color _gold = Color(0xFFF5C542);
-const Color _text = Color(0xFFEEEEF5);
-const Color _muted = Color(0xFF7777A0);
-const Color _border = Color(0x267B6FE0);
+const Color _gold = Color(0xFFC79200);
+const Color _text = Color(0xFF1A1A1A);
+const Color _muted = Color(0xFF6B7280);
+const Color _border = Color(0x1A11998E);
 
 class SellerOnboardingScreen extends StatefulWidget {
   const SellerOnboardingScreen({super.key});
@@ -35,8 +44,137 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
   String _selectedSubCategory = 'biriyani';
   bool _isSaving = false;
 
+  // Multi-city (per Nizam's plan): city + real lat/lng are GPS-detected
+  // via "Use my current location", not typed. Mandatory -- _onSubmit()
+  // blocks until this is set. This also fixes a real pre-existing bug:
+  // latitude/longitude were previously hardcoded to 0.0 at submit time
+  // (never geolocated at all), which would have put every seller's pin
+  // in the Gulf of Guinea on any map view keyed off these fields.
+  String? _detectedCity;
+  double? _detectedLat;
+  double? _detectedLng;
+  bool _detectingLocation = false;
+
+  Future<void> _detectLocation() async {
+    setState(() => _detectingLocation = true);
+    try {
+      final position = await LocationService().getCurrentLocation();
+      if (position == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not get your location. Please enable GPS and try again.'), backgroundColor: Colors.redAccent),
+          );
+        }
+        return;
+      }
+      final cityName = await LocationService().getCityFromCoordinates(
+        LatLng(position.latitude, position.longitude),
+      );
+      final matched = cityName == null
+          ? null
+          : (() {
+              final normalized = cityName.trim().toLowerCase();
+              for (final c in kSupportedCities) {
+                if (normalized.contains(c.slug) || c.slug.contains(normalized)) return c.slug;
+              }
+              return null;
+            })();
+      if (mounted) {
+        setState(() {
+          _detectedLat = position.latitude;
+          _detectedLng = position.longitude;
+          _detectedCity = matched ?? kDefaultCity;
+        });
+        _scheduleDraftSave();
+      }
+    } finally {
+      if (mounted) setState(() => _detectingLocation = false);
+    }
+  }
+
   final FoodSellerService _service = FoodSellerService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  // DRAFT AUTOSAVE (Aug 19 2026 — same hardening as hero_register_screen
+  // .dart's _saveDraft()/_restoreDraft(), applied here per Nizam's
+  // explicit request: "namma hero onbording la iruka onboarding flow va
+  // namma seller login kum implement pannanum"). A Google Sign-In
+  // redirect/reload on web (see AuthService.loginWithGoogle's Aug 19
+  // 2026 fix) used to be able to destroy an in-progress registration
+  // with no trace — the seller retyped everything or gave up, and
+  // admin never received anything. Debounced SharedPreferences autosave
+  // means a reload restores exactly what was typed instead of an empty
+  // form.
+  static const String _kDraftKey = 'seller_onboarding_draft_v1';
+  Timer? _draftDebounce;
+
+  void _scheduleDraftSave() {
+    _draftDebounce?.cancel();
+    _draftDebounce = Timer(const Duration(milliseconds: 600), _saveDraft);
+  }
+
+  Future<void> _saveDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _kDraftKey,
+        jsonEncode(<String, dynamic>{
+          'name': _nameController.text,
+          'phone': _phoneController.text,
+          'address': _addressController.text,
+          'hotelType': _selectedHotelType,
+          'subCategory': _selectedSubCategory,
+          'city': _detectedCity,
+          'lat': _detectedLat,
+          'lng': _detectedLng,
+        }),
+      );
+    } catch (e) {
+      debugPrint('[SellerOnboarding] draft save failed (non-fatal): $e');
+    }
+  }
+
+  Future<void> _restoreDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kDraftKey);
+      if (raw == null || raw.isEmpty || !mounted) return;
+      final d = jsonDecode(raw) as Map<String, dynamic>;
+      _nameController.text = (d['name'] as String?) ?? '';
+      _phoneController.text = (d['phone'] as String?) ?? '';
+      _addressController.text = (d['address'] as String?) ?? '';
+      if (!mounted) return;
+      setState(() {
+        _selectedHotelType = (d['hotelType'] as String?) ?? _selectedHotelType;
+        _selectedSubCategory = (d['subCategory'] as String?) ?? _selectedSubCategory;
+        _detectedCity = d['city'] as String?;
+        _detectedLat = (d['lat'] as num?)?.toDouble();
+        _detectedLng = (d['lng'] as num?)?.toDouble();
+      });
+    } catch (e) {
+      debugPrint('[SellerOnboarding] draft restore failed (non-fatal): $e');
+    }
+  }
+
+  Future<void> _clearDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_kDraftKey);
+    } catch (_) {}
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_restoreDraft());
+    for (final c in <TextEditingController>[
+      _nameController,
+      _phoneController,
+      _addressController,
+    ]) {
+      c.addListener(_scheduleDraftSave);
+    }
+  }
 
   static const _hotelTypes = [
     ('both', 'Veg & Non-Veg', 'I serve everything', Icons.restaurant_menu),
@@ -44,16 +182,16 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
     ('non-veg', 'Non-Veg', 'Specialty non-veg', Icons.restaurant),
   ];
 
-  static const _subCategories = [
-    ('biriyani', 'Biriyani & Rice', '🍛'),
-    ('parotta', 'Parotta & Breads', '🫓'),
-    ('south_indian', 'South Indian Meals', '🥘'),
-    ('fast_food', 'Fast Food & Snacks', '🍟'),
-    ('multi_cuisine', 'Multi-Cuisine', '🍽️'),
-  ];
+  // Single source of truth: lib/config/food_categories.dart. Keeping
+  // this list in sync with the customer-facing sidebar (see
+  // custom_food_order_screen.dart) is what makes "seller picks
+  // Biriyani at registration -> shows under the Biriyani sidebar
+  // icon" actually work end to end.
+  static const _subCategories = kFoodSubCategories;
 
   @override
   void dispose() {
+    _draftDebounce?.cancel();
     _nameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
@@ -62,6 +200,13 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
 
   Future<void> _onSubmit() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (_detectedCity == null || _detectedLat == null || _detectedLng == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please tap "Use my current location" first.'), backgroundColor: Colors.redAccent),
+      );
+      return;
+    }
 
     setState(() => _isSaving = true);
 
@@ -73,28 +218,48 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
       final seller = SellerModel(
         id: uid,
         name: _nameController.text.trim(),
-        category: 'food',
         subCategory: _selectedSubCategory,
         hotelType: _selectedHotelType,
         address: _addressController.text.trim(),
-        latitude: 0.0,
-        longitude: 0.0,
+        latitude: _detectedLat!,
+        longitude: _detectedLng!,
+        city: _detectedCity!,
         phone: _phoneController.text.trim(),
         isOpen: false,
-        estimatedPrepTimeMin: 20,
-        status: 'active',
+        // FIX (per Nizam/CTO's explicit request — seller approval gate):
+        // sellers used to go live to customers the instant they finished
+        // onboarding ('active' immediately). With a franchise model
+        // expanding across 5 cities, an unverified/fake seller going
+        // live instantly is a brand risk. Sellers now default to
+        // 'pending' — category_gateway_service.dart's loadCategoryData()
+        // already filters `.where('status', isEqualTo: 'active')` for
+        // the customer-facing browse screen, so a pending seller is
+        // automatically invisible to customers with no other code
+        // changes needed. Admin flips this to 'active' via the new
+        // admin_seller_approval_screen.dart once verified.
+        status: 'pending',
         createdAt: now,
         updatedAt: now,
       );
 
       await _service.createSellerProfile(seller);
+      unawaited(_clearDraft());
 
       if (!mounted) return;
 
+      // FIX (seller approval gate): a brand-new seller now lands on a
+      // live "under review" status screen (SellerPendingScreen) instead
+      // of straight into menu-authoring. It auto-navigates to the menu
+      // screen the moment admin flips status to 'active' — see
+      // seller_pending_screen.dart and admin_seller_approval_screen.dart.
       Navigator.pushReplacement(
         context,
         MaterialPageRoute<void>(
-          builder: (_) => SellerMenuSetupScreen(sellerId: uid),
+          builder: (_) => SellerPendingScreen(
+            sellerId: uid,
+            sellerName: _nameController.text.trim(),
+            categoryName: _selectedSubCategory == 'home_made' ? 'Home Kitchen' : 'Menu',
+          ),
         ),
       );
     } catch (e) {
@@ -285,7 +450,10 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
                 subtitle: type.$3,
                 icon: type.$4,
                 isSelected: _selectedHotelType == type.$1,
-                onTap: () => setState(() => _selectedHotelType = type.$1),
+                onTap: () {
+                  setState(() => _selectedHotelType = type.$1);
+                  _scheduleDraftSave();
+                },
               ),
             ),
           ),
@@ -324,12 +492,15 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
             runSpacing: 10,
             children: _subCategories.map(
               (cat) {
-                final isSelected = _selectedSubCategory == cat.$1;
+                final isSelected = _selectedSubCategory == cat.key;
                 return GestureDetector(
-                  onTap: () => setState(() => _selectedSubCategory = cat.$1),
+                  onTap: () {
+                    setState(() => _selectedSubCategory = cat.key);
+                    _scheduleDraftSave();
+                  },
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
+                        horizontal: 16, vertical: 10,),
                     decoration: BoxDecoration(
                       color: isSelected ? _teal : _card2,
                       borderRadius: BorderRadius.circular(20),
@@ -340,10 +511,10 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(cat.$3, style: const TextStyle(fontSize: 16)),
+                        Text(cat.emoji, style: const TextStyle(fontSize: 16)),
                         const SizedBox(width: 8),
                         Text(
-                          cat.$2,
+                          cat.label,
                           style: GoogleFonts.outfit(
                             color: isSelected ? Colors.white : _muted,
                             fontSize: 13,
@@ -431,6 +602,37 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
             ),
             validator: (v) =>
                 (v == null || v.trim().isEmpty) ? 'Address is required' : null,
+          ),
+          const SizedBox(height: 12),
+          // Multi-city: mandatory GPS-detected city + real lat/lng --
+          // replaces the previous hardcoded 0.0/0.0 that never actually
+          // captured a location.
+          InkWell(
+            onTap: _detectingLocation ? null : _detectLocation,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: _detectedCity != null ? _teal.withValues(alpha: 0.12) : _card2,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _detectedCity != null ? _teal : _border),
+              ),
+              child: Row(
+                children: [
+                  if (_detectingLocation) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _teal)) else Icon(_detectedCity != null ? Icons.check_circle_rounded : Icons.my_location_rounded, color: _teal, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _detectedCity != null
+                          ? 'Location set: ${cityLabelFor(_detectedCity!)}'
+                          : 'Use my current location (required)',
+                      style: GoogleFonts.outfit(color: _text, fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -555,5 +757,16 @@ class _TypeTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('label', label));
+    properties.add(StringProperty('title', title));
+    properties.add(StringProperty('subtitle', subtitle));
+    properties.add(DiagnosticsProperty<IconData>('icon', icon));
+    properties.add(DiagnosticsProperty<bool>('isSelected', isSelected));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
   }
 }

@@ -5,32 +5,47 @@ import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../../config/fare_rates.dart';
+import '../../config/ride_catalog.dart';
 import '../../models/ride_model.dart';
-import '../../services/category_gateway_service.dart';
+// GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../../app_navigator.dart' show chittiRouteObserver;
+import '../../services/auth_prompt_service.dart';
+import '../../services/chitti_memory_service.dart';
+// Phone lookups consolidated here (Aug 11 2026) — single source of truth.
+import '../../services/auth_service.dart';
+// INSTANT-SEED (Aug 11 2026): remembers the last confirmed pickup.
+import '../../services/pickup_memory_service.dart';
+import '../../services/theme_service.dart';
+import '../../widgets/cached_cloud_image.dart';
+// INSTANT-SEED: the app's existing drag-a-pin picker, reused for the
+// manual pickup path instead of adding tap plumbing to the shared map.
+import '../location_picker_screen.dart';
+import '../../services/app_minimizer_service.dart';
+import '../../services/city_service.dart';
 import '../../services/localization_service.dart';
 import '../../services/location_service.dart';
 import '../../services/map_service.dart';
-import '../../services/session_service.dart';
+import '../../services/recent_places_service.dart';
+import '../../widgets/cancellation_reason_sheet.dart';
+import '../../services/usage_tracking_service.dart';
 import '../../widgets/allin1_map_widget.dart';
+import '../../services/map_simulation_service.dart';
+import '../../widgets/server_busy_dialog.dart';
 import '../../widgets/vehicle_selection_bottom_sheet.dart';
-import '../login_screen.dart';
 import '../payment_screen.dart';
 import 'ride_search_screen.dart';
 import 'ride_tracking_screen.dart';
-
-enum _ServiceCategory {
-  bike,
-  auto,
-  cab,
-  parcel,
-}
+import '../../widgets/cached_tile_provider.dart';
 
 // Approximate Erode road paths aligned to major corridors such as
 // Brough Road, EVN Road, and Perundurai Road for ambient traffic.
@@ -114,14 +129,32 @@ const List<List<LatLng>> _erodeTrafficLoops = <List<LatLng>>[
   ],
 ];
 
-const List<List<LatLng>> _dummyTrafficRoutePairs = <List<LatLng>>[
-  <LatLng>[LatLng(11.3468, 77.7210), LatLng(11.3419, 77.7144)],
-  <LatLng>[LatLng(11.3479, 77.7228), LatLng(11.3416, 77.7169)],
-  <LatLng>[LatLng(11.3402, 77.7248), LatLng(11.3460, 77.7182)],
-  <LatLng>[LatLng(11.3398, 77.7283), LatLng(11.3280, 77.7515)],
-  <LatLng>[LatLng(11.3410, 77.7171), LatLng(11.3160, 77.6718)],
-  <LatLng>[LatLng(11.3520, 77.7280), LatLng(11.3792, 77.6974)],
-  <LatLng>[LatLng(11.3290, 77.7190), LatLng(11.3000, 77.7614)],
+// NOTE (Aug 17 2026): a SECOND `_erodeTrafficLoops` declaration used to
+// sit here — a merge artifact. Two top-level consts with the same name
+// is a hard compile error ('already declared in this scope'), and it
+// broke the CUSTOMER, ADMIN and SELLER web builds while HERO happened
+// to compile because it never pulled this file in.
+//
+// The duplicate was the coarser of the two (17 points vs 63) and its
+// corridors are already covered by the block above, which the comment
+// at its head describes as Brough Road / EVN Road / Perundurai Road.
+// Removed the duplicate, kept the detailed original — no traffic loop
+// is lost, the simulation just keeps the smoother path data.
+
+const List<List<LatLng>> _outskirtsTrafficLoops = <List<LatLng>>[
+  <LatLng>[
+    LatLng(11.2900, 77.7000),
+    LatLng(11.3000, 77.7300),
+    LatLng(11.3200, 77.7500),
+    LatLng(11.3500, 77.7600),
+    LatLng(11.3800, 77.7400),
+    LatLng(11.4000, 77.7100),
+    LatLng(11.4000, 77.6800),
+    LatLng(11.3800, 77.6500),
+    LatLng(11.3400, 77.6400),
+    LatLng(11.3100, 77.6600),
+    LatLng(11.2900, 77.7000),
+  ],
 ];
 
 const List<Map<String, dynamic>> _defaultSearchLocations =
@@ -160,140 +193,38 @@ const List<Map<String, dynamic>> _defaultSearchLocations =
   },
 ];
 
-LatLng _lerpLatLng(LatLng a, LatLng b, double t) {
-  return LatLng(
-    a.latitude + ((b.latitude - a.latitude) * t),
-    a.longitude + ((b.longitude - a.longitude) * t),
-  );
-}
-
-LatLng _offsetAlongSegment(
-    LatLng start, LatLng end, LatLng point, double laneOffset,) {
-  final dx = end.longitude - start.longitude;
-  final dy = end.latitude - start.latitude;
-  final length = sqrt((dx * dx) + (dy * dy));
-  if (length == 0) {
-    return point;
-  }
-  final perpLat = -dx / length;
-  final perpLng = dy / length;
-  return LatLng(
-    point.latitude + (perpLat * laneOffset),
-    point.longitude + (perpLng * laneOffset),
-  );
-}
-
-LatLng _pointOnPath(List<LatLng> path, double progress, double laneOffset) {
-  if (path.isEmpty) {
-    return const LatLng(11.3410, 77.7171);
-  }
-  if (path.length == 1) {
-    return path.first;
-  }
-  final clampedProgress = progress.clamp(0.0, 1.0);
-  final segmentCount = path.length - 1;
-  final scaled = clampedProgress * segmentCount;
-  final segmentIndex = scaled.floor().clamp(0, segmentCount - 1);
-  final nextIndex = (segmentIndex + 1).clamp(1, path.length - 1);
-  final localT = scaled - scaled.floorToDouble();
-  final point = _lerpLatLng(path[segmentIndex], path[nextIndex], localT);
-  return _offsetAlongSegment(
-      path[segmentIndex], path[nextIndex], point, laneOffset,);
-}
-
-double _bearingBetween(LatLng start, LatLng end) {
-  final lat1 = start.latitude * pi / 180;
-  final lat2 = end.latitude * pi / 180;
-  final dLng = (end.longitude - start.longitude) * pi / 180;
-  final y = sin(dLng) * cos(lat2);
-  final x = (cos(lat1) * sin(lat2)) - (sin(lat1) * cos(lat2) * cos(dLng));
-  return (atan2(y, x) * 180 / pi + 360) % 360;
-}
-
-double _bearingOnPath(List<LatLng> path, double progress, int direction) {
-  if (path.length < 2) {
-    return 0;
-  }
-  final clampedProgress = progress.clamp(0.0, 1.0);
-  final segmentCount = path.length - 1;
-  final scaled = clampedProgress * segmentCount;
-  final segmentIndex = scaled.floor().clamp(0, segmentCount - 1);
-  final nextIndex = (segmentIndex + 1).clamp(1, path.length - 1);
-  final start = path[segmentIndex];
-  final end = path[nextIndex];
-  return direction >= 0
-      ? _bearingBetween(start, end)
-      : _bearingBetween(end, start);
-}
-
-class _DummyVehicleState {
-  _DummyVehicleState({
-    required this.id,
-    required this.vehicleType,
-    required this.busy,
-    required this.loopIndex,
-    required this.progress,
-    required this.direction,
-    required this.speedStep,
-    required this.laneOffset,
-  });
-
-  final String id;
-  final String vehicleType;
-  final bool busy;
-  final int loopIndex;
-  final double speedStep;
-  final double laneOffset;
-  double progress;
-  int direction;
-  List<LatLng>? roadPath;
-
-  List<LatLng> activePath() {
-    final routedPath = roadPath;
-    if (routedPath != null && routedPath.length > 1) {
-      return routedPath;
-    }
-    return _erodeTrafficLoops[loopIndex];
-  }
-
-  LatLng project() {
-    return _pointOnPath(
-      activePath(),
-      progress,
-      laneOffset,
-    );
-  }
-
-  double bearing() {
-    return _bearingOnPath(
-      activePath(),
-      progress,
-      direction,
-    );
-  }
-
-  void advance(Random random) {
-    final jitter = 0.65 + (random.nextDouble() * 0.7);
-    progress += direction * speedStep * jitter;
-    if (progress >= 1) {
-      progress = 1;
-      direction = -1;
-    } else if (progress <= 0) {
-      progress = 0;
-      direction = 1;
-    }
-  }
-}
 
 class BikeBookingScreen extends StatefulWidget {
-  const BikeBookingScreen({super.key});
+  const BikeBookingScreen({
+    super.key,
+    this.initialCategory,
+    this.initialDropLocation,
+  });
+
+  // Voice-to-Order (MyAllin1 Super Hero, Pro tier — see
+  // voice_booking_intent_service.dart): when the AI parses a spoken
+  // command like "Book an auto to Erode Railway Station", it pushes this
+  // screen with the recognized category and a resolved destination
+  // (already geocoded via MapService().search(...)) pre-filled, so the
+  // customer lands one tap away from confirming instead of typing
+  // everything again. Both are optional and purely additive — every
+  // existing caller that omits them behaves exactly as before.
+  final String? initialCategory;
+  final Map<String, dynamic>? initialDropLocation;
 
   @override
   State<BikeBookingScreen> createState() => _BikeBookingScreenState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('initialCategory', initialCategory));
+    properties.add(DiagnosticsProperty<Map<String, dynamic>?>('initialDropLocation', initialDropLocation));
+  }
 }
 
 class _BikeBookingScreenState extends State<BikeBookingScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, RouteAware {
   static const List<String> _restorableCustomerRideStatuses = <String>[
     'searching',
     'assigned',
@@ -333,14 +264,12 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       ValueNotifier<List<MapMarker>>([]);
   List<Map<String, dynamic>> _onlineHeroSnapshots = [];
   StreamSubscription<DatabaseEvent>? _nearbyCaptainsSub;
-  final Map<String, Timer> _dummyVehicleTimers = <String, Timer>{};
   final LocationService _locationService = LocationService();
   final MapService _mapService = MapService();
   List<LatLng> _routePoints = [];
   double? _routeDistanceKm;
   int? _routeEtaMinutes;
   int _routeRequestId = 0;
-  final List<_DummyVehicleState> _ambientVehicles = <_DummyVehicleState>[];
   final Map<int, List<LatLng>> _dummyRouteCache = <int, List<LatLng>>{};
   final Set<int> _dummyRouteRequests = <int>{};
 
@@ -352,6 +281,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   bool _isSearching = false;
   bool _isResolvingPinAddress = false;
   List<Map<String, dynamic>> _searchSuggestions = [];
+  List<Map<String, dynamic>> _recentPlaces = <Map<String, dynamic>>[];
   String _activeSearchQuery = '';
   Timer? _debounceTimer;
   Timer? _searchMapIdleTimer;
@@ -365,11 +295,16 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   String? _pendingActiveRideStatus;
   String? _pendingActiveRidePaymentStatus;
   double? _pendingActiveRideAmount;
+  // Guards _continueActiveRide() against a fast double-tap firing the
+  // method twice concurrently (each independently pushing its own
+  // PaymentScreen/RideSearchScreen/RideTrackingScreen route) before the
+  // first call's rideRef.get() has even returned.
+  bool _isContinuingRide = false;
 
   // ── Fare State ────────────────────────────────────────────────
   Map<String, dynamic>? _fares;
   double? _estimatedFare;
-  _ServiceCategory _selectedCategory = _ServiceCategory.bike;
+  String _selectedCategory = 'bike';
   bool _isInitializingLocation = true;
   bool _locationPermissionRequired = false;
   String _startupStatus = 'Loading map and checking GPS...';
@@ -379,17 +314,74 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // NEW (Aug 25 2026 — Super Chitti Phase 1, Step 1: Passive Screen
+    // Awareness). Chitti reads this via ChittiMemoryService's system
+    // prompt injection so a vague command like "book it for me" while
+    // sitting here resolves to a ride, not food or groceries.
+    ChittiMemoryService.instance.setCurrentScreen('Bike Taxi booking (Taxi Dashboard)');
     _mapService.initialize();
-    _loadFareConfig();
+    // (didChangeDependencies below subscribes to chittiRouteObserver for
+    // the didPopNext() re-registration — see its doc comment.)
+    // Fare numbers are hardcoded (lib/config/fare_rates.dart) per
+    // Nizam's MVP decision — no Firestore read needed here anymore.
+    // _fares is populated directly from that single source of truth
+    // instead of _loadFareConfig()'s old CategoryGatewayService
+    // .loadRideFares() Firestore/cache round-trip, which would have
+    // spent a DB read on a value nothing actually uses for fare math
+    // anymore (RideModel.calculateFare() ignores its `fares` param).
+    _fares = RideModel.defaultFares;
+    MapSimulationService.instance.addListener(_onSimulationChanged);
     _listenToNearbyCaptains();
-    _initLocationTracking();
+    // INSTANT-SEED (Aug 11 2026): was _initLocationTracking(), which
+    // could keep the customer on a spinner for ~82s before the map
+    // became usable. Seeding never blocks; GPS refines in the
+    // background. See the block comment above _seedPickupInstantly().
+    unawaited(_seedPickupInstantly());
     unawaited(_restoreActiveRideIfNeeded());
+    unawaited(_loadRecentPlaces());
+
+    // Voice-to-Order pre-fill (see BikeBookingScreen's doc comment above).
+    // Applied directly in initState, before the first frame — these are
+    // plain field/text-controller writes, not map-dependent, so no need
+    // to wait for _mainMapReady/_searchMapReady.
+    final initialCategory = widget.initialCategory;
+    if (initialCategory != null &&
+        RideModel.defaultFares.containsKey(initialCategory)) {
+      _selectedCategory = initialCategory;
+    }
+    final initialDrop = widget.initialDropLocation;
+    if (initialDrop != null &&
+        initialDrop['lat'] is num &&
+        initialDrop['lng'] is num) {
+      _dropLocation = initialDrop;
+      _dropController.text = initialDrop['name'] as String? ??
+          initialDrop['full'] as String? ??
+          '';
+    }
     Timer(const Duration(seconds: 1), () {
       if (!mounted) return;
       _ensureDummyTrafficInitialized();
       unawaited(_hydrateDummyTrafficRoutes());
       _refreshHeroMarkers();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic>) {
+      chittiRouteObserver.subscribe(this, route);
+    }
+  }
+
+  // FIX (Aug 25 2026 — "Screen Forgetting Sickness"): re-registers the
+  // label when the user navigates BACK to this screen after pushing
+  // something on top of it (e.g. RideTrackingScreen) — see
+  // chitti_screen_tag.dart's header for the full explanation.
+  @override
+  void didPopNext() {
+    ChittiMemoryService.instance.setCurrentScreen('Bike Taxi booking (Taxi Dashboard)');
   }
 
   @override
@@ -413,38 +405,62 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     }
   }
 
-  void _returnToRootSafely() {
+  // FIX (back-button depth audit, per Nizam's request): this used to
+  // silently do NOTHING when canPop() was false — and canPop() IS false
+  // right after a ride completes, because payment_screen.dart and
+  // ride_tracking_screen.dart both intentionally reset the whole stack
+  // with pushAndRemoveUntil(BikeBookingScreen, (route) => false) once a
+  // ride is done (so back can't return into a finished ride — that part
+  // is correct). But that leaves THIS screen as the sole root route, so
+  // canPop() is false, the old `if (navigator.canPop())` guard silently
+  // skipped everything, and the very next back-press here — one of the
+  // most common moments in the whole app, right after finishing a ride —
+  // did nothing at all.
+  //
+  // UPDATED (Aug 18 2026 — Turbo App navigation audit, cross-verified
+  // with Gemini): the fix above pre-dated the later "System Back Button
+  // Overhaul" CTO mandate, which replaced every dashboard root's
+  // confirm-exit-then-SystemNavigator.pop() (a real Activity finish —
+  // the app actually closing) with AppMinimizer's minimize-to-background
+  // behaviour. This screen and ride_tracking_screen.dart's identical
+  // _returnToRootSafely() were the two places that mandate never
+  // reached, so the single most-used flow in the whole app (taxi
+  // booking, right after finishing a ride) was still hard-closing
+  // instead of minimizing. Now matches the other 4 app roots exactly.
+  Future<void> _returnToRootSafely() async {
     if (!mounted) {
       return;
     }
     final navigator = Navigator.of(context);
     if (navigator.canPop()) {
-      navigator.popUntil((route) => route.isFirst);
+      navigator.pop();
+      return;
     }
+    if (kIsWeb) {
+      // A browser tab cannot minimize itself to the OS home screen — no
+      // such API exists. Show the "use your device's Home button" hint
+      // once per session, then silently swallow further back-presses.
+      if (AppMinimizer.consumeWebHintOnce()) {
+        if (!mounted) return;
+        final t = context.read<LocalizationService>().t;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(t('press_home_to_minimize')),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+    unawaited(AppMinimizer.moveToBackground());
   }
 
   /// T2: Normalize bottom-sheet vehicle key → hero profile category key.
   /// This is the single source of truth for the pipeline:
   ///   Customer books 'cab' → rides/{id}.category = 'car'
   ///   Hero registered as 'car' → stream filter matches 'car'
-  String _normalizeCategoryKey(String vehicleType) {
-    switch (vehicleType.trim().toLowerCase()) {
-      case 'auto':
-        return 'auto';
-      case 'cab':
-      case 'car':
-      case 'mini':
-        return 'car';
-      case 'parcel':
-        return 'parcel';
-      case 'emergency_manpower':
-      case 'manpower':
-        return 'emergency_manpower';
-      case 'bike':
-      default:
-        return 'bike';
-    }
-  }
+  String _normalizeCategoryKey(String vehicleType) =>
+      rideHeroCategory(vehicleType);
 
   DateTime? _rideTimestamp(Map<String, dynamic> data, List<String> keys) {
     for (final key in keys) {
@@ -569,7 +585,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
           'status': 'cancelled',
           'cancelledBy': 'system',
           'cancelledAt': FieldValue.serverTimestamp(),
-        }));
+        }),);
       }
       if (!mounted) {
         return;
@@ -645,6 +661,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   Future<void> _continueActiveRide() async {
+    if (_isContinuingRide) {
+      return;
+    }
     final ride = _pendingActiveRide;
     final rideDocId = _pendingActiveRideDocId;
     var status = (_pendingActiveRideStatus ?? '').trim();
@@ -659,6 +678,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       return;
     }
 
+    setState(() => _isContinuingRide = true);
+    try {
     try {
       final rideSnap = await FirebaseFirestore.instance
           .collection('rides')
@@ -727,13 +748,56 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     }
 
     if (_shouldResumePaymentFlow(status, paymentStatus)) {
+      // Resolve the fare with full visibility into which source actually
+      // provided it — the old chain silently fell through to 0.0 when
+      // amount/estimatedFare/fare were all null, which UPI apps reject
+      // as an invalid amount (matches the "UPI opens but payment can't
+      // complete" report). Scoped to this resume-after-restart path only
+      // — the normal post-ride-completion path in ride_tracking_screen.dart
+      // is untouched.
+      double resolvedAmount;
+      String amountSource;
+      if (amount != null) {
+        resolvedAmount = amount;
+        amountSource = 'amount (pending-ride cache)';
+      } else if (ride.estimatedFare != null) {
+        resolvedAmount = ride.estimatedFare!.toDouble();
+        amountSource = 'ride.estimatedFare';
+      } else if (ride.fare != null) {
+        resolvedAmount = ride.fare!.toDouble();
+        amountSource = 'ride.fare';
+      } else {
+        resolvedAmount = 0.0;
+        amountSource = '0.0 fallback (amount/estimatedFare/fare all null)';
+      }
+      debugPrint(
+        '[BikeBookingScreen] Resume-payment fare resolved via $amountSource '
+        '= $resolvedAmount (rideDocId=$rideDocId)',
+      );
+
+      if (resolvedAmount <= 0) {
+        debugPrint(
+          '[BikeBookingScreen] ⚠️ Resume-payment amount is <= 0 — blocking '
+          'navigation to PaymentScreen to avoid sending an invalid UPI '
+          'request (rideDocId=$rideDocId).',
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Unable to determine ride fare — please contact support',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => PaymentScreen(
-            amount: amount ??
-                ride.estimatedFare?.toDouble() ??
-                ride.fare?.toDouble() ??
-                0.0,
+            amount: resolvedAmount,
             note: 'Bike Taxi Ride',
             rideDocId: rideDocId,
           ),
@@ -765,13 +829,24 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         ),
       ),
     );
+    } finally {
+      if (mounted) {
+        setState(() => _isContinuingRide = false);
+      }
+    }
   }
 
+  // FIX (Cancellation Reason Analytics, Aug 11 2026): cancel no longer
+  // fires immediately from the button tap — the reason sheet IS the
+  // confirmation now. Backing out of the sheet without picking a
+  // reason means no cancellation happens at all.
   Future<void> _cancelPendingActiveRide() async {
     final rideDocId = _pendingActiveRideDocId;
     if (rideDocId == null) {
       return;
     }
+    final reason = await showCancellationReasonSheet(context);
+    if (reason == null || !mounted) return;
     // ── Optimistic UI: dismiss ride banner immediately before network write ──
     // The update propagates via the ride stream; on failure the user is notified.
     if (mounted) {
@@ -791,6 +866,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         'status': 'cancelled',
         'cancelledBy': 'customer',
         'cancelledAt': FieldValue.serverTimestamp(),
+        'cancellationReason': reason,
       });
       if (mounted) _showError('Ride cancelled successfully');
     } catch (e) {
@@ -888,14 +964,24 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     }
   }
 
+  void _onSimulationChanged() {
+    if (!mounted) return;
+    _dummyHeroMarkersNotifier.value = MapSimulationService.instance.simulatedMarkers;
+  }
+
   @override
   void dispose() {
+    // Only clear if nothing else already overwrote it (e.g. a screen
+    // pushed on top of this one, which tags itself on its own
+    // initState) — best-effort, matches ChittiScreenTag's own note.
+    chittiRouteObserver.unsubscribe(this);
+    if (ChittiMemoryService.instance.currentScreen == 'Bike Taxi booking (Taxi Dashboard)') {
+      ChittiMemoryService.instance.setCurrentScreen(null);
+    }
+    MapSimulationService.instance.removeListener(_onSimulationChanged);
     WidgetsBinding.instance.removeObserver(this);
     _nearbyCaptainsSub?.cancel();
-    for (final timer in _dummyVehicleTimers.values) {
-      timer.cancel();
-    }
-    _dummyVehicleTimers.clear();
+    _nearbyCaptainsAuthWaitSub?.cancel();
     _debounceTimer?.cancel();
     _searchMapIdleTimer?.cancel();
     _pickupController.dispose();
@@ -906,51 +992,362 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   // ── Fare Config ───────────────────────────────────────────────
-  // CategoryGatewayService.loadRideFares() is already cache-backed (in-memory +
-  // Firestore persistence), so fares are available from disk on the first frame
-  // after the initial install and do not block the UI.
-  Future<void> _loadFareConfig() async {
-    try {
-      final fares = await CategoryGatewayService().loadRideFares();
-      if (mounted) setState(() => _fares = fares);
-    } catch (e) {
-      debugPrint('Fare load error: $e');
+  // Formerly _loadFareConfig() fetched CategoryGatewayService
+  // .loadRideFares() (Firestore-backed, settings/ride_fares) on every
+  // screen load. Removed: fares are hardcoded in
+  // lib/config/fare_rates.dart per Nizam's MVP decision, so _fares is
+  // now just set synchronously from RideModel.defaultFares in
+  // initState() — no network/cache round-trip, no wasted Firestore
+  // read.
+
+  /// Resolves the pre-ride fare estimate for the currently-selected
+  /// vehicle type at [distanceKm].
+  ///
+  /// Bike uses FareRates (hardcoded day/night rates) resolved against
+  /// the CURRENT time — booking-time rate is correct for a display
+  /// estimate; the hero's final bill independently re-resolves the
+  /// rate at completion time in hero_ride_screen.dart, since a ride can
+  /// cross the day/night boundary. Every other vehicle type is
+  /// unchanged — still RideModel.calculateFare() against the
+  /// Firestore-backed _fares map.
+  double _estimateFareFor(double distanceKm) {
+    if (_selectedVehicleTypeKey == 'bike') {
+      final perKm = FareRates.resolveBikePerKm(DateTime.now());
+      return FareRates.calculateBikeFare(
+        distanceKm: distanceKm,
+        perKm: perKm,
+      );
     }
+    return RideModel.calculateFare(
+      distanceKm,
+      _selectedVehicleTypeKey,
+      fares: _fares,
+    );
   }
 
   // ── Nearby Captains ───────────────────────────────────────────
+  StreamSubscription<User?>? _nearbyCaptainsAuthWaitSub;
+
+  // REGRESSION FIX (per Nizam's console screenshot: uncaught
+  // [firebase_database/permission-denied] on /online_heroes, "EXCEPTION
+  // CAUGHT BY FLUTTER FRAMEWORK"): this used to attach the RTDB listener
+  // unconditionally from initState(), with no auth check and no onError.
+  // Our own instant-launch work renders this screen before waiting on any
+  // auth stream, so on a fresh web load this listener frequently attached
+  // BEFORE Firebase Auth finished restoring the signed-in session --
+  // database.rules.json requires `auth != null` to read online_heroes, so
+  // the very first onValue event with no user yet threw
+  // permission-denied straight into the Flutter framework (a bare
+  // `.listen()` has no onError, so nothing in this file ever caught it).
+  //
+  // Fixed two ways, deliberately not by loosening the RTDB rule (that
+  // would expose every hero's live GPS position to unauthenticated
+  // clients): if there's no signed-in user yet, wait for the first
+  // authStateChanges() event and only attach once a real user exists;
+  // and regardless, the listener itself now has an onError handler so a
+  // future transient permission hiccup degrades silently instead of
+  // crashing.
   void _listenToNearbyCaptains() {
-    _nearbyCaptainsSub =
-        FirebaseDatabase.instance.ref('online_heroes').onValue.listen((event) {
-      final raw = event.snapshot.value as Map<dynamic, dynamic>?;
-      final heroes = <Map<String, dynamic>>[];
-      if (raw != null) {
-        raw.forEach((key, value) {
-          if (value is Map) {
-            heroes.add(
-              <String, dynamic>{
-                'id': '$key',
-                'lat': (value['lat'] as num?)?.toDouble() ??
-                    (value['latitude'] as num?)?.toDouble(),
-                'lng': (value['lng'] as num?)?.toDouble() ??
-                    (value['longitude'] as num?)?.toDouble(),
-                'vehicleType': (value['vehicleType'] as String?)?.trim(),
-                'name': (value['captainName'] as String?)?.trim() ??
-                    (value['name'] as String?)?.trim() ??
-                    'Hero',
-                'isAvailable': value['isAvailable'] as bool?,
-              },
-            );
-          }
-        });
-      }
-      _onlineHeroSnapshots = heroes;
-      _refreshHeroMarkers();
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      _nearbyCaptainsAuthWaitSub =
+          FirebaseAuth.instance.authStateChanges().listen((user) {
+        _nearbyCaptainsAuthWaitSub?.cancel();
+        _nearbyCaptainsAuthWaitSub = null;
+        if (mounted && user != null) {
+          _attachNearbyCaptainsListener();
+        }
+      });
+      return;
+    }
+    _attachNearbyCaptainsListener();
+  }
+
+  void _attachNearbyCaptainsListener() {
+    _nearbyCaptainsSub = FirebaseDatabase.instance
+        .ref('online_heroes')
+        .onValue
+        .listen(
+      (event) {
+        final raw = event.snapshot.value as Map<dynamic, dynamic>?;
+        final heroes = <Map<String, dynamic>>[];
+        if (raw != null) {
+          raw.forEach((key, value) {
+            if (value is Map) {
+              heroes.add(
+                <String, dynamic>{
+                  'id': '$key',
+                  'lat': (value['lat'] as num?)?.toDouble() ??
+                      (value['latitude'] as num?)?.toDouble(),
+                  'lng': (value['lng'] as num?)?.toDouble() ??
+                      (value['longitude'] as num?)?.toDouble(),
+                  'vehicleType': (value['vehicleType'] as String?)?.trim(),
+                  'name': (value['captainName'] as String?)?.trim() ??
+                      (value['name'] as String?)?.trim() ??
+                      'Hero',
+                  'isAvailable': value['isAvailable'] as bool?,
+                },
+              );
+            }
+          });
+        }
+        _onlineHeroSnapshots = heroes;
+        _refreshHeroMarkers();
+      },
+      onError: (Object error, StackTrace stack) {
+        debugPrint(
+          '[BikeBookingScreen] online_heroes listener error (non-fatal): $error',
+        );
+      },
+    );
+  }
+
+  // ================================================================
+  // INSTANT-SEED LOCATION (Aug 11 2026) — read this before editing
+  // ================================================================
+  // THE BUG THIS REPLACES: booking could not open until GPS answered.
+  // The old path was getCurrentLocation() [15s high accuracy -> 25s
+  // medium web retry] -> 2s pause -> getCurrentLocation() AGAIN [15s ->
+  // 25s]. Roughly 82 seconds before the customer was even OFFERED the
+  // manual pin — and on a Windows laptop with no GPS chip, that was the
+  // normal path, not the worst case. Customers on desktop browsers and
+  // iPhone PWAs simply could not book.
+  //
+  // THE NEW CONTRACT: the map NEVER waits for GPS.
+  //   1. Seed instantly from what we already know:
+  //        last confirmed pickup (Hive) -> device last-known -> Erode.
+  //      The customer sees a usable map and can book immediately.
+  //   2. Refine GPS in the BACKGROUND, capped at 8s, unawaited.
+  //      If it lands and the customer hasn't already chosen a point,
+  //      snap to it. If it never lands, nothing happens — nothing was
+  //      waiting on it, so there is no error state to show.
+  //   3. Manual pin is always reachable, and now actually works
+  //      (see _openManualPickupPicker).
+  //
+  // The result is that time-to-hero-ping no longer depends on GPS on
+  // ANY platform: iPhone PWA, Android PWA, native app and desktop
+  // browser all behave identically.
+  //
+  // INVARIANT: never reintroduce an `await` on a location call in the
+  // startup path. Background refinement only.
+  // ================================================================
+
+  /// True once the customer has chosen a pickup themselves — via search,
+  /// or the manual map picker. Background GPS must NEVER overwrite a
+  /// deliberate choice with a "corrected" one; that is how a customer
+  /// ends up dispatched from the wrong street after carefully pinning
+  /// the right one.
+  bool _pickupChosenByCustomer = false;
+
+  /// Seeds the map immediately from local knowledge, then kicks GPS off
+  /// in the background. Returns as soon as the seed is on screen.
+  Future<void> _seedPickupInstantly() async {
+    // 1. Anything already in memory wins — the dashboard warms
+    //    LocationService on app open, so this is often already here.
+    final cachedPos = _locationService.currentPosition;
+    if (cachedPos != null) {
+      _applySeed(
+        LatLng(cachedPos.latitude, cachedPos.longitude),
+        status: 'Live location ready',
+      );
+      unawaited(_refineLocationInBackground());
+      return;
+    }
+
+    // 2. Where they were picked up last time. Zero network, zero
+    //    permission, works on every platform including a browser that
+    //    has permanently denied location.
+    final remembered = await PickupMemoryService.instance.load();
+    if (remembered != null && mounted) {
+      _applySeed(
+        remembered.latLng,
+        status: 'Starting from your last pickup — drag the map to change it',
+      );
+      unawaited(_refineLocationInBackground());
+      return;
+    }
+
+    // 3. The OS's last-known fix. Cheap and instant when present.
+    final lastKnown = await _locationService.getLastKnownLocation();
+    if (lastKnown != null && mounted) {
+      _applySeed(
+        LatLng(lastKnown.latitude, lastKnown.longitude),
+        status: 'Locating you…',
+      );
+      unawaited(_refineLocationInBackground());
+      return;
+    }
+
+    // 4. City centre. A first-time customer on a desktop browser lands
+    //    here — and critically still gets a working, bookable map
+    //    rather than a spinner.
+    _applySeed(
+      kErodeCenter,
+      status: 'Set your pickup on the map, or wait for GPS',
+    );
+    unawaited(_refineLocationInBackground());
+  }
+
+  void _applySeed(LatLng point, {required String status}) {
+    if (!mounted) return;
+    setState(() {
+      // The overlay is never a gate again — the map underneath is
+      // usable from the first frame.
+      _isInitializingLocation = false;
+      _locationPermissionRequired = false;
+      _startupStatus = status;
     });
+    _updateUserLocation(point, animateMap: true);
+  }
+
+  /// True once the "GPS is slow, drag the map" hint has been shown this
+  /// screen visit. Shown at most once — a customer who already knows to
+  /// drag the map does not need to be told again every few seconds.
+  bool _shownSlowGpsHint = false;
+
+  /// One short GPS attempt, unawaited, whose failure is a non-event for
+  /// BOOKING (the map is already seeded and usable) but IS worth a
+  /// gentle, non-blocking nudge — the customer's seed may only be the
+  /// city centre or an old remembered point, and dragging the map
+  /// themselves is faster than waiting on GPS that has already proven
+  /// slow on this device.
+  Future<void> _refineLocationInBackground() async {
+    final pos = await _locationService.getFastLocation();
+    if (pos == null || !mounted) {
+      debugPrint(
+        '[bike_booking] background GPS refine did not land '
+        '(${_locationService.lastLocationError ?? "no fix"}) — '
+        'seeded pickup stands, booking is unaffected.',
+      );
+      _maybeShowSlowGpsHint();
+      return;
+    }
+    if (_pickupChosenByCustomer) {
+      // They already picked a point. Their choice wins, always.
+      debugPrint('[bike_booking] GPS landed but customer already chose a '
+          'pickup — not overriding.');
+      return;
+    }
+    _updateUserLocation(LatLng(pos.latitude, pos.longitude), animateMap: true);
+    if (mounted) {
+      setState(() => _startupStatus = 'Live location ready');
+    }
+  }
+
+  /// Non-blocking floating snackbar — never a dialog, never something
+  /// that sits in front of the map. Skipped entirely once the customer
+  /// has already made a deliberate pickup choice, since the hint would
+  /// then be stale advice about a problem they've already solved.
+  ///
+  /// FIX (Aug 11 2026): the plain wording "drag the map to set your
+  /// pickup" would have repeated the exact bug this whole feature was
+  /// built to fix — the MAIN map on this screen has no drag-to-pin
+  /// behaviour at all (Allin1MapWidget exposes no onCenterChanged here).
+  /// The real drag-a-pin map only exists INSIDE the search overlay
+  /// (_openSearch, the FlutterMap with onPositionChanged around line
+  /// 3315) — reachable by tapping the pickup field. A passive hint
+  /// pointing at the wrong surface would leave the customer dragging a
+  /// map that ignores them, same failure, different gesture. So this is
+  /// actionable: the button opens that real overlay directly instead of
+  /// describing a gesture that only works after another tap.
+  void _maybeShowSlowGpsHint() {
+    if (!mounted || _shownSlowGpsHint || _pickupChosenByCustomer) return;
+    _shownSlowGpsHint = true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('GPS signal slow. Set your pickup manually?'),
+        backgroundColor: _accentOrange,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 6),
+        action: SnackBarAction(
+          label: 'Set now',
+          textColor: Colors.white,
+          onPressed: () => _openManualPickupPicker(),
+        ),
+      ),
+    );
+  }
+
+  /// The manual pin path, and the fix for a promise the UI could not
+  /// keep: the old overlay said "Tap anywhere on the map to set your
+  /// pickup", but Allin1MapWidget exposes no map-tap callback at all
+  /// (only onMarkerTap / onCenterChanged), so tapping the map did
+  /// nothing whatsoever. Rather than add tap plumbing to the shared map
+  /// widget — which every other screen also uses — this reuses
+  /// LocationPickerScreen, the app's existing, proven drag-a-centre-pin
+  /// picker with reverse geocoding, already used by
+  /// custom_food_order_screen and hero_booking_screen.
+  Future<void> _openManualPickupPicker() async {
+    final picked = await Navigator.push<PickedLocation>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          initialCenter: _myPositionLatLng,
+          title: 'Set your pickup',
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+
+    final point = LatLng(picked.lat, picked.lng);
+    _pickupChosenByCustomer = true;
+    setState(() {
+      _pickupLocation = {
+        'name': picked.name,
+        'full': picked.name,
+        'lat': picked.lat,
+        'lng': picked.lng,
+      };
+      _pickupController.text = picked.name;
+      _isInitializingLocation = false;
+      _locationPermissionRequired = false;
+      _startupStatus = 'Pickup set';
+    });
+    _myPositionLatLng = point;
+    _moveMainMap(point, 16);
+    _refreshHeroMarkers();
+    if (_dropLocation != null) unawaited(_loadRoadRoute());
+
+    // Remembered so the NEXT booking seeds instantly — this is what
+    // makes booking two onward zero-wait on every platform.
+    unawaited(PickupMemoryService.instance.remember(point, name: picked.name));
   }
 
   // ── Location Tracking ─────────────────────────────────────────
+  // Kept for the explicit "Retry GPS" action only. It is NO LONGER on
+  // the startup path — _seedPickupInstantly() is.
   Future<void> _initLocationTracking() async {
+    // Fast path: the dashboard already warms up LocationService (permission
+    // + a first GPS fix) the moment the app opens (see
+    // dashboard_screen.dart's _prefetchLocationInBackground). If that
+    // already produced a cached position by the time the customer taps
+    // Taxi, use it immediately -- skip the "Checking GPS permission..."
+    // loading state entirely and just refresh silently in the background
+    // for accuracy, instead of making the customer wait through the whole
+    // permission+fetch flow again.
+    final cachedPos = _locationService.currentPosition;
+    if (cachedPos != null) {
+      if (mounted) {
+        setState(() {
+          _isInitializingLocation = false;
+          _locationPermissionRequired = false;
+          _startupStatus = 'Live location ready';
+        });
+      }
+      _updateUserLocation(
+        LatLng(cachedPos.latitude, cachedPos.longitude),
+        animateMap: true,
+      );
+      // Silent background refresh for a more precise fix; UI already shows
+      // the cached location so this doesn't block anything.
+      unawaited(_locationService.getCurrentLocation().then((pos) {
+        if (pos != null && mounted) {
+          _updateUserLocation(LatLng(pos.latitude, pos.longitude));
+        }
+      }),);
+      return;
+    }
+
     if (mounted) {
       setState(() {
         _isInitializingLocation = true;
@@ -978,27 +1375,63 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         });
       }
 
-      final pos = await _locationService.getCurrentLocation();
+      var pos = await _locationService.getCurrentLocation();
+
+      // FIX (Aug 11 2026 — Nizam's laptop-browser report): a null `pos`
+      // here used to be treated as "still loading" forever -- no log, no
+      // retry, no way for the customer to know GPS actually failed.
+      // LocationService itself now logs the real exception (see that
+      // file), but this screen also had zero retry of its own. Laptops
+      // relying on WiFi-based positioning (no GPS hardware) are commonly
+      // slower than the first getCurrentLocation() attempt allows -- so
+      // give it one more explicit try here (LocationService's own
+      // internal reduced-accuracy web retry already ran once inside that
+      // call; this is a second, screen-level attempt after a short pause,
+      // covering the case where the browser's position cache/negotiation
+      // just needed a beat longer) before surfacing a real retry action
+      // to the customer instead of leaving them stuck on a spinner.
+      if (pos == null && kIsWeb) {
+        debugPrint(
+            '[bike_booking] getCurrentLocation() returned null on first try '
+            '(lastLocationError: ${_locationService.lastLocationError}). '
+            'Retrying once after a short delay (web/laptop fallback)...',);
+        if (mounted) {
+          setState(() {
+            _startupStatus = 'Still locating you... retrying GPS fix.';
+          });
+        }
+        await Future.delayed(const Duration(seconds: 2));
+        pos = await _locationService.getCurrentLocation();
+        if (pos == null) {
+          debugPrint(
+              '[bike_booking] retry also returned null '
+              '(lastLocationError: ${_locationService.lastLocationError}).',);
+        }
+      }
+
       if (pos == null) {
         if (mounted) {
           setState(() {
-            _isInitializingLocation = true;
-            _locationPermissionRequired = false;
-            _startupStatus =
-                'Loading map / Checking GPS... you can browse while we locate you.';
+            _isInitializingLocation = false;
+            _locationPermissionRequired = true;
+            _startupStatus = _locationService.lastLocationError != null
+                ? 'Could not get a precise location automatically '
+                    '(${_locationService.lastLocationError}). Tap the map to '
+                    'set your pickup manually, or tap Retry.'
+                : 'Could not get a precise location automatically. Tap the '
+                    'map to set your pickup manually, or tap Retry.';
           });
         }
       } else {
         _updateUserLocation(LatLng(pos.latitude, pos.longitude),
             animateMap: true,);
-      }
-
-      if (mounted && _isInitializingLocation) {
-        setState(() {
-          _isInitializingLocation = false;
-          _locationPermissionRequired = false;
-          _startupStatus = 'Live location ready';
-        });
+        if (mounted) {
+          setState(() {
+            _isInitializingLocation = false;
+            _locationPermissionRequired = false;
+            _startupStatus = 'Live location ready';
+          });
+        }
       }
     } catch (e) {
       debugPrint('Location error: $e');
@@ -1006,7 +1439,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         setState(() {
           _isInitializingLocation = false;
           _locationPermissionRequired = true;
-          _startupStatus = 'Unable to access live location. Please enable GPS.';
+          _startupStatus = 'Unable to access live location. Please enable GPS, '
+              'or tap the map to set your pickup manually.';
         });
       }
     }
@@ -1034,54 +1468,13 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     if (animateMap) _moveMainMap(position, 15.5);
   }
 
-  String get _selectedVehicleTypeKey {
-    switch (_selectedCategory) {
-      case _ServiceCategory.auto:
-        return 'auto';
-      case _ServiceCategory.cab:
-        return 'cab';
-      case _ServiceCategory.parcel:
-        return 'parcel';
-      case _ServiceCategory.bike:
-        return 'bike';
-    }
-  }
+  String get _selectedVehicleTypeKey => _selectedCategory;
 
-  String? _assetForVehicleType(String vehicleType) {
-    switch (vehicleType) {
-      case 'auto':
-        return 'assets/images/top_auto.png';
-      case 'car':
-      case 'cab':
-      case 'mini-truck':
-      case 'mini_truck':
-      case 'truck':
-        return 'assets/images/top_cab.png';
-      case 'parcel':
-        return 'assets/images/top_parcel.png';
-      case 'bike':
-      default:
-        return 'assets/images/top_bike.png';
-    }
-  }
+  String? _assetForVehicleType(String vehicleType) =>
+      rideAssetFor(vehicleType);
 
-  IconData _fallbackIconForVehicleType(String vehicleType) {
-    switch (vehicleType) {
-      case 'auto':
-        return Icons.electric_rickshaw_rounded;
-      case 'car':
-      case 'cab':
-      case 'mini-truck':
-      case 'mini_truck':
-      case 'truck':
-        return Icons.local_taxi_rounded;
-      case 'parcel':
-        return Icons.inventory_2_rounded;
-      case 'bike':
-      default:
-        return Icons.two_wheeler_rounded;
-    }
-  }
+  IconData _fallbackIconForVehicleType(String vehicleType) =>
+      rideFallbackIcon(vehicleType);
 
   double _baseLaneOffsetForVehicleType(String vehicleType) {
     return 0;
@@ -1112,106 +1505,19 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     }
   }
 
-  void _ensureDummyTrafficInitialized() {
-    if (_ambientVehicles.isNotEmpty) {
-      return;
-    }
-
-    final trafficMix = <String, int>{
-      'bike': 4,
-      'auto': 3,
-      'cab': 2,
-    };
-
-    for (final entry in trafficMix.entries) {
-      final random = Random(entry.key.hashCode);
-      final slotGap = 1 / entry.value;
-      final laneBase = _baseLaneOffsetForVehicleType(entry.key);
-      final progressBias = _progressBiasForVehicleType(entry.key);
-      for (var index = 0; index < entry.value; index++) {
-        final loopIndex =
-            (index + entry.key.length) % _erodeTrafficLoops.length;
-        final baseProgress = ((index * slotGap) + progressBias) % 1;
-        final jitter = (random.nextDouble() - 0.5) * 0.08;
-        final vehicle = _DummyVehicleState(
-          id: '${entry.key}_$index',
-          vehicleType: entry.key,
-          busy: index.isOdd,
-          loopIndex: loopIndex,
-          progress: (baseProgress + jitter) % 1,
-          direction: random.nextBool() ? 1 : -1,
-          speedStep: 0.0025 + (random.nextDouble() * 0.0028),
-          laneOffset: laneBase,
-        );
-        _ambientVehicles.add(vehicle);
-        _scheduleVehicleTick(vehicle, random.nextInt(1600));
-      }
-    }
-    unawaited(_hydrateDummyTrafficRoutes());
-  }
+  void _ensureDummyTrafficInitialized() {}
 
   Future<void> _hydrateDummyTrafficRoutes() async {
-    final routeIndexes = _ambientVehicles
-        .map((vehicle) => vehicle.loopIndex)
-        .toSet()
-        .where((index) => !_dummyRouteCache.containsKey(index))
-        .where((index) => !_dummyRouteRequests.contains(index))
-        .toList();
-
-    for (final routeIndex in routeIndexes) {
-      _dummyRouteRequests.add(routeIndex);
-      final pair =
-          _dummyTrafficRoutePairs[routeIndex % _dummyTrafficRoutePairs.length];
-      try {
-        final route = await _mapService.getRoute(pair.first, pair.last);
-        if (!mounted) {
-          return;
-        }
-        final path = route?.points ?? const <LatLng>[];
-        if (path.length > 2) {
-          _dummyRouteCache[routeIndex] = path;
-          for (final vehicle in _ambientVehicles) {
-            if (vehicle.loopIndex == routeIndex) {
-              vehicle.roadPath = path;
-            }
-          }
-          _refreshHeroMarkers();
-        }
-      } catch (e) {
-        debugPrint('Dummy traffic route load error: $e');
-      } finally {
-        _dummyRouteRequests.remove(routeIndex);
-      }
-    }
+    // Deprecated: using pre-recorded multi-point loops now
   }
 
-  void _scheduleVehicleTick(_DummyVehicleState vehicle, [int? initialDelayMs]) {
-    _dummyVehicleTimers[vehicle.id]?.cancel();
-    final seed = vehicle.id.hashCode ^
-        DateTime.now().microsecondsSinceEpoch ^
-        (initialDelayMs ?? 0);
-    final random = Random(seed);
-    final delay = Duration(
-      milliseconds: initialDelayMs ?? (2500 + random.nextInt(2500)),
-    );
-    _dummyVehicleTimers[vehicle.id] = Timer(delay, () {
-      if (!mounted) {
-        return;
-      }
-      vehicle.advance(Random(
-        vehicle.id.hashCode ^ DateTime.now().millisecondsSinceEpoch,
-      ),);
-      _refreshHeroMarkers();
-      _scheduleVehicleTick(vehicle);
-    });
-  }
+
 
   void _refreshHeroMarkers() {
     if (!mounted) {
       return;
     }
 
-    _ensureDummyTrafficInitialized();
     final liveNearbyMarkers = _onlineHeroSnapshots.where((hero) {
       final lat = hero['lat'] as double?;
       final lng = hero['lng'] as double?;
@@ -1247,22 +1553,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       },
     ).toList();
 
-    final busyMarkers = _ambientVehicles
-        .map(
-          (vehicle) => MapMarker(
-            point: vehicle.project(),
-            color: _successGreen,
-            assetPath: _assetForVehicleType(vehicle.vehicleType),
-            icon: _fallbackIconForVehicleType(vehicle.vehicleType),
-            bearingDegrees:
-                vehicle.bearing() + _assetBearingOffset(vehicle.vehicleType),
-            size: 45,
-          ),
-        )
-        .toList();
-
     _nearbyCaptainMarkersNotifier.value = liveNearbyMarkers;
-    _dummyHeroMarkersNotifier.value = busyMarkers;
+    // _dummyHeroMarkersNotifier managed by MapSimulationService
   }
 
   Future<void> _loadRoadRoute() async {
@@ -1300,11 +1592,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         if (route != null) {
           _routeDistanceKm = route.distanceMeters / 1000.0;
           _routeEtaMinutes = (route.durationSeconds / 60.0).round();
-          _estimatedFare = RideModel.calculateFare(
-            _routeDistanceKm!,
-            _selectedVehicleTypeKey,
-            fares: _fares,
-          );
+          _estimatedFare = _estimateFareFor(_routeDistanceKm!);
         } else {
           _routeDistanceKm = null;
           _routeEtaMinutes = null;
@@ -1388,6 +1676,15 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
             _isSearching = false;
           });
         }
+        // FIX: demand-monitoring, per Nizam's request — log what
+        // customers actually search for so admin can see where in
+        // Erode demand clusters vs. where hero coverage is (compared
+        // against heroes' preferredWorkLocation field on hero_register_
+        // screen.dart). Fire-and-forget: never blocks or fails the
+        // search itself, and only fires once suggestions come back
+        // (not on every keystroke — the 500ms debounce already
+        // coalesces that).
+        _logLocationSearch(normalizedQuery, suggestions.length);
       } catch (_) {
         if (mounted && requestId == _searchRequestId) {
           setState(() {
@@ -1399,11 +1696,67 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     });
   }
 
+  void _logLocationSearch(String query, int resultCount) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    FirebaseFirestore.instance.collection('location_search_logs').add({
+      'query': query,
+      'resultCount': resultCount,
+      'userId': uid,
+      'createdAt': FieldValue.serverTimestamp(),
+    }).catchError((Object e) {
+      debugPrint('[BikeBooking] location_search_logs write failed: $e');
+    });
+  }
+
+  Future<void> _loadRecentPlaces() async {
+    final places = await RecentPlacesService().getRecentPlaces();
+    if (!mounted) return;
+    setState(() {
+      _recentPlaces = places;
+    });
+  }
+
+  Future<void> _recordRecentPlace(Map<String, dynamic> location) async {
+    await RecentPlacesService().recordPlace(location);
+    await _loadRecentPlaces();
+  }
+
   Future<void> _selectLocation(Map<String, dynamic> location) async {
     final selectedPoint = LatLng(
       (location['lat'] as num).toDouble(),
       (location['lng'] as num).toDouble(),
     );
+
+    // Guard against a silent zero-distance booking. The drop picker
+    // seeds its pin on the pickup coordinate (see _resolveSearchSeedPoint),
+    // so confirming without actually moving to a different spot used to
+    // overwrite a correct selection with a same-spot "destination" and
+    // _triggerBooking() would then bail out with dist <= 0 and no
+    // feedback at all -- reading to the customer as "my location changed
+    // to something wrong and booking won't start". Now we say so instead
+    // of going silent, and leave the previous selection untouched.
+    final otherLocation = _isFocusingDrop ? _pickupLocation : _dropLocation;
+    if (otherLocation != null) {
+      final otherPoint = LatLng(
+        (otherLocation['lat'] as num).toDouble(),
+        (otherLocation['lng'] as num).toDouble(),
+      );
+      final sameSpotKm = _haversineKm(
+        selectedPoint.latitude,
+        selectedPoint.longitude,
+        otherPoint.latitude,
+        otherPoint.longitude,
+      );
+      if (sameSpotKm < 0.02) {
+        _showError(
+          _isFocusingDrop
+              ? 'Destination looks the same as pickup. Please choose a different drop location.'
+              : 'Pickup looks the same as destination. Please choose a different pickup location.',
+        );
+        return;
+      }
+    }
+
     setState(() {
       if (_isFocusingDrop) {
         _dropLocation = location;
@@ -1411,10 +1764,25 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       } else {
         _pickupLocation = location;
         _pickupController.text = location['name'] as String? ?? '';
+        // INSTANT-SEED: a pickup picked from search is a deliberate
+        // choice. Latch it so a late background GPS fix cannot quietly
+        // drag the customer back to wherever the phone thinks they are.
+        _pickupChosenByCustomer = true;
       }
       _searchMapCenter = selectedPoint;
       _pinDropLocation = location;
     });
+    unawaited(_recordRecentPlace(location));
+    if (!_isFocusingDrop) {
+      // Remember it as the seed for the next booking — this is what
+      // makes booking two onward instant on every platform.
+      unawaited(
+        PickupMemoryService.instance.remember(
+          selectedPoint,
+          name: location['name'] as String? ?? 'Pinned location',
+        ),
+      );
+    }
     _moveMainMap(selectedPoint, 15.5);
     
     if (_isFocusingDrop) {
@@ -1590,6 +1958,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   void _triggerBooking() {
     final dist = _distance;
     if (dist <= 0) {
+      _showError(
+        'Unable to calculate the trip distance. Please pick the pickup and destination again.',
+      );
       return;
     }
     showModalBottomSheet<void>(
@@ -1602,29 +1973,118 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         initialVehicleType: _selectedVehicleTypeKey,
         onConfirm: (vehicleType, fare) {
           Navigator.of(ctx).pop();
-          _createRide(vehicleType, fare, dist);
+          unawaited(_confirmBookingWithOptionalParcelDetails(vehicleType, fare, dist));
         },
       ),
     );
   }
 
-  Future<void> _createRide(String vehicleType, double fare, double dist) async {
-    debugPrint('🔥 [RIDE CREATION] Entered _createRide() method!');
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      _showError('Authentication required');
-      // Redirect to login after a brief delay so the user sees the error
-      Future.delayed(const Duration(seconds: 1), () {
-        if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute<void>(
-            builder: (_) => const LoginScreen(
-              presetUserType: UserType.customer,
-            ),
-          ),
-        );
-      });
+  /// Parcel bookings additionally collect who's receiving the parcel
+  /// before creating the ride, so the hero has a contact at drop-off.
+  /// Every other category proceeds straight to _createRide(), unchanged.
+  Future<void> _confirmBookingWithOptionalParcelDetails(
+    String vehicleType,
+    double fare,
+    double dist,
+  ) async {
+    if (vehicleType != 'parcel') {
+      await _createRide(vehicleType, fare, dist);
       return;
+    }
+    final details = await showModalBottomSheet<Map<String, String>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => const _ParcelRecipientSheet(),
+    );
+    if (!mounted) {
+      return;
+    }
+    if (details == null) {
+      // Customer backed out of the recipient-details step — do not
+      // create the ride. Matches the existing cancel-the-sheet behavior
+      // for every other category (tapping outside VehicleSelectionBottomSheet
+      // also aborts booking without creating a ride).
+      return;
+    }
+    await _createRide(
+      vehicleType,
+      fare,
+      dist,
+      recipientName: details['name'],
+      recipientPhone: details['phone'],
+    );
+  }
+
+  Future<void> _createRide(
+    String vehicleType,
+    double fare,
+    double dist, {
+    String? recipientName,
+    String? recipientPhone,
+  }) async {
+    debugPrint('🔥 [RIDE CREATION] Entered _createRide() method!');
+
+    // GUEST MODE (Aug 11 2026): first line of the handler — a guest may
+    // pick pickup/drop, see the fare, and compare vehicle types, but the
+    // ride doc itself is written straight to rides/{id} a few lines
+    // below, and firestore.rules' isRealUser() now rejects that from an
+    // anonymous uid. Without this guard the customer would be
+    // optimistically navigated to "Finding a Hero" and only then hit a
+    // permission-denied — which is exactly the "Server Busy" symptom
+    // fixed back in the rides-rules audit. Sheet first, ride after.
+    if (!await requireRealAuth(
+      context,
+      reason: 'Sign in and your ride is one tap away',
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
+    var user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      // FIX (Aug 13 2026 audit — "customer app login pannamaye book
+      // aachu" / lost-booking-state report): this branch is a genuine
+      // edge case, not the normal path — requireRealAuth() above already
+      // returned true, meaning the stack-preserving auth_gate_sheet.dart
+      // sheet completed successfully. The only way to land here is a
+      // rare race where FirebaseAuth.authStateChanges() hasn't
+      // propagated the new user to `currentUser` in the same frame the
+      // sheet popped.
+      //
+      // The OLD fix for this race was to declare defeat and
+      // pushReplacement straight to a full LoginScreen. That was doubly
+      // wrong: (a) LoginScreen.dart never pops a result back to its
+      // caller — it internally does its OWN pushReplacement(Named) to
+      // the dashboard on success (see login_screen.dart:155/284/291), so
+      // awaiting a result from it here would simply hang forever, and
+      // (b) even if it did return, pushReplacement had already destroyed
+      // THIS route, taking _pickupLocation/_dropLocation/the whole
+      // booking with it — exactly the "signed in but had to re-pick
+      // everything" symptom reported.
+      //
+      // Correct fix: there is no need for a SECOND login UI at all — the
+      // sheet already succeeded. Just give authStateChanges() longer to
+      // catch up (this is a listener propagation delay, not a real
+      // failure). If it still hasn't arrived after a generous timeout,
+      // ask the customer to tap Book again rather than silently sending
+      // them into a second, stack-destroying login flow.
+      user = await FirebaseAuth.instance
+          .authStateChanges()
+          .firstWhere((u) => u != null)
+          .timeout(const Duration(seconds: 6), onTimeout: () => null);
+
+      if (user == null) {
+        if (!mounted) return;
+        showSignInRequiredSnack(
+          context,
+          message: "Signed in — tap Book once more to confirm your ride",
+        );
+        return;
+      }
     }
     if (_pickupLocation == null || _dropLocation == null) {
       _showError('Please select pickup and destination');
@@ -1633,19 +2093,32 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     try {
       final rideRef = FirebaseFirestore.instance.collection('rides').doc();
       final normalizedDist = double.parse(dist.toStringAsFixed(2));
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      final userData = userDoc.data() ?? <String, dynamic>{};
-      final customerPhone =
-          ((userData['phoneNumber'] as String?)?.trim().isNotEmpty ?? false)
-              ? (userData['phoneNumber'] as String).trim()
-              : ((userData['phone'] as String?)?.trim().isNotEmpty ?? false)
-                  ? (userData['phone'] as String).trim()
-                  : (user.phoneNumber ?? '').trim();
-      final pickupAddress = (_pickupLocation!['name'] as String? ?? '').trim();
-      final dropAddress = (_dropLocation!['name'] as String? ?? '').trim();
+      // Multi-city (Plan 3): tags this ride with the customer's current
+      // city so ride_search_screen.dart's hero-ping queue can filter to
+      // same-city heroes only. Defaults to kDefaultCity ('erode') until
+      // a real city-picker UI exists for customers.
+      final rideCity = await CityService.getCurrentCity();
+      // CONSOLIDATED (Aug 11 2026): this was a full users/{uid} Firestore
+      // read plus an inline, hand-rolled copy of the
+      // phoneNumber -> phone -> Auth-field fallback chain — a fourth
+      // implementation of one rule, sitting directly on the ride-creation
+      // path. AuthService.resolveCustomerPhone() is now the single source
+      // of truth and serves this from the Hive cache: zero reads, zero
+      // network latency before the ride doc is written and heroes are
+      // pinged.
+      final customerPhone = await AuthService().resolveCustomerPhone(user);
+      // Use the full address ('full') rather than the short label ('name')
+      // when saving to Firestore — the picker UI shows both (name as the
+      // title, full as the subtitle), but only the short label was being
+      // persisted, so every downstream screen (tracking, hero pings, admin)
+      // only ever saw the truncated label instead of the actual address the
+      // customer confirmed. Falls back to 'name' if 'full' is ever missing.
+      final pickupAddress = ((_pickupLocation!['full'] as String?)?.trim().isNotEmpty ?? false)
+          ? (_pickupLocation!['full'] as String).trim()
+          : (_pickupLocation!['name'] as String? ?? '').trim();
+      final dropAddress = ((_dropLocation!['full'] as String?)?.trim().isNotEmpty ?? false)
+          ? (_dropLocation!['full'] as String).trim()
+          : (_dropLocation!['name'] as String? ?? '').trim();
 
       // ── Optimistic UI: Prepare the model and state before network call ──
       final rideModel = RideModel(
@@ -1666,6 +2139,17 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         status: 'searching',
         createdAt: DateTime.now(),
       );
+
+      // DEMAND TRACKING (Aug 11 2026 — Nizam's request): record which
+      // places and vehicle types customers actually want, so the Admin
+      // app can show real demand. Fire-and-forget single-doc atomic
+      // increments (see UsageTrackingService) — deliberately NOT awaited
+      // so tracking can never delay or block a real booking, and every
+      // failure is swallowed inside the service itself.
+      unawaited(UsageTrackingService.instance.trackVehicleBooked(vehicleType));
+      unawaited(UsageTrackingService.instance.trackPlaceSearched(pickupAddress));
+      unawaited(UsageTrackingService.instance.trackPlaceSearched(dropAddress));
+      unawaited(UsageTrackingService.instance.trackServiceUsed('taxi'));
 
       // ── Optimistic Update: Transition UI immediately ──
       setState(() {
@@ -1694,6 +2178,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
          'category': _normalizeCategoryKey(vehicleType),
          'vehicle_category': _normalizeCategoryKey(vehicleType),
          'status': 'searching',
+         'paymentStatus': 'pending',
+         'city': rideCity,
          'createdAt': FieldValue.serverTimestamp(),
          'heroId': null,
          'captainId': null,
@@ -1703,10 +2189,57 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
          'heroModel': null,
          'heroRating': null,
          'heroEta': null,
+         // ── Bike fare-rates fields (bike only) ──────────────────
+         // baseFare/baseDistance are the FareRates constants at the
+         // moment of booking — these don't change over the trip.
+         // routeDistanceKm is the road-route distance already computed
+         // for this estimate (falls back to haversine only if routing
+         // failed — see the _distance getter). hero_ride_screen.dart's
+         // _completeTrip() reads all three: baseFare/baseDistance
+         // directly, and routeDistanceKm as the distance floor so GPS
+         // undercounting during the ride can't produce a bill lower
+         // than what this same estimate was based on. Per-km rate is
+         // deliberately NOT written here — it's resolved at completion
+         // time, not booking time, since a ride can cross the
+         // day/night boundary.
+         if (vehicleType == 'bike') 'baseFare': FareRates.bikeBaseFare,
+         if (vehicleType == 'bike')
+           'baseDistance': FareRates.bikeBaseDistanceKm,
+         if (vehicleType == 'bike') 'routeDistanceKm': normalizedDist,
+         // ── Non-bike fare fields (auto/cab/parcel/mini_truck/lorry/
+         // emergency_manpower) — CONFIRMED BUG FIX ────────────────
+         // Previously these fields were never written for non-bike
+         // categories at all, so hero_ride_screen.dart's else-branch
+         // always fell back to its hardcoded defaults (baseFare 25.0,
+         // farePerKm 6.0 — bike's rate, not this category's real rate)
+         // and had no distance floor, so GPS-undercounted trips could
+         // settle at a flat ₹25 regardless of vehicle type or true
+         // distance. Fixed by writing each category's REAL rate here
+         // (same lookup table used for the customer's own estimate:
+         // RideModel.defaultFares) plus routeDistanceKm, giving every
+         // non-bike category the same distance-floor protection bike
+         // already has.
+         if (vehicleType != 'bike')
+           'baseFare': (RideModel.defaultFares[vehicleType] ??
+                   RideModel.defaultFares['bike']!)['baseFare'],
+         if (vehicleType != 'bike')
+           'farePerKm': (RideModel.defaultFares[vehicleType] ??
+                   RideModel.defaultFares['bike']!)['perKm'],
+         if (vehicleType != 'bike') 'routeDistanceKm': normalizedDist,
+         // ── Parcel recipient details (parcel only) ───────────────
+         // Collected via _ParcelRecipientSheet before this write.
+         // Surfaced to the hero on hero_ride_screen.dart.
+         if (vehicleType == 'parcel' && recipientName != null)
+           'recipientName': recipientName,
+         if (vehicleType == 'parcel' && recipientPhone != null)
+           'recipientPhone': recipientPhone,
        }).then((_) {
          debugPrint('🔥 [RIDE CREATION] Firestore document created successfully! Doc ID: ${rideRef.id}');
-       }).catchError((dynamic e) {
+       }).catchError((e) {
          debugPrint('[BikeBookingScreen] Background ride creation failed: $e');
+         if (mounted) {
+           showServerBusyDialog(context);
+         }
        });
 
       if (!mounted) return;
@@ -1719,13 +2252,11 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
             existingRideDocId: rideRef.id,
           ),
         ),
-      ));
+      ),);
     } catch (e) {
       debugPrint('🔥 [RIDE CREATION ERROR] Crashed with: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to book ride. Please try again.')),
-        );
+        showServerBusyDialog(context);
       }
     }
   }
@@ -1897,23 +2428,23 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                         Expanded(
                           child: _glassPanel(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 14,),
+                                horizontal: 14, vertical: 10,),
                             child: Row(
                               children: [
                                 Container(
-                                  width: 10,
-                                  height: 10,
+                                  width: 8,
+                                  height: 8,
                                   decoration: const BoxDecoration(
                                       color: _successGreen,
                                       shape: BoxShape.circle,),
                                 ),
-                                const SizedBox(width: 10),
+                                const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     'Erode Taxi',
                                     style: GoogleFonts.outfit(
                                         color: _textPrimary,
-                                        fontSize: 17,
+                                        fontSize: 14,
                                         fontWeight: FontWeight.w700,),
                                   ),
                                 ),
@@ -1923,7 +2454,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                                       : 'Live',
                                   style: GoogleFonts.outfit(
                                       color: _textSecondary,
-                                      fontSize: 12,
+                                      fontSize: 10.5,
                                       fontWeight: FontWeight.w600,),
                                 ),
                               ],
@@ -1938,6 +2469,31 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                           },
                         ),
                       ],
+                    ),
+                  ),
+
+                  // GPS Fallback manual pin
+                  Positioned(
+                    right: 16,
+                    bottom: 275, // Above the my location button
+                    child: Container(
+                      decoration: BoxDecoration(
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: FloatingActionButton.extended(
+                        heroTag: 'manual_pin',
+                        onPressed: _openManualPickupPicker,
+                        backgroundColor: Colors.white,
+                        elevation: 0,
+                        icon: const Icon(Icons.location_on_rounded, color: _accentOrange, size: 20),
+                        label: Text('Set Pin manually', style: GoogleFonts.outfit(color: _accentOrange, fontWeight: FontWeight.w600, fontSize: 13)),
+                      ),
                     ),
                   ),
 
@@ -2048,24 +2604,77 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                   ),
                   const SizedBox(height: 18),
                   if (_locationPermissionRequired)
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        await _locationService.openLocationSettings();
-                        unawaited(_initLocationTracking());
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _accentOrange,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 14,
+                    // FIX (Aug 11 2026 — laptop/desktop GPS fallback):
+                    // previously this was a single "Enable GPS" button
+                    // that reopened OS location settings -- useless when
+                    // the real problem is a slow/failed browser fix
+                    // rather than a denied permission (the laptop case),
+                    // and it left the customer with NO way to proceed at
+                    // all since this overlay blocks all touches on the
+                    // map underneath. Now offers both: Retry (re-runs the
+                    // same GPS attempt, for transient failures) and Set
+                    // Manually (dismisses the overlay so the customer can
+                    // tap their pickup point directly on the map -- the
+                    // guaranteed fallback for a laptop that just can't get
+                    // a fast/precise fix at all).
+                    Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              unawaited(_initLocationTracking());
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _accentOrange,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 14,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                            ),
+                            icon: const Icon(Icons.gps_fixed_rounded),
+                            label: const Text('Retry GPS'),
+                          ),
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            // FIX (Aug 11 2026): this used to just dismiss
+                            // the overlay and tell the customer to "tap
+                            // anywhere on the map" — an instruction the
+                            // app could not honour, because
+                            // Allin1MapWidget has no map-tap callback.
+                            // The customer was left on a map that
+                            // ignored every tap. Now opens the real
+                            // picker.
+                            onPressed: () {
+                              setState(() {
+                                _isInitializingLocation = false;
+                                _locationPermissionRequired = false;
+                              });
+                              unawaited(_openManualPickupPicker());
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _accentOrange,
+                              side: BorderSide(color: _accentOrange),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 14,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                            ),
+                            icon: const Icon(Icons.touch_app_rounded),
+                            label: const Text('Set Pickup Manually'),
+                          ),
                         ),
-                      ),
-                      icon: const Icon(Icons.gps_fixed_rounded),
-                      label: const Text('Enable GPS'),
+                      ],
                     )
                   else
                     const LinearProgressIndicator(
@@ -2225,54 +2834,42 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
 
   Widget _buildPremiumVehicleScroller() {
     final localization = context.watch<LocalizationService>();
+    final chips = <Widget>[];
+    for (var i = 0; i < kRideCatalog.length; i++) {
+      if (i > 0) {
+        chips.add(const SizedBox(width: 12));
+      }
+      final entry = kRideCatalog[i];
+      chips.add(
+        _premiumCategoryChip(
+          categoryKey: entry.key,
+          assetPath: entry.assetPath,
+          fallbackIcon: entry.fallbackIcon,
+          label: localization.t(entry.l10nKey),
+        ),
+      );
+    }
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: [
-          _premiumCategoryChip(
-            category: _ServiceCategory.bike,
-            assetPath: 'assets/images/top_bike.png',
-            fallbackIcon: Icons.two_wheeler_rounded,
-            label: localization.t('bike_label'),
-          ),
-          const SizedBox(width: 12),
-          _premiumCategoryChip(
-            category: _ServiceCategory.auto,
-            assetPath: 'assets/images/top_auto.png',
-            fallbackIcon: Icons.electric_rickshaw_rounded,
-            label: localization.t('auto_label'),
-          ),
-          const SizedBox(width: 12),
-          _premiumCategoryChip(
-            category: _ServiceCategory.cab,
-            assetPath: 'assets/images/top_cab.png',
-            fallbackIcon: Icons.local_taxi_rounded,
-            label: localization.t('cab_label'),
-          ),
-          const SizedBox(width: 12),
-          _premiumCategoryChip(
-            category: _ServiceCategory.parcel,
-            assetPath: 'assets/images/top_parcel.png',
-            fallbackIcon: Icons.inventory_2_rounded,
-            label: localization.t('parcel_label'),
-          ),
-        ],
+        children: chips,
       ),
     );
   }
 
   Widget _premiumCategoryChip({
-    required _ServiceCategory category,
+    required String categoryKey,
     required String assetPath,
     required IconData fallbackIcon,
     required String label,
   }) {
-    final isSelected = _selectedCategory == category;
+    final isSelected = _selectedCategory == categoryKey;
 
     return Material(
+      key: Key('bike_booking_category_chip_$categoryKey'),
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => _selectCategory(category),
+        onTap: () => _selectCategory(categoryKey),
         borderRadius: BorderRadius.circular(24),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 220),
@@ -2295,15 +2892,68 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                 SizedBox(
                   width: 34,
                   height: 34,
-                  child: Image.asset(
-                    assetPath,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => Icon(
-                      fallbackIcon,
-                      color: _accentOrange,
-                      size: 30,
-                    ),
-                  ),
+                  child: Builder(builder: (context) {
+                    // Same taxi pink slot mapping as the Home dashboard
+                    // and the confirm-ride sheet (vehicle_selection_
+                    // bottom_sheet.dart) — bike=1, auto=2, cab=3,
+                    // parcel=4, mini_truck/lorry=5. emergency_manpower
+                    // has no pink asset yet.
+                    const pinkSlots = {
+                      'bike': 1, 'auto': 2, 'cab': 3, 'parcel': 4,
+                      'mini_truck': 5, 'lorry': 5,
+                    };
+                    // Photo Realistic theme — covers 'emergency_manpower'
+                    // too, which has no pink asset yet, since a photo
+                    // needs no bespoke asset production.
+                    const photoUrls = {
+                      'bike': 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=200&q=80',
+                      'auto': 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=200&q=80',
+                      'cab': 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=200&q=80',
+                      'parcel': 'https://images.unsplash.com/photo-1595246140625-573b715d11dc?w=200&q=80',
+                      'mini_truck': 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=200&q=80',
+                      'lorry': 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=200&q=80',
+                      'emergency_manpower': 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=200&q=80',
+                    };
+                    final iconTheme = context.watch<ThemeService>().iconThemeKey;
+                    final photoUrl = photoUrls[categoryKey];
+                    if (iconTheme == 'photo_realistic' && photoUrl != null) {
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: CachedCloudImage(
+                          photoUrl,
+                          fit: BoxFit.cover,
+                          cacheWidth: 136,
+                          errorWidget: Image.asset(
+                            assetPath,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => Icon(fallbackIcon, color: _accentOrange, size: 30),
+                          ),
+                        ),
+                      );
+                    }
+                    final pinkSlot = pinkSlots[categoryKey];
+                    final isPink = pinkSlot != null && iconTheme == 'pink_white_3d';
+                    if (isPink) {
+                      return Image.asset(
+                        'assets/images/pink_icons/taxi_${pinkSlot}_a.webp',
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => Image.asset(
+                          assetPath,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => Icon(fallbackIcon, color: _accentOrange, size: 30),
+                        ),
+                      );
+                    }
+                    return Image.asset(
+                      assetPath,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => Icon(
+                        fallbackIcon,
+                        color: _accentOrange,
+                        size: 30,
+                      ),
+                    );
+                  }),
                 ),
                 const SizedBox(height: 4),
                 AnimatedContainer(
@@ -2464,19 +3114,15 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     );
   }
 
-  void _selectCategory(_ServiceCategory category) {
-    if (!mounted || _selectedCategory == category) {
+  void _selectCategory(String categoryKey) {
+    if (!mounted || _selectedCategory == categoryKey) {
       return;
     }
 
     setState(() {
-      _selectedCategory = category;
+      _selectedCategory = categoryKey;
       if (_routeDistanceKm != null && _routeDistanceKm! > 0) {
-        _estimatedFare = RideModel.calculateFare(
-          _routeDistanceKm!,
-          _selectedVehicleTypeKey,
-          fares: _fares,
-        );
+        _estimatedFare = _estimateFareFor(_routeDistanceKm!);
       }
     });
     _refreshHeroMarkers();
@@ -2515,7 +3161,6 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
             : null,
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
@@ -2636,6 +3281,12 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                                   'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
                               subdomains: const ['a', 'b', 'c', 'd'],
                               userAgentPackageName: 'com.allin1.superapp',
+                              // Offline-first tiles (Aug 28 2026) — see
+                              // cached_tile_provider.dart. Without this the
+                              // default provider is memory-only, so this map
+                              // re-downloaded every tile on every cold start
+                              // and was blank with no network.
+                              tileProvider: CachedTileProvider(),
                             ),
                           ],
                         ),
@@ -2871,9 +3522,28 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   List<Map<String, dynamic>> get _visibleSearchSuggestions {
-    return _activeSearchQuery.isEmpty
-        ? _defaultSearchLocations
-        : _searchSuggestions;
+    if (_activeSearchQuery.isNotEmpty) {
+      return _searchSuggestions;
+    }
+    if (_recentPlaces.isEmpty) {
+      return _defaultSearchLocations;
+    }
+    // Customer's own recent picks first, then the static Erode
+    // landmarks -- deduped by name so a landmark the customer already
+    // picked recently doesn't show twice.
+    final seenNames = <String>{};
+    final merged = <Map<String, dynamic>>[];
+    for (final place in _recentPlaces) {
+      if (seenNames.add(place['name'] as String? ?? '')) {
+        merged.add(place);
+      }
+    }
+    for (final place in _defaultSearchLocations) {
+      if (seenNames.add(place['name'] as String? ?? '')) {
+        merged.add(place);
+      }
+    }
+    return merged;
   }
 
   Widget _buildSearchSuggestionPanel() {
@@ -2931,7 +3601,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
             child: Text(
-              'Favorites / Recent locations',
+              'Recent & popular in Erode',
               style: GoogleFonts.outfit(
                 color: _textPrimary,
                 fontSize: 13,
@@ -2991,6 +3661,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
             ),
             itemBuilder: (context, index) {
               final loc = suggestions[index];
+              final isRecent = loc['source'] == 'recent';
               final isFavorite = loc['provider'] == 'favorite';
               return ListTile(
                 contentPadding: const EdgeInsets.symmetric(
@@ -3005,9 +3676,11 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(
-                    isFavorite
-                        ? Icons.favorite_border_rounded
-                        : Icons.location_on_rounded,
+                    isRecent
+                        ? Icons.history_rounded
+                        : isFavorite
+                            ? Icons.favorite_border_rounded
+                            : Icons.location_on_rounded,
                     color: _accentOrange,
                   ),
                 ),
@@ -3171,7 +3844,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
               ],
               Expanded(
                 child: ElevatedButton(
-                  onPressed: _continueActiveRide,
+                  onPressed:
+                      _isContinuingRide ? null : _continueActiveRide,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: _accentOrange,
@@ -3181,13 +3855,23 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                       borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  child: Text(
-                    _continueActionLabel(status, paymentStatus),
-                    style: GoogleFonts.outfit(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+                  child: _isContinuingRide
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(_accentOrange),
+                          ),
+                        )
+                      : Text(
+                          _continueActionLabel(status, paymentStatus),
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                 ),
               ),
             ],
@@ -3208,9 +3892,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         Icon(
           isDrop ? Icons.location_on_rounded : Icons.my_location_rounded,
           color: iconColor,
-          size: 17,
+          size: 15,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         Expanded(
           child: TextField(
             controller: controller,
@@ -3222,16 +3906,21 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
               _primeSearchMap();
             },
             onChanged: _onSearchChanged,
+            // FIX (per Nizam's request — "location typing box font size
+            // perusa iruku... cute aakkanum"): trimmed down from 14 to
+            // 13, and gave the hint text its own explicit (smaller)
+            // size instead of inheriting the same size as typed text.
             style: GoogleFonts.outfit(
               color: _textPrimary,
-              fontSize: 16,
+              fontSize: 13,
               fontWeight: FontWeight.w500,
             ),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: GoogleFonts.outfit(color: _textSecondary),
+              hintStyle: GoogleFonts.outfit(color: _textSecondary, fontSize: 12.5),
               border: InputBorder.none,
               contentPadding: EdgeInsets.zero,
+              isDense: true,
             ),
           ),
         ),
@@ -3240,7 +3929,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
             icon: const Icon(
               Icons.close_rounded,
               color: _textSecondary,
-              size: 18,
+              size: 16,
             ),
             onPressed: () {
               setState(() {
@@ -3258,6 +3947,139 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
             },
           ),
       ],
+    );
+  }
+}
+
+/// Small, self-contained bottom sheet that collects the parcel
+/// recipient's name and phone number before a parcel ride is created.
+/// Display-only in the sense that it has no Firestore/ride knowledge —
+/// it just returns a Map<String, String> (or null if cancelled) to
+/// whoever opened it via showModalBottomSheet.
+class _ParcelRecipientSheet extends StatefulWidget {
+  const _ParcelRecipientSheet();
+
+  @override
+  State<_ParcelRecipientSheet> createState() => _ParcelRecipientSheetState();
+}
+
+class _ParcelRecipientSheetState extends State<_ParcelRecipientSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    Navigator.of(context).pop(<String, String>{
+      'name': _nameController.text.trim(),
+      'phone': _phoneController.text.trim(),
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Text(
+              'Recipient Details',
+              style: GoogleFonts.outfit(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Who should the hero hand this parcel to?',
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _nameController,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                labelText: 'Recipient Name',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              validator: (value) {
+                if ((value ?? '').trim().isEmpty) {
+                  return 'Enter recipient name';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
+              maxLength: 10,
+              decoration: InputDecoration(
+                labelText: 'Recipient Phone',
+                counterText: '',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              validator: (value) {
+                final input = (value ?? '').trim();
+                if (input.length != 10 || !RegExp(r'^[0-9]{10}$').hasMatch(input)) {
+                  return 'Enter a valid 10-digit number';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _submit,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: const Text('Confirm & Book'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

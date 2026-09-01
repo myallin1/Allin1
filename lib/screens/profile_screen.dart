@@ -3,24 +3,53 @@
 // Allin1 Super App - Allin1
 // ================================================================
 
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../services/local_sync_service.dart';
+import 'package:provider/provider.dart';
 
-const Color kSurface = Color(0xFF0D0D18);
-const Color kCard = Color(0xFF141420);
-const Color kCard2 = Color(0xFF1A1A28);
-const Color kPurple = Color(0xFF7B6FE0);
-const Color kPurple2 = Color(0xFF7B6FE0);
+import '../services/hive_cache.dart';
+import '../services/local_sync_service.dart';
+import '../services/theme_service.dart';
+
+// NOTE (Nizam's full Option 2 rollout): kPurple/kPurple2 here are this
+// screen's PRIMARY/SECONDARY brand color (not a decorative accent), so
+// they get their own local sync rather than the shared app_palette.dart.
+Color kSurface = const Color(0xFF0D0D18);
+Color kCard    = const Color(0xFF141420);
+Color kCard2   = const Color(0xFF1A1A28);
+Color kPurple  = const Color(0xFF7B6FE0);
+Color kPurple2 = const Color(0xFF7B6FE0);
+Color kText    = const Color(0xFFEEEEF5);
+Color kMuted   = const Color(0xFF7777A0);
+Color kBorder  = const Color(0x267B6FE0);
 const Color kOrange = Color(0xFFE07C6F);
-const Color kGreen = Color(0xFF3DBA6F);
-const Color kGold = Color(0xFFF5C542);
-const Color kRed = Color(0xFFE05555);
-const Color kText = Color(0xFFEEEEF5);
-const Color kMuted = Color(0xFF7777A0);
-const Color kBorder = Color(0x267B6FE0);
+const Color kGreen  = Color(0xFF3DBA6F);
+const Color kGold   = Color(0xFFF5C542);
+const Color kRed    = Color(0xFFE05555);
+
+void _syncProfilePalette(BuildContext context) {
+  ThemeService ts;
+  try {
+    ts = Provider.of<ThemeService>(context);
+  } catch (_) {
+    return;
+  }
+  final theme = ts.currentTheme;
+  final cs = theme.colorScheme;
+  kPurple = cs.primary;
+  kPurple2 = cs.secondary;
+  kSurface = cs.surface;
+  kCard = cs.surface;
+  kCard2 = Color.alphaBlend(cs.primary.withValues(alpha: 0.06), cs.surface);
+  kText = cs.onSurface;
+  kMuted = cs.onSurface.withValues(alpha: 0.55);
+  kBorder = theme.dividerColor;
+}
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -46,15 +75,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadUserData();
   }
 
-  void _loadUserData() {
+  void _loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      setState(() {
-        _currentUser = user;
-        _nameController.text = user.displayName ?? '';
-        _emailController.text = user.email ?? '';
-        _phoneController.text = user.phoneNumber ?? '';
+      _currentUser = user;
+      
+      // Zero Database Wastage: Try local cache first
+      final cachedProfile = await HiveCache.getCachedUserProfile();
+      if (cachedProfile != null) {
+        if (mounted) {
+          setState(() {
+            _nameController.text = cachedProfile['name']?.toString() ?? user.displayName ?? '';
+            _emailController.text = cachedProfile['email']?.toString() ?? user.email ?? '';
+            _phoneController.text = cachedProfile['phone']?.toString() ?? user.phoneNumber ?? '';
+          });
+        }
+      } else {
+        // Fallback to Auth + Firestore if cache is totally empty
+        if (mounted) {
+          setState(() {
+            _nameController.text = user.displayName ?? '';
+            _emailController.text = user.email ?? '';
+            _phoneController.text = user.phoneNumber ?? '';
+          });
+        }
+        unawaited(_loadProfileFromFirestore(user.uid));
+      }
+    }
+  }
+
+  Future<void> _loadProfileFromFirestore(String uid) async {
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final data = doc.data() ?? {};
+      final phone = (data['phoneNumber'] as String?)?.trim();
+      final phoneAlt = (data['phone'] as String?)?.trim();
+      final resolvedPhone = (phone != null && phone.isNotEmpty)
+          ? phone
+          : (phoneAlt != null && phoneAlt.isNotEmpty ? phoneAlt : null);
+          
+      final name = data['name'] as String? ?? _currentUser?.displayName ?? '';
+      final email = data['email'] as String? ?? _currentUser?.email ?? '';
+
+      if (mounted) {
+        setState(() {
+          if (resolvedPhone != null) _phoneController.text = resolvedPhone;
+          if (name.isNotEmpty) _nameController.text = name;
+          if (email.isNotEmpty) _emailController.text = email;
+        });
+      }
+      
+      // Warm up the cache for next time
+      await HiveCache.cacheUserProfile({
+        'name': name,
+        'email': email,
+        'phone': resolvedPhone ?? '',
       });
+    } catch (_) {
+      // Non-fatal fallback
     }
   }
 
@@ -65,8 +143,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       if (_currentUser != null) {
-        await _currentUser!.updateDisplayName(_nameController.text.trim());
-        // Phone update requires re-verification
+        final newName = _nameController.text.trim();
+        await _currentUser!.updateDisplayName(newName);
+        
+        // Write to Firestore
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(_currentUser!.uid)
+            .set({
+          'name': newName,
+          'email': _emailController.text.trim(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        // Update Local Cache immediately (Zero Wastage)
+        await HiveCache.cacheUserProfile({
+          'name': newName,
+          'email': _emailController.text.trim(),
+          'phone': _phoneController.text.trim(),
+        });
       }
 
       if (mounted) {
@@ -102,18 +197,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _syncProfilePalette(context);
     return Scaffold(
+      key: const Key('profile_screen_scaffold'),
       backgroundColor: kSurface,
       appBar: AppBar(
         backgroundColor: kSurface,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: kText),
+          icon: Icon(Icons.arrow_back_ios_new, color: kText),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           'Profile',
-          style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w600),
+          style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: kText),
         ),
         actions: [
           if (!_isEditing)
@@ -140,8 +237,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 30),
               _buildInfoCard(),
               const SizedBox(height: 20),
-              _buildStatsCard(),
-              const SizedBox(height: 20),
+              // FIX (audit cleanup): removed — this "Activity Stats"
+              // card showed hardcoded fake numbers (24 rides, 156 km,
+              // ₹120 saved) for literally every customer, never backed
+              // by any real query. Misleading fabricated data is worse
+              // than no card at all; removed rather than left dummy.
+              // _buildStatsCard() and its _statItem() helper are left
+              // in place below, unused, in case a future mandate wants
+              // to wire them to real order-history counts.
               _buildAccountSection(),
             ],
           ),
@@ -337,7 +440,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: kBorder),
+          borderSide: BorderSide(color: kBorder),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -349,84 +452,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      ),
-    );
-  }
-
-  Widget _buildStatsCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            kPurple.withValues(alpha: 0.2),
-            kPurple2.withValues(alpha: 0.1),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kPurple.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.analytics_outlined, color: kPurple, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'Activity Stats',
-                style: GoogleFonts.outfit(
-                  color: kText,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              _statItem('Total Rides', '24', Icons.directions_bike),
-              _statItem('Distance', '156 km', Icons.route),
-              _statItem('Saved', '₹120', Icons.savings_outlined),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _statItem(String label, String value, IconData icon) {
-    return Expanded(
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: kPurple.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: kPurple, size: 24),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: GoogleFonts.outfit(
-              color: kText,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Text(
-            label,
-            style: GoogleFonts.outfit(
-              color: kMuted,
-              fontSize: 11,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -445,36 +470,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        _buildMenuItem(
-          icon: Icons.wallet_outlined,
-          title: 'Payment Methods',
-          subtitle: 'Manage UPI & cards',
-          onTap: () {},
-        ),
-        _buildMenuItem(
-          icon: Icons.location_on_outlined,
-          title: 'Saved Addresses',
-          subtitle: 'Home, Work, Other',
-          onTap: () {},
-        ),
-        _buildMenuItem(
-          icon: Icons.history,
-          title: 'Ride History',
-          subtitle: 'View all past rides',
-          onTap: () => Navigator.pushNamed(context, '/ride-history'),
-        ),
-        _buildMenuItem(
-          icon: Icons.directions_bike,
-          title: 'Captain Documents',
-          subtitle: 'Upload DL, RC, Aadhaar',
-          onTap: () => Navigator.pushNamed(context, '/captain-docs'),
-        ),
-        _buildMenuItem(
-          icon: Icons.help_outline,
-          title: 'Help & Support',
-          subtitle: 'FAQs, Contact us',
-          onTap: () {},
-        ),
+        // FIX (audit: "athulla iruka option dummy and unwanted ah
+        // iruku" — customer-reported cleanup request): removed 5 menu
+        // items. Payment Methods / Saved Addresses had dead no-op
+        // onTap: () {} handlers and don't correspond to any real
+        // feature anywhere in this app (not even the side drawer) —
+        // pure placeholders. Help & Support was also a no-op, but DOES
+        // duplicate a real, working drawer item (dashboard_screen.dart
+        // — WhatsApp support link). Ride History navigated to
+        // '/ride-history', a route never registered in
+        // main_customer.dart (would throw at runtime) — also a
+        // duplicate, since the drawer's real "Activity" item already
+        // opens RideHistoryScreen correctly. Captain Documents
+        // navigated to another unregistered route, '/captain-docs' —
+        // and is a Hero-app concept (DL/RC/Aadhaar upload) that had no
+        // business being in the Customer app's profile at all, looks
+        // like leftover copy-paste from a Hero screen. Kept Settings
+        // (real, working route) and Sign Out (real, fully wired) below
+        // — the only two that actually did something.
         _buildMenuItem(
           icon: Icons.settings_outlined,
           title: 'Settings',
@@ -579,7 +592,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right, color: kMuted, size: 20),
+                Icon(Icons.chevron_right, color: kMuted, size: 20),
               ],
             ),
           ),

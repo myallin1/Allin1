@@ -66,13 +66,42 @@ class OSMProvider extends MapProvider {
     }
   }
 
-  Future<List<Map<String, dynamic>>> searchNearErode(String query) async {
+  // [center] biases/restricts the search box around a specific point —
+  // pass the customer's live location so search follows whatever city
+  // they're actually in, instead of always searching around Erode.
+  // Omit it (or pass null) to fall back to the Erode default, which
+  // keeps every existing call site working unchanged.
+  Future<List<Map<String, dynamic>>> searchNearErode(
+    String query, {
+    LatLng? center,
+  }) async {
     if (query.trim().length < 3) return [];
 
-    const west = _erodeCenterLng - _erodeRadiusDegrees;
-    const east = _erodeCenterLng + _erodeRadiusDegrees;
-    const north = _erodeCenterLat + _erodeRadiusDegrees;
-    const south = _erodeCenterLat - _erodeRadiusDegrees;
+    // First attempt: bounded=1 hard-restricts results to inside the
+    // city box. Nominatim's /search is a full-text/token geocoder, not
+    // a true prefix-autocomplete API — short fragments (e.g. "col" for
+    // "Collector Office") frequently match nothing when bounded=1
+    // forces a strict in-box-only result set. If that happens, retry
+    // once with the box used only as a ranking *bias* (bounded=0)
+    // instead of a hard filter, so a real match can still surface even
+    // if Nominatim's confidence for that fragment falls just outside
+    // strict bounding.
+    final strict = await _fetchNominatim(query, bounded: true, center: center);
+    if (strict.isNotEmpty) return strict;
+    return _fetchNominatim(query, bounded: false, center: center);
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchNominatim(
+    String query, {
+    required bool bounded,
+    LatLng? center,
+  }) async {
+    final centerLat = center?.latitude ?? _erodeCenterLat;
+    final centerLng = center?.longitude ?? _erodeCenterLng;
+    final west = centerLng - _erodeRadiusDegrees;
+    final east = centerLng + _erodeRadiusDegrees;
+    final north = centerLat + _erodeRadiusDegrees;
+    final south = centerLat - _erodeRadiusDegrees;
 
     try {
       final response = await http.get(
@@ -83,7 +112,7 @@ class OSMProvider extends MapProvider {
           '&limit=8'
           '&addressdetails=1'
           '&countrycodes=in'
-          '&bounded=1'
+          '${bounded ? '&bounded=1' : ''}'
           '&dedupe=1'
           '&viewbox=$west,$north,$east,$south',
         ),

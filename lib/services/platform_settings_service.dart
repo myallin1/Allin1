@@ -5,6 +5,7 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/platform_settings.dart';
+import './firestore_usage_tracking.dart';
 
 class PlatformSettingsService {
   static final PlatformSettingsService _instance =
@@ -219,7 +220,7 @@ class PlatformSettingsService {
 
   /// Listen to real-time settings changes
   Stream<PlatformSettings> watchSettings() {
-    return _settingsRef.doc('global').snapshots().map((doc) {
+    return _settingsRef.doc('global').trackedSnapshots().map((doc) {
       if (doc.exists && doc.data() != null) {
         final settings = PlatformSettings.fromMap(
           doc.data()! as Map<String, dynamic>,

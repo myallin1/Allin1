@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Welcome to Allin1</title>
+<meta property="og:title" content="Welcome to Allin1 Super App">
+<meta property="og:description" content="Click here to continue your onboarding.">
+<meta property="og:image" content="https://erode-super-app.web.app/icons/Icon-customer-512.png">
+<meta property="og:url" content="https://erode-super-app.web.app/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Welcome to Allin1 Super App">
+<meta name="twitter:description" content="Click here to continue your onboarding.">
+<meta name="twitter:image" content="https://erode-super-app.web.app/icons/Icon-customer-512.png">
+<!--
+  ================================================================
+  /q/ — Dynamic QR redirect + scan tracker
+  ================================================================
+  NEW (Aug 13 2026 — Nizam: "namma app kullaye dynamic qr create panni
+  athula irunthu vantha campaign ah detailed ah monitor panna option
+  venum", QRCG-style).
+
+  WHY THIS IS A STANDALONE PAGE AND NOT THE FLUTTER APP:
+  a printed QR can never be re-printed, so the destination must be
+  editable server-side forever. Routing that through the Flutter app
+  would mean every single scan downloads the ~4MB bundle BEFORE any
+  tracking fires — and a customer who bounces during that load is never
+  counted at all. This page is ~6KB of plain HTML/JS with no framework,
+  no Firebase SDK and no build step: it logs the scan and redirects in
+  well under a second, on 2G.
+
+  SPARK-TIER CONSTRAINT: there are no Cloud Functions, so both the
+  destination lookup and the scan write go straight to the Firestore
+  REST API as an UNAUTHENTICATED request. That is only safe because of
+  how the two collections are scoped in firestore.rules:
+
+    qr_links/{code}       PUBLIC READ, admin write. Deliberately holds
+                          ONLY {destination, active} — no campaign
+                          names, no counts, nothing sensitive. The
+                          real campaign record stays in
+                          affiliate_codes, which remains admin-only.
+
+    affiliate_scans/{id}  PUBLIC CREATE, admin read. A scanner can add
+                          a row but can never list or read them back,
+                          and the rules pin the shape of what may be
+                          written.
+
+  Everything degrades safely: if the lookup fails for any reason we
+  still redirect to the app root, so a scanner NEVER lands on an error.
+-->
+<style>
+  html,body{margin:0;height:100%;background:#FFF6FA;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .w{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px}
+  .m{width:64px;height:64px;border-radius:20px;background:linear-gradient(135deg,#FF4FA3,#BE2A7A)}
+  .t{color:#4A1236;font-size:15px;font-weight:600}
+  .s{color:#8A4E72;font-size:12px}
+  .b{width:150px;height:3px;border-radius:3px;background:rgba(255,79,163,.18);overflow:hidden}
+  .b i{display:block;height:100%;width:40%;border-radius:3px;background:#FF4FA3;animation:go 1s ease-in-out infinite}
+  @keyframes go{0%{transform:translateX(-100%)}100%{transform:translateX(310%)}}
+  @media (prefers-reduced-motion:reduce){.b i{animation:none;width:100%}}
+</style>
+</head>
+<body>
+<div class="w">
+  <div class="m"></div>
+  <div class="t">Opening MyAllin1…</div>
+  <div class="s">Made with &#10084; in Erode</div>
+  <div class="b"><i></i></div>
+</div>
+<script>
+(function () {
+  var PROJECT = 'erode-super-app';
+  var KEY = 'AIzaSyDipnXQFpwR1Zm4L3-XebKVgc1oPJhReME';
+  var BASE = 'https://firestore.googleapis.com/v1/projects/' + PROJECT +
+             '/databases/(default)/documents';
+  var FALLBACK = 'https://my-allin1.web.app/';
+
+  var params = new URLSearchParams(location.search);
+  // Support BOTH /q/?c=CODE and /q/?code=CODE so a mistyped poster or an
+  // older printed batch still resolves instead of dead-ending.
+  var code = (params.get('c') || params.get('code') || '').trim();
+
+  function go(url) {
+    location.replace(url);
+  }
+
+  if (!code) { go(FALLBACK); return; }
+
+  // ---- unique-vs-repeat, decided entirely on-device -----------------
+  // No cookies, no fingerprinting, no PII. A single localStorage flag
+  // per code: absent = this device has never opened this campaign.
+  var uniq = true;
+  try {
+    var k = 'a1qr_' + code;
+    if (localStorage.getItem(k) === '1') uniq = false;
+    localStorage.setItem(k, '1');
+  } catch (e) { /* private mode — count as unique, harmless */ }
+
+  // ---- coarse OS bucket from the UA string --------------------------
+  var ua = navigator.userAgent || '';
+  var os = /Android/i.test(ua) ? 'Android'
+         : /iPhone|iPad|iPod/i.test(ua) ? 'iOS'
+         : /Windows/i.test(ua) ? 'Windows'
+         : /Mac OS X/i.test(ua) ? 'macOS'
+         : /Linux/i.test(ua) ? 'Linux' : 'Other';
+
+  // Fire-and-forget scan write. keepalive lets it survive the redirect
+  // that happens milliseconds later — without it the browser cancels
+  // the request on navigation and the scan is silently lost.
+  function logScan() {
+    try {
+      fetch(BASE + '/affiliate_scans?key=' + KEY, {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            code:     { stringValue: code },
+            os:       { stringValue: os },
+            isUnique: { booleanValue: uniq },
+            ref:      { stringValue: document.referrer || '' },
+            ts:       { timestampValue: new Date().toISOString() }
+          }
+        })
+      }).catch(function () {});
+    } catch (e) { /* never block the redirect */ }
+  }
+
+  // ---- destination lookup, then redirect ---------------------------
+  // 2.5s ceiling: a scanner must never be left staring at this page
+  // because Firestore was slow. On timeout we log the scan anyway and
+  // send them to the app root.
+  var done = false;
+  function finish(url) {
+    if (done) return;
+    done = true;
+    logScan();
+    go(url);
+  }
+  setTimeout(function () { finish(FALLBACK); }, 2500);
+
+  fetch(BASE + '/qr_links/' + encodeURIComponent(code) + '?key=' + KEY)
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      var f = d && d.fields;
+      var active = !f || !f.active || f.active.booleanValue !== false;
+      var dest = f && f.destination && f.destination.stringValue;
+      if (!active) { finish(FALLBACK); return; }
+      // Only ever follow an absolute http(s) destination we stored
+      // ourselves — never anything reflected from the query string.
+      if (dest && /^https?:\/\//i.test(dest)) {
+        var sep = dest.indexOf('?') === -1 ? '?' : '&';
+        finish(dest + sep + 'ref=' + encodeURIComponent(code));
+      } else {
+        finish(FALLBACK + '?ref=' + encodeURIComponent(code));
+      }
+    })
+    .catch(function () { finish(FALLBACK + '?ref=' + encodeURIComponent(code)); });
+})();
+</script>
+</body>
+</html>

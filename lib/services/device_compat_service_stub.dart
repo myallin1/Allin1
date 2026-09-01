@@ -1,9 +1,19 @@
+import 'update_service.dart';
 import 'device_compat_service.dart';
 
-const String _customerArm64Url =
-    'https://github.com/myallin1/Allin1-update-release/releases/latest/download/customer-arm64.apk';
-const String _customerUniversalUrl =
-    'https://github.com/myallin1/Allin1-update-release/releases/latest/download/customer-armeabi-v7a.apk';
+// FIX: same broken architecture-split filenames as
+// device_compat_service_web.dart — pointed at customer-arm64.apk /
+// customer-armeabi-v7a.apk / hero-armeabi-v7a.apk, none of which exist
+// in the release. Only allin1-customer.apk / allin1-hero.apk are
+// actually uploaded.
+// SINGLE SOURCE OF TRUTH (Aug 17 2026 — Nizam: "dowload source git
+// orey place ah than irukanum"). These were two more hardcoded copies of
+// the release URLs. Every APK link in the app now resolves through
+// UpdateService, so changing the release naming is a one-file edit
+// instead of a hunt across five files — which is exactly how
+// landing_page.dart ended up pointing at a filename that did not exist.
+const String _customerApkUrl = UpdateService.customerApkUrl;
+const String _heroApkUrl = UpdateService.heroApkUrl;
 
 Future<DeviceCompatProfile> detectCustomerApkProfile() async {
   return const DeviceCompatProfile(
@@ -14,8 +24,8 @@ Future<DeviceCompatProfile> detectCustomerApkProfile() async {
     deviceMemoryGb: null,
     hardwareConcurrency: null,
     isDetectionConfident: false,
-    primaryDownloadUrl: _customerArm64Url,
-    universalDownloadUrl: _customerUniversalUrl,
+    primaryDownloadUrl: _customerApkUrl,
+    universalDownloadUrl: _customerApkUrl,
     primaryFileLabel: 'Customer Universal APK',
   );
 }
@@ -29,10 +39,8 @@ Future<DeviceCompatProfile> detectHeroApkProfile() async {
     deviceMemoryGb: null,
     hardwareConcurrency: null,
     isDetectionConfident: false,
-    primaryDownloadUrl:
-        'https://github.com/myallin1/Allin1-update-release/releases/latest/download/hero-armeabi-v7a.apk',
-    universalDownloadUrl:
-        'https://github.com/myallin1/Allin1-update-release/releases/latest/download/hero-armeabi-v7a.apk',
+    primaryDownloadUrl: _heroApkUrl,
+    universalDownloadUrl: _heroApkUrl,
     primaryFileLabel: 'Hero Universal APK',
   );
 }

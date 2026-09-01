@@ -3,9 +3,11 @@
 // Premium NJ Tech Pink Dark Theme — May 2026
 // ================================================================
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
 // ── Brand constants (mirrors dashboard) ─────────────────────────
 const Color _kPink     = Color(0xFFFF4FA3);
@@ -16,9 +18,11 @@ const Color _kMuted    = Color(0xFF9999BB);
 const Color _kGold     = Color(0xFFFFBB00);
 const Color _kGreen    = Color(0xFF00C853);
 
-const String _phone    = '+918681869091';
-const String _telUri   = 'tel:+918681869091';
-const String _waUri    = 'https://wa.me/918681869091';
+// FIX (per Nizam/CTO's approved feature batch): Car Services direct
+// contact number set to the CTO-provided number for Call + WhatsApp.
+const String _phone    = '+919092031090';
+const String _telUri   = 'tel:+919092031090';
+const String _waUri    = 'https://wa.me/919092031090';
 
 // ── Service data ─────────────────────────────────────────────────
 const _services = [
@@ -73,14 +77,37 @@ class _CarService {
 // ================================================================
 // SCREEN
 // ================================================================
-class CarWashScreen extends StatelessWidget {
+class CarWashScreen extends StatefulWidget {
   const CarWashScreen({super.key});
+
+  @override
+  State<CarWashScreen> createState() => _CarWashScreenState();
+}
+
+class _CarWashScreenState extends State<CarWashScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToServices() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _kDark,
       body: CustomScrollView(
+        controller: _scrollController,
         physics: const BouncingScrollPhysics(),
         slivers: [
           _buildAppBar(context),
@@ -88,14 +115,21 @@ class CarWashScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
-                (_, i) => _ServiceCard(service: _services[i]),
+                // FIX (per Nizam's request — "1st irukka call and whatsapp
+                // button mattum vitru athuku keela irukuratha remove
+                // panniru"): only the first service card keeps its own
+                // Call/WhatsApp row now; cards below it no longer repeat
+                // it. The pinned bottom bar still has Call, so contact is
+                // always reachable — this just removes the redundant
+                // duplicate per-card buttons.
+                (_, i) => _ServiceCard(service: _services[i], showActions: i == 0),
                 childCount: _services.length,
               ),
             ),
           ),
         ],
       ),
-      bottomNavigationBar: _BottomContactBar(),
+      bottomNavigationBar: _BottomActionBar(onServiceTap: _scrollToServices),
     );
   }
 
@@ -106,7 +140,7 @@ class CarWashScreen extends StatelessWidget {
       backgroundColor: _kDark,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back_ios_new_rounded,
-            color: Colors.white, size: 20),
+            color: Colors.white, size: 20,),
         onPressed: () => Navigator.pop(context),
       ),
       flexibleSpace: FlexibleSpaceBar(
@@ -119,18 +153,18 @@ class CarWashScreen extends StatelessWidget {
                 style: GoogleFonts.outfit(
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
-                    color: Colors.white)),
+                    color: Colors.white,),),
             Text('Water Wash 🚗',
                 style: GoogleFonts.outfit(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: _kPink)),
+                    color: _kPink,),),
           ],
         ),
         background: Stack(
           fit: StackFit.expand,
           children: [
-            Image.network(
+            CachedCloudImage(
               'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?w=800&q=80',
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => Container(color: _kDark2),
@@ -158,7 +192,7 @@ class CarWashScreen extends StatelessWidget {
                   boxShadow: [
                     BoxShadow(
                       color: _kPink.withValues(alpha: 0.3),
-                      blurRadius: 40, spreadRadius: 10),
+                      blurRadius: 40, spreadRadius: 10,),
                   ],
                 ),
               ),
@@ -175,7 +209,8 @@ class CarWashScreen extends StatelessWidget {
 // ================================================================
 class _ServiceCard extends StatelessWidget {
   final _CarService service;
-  const _ServiceCard({required this.service});
+  final bool showActions;
+  const _ServiceCard({required this.service, this.showActions = true});
 
   @override
   Widget build(BuildContext context) {
@@ -184,11 +219,11 @@ class _ServiceCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: _kCard,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _kPink.withValues(alpha: 0.18), width: 1),
+        border: Border.all(color: _kPink.withValues(alpha: 0.18)),
         boxShadow: [
           BoxShadow(
               color: _kPink.withValues(alpha: 0.08),
-              blurRadius: 20, offset: const Offset(0, 6)),
+              blurRadius: 20, offset: const Offset(0, 6),),
         ],
       ),
       child: Column(
@@ -200,7 +235,7 @@ class _ServiceCard extends StatelessWidget {
               ClipRRect(
                 borderRadius:
                     const BorderRadius.vertical(top: Radius.circular(20)),
-                child: Image.network(
+                child: CachedCloudImage(
                   service.imageUrl,
                   height: 190,
                   width: double.infinity,
@@ -212,12 +247,12 @@ class _ServiceCard extends StatelessWidget {
                           color: _kDark2,
                           child: const Center(
                               child: CircularProgressIndicator(
-                                  color: _kPink, strokeWidth: 2))),
+                                  color: _kPink, strokeWidth: 2,),),),
                   errorBuilder: (_, __, ___) => Container(
                     height: 190, color: _kDark2,
                     child: const Center(
                         child: Icon(Icons.local_car_wash_rounded,
-                            color: _kPink, size: 48))),
+                            color: _kPink, size: 48,),),),
                 ),
               ),
               // Badge
@@ -225,13 +260,13 @@ class _ServiceCard extends StatelessWidget {
                 top: 12, left: 12,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 5),
+                      horizontal: 10, vertical: 5,),
                   decoration: BoxDecoration(
                     color: service.badgeColor,
                     borderRadius: BorderRadius.circular(8),
                     boxShadow: [
                       BoxShadow(color: service.badgeColor.withValues(alpha: 0.4),
-                          blurRadius: 8)
+                          blurRadius: 8,),
                     ],
                   ),
                   child: Text(service.badge,
@@ -239,7 +274,7 @@ class _ServiceCard extends StatelessWidget {
                           color: Colors.white,
                           fontSize: 9,
                           fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5)),
+                          letterSpacing: 0.5,),),
                 ),
               ),
               // Price tag
@@ -247,18 +282,18 @@ class _ServiceCard extends StatelessWidget {
                 top: 12, right: 12,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
+                      horizontal: 12, vertical: 6,),
                   decoration: BoxDecoration(
                     color: _kDark.withValues(alpha: 0.85),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                        color: _kPink.withValues(alpha: 0.5)),
+                        color: _kPink.withValues(alpha: 0.5),),
                   ),
                   child: Text(service.price,
                       style: GoogleFonts.outfit(
                           color: _kPink,
                           fontSize: 13,
-                          fontWeight: FontWeight.w800)),
+                          fontWeight: FontWeight.w800,),),
                 ),
               ),
               // Bottom image gradient
@@ -291,56 +326,65 @@ class _ServiceCard extends StatelessWidget {
                     style: GoogleFonts.outfit(
                         color: Colors.white,
                         fontSize: 18,
-                        fontWeight: FontWeight.w800)),
+                        fontWeight: FontWeight.w800,),),
                 const SizedBox(height: 4),
                 Text(service.subtitle,
-                    style: TextStyle(
-                        color: _kMuted, fontSize: 12, height: 1.4)),
+                    style: const TextStyle(
+                        color: _kMuted, fontSize: 12, height: 1.4,),),
                 const SizedBox(height: 12),
                 // Feature chips
                 Wrap(
                   spacing: 6, runSpacing: 6,
                   children: service.features.map((f) => Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
+                        horizontal: 10, vertical: 4,),
                     decoration: BoxDecoration(
                       color: _kPink.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                          color: _kPink.withValues(alpha: 0.3)),
+                          color: _kPink.withValues(alpha: 0.3),),
                     ),
                     child: Text(f,
-                        style: TextStyle(
+                        style: const TextStyle(
                             color: _kPink,
                             fontSize: 10,
-                            fontWeight: FontWeight.w600)),
-                  )).toList(),
+                            fontWeight: FontWeight.w600,),),
+                  ),).toList(),
                 ),
-                const SizedBox(height: 16),
-                // ── Action buttons ────────────────────────────
-                Row(children: [
-                  Expanded(
-                    child: _ActionButton(
-                      label: '📞  Call Now',
-                      color: _kPink,
-                      onTap: () => _launch(_telUri),
+                if (showActions) ...[
+                  const SizedBox(height: 16),
+                  // ── Action buttons ────────────────────────────
+                  Row(children: [
+                    Expanded(
+                      child: _ActionButton(
+                        label: '📞  Call Now',
+                        color: _kPink,
+                        onTap: () => _launch(_telUri),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _ActionButton(
-                      label: '💬  WhatsApp',
-                      color: const Color(0xFF25D366),
-                      onTap: () => _launch(_waUri),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _ActionButton(
+                        label: '💬  WhatsApp',
+                        color: const Color(0xFF25D366),
+                        onTap: () => _launch(_waUri),
+                      ),
                     ),
-                  ),
-                ]),
+                  ],),
+                ],
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<_CarService>('service', service));
+    properties.add(DiagnosticsProperty<bool>('showActions', showActions));
   }
 }
 
@@ -352,7 +396,7 @@ class _ActionButton extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
   const _ActionButton(
-      {required this.label, required this.color, required this.onTap});
+      {required this.label, required this.color, required this.onTap,});
 
   @override
   Widget build(BuildContext context) {
@@ -366,7 +410,7 @@ class _ActionButton extends StatelessWidget {
           boxShadow: [
             BoxShadow(
                 color: color.withValues(alpha: 0.35),
-                blurRadius: 12, offset: const Offset(0, 4)),
+                blurRadius: 12, offset: const Offset(0, 4),),
           ],
         ),
         child: Center(
@@ -374,70 +418,134 @@ class _ActionButton extends StatelessWidget {
               style: GoogleFonts.outfit(
                   color: Colors.white,
                   fontSize: 13,
-                  fontWeight: FontWeight.w700)),
+                  fontWeight: FontWeight.w700,),),
         ),
       ),
     );
   }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('label', label));
+    properties.add(ColorProperty('color', color));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
+  }
 }
 
-class _BottomContactBar extends StatelessWidget {
+// FIX (CTO checklist Item 14): 4 rigidly-pinned bottom buttons —
+// Service / Old Spares / Appointment / Call. No dedicated spare-parts
+// marketplace or in-app appointment scheduler exists yet in this repo
+// (confirmed via repo search), so "Old Spares" and "Appointment" open a
+// pre-filled WhatsApp enquiry to the same CTO-provided number the old
+// contact bar used — functional today without waiting on new backend
+// screens, and easy to repoint at real screens later without touching
+// this bar's layout.
+class _BottomActionBar extends StatelessWidget {
+  final VoidCallback onServiceTap;
+  const _BottomActionBar({required this.onServiceTap});
+
+  static Future<void> _whatsAppEnquiry(String text) =>
+      _launch('https://wa.me/919092031090?text=${Uri.encodeComponent(text)}');
+
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(
-          16, 12, 16, 12 + MediaQuery.paddingOf(context).bottom),
+          10, 10, 10, 10 + MediaQuery.paddingOf(context).bottom,),
       decoration: BoxDecoration(
         color: _kCard,
         border: Border(top: BorderSide(color: _kPink.withValues(alpha: 0.2))),
         boxShadow: [
           BoxShadow(color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 20, offset: const Offset(0, -4)),
+              blurRadius: 20, offset: const Offset(0, -4),),
         ],
       ),
       child: Row(children: [
-        const Icon(Icons.phone_in_talk_rounded, color: _kPink, size: 18),
-        const SizedBox(width: 8),
-        Column(crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min, children: [
-          Text('Book Now', style: GoogleFonts.outfit(
-              color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
-          Text(_phone, style: TextStyle(color: _kMuted, fontSize: 10)),
-        ]),
-        const Spacer(),
-        GestureDetector(
-          onTap: () => _launch(_telUri),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: _kPink,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(
-                  color: _kPink.withValues(alpha: 0.4), blurRadius: 10)],
-            ),
-            child: Text('📞  Call', style: GoogleFonts.outfit(
-                color: Colors.white, fontSize: 13,
-                fontWeight: FontWeight.w700)),
+        Expanded(
+          child: _BottomBarButton(
+            icon: Icons.build_rounded,
+            label: 'Service',
+            color: _kPink,
+            onTap: onServiceTap,
           ),
         ),
         const SizedBox(width: 8),
-        GestureDetector(
-          onTap: () => _launch(_waUri),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: const Color(0xFF25D366),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(
-                  color: const Color(0xFF25D366).withValues(alpha: 0.4),
-                  blurRadius: 10)],
-            ),
-            child: Text('💬  WA', style: GoogleFonts.outfit(
-                color: Colors.white, fontSize: 13,
-                fontWeight: FontWeight.w700)),
+        Expanded(
+          child: _BottomBarButton(
+            icon: Icons.settings_suggest_rounded,
+            label: 'Old Spares',
+            color: _kGold,
+            onTap: () => _whatsAppEnquiry(
+                "Hi, I'm looking for old/spare car parts. Please share availability.",),
           ),
         ),
-      ]),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _BottomBarButton(
+            icon: Icons.event_available_rounded,
+            label: 'Appointment',
+            color: _kGreen,
+            onTap: () => _whatsAppEnquiry(
+                "Hi, I'd like to book a car service appointment.",),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _BottomBarButton(
+            icon: Icons.call_rounded,
+            label: 'Call',
+            color: const Color(0xFF25D366),
+            onTap: () => _launch(_telUri),
+          ),
+        ),
+      ],),
+    );
+  }
+}
+
+class _BottomBarButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  const _BottomBarButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.5)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.outfit(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -448,3 +556,4 @@ Future<void> _launch(String uriStr) async {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }
+

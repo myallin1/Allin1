@@ -8,6 +8,7 @@
 // Version: 1.0.0
 // ================================================================
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// Primary API configuration for the Allin1 Super App commerce backend.
@@ -47,8 +48,52 @@ abstract final class ApiConfig {
 
   /// Ola Maps API Key (Krutrim)
   /// Loaded from the local `.env` file via flutter_dotenv.
+  ///
+  /// Callers MUST `await ApiConfig.ensureEnvLoaded()` before reading this,
+  /// otherwise it silently returns '' — see ensureEnvLoaded() docs.
   static String get olaMapsApiKey =>
       (dotenv.env['OLA_MAPS_API_KEY'] ?? '').trim();
+
+  // ================================================================
+  // Environment loading
+  // ================================================================
+
+  /// Memoised in-flight/completed `.env` load.
+  static Future<void>? _envLoadFuture;
+
+  /// Loads `.env` exactly once, no matter how many callers race for it.
+  ///
+  /// Why this exists: `.env` is an asset, so on web it is fetched over
+  /// HTTP rather than read from a local file. The app previously called
+  /// `dotenv.load()` in exactly one place (SplashSetupScreen.initState),
+  /// while `main_hero.dart` / `main_customer.dart` kicked off
+  /// `MapService().initialize()` concurrently via `unawaited(...)`. On web
+  /// the warm-up reliably won that race, read an empty `dotenv.env`,
+  /// logged `Ola API key present=false length=0`, and set
+  /// `_isInitialized = true` — so the later, correctly-ordered call from
+  /// the splash screen hit the early-return guard and the empty-key state
+  /// was cached for the entire session.
+  ///
+  /// Awaiting this before any dotenv read makes the ordering explicit and
+  /// removes the race on every platform. Safe to call repeatedly and from
+  /// multiple entrypoints concurrently: subsequent callers await the same
+  /// future rather than triggering a second load.
+  static Future<void> ensureEnvLoaded() => _envLoadFuture ??= _loadEnv();
+
+  static Future<void> _loadEnv() async {
+    if (dotenv.isInitialized) {
+      return;
+    }
+    try {
+      await dotenv.load();
+      debugPrint('[ApiConfig] .env loaded (${dotenv.env.length} keys)');
+    } catch (e) {
+      // Non-fatal: callers degrade to empty-string config and their own
+      // fallbacks (MapService falls back to OSM/Haversine). Do not
+      // rethrow — a missing .env must not block app startup.
+      debugPrint('[ApiConfig] .env load failed: $e');
+    }
+  }
 
   // ================================================================
   // Timeout Configuration (milliseconds)

@@ -17,6 +17,7 @@ import '../models/credential_category.dart' hide Timestamp;
 import 'credential_cache_service.dart';
 import 'encryption_service.dart';
 import 'session_service.dart';
+import './firestore_usage_tracking.dart';
 
 // ================================================================
 // Credential Result Class
@@ -400,7 +401,7 @@ class CredentialService {
         .where('isDeleted', isEqualTo: false)
         .orderBy('isPinned', descending: true)
         .orderBy('updatedAt', descending: true)
-        .snapshots()
+        .trackedSnapshots()
         .map(
           (snapshot) => snapshot.docs
               .map(
@@ -794,7 +795,7 @@ class CredentialService {
     return _categoriesCollection
         .where('userId', isEqualTo: userId)
         .orderBy('sortOrder')
-        .snapshots()
+        .trackedSnapshots()
         .map(
           (snapshot) => snapshot.docs
               .map(

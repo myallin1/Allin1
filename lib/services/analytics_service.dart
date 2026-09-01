@@ -16,7 +16,6 @@
 // ================================================================
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -276,19 +275,19 @@ class AnalyticsService {
 
       // Initialize Crashlytics
       if (enableCrashlytics) {
-        _crashlytics = FirebaseCrashlytics.instance;
+        if (!kIsWeb) {
+          _crashlytics = FirebaseCrashlytics.instance;
 
-        // Set crashlytics to collect crashes in production
-        await _crashlytics!.setCrashlyticsCollectionEnabled(!kDebugMode);
+          // Set crashlytics to collect crashes in production
+          await _crashlytics!.setCrashlyticsCollectionEnabled(!kDebugMode);
 
-        // Set custom keys for better crash context
-        await _crashlytics!.setCustomKey('app_version', '1.0.0');
-        await _crashlytics!
-            .setCustomKey('platform', Platform.isAndroid ? 'android' : 'ios');
+          // Set custom keys for better crash context
+          await _crashlytics!.setCustomKey('app_version', '1.0.0');
 
-        // Enable uncaught error handling
-        if (!kDebugMode) {
-          FlutterError.onError = _crashlytics!.recordFlutterError;
+          // Enable uncaught error handling
+          if (!kDebugMode) {
+            FlutterError.onError = _crashlytics!.recordFlutterError;
+          }
         }
 
         debugPrint('[AnalyticsService] Crashlytics initialized');

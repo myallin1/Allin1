@@ -250,6 +250,96 @@ jobs:
           retention-days: 30
 
   # ============================================================
+  # Job 3b: Publish Admin Test Build — the missing link in the
+  # "Chitti voice -> GitHub issue -> Claude -> merge -> testable APK"
+  # pipeline (Sep 1 2026, Nizam: "namma automation work ah fullfill ah
+  # mudi").
+  #
+  # The android matrix build above runs `flutter build apk` with NO
+  # --flavor, which compiles lib/main.dart — not lib/main_admin.dart.
+  # It has never once produced the admin app this whole automation
+  # exists to test. This job builds the actual admin flavor and
+  # publishes it somewhere Nizam can reach from his phone without
+  # opening GitHub Actions logs:
+  #   1. A rolling "latest-admin-test" GitHub Release (always the same
+  #      tag, so ChittiDevMonitorScreen's releases/latest API call keeps
+  #      working without the workflow needing to invent version tags).
+  #   2. An FCM push to the `chitti_dev_builds` topic the admin app
+  #      subscribes to (see main_admin.dart), so this isn't something
+  #      that needs polling — it lands like every other admin alert.
+  # Runs on every push to main, independent of the platform matrix
+  # above and its own (separately broken — branch and tag refs cannot
+  # both match) deploy-job condition.
+  publish_admin_test_build:
+    name: Publish Admin Test Build
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build admin flavor APK
+        run: flutter build apk --release --flavor admin -t lib/main_admin.dart
+
+      - name: Rename with commit info
+        id: apk
+        run: |
+          SRC="build/app/outputs/flutter-apk/app-admin-release.apk"
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          DEST="build/app/outputs/flutter-apk/allin1-admin-${SHORT_SHA}.apk"
+          cp "$SRC" "$DEST"
+          echo "path=$DEST" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Publish rolling GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: latest-admin-test
+          name: "Admin test build ${{ steps.apk.outputs.short_sha }}"
+          body: |
+            Automatically built from commit ${{ github.sha }}.
+            This tag always points at the newest admin build — install
+            over the previous one, no uninstall needed unless the
+            signing key changed.
+          files: ${{ steps.apk.outputs.path }}
+          prerelease: true
+          # Overwrites the existing "latest-admin-test" release instead
+          # of failing because the tag already exists — this tag is
+          # meant to move.
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify admin app via FCM
+        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          RELEASE_URL: https://github.com/${{ github.repository }}/releases/tag/latest-admin-test
+          SHORT_SHA: ${{ steps.apk.outputs.short_sha }}
+        run: |
+          npm install firebase-admin@12 --no-save --silent
+          node .github/scripts/notify-admin-build.js
+
+  # ============================================================
   # Job 4: Security Scan - Dependency and vulnerability check
   # ============================================================
   security_scan:

@@ -8,17 +8,30 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+import '../widgets/economic_vision_banner.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'hero_pending_screen.dart';
 import 'hero_register_screen.dart';
 
-const Color _bg = Color(0xFF0A0A12);
-const Color _card = Color(0xFF1A1A2A);
+// THEME FIX: was a dark theme, inconsistent with the customer app's
+// language/sign-in page (welcome_screen.dart), which Nizam pointed to as
+// the reference look. Palette below is lifted straight from that file so
+// the hero and customer apps' opening screens read as one family — white
+// background, pink brand accent, the same ink/muted text colors.
+const Color _bg = Colors.white;
+const Color _card = Color(0xFFFFF3F9);
 const Color _green = Color(0xFF00C853);
 const Color _gold = Color(0xFFFFBB00);
-const Color _text = Color(0xFFEEEEF5);
-const Color _muted = Color(0xFF7777A0);
+// "Register as Hero" button color — requested green, kept separate from
+// _gold since that's still used elsewhere (SnackBars) on this screen.
+const Color _registerGreen = Color(0xFF00C853);
+const Color _text = Color(0xFF4A1236);
+const Color _muted = Color(0xFF8A4E72);
+const Color _pink = Color(0xFFFF4FA3);
+const Color _pinkLight = Color(0xFFFF92C8);
+const Color _border = Color(0xFFF0DCE8);
 
 class HeroLoginScreen extends StatefulWidget {
   const HeroLoginScreen({super.key});
@@ -42,9 +55,36 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
         'approved';
   }
 
-  bool _isPendingHero(Map<String, dynamic>? heroData) {
+  bool _isRejectedHero(Map<String, dynamic>? heroData) {
     return heroData?['approvalStatus']?.toString().trim().toLowerCase() ==
-        'pending';
+        'rejected';
+  }
+
+  /// FIX (Aug 17 2026 — Nizam: "customer old form valiya vantha some
+  /// details upload pannathana... ithunala hero login problem aguthu").
+  ///
+  /// This used to be a strict `== 'pending'` equality test. Every caller
+  /// below follows the same shape: approved -> home, pending -> pending
+  /// screen, ANYTHING ELSE -> signOut() + "Your account is pending Admin
+  /// approval". So a hero registered through an older version of the
+  /// form, whose doc has NO approvalStatus field at all (or some legacy
+  /// value), matched neither branch and was SIGNED OUT on every single
+  /// login attempt — while being told they were "pending approval",
+  /// which is not something signing out could ever help with.
+  ///
+  /// _syncHeroIdentityFields() above does backfill approvalStatus:
+  /// 'pending' for exactly these docs — but it writes to Firestore while
+  /// the callers keep testing the STALE in-memory `heroData` map read
+  /// moments earlier, so the repair never helped the login that
+  /// performed it.
+  ///
+  /// Now: only an explicit 'approved' or 'rejected' is treated as such;
+  /// everything else — 'pending', empty, missing, or any legacy value —
+  /// is pending. That is the honest reading: if we cannot prove a hero
+  /// was approved or rejected, they are waiting. Nobody gets ejected
+  /// from the app over a field an old build forgot to write.
+  bool _isPendingHero(Map<String, dynamic>? heroData) {
+    return !_isApprovedHero(heroData) && !_isRejectedHero(heroData);
   }
 
   Future<void> _syncHeroIdentityFields(
@@ -66,6 +106,17 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
           heroData?['name'] ??
           heroData?['captainName'] ??
           '',
+      // FIX (Hero Registration/Approval bug, CTO mandate): this was the
+      // other half of the disconnect — this identity-sync merge-set could
+      // be the FIRST write to heroes/{uid} for a hero, and it never set
+      // approvalStatus at all. If auth_service.dart's
+      // completeProfileSetup() ran afterward and only checked
+      // `!existingHero.exists` (now fixed to check the field itself), the
+      // hero's doc would permanently have no approvalStatus and never
+      // show up in Admin's pending-approvals query. Backfilling it here
+      // too closes the gap regardless of which write path runs first.
+      if (!(heroData?.containsKey('approvalStatus') ?? false))
+        'approvalStatus': 'pending',
     }, SetOptions(merge: true),);
   }
 
@@ -404,14 +455,26 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
         return;
       }
 
+      // Only reachable for an EXPLICITLY rejected hero now (see
+      // _isPendingHero above — every other state, including a legacy doc
+      // with no approvalStatus at all, is treated as pending and lands
+      // on HeroPendingScreen instead of being signed out here).
+      //
+      // Message corrected to match: this used to say "pending Admin
+      // approval", which was wrong twice over — it was shown to
+      // rejected heroes, and it was also the message a legacy-doc hero
+      // saw right before being ejected, telling them to wait for
+      // something that would never happen.
       await FirebaseAuth.instance.signOut();
       await googleSignIn.signOut();
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Your account is pending Admin approval'),
-          backgroundColor: Color(0xFFF5C542),
+          content: Text(
+            'Your Hero application was not approved. Please contact support.',
+          ),
+          backgroundColor: Color(0xFFFF5252),
         ),
       );
     } catch (e) {
@@ -437,23 +500,33 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(
-        child: Padding(
+        // FIX: was a fixed-height Column with Spacer()s, which only works
+        // when content is short enough to fit one screen. Nizam wants the
+        // "How to be an Allin1 Hero?" guidance visible on THIS page (above
+        // the login/register options, not inside the registration form or
+        // a separate page) — that's real height, so this needs to scroll
+        // on smaller phones instead of overflowing. Spacers replaced with
+        // fixed gaps accordingly.
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             children: [
-              const Spacer(flex: 2),
-              // Logo
-              ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: Image.asset(
-                  'assets/images/bapx_nj_logo.gif',
-                  width: 100,
-                  height: 100,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const Text(
-                    '🦸',
-                    style: TextStyle(fontSize: 60),
+              const SizedBox(height: 32),
+              // Logo — was the 2.4 MB bapx_nj_logo.gif, now drawn in code.
+              // See the matching comment in customer_login_screen.dart.
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF4FA3), Color(0xFFFF92C8)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Center(
+                  child: Text('🦸', style: TextStyle(fontSize: 48)),
                 ),
               ),
               const SizedBox(height: 24),
@@ -473,20 +546,40 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
                   fontSize: 14,
                 ),
               ),
-              const Spacer(),
-              // Sign in with Google Button
+              const SizedBox(height: 28),
+              // FIX: guidance card, per Nizam's explicit instruction — shown
+              // here on the opening page, ABOVE the Google sign-in /
+              // Register as Hero options below, with a graphic icon per
+              // step (not just a number) so it reads at a glance.
+              // NEW (Aug 13 2026): same பொருளாதாரப் புரட்சி banner the
+              // customer app shows, reused verbatim from the shared
+              // widget so both apps can never drift apart. compact:true
+              // because this page already carries a logo, a title and
+              // the 3-step guide card below.
+              const EconomicVisionBanner(
+                horizontalPadding: 0,
+                compact: true,
+                heroApp: true,
+              ),
+              const SizedBox(height: 20),
+              const _HowToBecomeHeroCard(),
+              const SizedBox(height: 28),
+              // THEME FIX: was a transparent-outline/white-text button
+              // designed for a dark background — now a solid pink button
+              // matching welcome_screen.dart's "Continue with Google" on
+              // the customer app, for the same light theme.
               SizedBox(
                 width: double.infinity,
-                child: OutlinedButton(
+                height: 52,
+                child: ElevatedButton(
                   onPressed: _isLoading ? null : _loginWithGoogle,
-                  style: OutlinedButton.styleFrom(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _pink,
                     foregroundColor: Colors.white,
-                    side: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.6),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    disabledBackgroundColor: _pink.withValues(alpha: 0.5),
+                    elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(15),
                     ),
                   ),
                   child: _isLoading
@@ -501,14 +594,7 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
                       : const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(
-                              'G',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
+                            Icon(Icons.login_rounded, size: 19, color: Colors.white),
                             SizedBox(width: 8),
                             Text(
                               'Sign in with Google',
@@ -536,8 +622,8 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
                     );
                   },
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: _gold,
-                    side: const BorderSide(color: _gold),
+                    foregroundColor: _registerGreen,
+                    side: const BorderSide(color: _registerGreen),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -549,11 +635,141 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
                   ),
                 ),
               ),
-              const Spacer(flex: 2),
+              const SizedBox(height: 32),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+// ── "How to be an Allin1 Hero?" guidance card ──────────────────────
+// Shown on THIS opening/login page, above the Google sign-in / Register
+// as Hero options — per Nizam's explicit instruction. Each step gets its
+// own icon badge (not just a number) so it reads as a graphical
+// instruction at a glance, not a wall of text. Same 3 stages
+// HeroPendingScreen tracks live after a hero actually submits the form.
+class _HowToBecomeHeroCard extends StatelessWidget {
+  const _HowToBecomeHeroCard();
+
+  static const List<_HowToStep> _steps = [
+    _HowToStep(
+      icon: Icons.badge_rounded,
+      title: 'Fill Your Details & Upload Proof',
+      subtitle: 'Personal info + License, Aadhaar, PAN photos',
+    ),
+    _HowToStep(
+      icon: Icons.fact_check_rounded,
+      title: 'KYC Verification',
+      subtitle: 'Admin checks your documents and calls to confirm',
+    ),
+    _HowToStep(
+      icon: Icons.emoji_events_rounded,
+      title: 'Onboarding Complete',
+      subtitle: "You're approved — go online and start earning",
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFF4FA3), Color(0xFFBE2A7A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFF4FA3).withValues(alpha: 0.28),
+            blurRadius: 22,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'How to be an Allin1 Hero?',
+            style: GoogleFonts.outfit(
+              color: Colors.white,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 16),
+          for (var i = 0; i < _steps.length; i++) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.22),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(_steps[i].icon, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _steps[i].title,
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _steps[i].subtitle,
+                          style: GoogleFonts.outfit(
+                            color: Colors.white.withValues(alpha: 0.82),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (i != _steps.length - 1)
+              Padding(
+                padding: const EdgeInsets.only(left: 19),
+                child: Container(
+                  width: 2,
+                  height: 20,
+                  color: Colors.white.withValues(alpha: 0.3),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HowToStep {
+  const _HowToStep({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
 }

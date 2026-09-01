@@ -12,19 +12,46 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../services/update_service.dart';
+import 'package:provider/provider.dart';
 
-const Color kSurface = Color(0xFF0D0D18);
-const Color kCard = Color(0xFF141420);
-const Color kCard2 = Color(0xFF1A1A28);
-const Color kPurple = Color(0xFF7B6FE0);
-const Color kGreen = Color(0xFF3DBA6F);
-const Color kGold = Color(0xFFF5C542);
+import '../config/app_variant.dart';
+import '../services/theme_service.dart';
+import '../services/update_service.dart';
+import 'package:erode_superapp/widgets/cached_cloud_image.dart';
+import '../services/firestore_usage_tracking.dart';
+
+// NOTE (Nizam's full Option 2 rollout): kPurple here is this screen's
+// PRIMARY brand color (not a decorative accent), so it gets its own
+// local sync rather than the shared app_palette.dart.
+Color kSurface = const Color(0xFF0D0D18);
+Color kCard    = const Color(0xFF141420);
+Color kCard2   = const Color(0xFF1A1A28);
+Color kPurple  = const Color(0xFF7B6FE0);
+Color kText    = const Color(0xFFEEEEF5);
+Color kMuted   = const Color(0xFF7777A0);
+Color kBorder  = const Color(0x267B6FE0);
+const Color kGreen  = Color(0xFF3DBA6F);
+const Color kGold   = Color(0xFFF5C542);
 const Color kOrange = Color(0xFFE07C6F);
-const Color kRed = Color(0xFFE05555);
-const Color kText = Color(0xFFEEEEF5);
-const Color kMuted = Color(0xFF7777A0);
-const Color kBorder = Color(0x267B6FE0);
+const Color kRed    = Color(0xFFE05555);
+
+void _syncNotificationsPalette(BuildContext context) {
+  ThemeService ts;
+  try {
+    ts = Provider.of<ThemeService>(context);
+  } catch (_) {
+    return;
+  }
+  final theme = ts.currentTheme;
+  final cs = theme.colorScheme;
+  kPurple = cs.primary;
+  kSurface = cs.surface;
+  kCard = cs.surface;
+  kCard2 = Color.alphaBlend(cs.primary.withValues(alpha: 0.06), cs.surface);
+  kText = cs.onSurface;
+  kMuted = cs.onSurface.withValues(alpha: 0.55);
+  kBorder = theme.dividerColor;
+}
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -59,6 +86,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
   @override
   Widget build(BuildContext context) {
+    _syncNotificationsPalette(context);
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
@@ -67,12 +95,12 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         backgroundColor: kSurface,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: kText),
+          icon: Icon(Icons.arrow_back_ios_new, color: kText),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           'Notifications',
-          style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w600),
+          style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: kText),
         ),
         actions: [
           TextButton(
@@ -97,7 +125,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   .where('userId', isEqualTo: user.uid)
                   .orderBy('createdAt', descending: true)
                   .limit(50)
-                  .snapshots(),
+                  .trackedSnapshots(),
               builder: (ctx, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
@@ -128,7 +156,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.notifications_none, color: kMuted, size: 64),
+          Icon(Icons.notifications_none, color: kMuted, size: 64),
           const SizedBox(height: 16),
           Text(
             'No notifications',
@@ -167,10 +195,15 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     final currentPatch = (data['shorebird_current_patch'] as num?)?.toInt();
     final nextPatch = (data['shorebird_next_patch'] as num?)?.toInt();
     final binaryUpdateAvailable = data['binary_update_available'] == true;
+    // FIX (audit finding): was hardcoded 'customer' whenever an admin's
+    // push notification doc omitted app_variant — a Hero user reading
+    // that notification would be sent the Customer APK. Falls back to
+    // THIS running app's own flavor (see lib/config/app_variant.dart,
+    // set once at boot by each main_X.dart) instead of guessing.
     final effectiveApkUrl = apkUrl.isNotEmpty
         ? apkUrl
         : UpdateService().fallbackApkUrl(
-            appVariant.isNotEmpty ? appVariant : 'customer',
+            appVariant.isNotEmpty ? appVariant : currentAppVariant,
           );
     final isUpdateNotification = data['update_available'] == true ||
         apkUrl.isNotEmpty ||
@@ -504,7 +537,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Image.network(
+              CachedCloudImage(
                 posterUrl,
                 fit: BoxFit.cover,
                 loadingBuilder: (context, child, progress) {
@@ -869,3 +902,4 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     );
   }
 }
+

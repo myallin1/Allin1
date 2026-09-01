@@ -26,7 +26,7 @@ class SellerScreen extends StatelessWidget {
         backgroundColor: kSurface,
         title: Text(
           'Seller Dashboard',
-          style: GoogleFonts.spaceGrotesk(color: kText),
+          style: GoogleFonts.outfit(color: kText),
         ),
       ),
       body: SingleChildScrollView(
@@ -63,7 +63,7 @@ class _Hero extends StatelessWidget {
         children: [
           Text(
             'Seller command center',
-            style: GoogleFonts.spaceGrotesk(
+            style: GoogleFonts.outfit(
               color: kText,
               fontSize: 24,
               fontWeight: FontWeight.w700,
@@ -156,7 +156,7 @@ class _KpiCard extends StatelessWidget {
         children: [
           Text(
             value,
-            style: GoogleFonts.spaceGrotesk(
+            style: GoogleFonts.outfit(
               color: kGold,
               fontWeight: FontWeight.w700,
             ),
@@ -191,7 +191,7 @@ class _FeatureList extends StatelessWidget {
       children: [
         Text(
           'Seller Features',
-          style: GoogleFonts.spaceGrotesk(
+          style: GoogleFonts.outfit(
             color: kText,
             fontSize: 18,
             fontWeight: FontWeight.w700,

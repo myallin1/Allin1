@@ -1,22 +1,28 @@
 // lib/widgets/allin1_map_widget.dart
 // Dual Map Provider Architecture | Ola + OSM
 // Architecture: ListenableBuilder only (NO Streams, NO ValueKey)
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+import 'package:vector_map_tiles/vector_map_tiles.dart' as vmt;
+import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vtr;
 
 import '../config/api_config.dart';
+import '../services/hive_cache.dart';
 import '../services/map_service.dart';
+import '../services/ola_maps_provider.dart';
+import 'cached_tile_provider.dart';
 
-// â”€â”€ Erode Default Coordinates â”€â”€
+// ── Erode Default Coordinates ──
 const LatLng kErodeCenter = LatLng(11.3410, 77.7171);
 final Uint8List _transparentPixel = Uint8List.fromList(<int>[
   0x89,
@@ -88,10 +94,275 @@ final Uint8List _transparentPixel = Uint8List.fromList(<int>[
   0x82,
 ]);
 
+// Ola Vector Tiles (real MapLibre-style rendering) -- surgical addition.
+// Cached at module level so the style is fetched from Ola ONCE per app
+// session and reused by every map screen (taxi, food, hero, etc.), not
+// re-fetched on every single screen open. If it ever fails (bad key, Ola
+// quota/limit genuinely exhausted, network error), the cached Future
+// resolves to null and stays that way for the rest of the session -- every
+// map screen then just renders the existing OSM TileLayer below, exactly
+// as it always has. This is a pure fallback: the OSM path is completely
+// untouched.
+Future<vmt.Style?>? _olaVectorStyleFuture;
+
+Future<vmt.Style?> _loadOlaVectorStyle() {
+  return _olaVectorStyleFuture ??= () async {
+    // REGRESSION FIX (per Nizam's report: Ola never opens, every session,
+    // even once the key is confirmed present) -- this used to check
+    // ApiConfig.olaMapsApiKey immediately on the very first call. On web
+    // especially, dotenv is still loading at that exact moment (same race
+    // _initializeMapService() below already guards against with this same
+    // wait loop), so the key read as empty, vectorStyleUriFor() returned
+    // null, and because this Future is cached at module level, that
+    // "no key yet" result got permanently frozen in as "Ola failed" for
+    // the rest of the session -- every later map screen kept rendering
+    // OSM even after the key had long since loaded. Wait for it first.
+    const maxWaitMs = 3000;
+    const stepMs = 100;
+    var waited = 0;
+    while (ApiConfig.olaMapsApiKey.isEmpty && waited < maxWaitMs) {
+      await Future<void>.delayed(const Duration(milliseconds: stepMs));
+      waited += stepMs;
+    }
+
+    final key = ApiConfig.olaMapsApiKey.trim();
+    final uri = OlaMapsProvider.vectorStyleUriFor(key);
+    if (uri == null) {
+      debugPrint(
+        '[Allin1MapWidget] Ola vector style skipped (no valid key after '
+        '${waited}ms wait)',
+      );
+      return null;
+    }
+    try {
+      final style = await _buildOlaStyleManually(key);
+      debugPrint('[Allin1MapWidget] Ola vector style loaded OK');
+      return style;
+    } catch (e) {
+      debugPrint(
+        '[Allin1MapWidget] Ola vector style load FAILED, staying on OSM: $e',
+      );
+      return null;
+    }
+  }();
+}
+
+// REGRESSION FIX (per Nizam's console screenshot: 401 Unauthorized on
+// https://api.olamaps.io/tiles/vector/v1/data/planet.json, no query string
+// at all): vmt.StyleReader's built-in api-key injection only replaces a
+// LITERAL "{key}" placeholder token inside URLs -- that's a convention some
+// providers (Stadia Maps, MapTiler) bake into their style.json responses so
+// this package can substitute the caller's key. Ola's style.json does NOT
+// contain that token in its `sources` entries (confirmed by reading
+// StyleReader's actual source on pub.dev/GitHub for this exact package
+// version) -- so every nested source/tile request StyleReader made after
+// the initial (correctly-keyed) style.json fetch went out with NO api_key
+// at all, and Ola correctly 401'd them.
+//
+// Fix: don't use vmt.StyleReader for Ola. Fetch + walk the style JSON
+// ourselves, appending `?api_key=...` (or `&api_key=...`) to every source
+// URL we actually use, exactly matching Ola's own documented query-param
+// auth convention -- then hand the theme JSON to vector_tile_renderer's
+// ThemeReader (the same class StyleReader itself delegates to) and build
+// TileProviders by hand. Sprites are intentionally skipped here (Ola's
+// style has no `{key}`-token sprite URLs either, and base map rendering --
+// roads, water, land, labels via device fonts -- doesn't depend on them);
+// can be added later if POI icons are needed.
+// PERSISTENT STYLE CACHE (fix: repeat Ola network calls on every app open)
+// ─────────────────────────────────────────────────────────────────────
+// The vector TILE BYTES were already persisted to disk correctly (see
+// vmt.VectorTileLayer's fileCacheTtl/fileCacheMaximumSizeInBytes below),
+// but the STYLE resolution done here -- the style.json fetch, plus any
+// nested TileJSON source fetches -- was only cached in the module-level
+// `_olaVectorStyleFuture`, which is an in-memory variable that resets to
+// null on every cold start. So even with tile bytes cached, every single
+// app launch still re-hit Ola's network API twice (style.json + source
+// TileJSON) before it could render a single (already-cached) tile.
+// Fix: persist the RESOLVED style JSON + per-source tile URL templates
+// (the only two things a fresh vmt.Style needs) to disk via HiveCache.
+// On a cache hit, this function does zero network calls -- it rebuilds
+// the same vmt.Style purely from the cached JSON, which is fast (sync
+// JSON parsing), local, and free.
+//
+// INFINITE CACHE-FIRST (per Nizam/CTO decision): no expiry timer here on
+// purpose. Ola's style rarely changes, and a TTL only exists to force a
+// re-fetch we don't want -- every unnecessary re-fetch burns Ola API
+// quota for zero user-visible benefit. The policy is simply: if the
+// cache has it, serve it forever, no network, no questions asked; if the
+// cache is empty (fresh install or the user cleared app storage), fetch
+// once and cache it permanently. HiveCache.put() requires a TTL
+// argument, so this uses a 100-year duration as "effectively forever"
+// rather than special-casing HiveCache itself (which other callers still
+// rely on for real, intentional expiry).
+const _kOlaStyleCacheKey = 'ola_vector_style_resolved_v1';
+const _kOlaStyleCacheTtl = Duration(days: 36500);
+
+Future<vmt.Style> _buildOlaStyleManually(String apiKey) async {
+  final cached = await HiveCache.get<Map>(_kOlaStyleCacheKey);
+  if (cached != null) {
+    try {
+      final style = _styleFromCachedJson(cached);
+      if (style != null) {
+        debugPrint('[Allin1MapWidget] Ola vector style loaded from disk '
+            'cache (no network call)');
+        return style;
+      }
+    } catch (e) {
+      debugPrint('[Allin1MapWidget] Ola style cache unusable, refetching: $e');
+    }
+  }
+
+  final styleUri = Uri.parse(
+    'https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json',
+  ).replace(queryParameters: {'api_key': apiKey});
+
+  final styleResp =
+      await http.get(styleUri).timeout(const Duration(seconds: 10));
+  if (styleResp.statusCode != 200) {
+    throw 'Ola style fetch failed: HTTP ${styleResp.statusCode}';
+  }
+  final styleJson = json.decode(styleResp.body);
+  if (styleJson is! Map<String, dynamic>) {
+    throw 'Ola style response is not a JSON object';
+  }
+
+  final sourcesJson = styleJson['sources'];
+  if (sourcesJson is! Map) {
+    throw 'Ola style has no sources';
+  }
+
+  String withApiKey(String url) {
+    final parsed = Uri.tryParse(url);
+    if (parsed != null && parsed.queryParameters.containsKey('api_key')) {
+      return url;
+    }
+    return '$url${url.contains('?') ? '&' : '?'}api_key=$apiKey';
+  }
+
+  final providerByName = <String, vmt.VectorTileProvider>{};
+  // Resolved per-source info collected alongside providerByName, purely
+  // so it can be persisted to disk once we're done -- everything a
+  // future cold start needs to rebuild providerByName without any HTTP
+  // calls at all.
+  final resolvedSourcesForCache = <String, Map<String, dynamic>>{};
+
+  for (final entry in sourcesJson.entries) {
+    final sourceValue = entry.value;
+    if (sourceValue is! Map) continue;
+    final sourceTypeName = sourceValue['type'];
+    vmt.TileProviderType? providerType;
+    for (final candidate in vmt.TileProviderType.values) {
+      if (candidate.name.replaceAll('_', '-') == sourceTypeName) {
+        providerType = candidate;
+        break;
+      }
+    }
+    if (providerType == null) continue;
+
+    Map<String, dynamic> resolvedSource;
+    final referencedUrl = sourceValue['url'] as String?;
+    if (referencedUrl != null) {
+      // Some vector styles point at a separate TileJSON document instead
+      // of embedding `tiles` directly -- fetch that too, with the same
+      // api_key treatment, before we can find its tile URL template.
+      final resolvedUri = Uri.tryParse(withApiKey(referencedUrl));
+      if (resolvedUri == null) continue;
+      final sourceResp =
+          await http.get(resolvedUri).timeout(const Duration(seconds: 10));
+      if (sourceResp.statusCode != 200) continue;
+      final decoded = json.decode(sourceResp.body);
+      if (decoded is! Map<String, dynamic>) continue;
+      resolvedSource = decoded;
+    } else {
+      resolvedSource = Map<String, dynamic>.from(sourceValue);
+    }
+
+    final tiles = resolvedSource['tiles'];
+    if (tiles is! List || tiles.isEmpty) continue;
+    final tileUrl = withApiKey(tiles.first as String);
+    final maxzoom = (resolvedSource['maxzoom'] as num?)?.toInt() ?? 14;
+    final minzoom = (resolvedSource['minzoom'] as num?)?.toInt() ?? 1;
+    providerByName[entry.key as String] = vmt.NetworkVectorTileProvider(
+      type: providerType,
+      urlTemplate: tileUrl,
+      maximumZoom: maxzoom,
+      minimumZoom: minzoom,
+    );
+    resolvedSourcesForCache[entry.key as String] = {
+      'type': sourceTypeName,
+      'urlTemplate': tileUrl,
+      'maxzoom': maxzoom,
+      'minzoom': minzoom,
+    };
+  }
+
+  if (providerByName.isEmpty) {
+    throw 'Ola style has no usable vector sources';
+  }
+
+  // Fire-and-forget: don't let a disk-write failure affect this session's
+  // (already-successful) style load.
+  unawaited(HiveCache.put(
+    _kOlaStyleCacheKey,
+    <String, dynamic>{
+      'styleJson': styleJson,
+      'resolvedSources': resolvedSourcesForCache,
+    },
+    ttl: _kOlaStyleCacheTtl,
+  ));
+
+  return vmt.Style(
+    name: styleJson['name'] as String?,
+    theme: vtr.ThemeReader().read(styleJson),
+    providers: vmt.TileProviders(providerByName),
+  );
+}
+
+/// Rebuilds a [vmt.Style] purely from the JSON persisted by
+/// [_buildOlaStyleManually] above -- no network calls. Returns null if the
+/// cached shape is unexpected (e.g. an older cache format), so the caller
+/// falls back to a normal network fetch instead of crashing.
+vmt.Style? _styleFromCachedJson(Map cached) {
+  final styleJson = cached['styleJson'];
+  final resolvedSources = cached['resolvedSources'];
+  if (styleJson is! Map || resolvedSources is! Map) return null;
+  final styleJsonTyped = Map<String, dynamic>.from(styleJson);
+
+  final providerByName = <String, vmt.VectorTileProvider>{};
+  for (final entry in resolvedSources.entries) {
+    final info = entry.value;
+    if (info is! Map) continue;
+    final sourceTypeName = info['type'];
+    vmt.TileProviderType? providerType;
+    for (final candidate in vmt.TileProviderType.values) {
+      if (candidate.name.replaceAll('_', '-') == sourceTypeName) {
+        providerType = candidate;
+        break;
+      }
+    }
+    if (providerType == null) continue;
+    final urlTemplate = info['urlTemplate'] as String?;
+    if (urlTemplate == null) continue;
+    providerByName[entry.key as String] = vmt.NetworkVectorTileProvider(
+      type: providerType,
+      urlTemplate: urlTemplate,
+      maximumZoom: (info['maxzoom'] as num?)?.toInt() ?? 14,
+      minimumZoom: (info['minzoom'] as num?)?.toInt() ?? 1,
+    );
+  }
+  if (providerByName.isEmpty) return null;
+
+  return vmt.Style(
+    name: styleJsonTyped['name'] as String?,
+    theme: vtr.ThemeReader().read(styleJsonTyped),
+    providers: vmt.TileProviders(providerByName),
+  );
+}
+
 /// Allin1MapWidget - Dual Map Provider enabled map widget
 ///
 /// Features:
-/// - Automatic provider switching (Ola â†” OSM)
+/// - Automatic provider switching (Ola ↔ OSM)
 /// - Real-time tile URL generation via custom TileProvider
 /// - Provider badge showing active provider
 /// - Clean lifecycle management
@@ -102,8 +373,14 @@ class Allin1MapWidget extends StatefulWidget {
   final List<MapRoute> routes;
   final List<MapCircle> circles;
   final bool interactive;
+  final void Function(int index)? onMarkerTap;
   final MapController? mapController;
   final VoidCallback? onMapReady;
+
+  /// Fires as the map is panned/zoomed, with the new centre point.
+  /// Used by LocationPickerScreen to keep a fixed centre pin's address
+  /// in sync while the customer drags the map underneath it.
+  final void Function(LatLng center, bool gestureFinished)? onCenterChanged;
 
   const Allin1MapWidget({
     super.key,
@@ -115,6 +392,8 @@ class Allin1MapWidget extends StatefulWidget {
     this.interactive = true,
     this.mapController,
     this.onMapReady,
+    this.onMarkerTap,
+    this.onCenterChanged,
   });
 
   @override
@@ -131,6 +410,8 @@ class Allin1MapWidget extends StatefulWidget {
     properties.add(DiagnosticsProperty<bool>('interactive', interactive));
     properties.add(DiagnosticsProperty<MapController?>('mapController', mapController));
     properties.add(ObjectFlagProperty<VoidCallback?>.has('onMapReady', onMapReady));
+    properties.add(ObjectFlagProperty<void Function(int index)?>.has('onMarkerTap', onMarkerTap));
+    properties.add(ObjectFlagProperty<void Function(LatLng center, bool gestureFinished)?>.has('onCenterChanged', onCenterChanged));
   }
 }
 
@@ -142,6 +423,7 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
   bool _isMapReady = false;
   LatLng? _pendingCenter;
   double? _pendingZoom;
+  vmt.Style? _olaStyle;
 
   MapController get _effectiveMapController =>
       widget.mapController ?? _internalMapController;
@@ -156,6 +438,17 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
       '[Allin1MapWidget] init center=${widget.center.latitude},${widget.center.longitude} zoom=${widget.zoom}',
     );
     unawaited(_initializeMapService());
+    unawaited(_loadOlaVectorStyleForThisScreen());
+  }
+
+  Future<void> _loadOlaVectorStyleForThisScreen() async {
+    // Reuses the module-level cached Future -- on the very first map
+    // screen this actually hits the network; every screen after that
+    // (this session) gets the already-resolved style or null instantly.
+    final style = await _loadOlaVectorStyle();
+    if (mounted && style != null) {
+      setState(() => _olaStyle = style);
+    }
   }
 
   Future<void> _initializeMapService() async {
@@ -259,6 +552,22 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
 
   @override
   Widget build(BuildContext context) {
+    // FIX (Nizam's back-button stutter report): wraps the whole map
+    // subtree in a RepaintBoundary. _mapService is a global singleton
+    // shared by EVERY Allin1MapWidget instance across the taxi/food/
+    // hero flows -- without this, a repaint triggered by this map (tile
+    // decode, marker move) forces Flutter to also re-examine unrelated
+    // sibling widgets on the same screen (e.g. during a pop transition),
+    // which is a common cause of a brief 1-2s jank right when leaving a
+    // map-heavy screen. RepaintBoundary isolates this widget's paint
+    // layer so that cost stays contained to the map itself. Pure
+    // performance isolation -- no behavior change.
+    return RepaintBoundary(
+      child: _buildMap(context),
+    );
+  }
+
+  Widget _buildMap(BuildContext context) {
     // FIX #2: Single rebuild mechanism via ListenableBuilder
     // NO Streams, NO ValueKey - only ChangeNotifier
     return ListenableBuilder(
@@ -282,6 +591,9 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
                 minZoom: 10,
                 maxZoom: 18,
                 onMapReady: _handleMapReady,
+                onPositionChanged: (camera, hasGesture) {
+                  widget.onCenterChanged?.call(camera.center, !hasGesture);
+                },
                 interactionOptions: InteractionOptions(
                   flags: widget.interactive
                       ? InteractiveFlag.all
@@ -289,11 +601,78 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
                 ),
               ),
               children: [
-                TileLayer(
-                  tileProvider: _DynamicTileProvider(_mapService),
-                  userAgentPackageName: 'com.allin1.superapp',
-                  maxZoom: 18,
-                ),
+                // Ola Vector Tiles (real MapLibre-style rendering) when the
+                // background-loaded style is ready AND Ola is still the
+                // active provider (MapService already flips selectedProvider
+                // to osm on genuine failure elsewhere). Decided BEFORE this
+                // build runs -- never flashes OSM-then-Ola or vice versa,
+                // per Nizam's explicit requirement. Any failure here just
+                // means _olaStyle stayed null and the OSM TileLayer below
+                // renders exactly as it always has -- zero change to that
+                // path.
+                if (_olaStyle != null &&
+                    _mapService.selectedProvider == MapProviderType.ola)
+                  vmt.VectorTileLayer(
+                    theme: _olaStyle!.theme,
+                    sprites: _olaStyle!.sprites,
+                    tileProviders: _olaStyle!.providers,
+                    // AGGRESSIVE PERSISTENT CACHE (per Nizam's cost-control
+                    // request -- we're on Ola's free tier): the package
+                    // already ships a real persistent byte-cache under the
+                    // hood -- IndexedDB via idb_shim on Web/PWA
+                    // (lib/src/cache/byte_storage_idb.dart), the device
+                    // filesystem on Android/iOS
+                    // (lib/src/cache/byte_storage_io.dart) -- keyed by tile
+                    // coordinate + source, so a tile fetched once is
+                    // reused across ENTIRE APP RESTARTS, not just this
+                    // session, and any tile still within fileCacheTtl is
+                    // served straight from that store with zero network
+                    // call to Ola.
+                    //
+                    // INFINITE CACHE-FIRST (per Nizam/CTO decision): no
+                    // expiry timer, on purpose -- Erode's streets don't
+                    // change often enough to justify burning Ola API
+                    // quota on a re-fetch nobody asked for. Policy is
+                    // cache-first, forever: if a tile is already on disk,
+                    // serve it with zero network calls, no matter how
+                    // old; only a fresh install or the user manually
+                    // clearing app storage empties the cache and triggers
+                    // a real fetch. The package's fileCacheTtl parameter
+                    // has no explicit "infinite" value, so this uses a
+                    // 100-year duration as effectively forever. The
+                    // 150MB size cap stays -- that's a storage-footprint
+                    // bound, not an expiry policy, so it still protects
+                    // against unbounded disk growth if someone explores
+                    // many different cities.
+                    fileCacheTtl: const Duration(days: 36500),
+                    fileCacheMaximumSizeInBytes: 150 * 1024 * 1024,
+                    logCacheStats: kDebugMode,
+                  )
+                else
+                  TileLayer(
+                    tileProvider: _DynamicTileProvider(_mapService),
+                    userAgentPackageName: 'com.allin1.superapp',
+                    maxZoom: 18,
+                    // FIX (blank-map-tile audit, per Nizam's report): tile
+                    // load failures used to be completely silent -- OSM's
+                    // public tile.openstreetmap.org server can 403/429 a
+                    // request with no visible error anywhere (Flutter's
+                    // image pipeline just swallows it), leaving the map
+                    // area permanently blank with zero feedback. This
+                    // surfaces genuine tile failures to MapService so the
+                    // existing "Allin1 map loading..." error overlay
+                    // (gated on hasUiError) actually appears instead of a
+                    // dead blank screen, and gives us a debug log to
+                    // confirm whether OSM is actually rate-limiting us.
+                    errorTileCallback: (tile, error, stackTrace) {
+                      debugPrint(
+                        '[Allin1MapWidget] Tile load FAILED provider='
+                        '${_mapService.currentProvider.name} '
+                        'coords=${tile.coordinates} error=$error',
+                      );
+                      _mapService.markFailure();
+                    },
+                  ),
                 if (widget.routes.isNotEmpty)
                   PolylineLayer(
                     polylines: widget.routes
@@ -322,20 +701,42 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
                         .toList(),
                   ),
                 MarkerLayer(
+                  // FIX (Aug 12 2026 — customer-facing demo-vehicle
+                  // removal): this used to silently merge
+                  // MapSimulationService.instance.simulatedMarkers into
+                  // EVERY map on EVERY screen (customer + hero), driven by
+                  // a remote Firestore flag. That made it possible for
+                  // fake vehicles to appear on a real customer's live map.
+                  // The simulation is now confined entirely to
+                  // admin_map_simulation_screen.dart, which builds this
+                  // same widget with its own `markers:` list explicitly —
+                  // this widget itself no longer knows the simulation
+                  // service exists.
                   markers: widget.markers
+                      .asMap()
+                      .entries
                       .map(
-                        (m) => Marker(
-                          point: m.point,
-                          width: m.size,
-                          height: m.size,
-                          alignment: Alignment.center,
-                          child: _DefaultMarker(
-                            color: m.color,
-                            icon: m.icon,
-                            assetPath: m.assetPath,
-                            bearingDegrees: m.bearingDegrees,
-                          ),
-                        ),
+                        (entry) {
+                          final index = entry.key;
+                          final m = entry.value;
+                          return Marker(
+                            point: m.point,
+                            width: m.size,
+                            height: m.size,
+                            alignment: Alignment.center,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => widget.onMarkerTap?.call(index),
+                              child: _DefaultMarker(
+                                color: m.color,
+                                icon: m.icon,
+                                assetPath: m.assetPath,
+                                bearingDegrees: m.bearingDegrees,
+                                circular: m.circular,
+                              ),
+                            ),
+                          );
+                        },
                       )
                       .toList(),
                 ),
@@ -412,7 +813,7 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
                                     'Allin1 map loading...',
                                     textAlign: TextAlign.center,
                                     style: GoogleFonts.outfit(
-                                      color: Color(0xFF4A1236),
+                                      color: const Color(0xFF4A1236),
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
                                     ),
@@ -447,13 +848,42 @@ class _Allin1MapWidgetState extends State<Allin1MapWidget>
   }
 }
 
-// â”€â”€ FIX #1: Custom TileProvider with AUTO-FALLBACK â”€â”€â”€â”€â”€â”€â”€
+// ── FIX #1: Custom TileProvider with AUTO-FALLBACK ───────
 /// Generates tile URLs dynamically from the current provider.
 /// If Ola tiles fail (timeout/broken URL), automatically falls back to OSM tiles.
 class _DynamicTileProvider extends TileProvider {
   final MapService mapService;
 
   _DynamicTileProvider(this.mapService);
+
+  // FIX (blank-map-tile audit, per Nizam's report): requests to
+  // tile.openstreetmap.org (which is what every tile URL currently
+  // resolves to -- see OlaMapsProvider.getTileUrl()/OSMProvider) went
+  // out via a bare `NetworkImage(url)` with NO headers at all. Because a
+  // custom TileProvider is supplied here, flutter_map's own mechanism
+  // that turns TileLayer.userAgentPackageName into a real `User-Agent`
+  // header never runs (that only happens inside flutter_map's built-in
+  // NetworkTileProvider) -- so despite userAgentPackageName being set
+  // above, tile requests were actually going out with no identifying
+  // header at all. OSM's tile usage policy explicitly blocks/rate-limits
+  // exactly this pattern (see operations.osmfoundation.org/policies/tiles),
+  // which is the most likely reason the map area goes blank with no
+  // error: OSM silently drops/403s unidentified high-volume requests.
+  static const Map<String, String> _tileHeaders = {
+    'User-Agent': 'Allin1SuperApp/1.0 (Erode Tamil Nadu; contact via app)',
+  };
+
+  // REGRESSION FIX (web crash report): browsers enforce the XHR/fetch
+  // "forbidden header" list, which includes User-Agent -- it can never be
+  // set by page JS, only by the browser itself. On Android/iOS this header
+  // is what satisfies OSM's tile usage policy; on web, attempting to set it
+  // throws "Refused to set unsafe header" and kills the tile fetch outright,
+  // which is what was silently forcing every web map onto the OSM/Ola
+  // failure path. Native platforms keep the header exactly as before; web
+  // sends no custom headers (flutter_map/dart:html already identifies the
+  // request via the browser's own real User-Agent).
+  static Map<String, String>? get _platformTileHeaders =>
+      kIsWeb ? null : _tileHeaders;
 
   @override
   ImageProvider getImage(TileCoordinates coordinates, TileLayer options) {
@@ -466,7 +896,13 @@ class _DynamicTileProvider extends TileProvider {
       debugPrint(
         '[Allin1MapWidget] Loading tile provider=${mapService.currentProvider.name} url=$url',
       );
-      return NetworkImage(url);
+      // Aug 28 2026 (offline-first maps): was a bare NetworkImage, i.e.
+      // in-memory only, so every cold start re-downloaded every tile and
+      // the map was blank with no network. Now persisted to disk on
+      // native; on web the service worker's map-tile-cache-v1 does the
+      // same job. See cached_tile_provider.dart for why the platforms
+      // differ.
+      return CachedTileProvider.imageProviderFor(url, _platformTileHeaders);
     } catch (e) {
       debugPrint('[Allin1MapWidget] Tile URL generation failed: $e');
       mapService.markFailure();
@@ -474,10 +910,10 @@ class _DynamicTileProvider extends TileProvider {
     }
   }
 
-  // getImageFromCache removed in flutter_map v8 â€” uses default caching
+  // getImageFromCache removed in flutter_map v8 — uses default caching
 }
 
-// â”€â”€ Provider Badge (shows active provider) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Provider Badge (shows active provider) ────────────────────────
 class _ProviderBadge extends StatelessWidget {
   final MapProviderType provider;
 
@@ -495,7 +931,7 @@ class _ProviderBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'â­ Premium Map',
+            '⭐ Premium Map',
             style: TextStyle(
               color: Colors.white,
               fontSize: 9,
@@ -514,18 +950,20 @@ class _ProviderBadge extends StatelessWidget {
   }
 }
 
-// â”€â”€ Default Marker (unchanged from original) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Default Marker (unchanged from original) ─────────────────────
 class _DefaultMarker extends StatelessWidget {
   final Color color;
   final IconData icon;
   final String? assetPath;
   final double? bearingDegrees;
+  final bool circular;
 
   const _DefaultMarker({
     required this.color,
     required this.icon,
     this.assetPath,
     this.bearingDegrees,
+    this.circular = false,
   });
 
   @override
@@ -550,24 +988,41 @@ class _DefaultMarker extends StatelessWidget {
     }
 
     if (assetPath != null) {
+      final assetImage = Image.asset(
+        assetPath!,
+        width: 45,
+        height: 45,
+        fit: BoxFit.cover,
+        // gaplessPlayback stops a GIF's animation from restarting from
+        // frame 0 every time this widget is rebuilt (e.g. every 1s
+        // simulation tick) -- that restart-per-rebuild was the exact
+        // cause of the earlier "jittering" bug. With this on, the same
+        // underlying animation controller just keeps playing through.
+        gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => Icon(
+          icon,
+          color: Colors.white,
+          size: 20,
+        ),
+      );
+      final clipped = circular
+          ? ClipOval(
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: [
+                    BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 10, spreadRadius: 1),
+                  ],
+                ),
+                child: assetImage,
+              ),
+            )
+          : assetImage;
       return SizedBox(
         width: 45,
         height: 45,
-        child: Center(
-          child: rotateIfNeeded(
-            Image.asset(
-              assetPath!,
-              width: 45,
-              height: 45,
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => Icon(
-                icon,
-                color: Colors.white,
-                size: 20,
-              ),
-            ),
-          ),
-        ),
+        child: Center(child: rotateIfNeeded(clipped)),
       );
     }
 
@@ -603,7 +1058,7 @@ class _DefaultMarker extends StatelessWidget {
   }
 }
 
-// â”€â”€ Data Models (unchanged from original) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Data Models (unchanged from original) ────────────────────────
 class MapMarker {
   final LatLng point;
   final Color color;
@@ -612,6 +1067,11 @@ class MapMarker {
   final String? assetPath;
   final double? bearingDegrees;
   final double size;
+  // NEW (Aug 12 2026 — circular hero marker request): opt-in only,
+  // defaults false, so every existing caller (real ride markers,
+  // vehicle sim markers, etc.) renders exactly as before. Only
+  // MapSimulationService's hero avatar sets this true.
+  final bool circular;
 
   const MapMarker({
     required this.point,
@@ -621,6 +1081,7 @@ class MapMarker {
     this.assetPath,
     this.bearingDegrees,
     this.size = 56,
+    this.circular = false,
   });
 }
 
@@ -651,3 +1112,4 @@ class MapCircle {
     this.borderStrokeWidth = 2.5,
   });
 }
+

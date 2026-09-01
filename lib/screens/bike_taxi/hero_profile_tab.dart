@@ -8,9 +8,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/pwa_cache_platform_stub.dart'
+    if (dart.library.html) '../../services/pwa_cache_platform_web.dart';
 import '../../services/update_service.dart';
+import '../../services/usage_tracking_service.dart';
+import '../../services/web_version_checker.dart';
 import '../../widgets/hero_premium_loader.dart';
 import 'hero_settings_screen.dart';
+import 'hero_wallet_screen.dart';
 
 class HeroProfileTab extends StatefulWidget {
   const HeroProfileTab({super.key});
@@ -117,9 +122,11 @@ class _HeroProfileTabState extends State<HeroProfileTab>
     }
     setState(() => _loggingOut = true);
     try {
+      // FIX (WhatsApp-model presence migration, CTO mandate): removed
+      // 'isOnline'/'status' from this Firestore write — presence lives
+      // only in RTDB's online_heroes node now (removed below). Kept
+      // activeRideId/lastUpdated since those aren't presence fields.
       await FirebaseFirestore.instance.collection('heroes').doc(user.uid).set({
-        'isOnline': false,
-        'status': 'offline',
         'activeRideId': null,
         'lastUpdated': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true),);
@@ -152,6 +159,14 @@ class _HeroProfileTabState extends State<HeroProfileTab>
     );
   }
 
+  Future<void> _openWallet() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const HeroWalletScreen(),
+      ),
+    );
+  }
+
   Future<void> _openHelpSupport() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -160,8 +175,60 @@ class _HeroProfileTabState extends State<HeroProfileTab>
     );
   }
 
+  // FIX (per Nizam's recurring bug report — Hero "Check for Updates"
+  // still ended up downloading/updating a different app): this used to
+  // unconditionally launchUrl() the Hero APK release link, on web AND
+  // native alike. On the Hero PWA that meant tapping "Check for
+  // Updates" never actually checked anything — it just kicked the
+  // customer out to an external APK download every single time,
+  // completely bypassing the self-referential /version.json check that
+  // dashboard_screen.dart (customer) and super_admin_home_screen.dart
+  // (admin) already use for their own "Check for Updates" buttons. That
+  // inconsistency (this screen alone skipping the WebVersionChecker
+  // path) is what looked like "updating the wrong app": a web PWA user
+  // was being routed to a downloadable-APK flow that has nothing to do
+  // with the page they were actually running.
+  //
+  // Now mirrors the other two flavors exactly: on web, poll THIS tab's
+  // own same-origin /version.json (WebVersionChecker never touches any
+  // other app's URL) and clear-cache-and-reload in place if it differs;
+  // only on native (where version.json isn't served) does it fall back
+  // to the GitHub APK link, and even then always via
+  // UpdateService().fallbackApkUrl('hero') — never a hardcoded/cross-
+  // copied variant string.
   Future<void> _openHeroUpdateUrl() async {
     final messenger = ScaffoldMessenger.of(context);
+
+    if (kIsWeb) {
+      await WebVersionChecker.instance.checkNow();
+      if (!mounted) return;
+
+      if (!WebVersionChecker.instance.isUpdateAvailable) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('You already have the latest version.'),
+            backgroundColor: Color(0xFF6C63FF),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Updating…'),
+          backgroundColor: Color(0xFF6C63FF),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      try {
+        await PwaCachePlatform().clearAndReload();
+      } catch (e) {
+        debugPrint('[HeroCheckUpdate] cache clear failed: $e');
+      }
+      return;
+    }
+
     final launched = await launchUrl(
       Uri.parse(UpdateService().fallbackApkUrl('hero')),
       mode: LaunchMode.externalApplication,
@@ -177,10 +244,16 @@ class _HeroProfileTabState extends State<HeroProfileTab>
     }
   }
 
-  // T2: Direct APK download — CEO drops hero_app.apk into Firebase hosting
-  // and runs `firebase deploy`. This URL auto-serves the latest build.
+  // FIX (per Nizam's bug report): this used to point at a stale/dead
+  // Firebase Hosting URL (my-allin1.web.app/hero_app.apk) that nobody
+  // has deployed to in this session — a totally different, unmaintained
+  // path from the canonical GitHub Releases source every other download
+  // button in the app already uses (UpdateService.fallbackApkUrl).
+  // Switched to the same canonical source for consistency and because
+  // the old URL almost certainly 404s or serves a stale build.
   Future<void> _downloadHeroApp() async {
-    const apkUrl = 'https://my-allin1.web.app/hero_app.apk';
+    unawaited(UsageTrackingService.instance.trackApkDownload('hero'));
+    final apkUrl = UpdateService().fallbackApkUrl('hero');
     final messenger = ScaffoldMessenger.of(context);
     final launched = await launchUrl(
       Uri.parse(apkUrl),
@@ -254,11 +327,37 @@ class _HeroProfileTabState extends State<HeroProfileTab>
                           ),
                         ),
                          const SizedBox(height: 12),
+                         // Revenue Master Plan: prepaid commission wallet
+                         // entry point -- recharge here, or check balance
+                         // before it stops incoming trip requests.
                          SizedBox(
                            width: double.infinity,
                            child: ElevatedButton.icon(
                              style: ElevatedButton.styleFrom(
-                               backgroundColor: Color(0xFF6C63FF),
+                               backgroundColor: const Color(0xFFFF4FA3),
+                               foregroundColor: Colors.white,
+                               padding: const EdgeInsets.symmetric(vertical: 12),
+                               shape: RoundedRectangleBorder(
+                                 borderRadius: BorderRadius.circular(16),
+                               ),
+                             ),
+                             onPressed: _openWallet,
+                             icon: const Icon(Icons.account_balance_wallet_rounded),
+                             label: Text(
+                               'Hero Wallet',
+                               style: GoogleFonts.outfit(
+                                 fontSize: 12,
+                                 fontWeight: FontWeight.w800,
+                               ),
+                             ),
+                           ),
+                         ),
+                         const SizedBox(height: 8),
+                         SizedBox(
+                           width: double.infinity,
+                           child: ElevatedButton.icon(
+                             style: ElevatedButton.styleFrom(
+                               backgroundColor: const Color(0xFF6C63FF),
                                foregroundColor: Colors.white,
                                padding: const EdgeInsets.symmetric(vertical: 12),
                                shape: RoundedRectangleBorder(

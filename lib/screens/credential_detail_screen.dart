@@ -190,8 +190,9 @@ class _CredentialDetailScreenState extends State<CredentialDetailScreen> {
         title: Text(
           _isEditing ? 'Edit Credential' : 'Add Credential',
           style: GoogleFonts.outfit(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
             color: kText,
-            fontWeight: FontWeight.w600,
           ),
         ),
         actions: [

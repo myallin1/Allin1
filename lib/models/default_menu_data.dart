@@ -32,59 +32,59 @@ class DefaultMenuData {
         category: 'biriyani_rice',
         emoji: '🍗',
         isVeg: false,
-        tags: ['bestseller', 'popular']),
+        tags: ['bestseller', 'popular'],),
     DefaultMenuItem(
         id: 'mutton_biriyani',
         name: 'Mutton Biriyani',
         category: 'biriyani_rice',
         emoji: '🐐',
         isVeg: false,
-        tags: ['bestseller', 'premium']),
+        tags: ['bestseller', 'premium'],),
     DefaultMenuItem(
         id: 'egg_biriyani',
         name: 'Egg Biriyani',
         category: 'biriyani_rice',
         emoji: '🥚',
         isVeg: false,
-        tags: ['popular']),
+        tags: ['popular'],),
     DefaultMenuItem(
         id: 'veg_biriyani',
         name: 'Veg Biriyani',
         category: 'biriyani_rice',
         emoji: '🥕',
-        tags: ['popular']),
+        tags: ['popular'],),
     DefaultMenuItem(
         id: 'chicken_fried_rice',
         name: 'Chicken Fried Rice',
         category: 'biriyani_rice',
         emoji: '🍚',
-        isVeg: false),
+        isVeg: false,),
     DefaultMenuItem(
         id: 'veg_fried_rice',
         name: 'Veg Fried Rice',
         category: 'biriyani_rice',
-        emoji: '🍚'),
+        emoji: '🍚',),
     DefaultMenuItem(
         id: 'ghee_rice',
         name: 'Ghee Rice',
         category: 'biriyani_rice',
         emoji: '🍚',
-        tags: ['popular']),
+        tags: ['popular'],),
     DefaultMenuItem(
         id: 'lemon_rice',
         name: 'Lemon Rice',
         category: 'biriyani_rice',
-        emoji: '🍋'),
+        emoji: '🍋',),
     DefaultMenuItem(
         id: 'curd_rice',
         name: 'Curd Rice',
         category: 'biriyani_rice',
-        emoji: '🥣'),
+        emoji: '🥣',),
     DefaultMenuItem(
         id: 'tamarind_rice',
         name: 'Tamarind Rice / Puliyodharai',
         category: 'biriyani_rice',
-        emoji: '🍛'),
+        emoji: '🍛',),
 
     // ── Parotta & Breads ────────────────────────────────────────
     DefaultMenuItem(
@@ -92,47 +92,47 @@ class DefaultMenuData {
         name: 'Plain Parotta',
         category: 'parotta_bread',
         emoji: '🫓',
-        tags: ['bestseller']),
+        tags: ['bestseller'],),
     DefaultMenuItem(
         id: 'malai_parotta',
         name: 'Malai Parotta',
         category: 'parotta_bread',
         emoji: '🫓',
-        tags: ['popular']),
+        tags: ['popular'],),
     DefaultMenuItem(
         id: 'chilli_parotta',
         name: 'Chilli Parotta',
         category: 'parotta_bread',
         emoji: '🌶️',
         isVeg: false,
-        tags: ['popular']),
+        tags: ['popular'],),
     DefaultMenuItem(
         id: 'kothu_parotta',
         name: 'Kothu Parotta (Chicken)',
         category: 'parotta_bread',
         emoji: '🍛',
         isVeg: false,
-        tags: ['bestseller']),
+        tags: ['bestseller'],),
     DefaultMenuItem(
         id: 'kothu_parotta_veg',
         name: 'Kothu Parotta (Veg)',
         category: 'parotta_bread',
-        emoji: '🍛'),
+        emoji: '🍛',),
     DefaultMenuItem(
-        id: 'chapati', name: 'Chapati', category: 'parotta_bread', emoji: '🫓'),
+        id: 'chapati', name: 'Chapati', category: 'parotta_bread', emoji: '🫓',),
     DefaultMenuItem(
         id: 'naan_butter',
         name: 'Butter Naan',
         category: 'parotta_bread',
         emoji: '🫓',
-        tags: ['popular']),
+        tags: ['popular'],),
     DefaultMenuItem(
         id: 'naan_garlic',
         name: 'Garlic Naan',
         category: 'parotta_bread',
-        emoji: '🫓'),
+        emoji: '🫓',),
     DefaultMenuItem(
-        id: 'poori', name: 'Poori', category: 'parotta_bread', emoji: '🫓'),
+        id: 'poori', name: 'Poori', category: 'parotta_bread', emoji: '🫓',),
 
     // ── Curries & Gravies ───────────────────────────────────────
     DefaultMenuItem(
@@ -141,77 +141,77 @@ class DefaultMenuData {
         category: 'curry_gravy',
         emoji: '🍗',
         isVeg: false,
-        tags: ['bestseller', 'popular']),
+        tags: ['bestseller', 'popular'],),
     DefaultMenuItem(
         id: 'mutton_gravy',
         name: 'Mutton Gravy',
         category: 'curry_gravy',
         emoji: '🥩',
         isVeg: false,
-        tags: ['premium']),
+        tags: ['premium'],),
     DefaultMenuItem(
         id: 'chicken_65',
         name: 'Chicken 65',
         category: 'curry_gravy',
         emoji: '🍗',
         isVeg: false,
-        tags: ['bestseller', 'popular']),
+        tags: ['bestseller', 'popular'],),
     DefaultMenuItem(
         id: 'chilli_chicken',
         name: 'Chilli Chicken',
         category: 'curry_gravy',
         emoji: '🌶️',
         isVeg: false,
-        tags: ['popular']),
+        tags: ['popular'],),
     DefaultMenuItem(
         id: 'pepper_chicken',
         name: 'Pepper Chicken',
         category: 'curry_gravy',
         emoji: '🌶️',
-        isVeg: false),
+        isVeg: false,),
     DefaultMenuItem(
         id: 'fish_fry',
         name: 'Fish Fry / Meen Fry',
         category: 'curry_gravy',
         emoji: '🐟',
         isVeg: false,
-        tags: ['popular']),
+        tags: ['popular'],),
     DefaultMenuItem(
         id: 'prawn_fry',
         name: 'Prawn Fry',
         category: 'curry_gravy',
         emoji: '🦐',
         isVeg: false,
-        tags: ['premium']),
+        tags: ['premium'],),
     DefaultMenuItem(
         id: 'dal_tadka',
         name: 'Dal Tadka',
         category: 'curry_gravy',
-        emoji: '🥘'),
+        emoji: '🥘',),
     DefaultMenuItem(
         id: 'paneer_butter_masala',
         name: 'Paneer Butter Masala',
         category: 'curry_gravy',
         emoji: '🧈',
-        tags: ['bestseller', 'popular']),
+        tags: ['bestseller', 'popular'],),
     DefaultMenuItem(
         id: 'mushroom_gravy',
         name: 'Mushroom Gravy',
         category: 'curry_gravy',
-        emoji: '🍄'),
+        emoji: '🍄',),
     DefaultMenuItem(
         id: 'veg_kurma',
         name: 'Veg Kurma',
         category: 'curry_gravy',
-        emoji: '🥕'),
+        emoji: '🥕',),
     DefaultMenuItem(
         id: 'sambar',
         name: 'Sambar',
         category: 'curry_gravy',
         emoji: '🥘',
-        tags: ['popular']),
+        tags: ['popular'],),
     DefaultMenuItem(
-        id: 'rasam', name: 'Rasam', category: 'curry_gravy', emoji: '🍲'),
+        id: 'rasam', name: 'Rasam', category: 'curry_gravy', emoji: '🍲',),
 
     // ── Starters & Snacks ──────────────────────────────────────
     DefaultMenuItem(
@@ -220,51 +220,51 @@ class DefaultMenuData {
         category: 'starter_snack',
         emoji: '🍗',
         isVeg: false,
-        tags: ['popular']),
+        tags: ['popular'],),
     DefaultMenuItem(
         id: 'chicken_tikka',
         name: 'Chicken Tikka',
         category: 'starter_snack',
         emoji: '🥩',
         isVeg: false,
-        tags: ['popular']),
+        tags: ['popular'],),
     DefaultMenuItem(
         id: 'paneer_tikka',
         name: 'Paneer Tikka',
         category: 'starter_snack',
-        emoji: '🧀'),
+        emoji: '🧀',),
     DefaultMenuItem(
         id: 'gobi_manchurian',
         name: 'Gobi Manchurian',
         category: 'starter_snack',
         emoji: '🥦',
-        tags: ['popular']),
+        tags: ['popular'],),
     DefaultMenuItem(
         id: 'chilli_gobi',
         name: 'Chilli Gobi',
         category: 'starter_snack',
-        emoji: '🌶️'),
+        emoji: '🌶️',),
     DefaultMenuItem(
         id: 'baby_corn_manchurian',
         name: 'Baby Corn Manchurian',
         category: 'starter_snack',
-        emoji: '🌽'),
+        emoji: '🌽',),
     DefaultMenuItem(
         id: 'samosa',
         name: 'Samosa',
         category: 'starter_snack',
         emoji: '🥟',
-        tags: ['popular']),
+        tags: ['popular'],),
     DefaultMenuItem(
         id: 'cutlet',
         name: 'Cutlet (Veg)',
         category: 'starter_snack',
-        emoji: '🥟'),
+        emoji: '🥟',),
     DefaultMenuItem(
         id: 'bajji_mixture',
         name: 'Bajji / Mixture',
         category: 'starter_snack',
-        emoji: '🍟'),
+        emoji: '🍟',),
 
     // ── Beverages ───────────────────────────────────────────────
     DefaultMenuItem(
@@ -272,40 +272,40 @@ class DefaultMenuData {
         name: 'Tea / Chai',
         category: 'beverage',
         emoji: '☕',
-        tags: ['bestseller']),
+        tags: ['bestseller'],),
     DefaultMenuItem(
         id: 'coffee',
         name: 'Coffee',
         category: 'beverage',
         emoji: '☕',
-        tags: ['bestseller']),
+        tags: ['bestseller'],),
     DefaultMenuItem(
         id: 'butter_milk',
         name: 'Butter Milk / Neer Mor',
         category: 'beverage',
         emoji: '🥛',
-        tags: ['popular']),
+        tags: ['popular'],),
     DefaultMenuItem(
         id: 'lassi',
         name: 'Lassi (Sweet / Salt)',
         category: 'beverage',
-        emoji: '🥤'),
+        emoji: '🥤',),
     DefaultMenuItem(
         id: 'soda',
         name: 'Soda / Lime Soda',
         category: 'beverage',
-        emoji: '🥤'),
+        emoji: '🥤',),
     DefaultMenuItem(
         id: 'fruit_juice',
         name: 'Fruit Juice',
         category: 'beverage',
-        emoji: '🧃'),
+        emoji: '🧃',),
     DefaultMenuItem(
         id: 'water_bottle',
         name: 'Water Bottle',
         category: 'beverage',
         emoji: '💧',
-        tags: ['popular']),
+        tags: ['popular'],),
 
     // ── Desserts ────────────────────────────────────────────────
     DefaultMenuItem(
@@ -313,20 +313,20 @@ class DefaultMenuData {
         name: 'Payasam / Kheer',
         category: 'dessert',
         emoji: '🍮',
-        tags: ['popular']),
+        tags: ['popular'],),
     DefaultMenuItem(
         id: 'gulab_jamun',
         name: 'Gulab Jamun',
         category: 'dessert',
         emoji: '🍡',
-        tags: ['bestseller']),
+        tags: ['bestseller'],),
     DefaultMenuItem(
-        id: 'ice_cream', name: 'Ice Cream', category: 'dessert', emoji: '🍦'),
+        id: 'ice_cream', name: 'Ice Cream', category: 'dessert', emoji: '🍦',),
     DefaultMenuItem(
         id: 'jigarthanda',
         name: 'Jigarthanda',
         category: 'dessert',
-        emoji: '🥤'),
+        emoji: '🥤',),
   ];
 
   // ── Category buckets for display ─────────────────────────────

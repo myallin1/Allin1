@@ -17,6 +17,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/credential.dart' hide Timestamp;
 import '../../services/admin_credential_service.dart';
 import '../../services/encryption_service.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 // ── Theme Colors ─────────────────────────────────────────────
 const Color kBg = Color(0xFF08080F);
@@ -116,7 +117,7 @@ class _CredentialsAdminScreenState extends State<CredentialsAdminScreen>
         backgroundColor: kSurface,
         title: Text(
           'Credential Management',
-          style: GoogleFonts.poppins(color: kText),
+          style: GoogleFonts.outfit(color: kText),
         ),
         centerTitle: true,
         bottom: TabBar(
@@ -217,7 +218,7 @@ class _CredentialsAdminScreenState extends State<CredentialsAdminScreen>
           const SizedBox(height: 8),
           Text(
             value,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.outfit(
               color: kText,
               fontSize: 24,
               fontWeight: FontWeight.bold,
@@ -359,7 +360,7 @@ class _UserCredentialsViewState extends State<_UserCredentialsView> {
       stream: FirebaseFirestore.instance
           .collection('credentials')
           .orderBy('createdAt', descending: true)
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -851,7 +852,7 @@ class _AdminManagedViewState extends State<_AdminManagedView> {
       stream: FirebaseFirestore.instance
           .collection('adminCredentials')
           .orderBy('createdAt', descending: true)
-          .snapshots(),
+          .trackedSnapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -1583,7 +1584,7 @@ class _UserAssignmentsViewState extends State<_UserAssignmentsView> {
   Widget _buildAssignmentsTable() {
     return StreamBuilder<QuerySnapshot>(
       stream:
-          FirebaseFirestore.instance.collection('adminCredentials').snapshots(),
+          FirebaseFirestore.instance.collection('adminCredentials').trackedSnapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(

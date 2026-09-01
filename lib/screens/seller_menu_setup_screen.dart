@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -5,17 +6,17 @@ import '../models/default_menu_data.dart';
 import '../models/food_models.dart';
 import '../services/food_seller_service.dart';
 
-const Color _bg = Color(0xFF08080F);
-const Color _surface = Color(0xFF0D0D18);
-const Color _card = Color(0xFF141420);
-const Color _card2 = Color(0xFF1A1A28);
+const Color _bg = Color(0xFFF7FAF8);
+const Color _surface = Color(0xFFFFFFFF);
+const Color _card = Color(0xFFFFFFFF);
+const Color _card2 = Color(0xFFF1F6F3);
 const Color _teal = Color(0xFF11998E);
 const Color _tealLight = Color(0xFF38EF7D);
-const Color _gold = Color(0xFFF5C542);
-const Color _text = Color(0xFFEEEEF5);
-const Color _muted = Color(0xFF7777A0);
-const Color _border = Color(0x267B6FE0);
-const Color _red = Color(0xFFFF5252);
+const Color _gold = Color(0xFFC79200);
+const Color _text = Color(0xFF1A1A1A);
+const Color _muted = Color(0xFF6B7280);
+const Color _border = Color(0x1A11998E);
+const Color _red = Color(0xFFD64545);
 
 class _MenuItemEntry {
   final DefaultMenuItem defaultItem;
@@ -24,8 +25,7 @@ class _MenuItemEntry {
 
   _MenuItemEntry({
     required this.defaultItem,
-    this.enabled = false,
-  }) : priceController = TextEditingController();
+  }) : enabled = false, priceController = TextEditingController();
 }
 
 class SellerMenuSetupScreen extends StatefulWidget {
@@ -35,6 +35,12 @@ class SellerMenuSetupScreen extends StatefulWidget {
 
   @override
   State<SellerMenuSetupScreen> createState() => _SellerMenuSetupScreenState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('sellerId', sellerId));
+  }
 }
 
 class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
@@ -159,12 +165,11 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
             name: entry.defaultItem.name,
             price: price,
             isVeg: entry.defaultItem.isVeg,
-            isAvailable: true,
             tags: entry.defaultItem.tags,
             categoryName: DefaultMenuData.categoryLabels[entry.defaultItem.category] ?? entry.defaultItem.category,
             createdAt: DateTime.now(),
             updatedAt: DateTime.now(),
-          ));
+          ),);
         }
       }
 
@@ -312,7 +317,7 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: Container(
+          child: DecoratedBox(
             decoration: BoxDecoration(
               color: _card,
               borderRadius: BorderRadius.circular(16),
@@ -350,7 +355,7 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
                           Container(
                             margin: const EdgeInsets.only(right: 8),
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
+                                horizontal: 8, vertical: 2,),
                             decoration: BoxDecoration(
                               color: _teal.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(8),
@@ -375,7 +380,7 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
                   ),
                 ),
                 if (isExpanded)
-                  ...items.map((entry) => _buildMenuItemTile(entry)),
+                  ...items.map(_buildMenuItemTile),
               ],
             ),
           ),
@@ -444,7 +449,7 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
                 Row(
                   children: [
                     Text(entry.defaultItem.emoji,
-                        style: const TextStyle(fontSize: 18)),
+                        style: const TextStyle(fontSize: 18),),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -465,7 +470,7 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
                       Container(
                         margin: const EdgeInsets.only(right: 6),
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 1),
+                            horizontal: 5, vertical: 1,),
                         decoration: BoxDecoration(
                           color: _red.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4),
@@ -563,7 +568,7 @@ class _SellerMenuSetupScreenState extends State<SellerMenuSetupScreen> {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: _surface,
         border: Border(top: BorderSide(color: _border)),
       ),

@@ -5,17 +5,58 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+    <!-- FIX (Play Store pre-submission blocker): ACCESS_BACKGROUND_LOCATION
+         removed — grep confirmed no code anywhere requests "always"/background
+         location (permission_service.dart only ever asks for foreground
+         location), so this permission was declared but unused across all 3
+         flavors. Keeping it would have required completing Play Console's
+         Background Location declaration form (justification + video) for a
+         permission nothing in the app actually uses. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.DISABLE_KEYGUARD"/>
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+    <!-- TASK 1 (Aug 8 2026): required for
+         Permission.ignoreBatteryOptimizations in
+         hero_ride_notification_service.dart's
+         requestBatteryOptimizationExemption() — without this manifest
+         entry, permission_handler's request silently fails on real
+         devices (works fine on some emulators, which is why this was
+         easy to miss). Lets the Hero app ask the OS not to freeze it in
+         the background, so killed/backgrounded full-screen-intent ride
+         alerts can still wake the screen. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <!-- AUDIT FIX: Required for full-screen notification on lock screen -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <!-- NEW (CTO mandate — Hero app "You are Online" foreground service,
+         FCM Layer 2 alternative Option D): Android 14+ requires a
+         specific foreground-service-type permission alongside the
+         generic one above. "location" is the accurate/defensible type
+         here — while a hero is Online this service exists precisely to
+         keep the app process (and its ongoing GPS position uploads to
+         RTDB online_heroes/{uid}) alive in the background, not an
+         unrelated use dressed up as location. Only the Hero flavor
+         actually starts this service (see hero_foreground_service.dart)
+         — Customer/Seller/Admin builds declare the permission
+         (harmless, unused) since this manifest is shared across all 4
+         flavors. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <!-- NOT vestigial: required by AppUpdateChecker/update_service.dart's
+         one-tap self-update flow (OpenFilex.open() on a downloaded APK from
+         GitHub Releases needs this to launch Android's package installer).
+         Keep alongside the FileProvider below, which the installer intent
+         also depends on. If this build is ever distributed through Play
+         Store instead of sideloaded, note that Play Store already handles
+         updates itself — this self-download-and-install path is only for
+         the sideloaded/direct-APK distribution channel and should probably
+         be disabled for a Play-distributed build, since Play's policies
+         discourage apps installing other APKs outside Play's own update
+         mechanism. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
     <application
@@ -57,7 +98,24 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Makes Allin1 appear in Android's share sheet for plain
+                 text. A location shared from WhatsApp or Google Maps
+                 arrives here as a text/plain message containing a maps
+                 link; the app reads the coordinates straight out of it
+                 (see location_link_parser.dart) and asks the customer
+                 whether it's the pickup or the drop. The PWA gets the
+                 same behaviour through "share_target" in
+                 web/manifest.json. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
         </activity>
+
+
+
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

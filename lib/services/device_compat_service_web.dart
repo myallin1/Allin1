@@ -1,21 +1,31 @@
 import 'package:flutter/foundation.dart';
 
 import 'device_compat_service.dart';
+import 'update_service.dart';
 
-const String _customerArm64Url =
-    'https://github.com/myallin1/Allin1-update-release/releases/latest/download/customer-arm64.apk';
-const String _customerArmeabiV7aUrl =
-    'https://github.com/myallin1/Allin1-update-release/releases/latest/download/customer-armeabi-v7a.apk';
-const String _heroArm64Url =
-    'https://github.com/myallin1/Allin1-update-release/releases/latest/download/hero-arm64.apk';
-const String _heroArmeabiV7aUrl =
-    'https://github.com/myallin1/Allin1-update-release/releases/latest/download/hero-armeabi-v7a.apk';
+// FIX (root cause of the web "download the app" button 404'ing / "the
+// GitHub link shows the app isn't there"): these used to point at
+// architecture-split filenames (customer-arm64.apk,
+// customer-armeabi-v7a.apk, etc.) that were never actually uploaded to
+// the release. The real release only ever contains one universal APK
+// per app — allin1-customer.apk / allin1-hero.apk. Since architecture
+// detection below always resolves to CpuArchitecture.universal anyway
+// (see _detectProfile), both the "primary" and "universal" slots now
+// point at the same real, working URL.
+// SINGLE SOURCE OF TRUTH (Aug 17 2026 — Nizam: "dowload source git
+// orey place ah than irukanum"). These were two more hardcoded copies of
+// the release URLs. Every APK link in the app now resolves through
+// UpdateService, so changing the release naming is a one-file edit
+// instead of a hunt across five files — which is exactly how
+// landing_page.dart ended up pointing at a filename that did not exist.
+const String _customerApkUrl = UpdateService.customerApkUrl;
+const String _heroApkUrl = UpdateService.heroApkUrl;
 
 Future<DeviceCompatProfile> detectCustomerApkProfile() async {
   return _detectProfile(
     appVariant: 'customer',
-    arm64Url: _customerArm64Url,
-    universalUrl: _customerArmeabiV7aUrl,
+    arm64Url: _customerApkUrl,
+    universalUrl: _customerApkUrl,
     labelPrefix: 'Customer',
   );
 }
@@ -23,8 +33,8 @@ Future<DeviceCompatProfile> detectCustomerApkProfile() async {
 Future<DeviceCompatProfile> detectHeroApkProfile() async {
   return _detectProfile(
     appVariant: 'hero',
-    arm64Url: _heroArm64Url,
-    universalUrl: _heroArmeabiV7aUrl,
+    arm64Url: _heroApkUrl,
+    universalUrl: _heroApkUrl,
     labelPrefix: 'Hero',
   );
 }

@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.njtech.allin1",
+      "sha256_cert_fingerprints": [
+        "REPLACE_ME_MANUAL_STEP_REQUIRED_SEE_NOTE_BELOW"
+      ]
+    }
+  }
+]

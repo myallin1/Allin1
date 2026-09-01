@@ -206,6 +206,8 @@ class _FareManagementScreenState extends State<FareManagementScreen> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
+                  _buildInactiveNotice(),
+                  const SizedBox(height: 20),
                   _buildFareCard(
                     title: 'Bike Taxi',
                     icon: Icons.motorcycle,
@@ -242,6 +244,69 @@ class _FareManagementScreenState extends State<FareManagementScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  // ── MVP notice ────────────────────────────────────────────────
+  // Per Nizam's explicit product decision, fare math for this MVP
+  // release is hardcoded in lib/config/fare_rates.dart and is
+  // deliberately NOT Firestore-backed (saves a DB read on every fare
+  // calculation; rates don't change often enough to justify the
+  // cost). This screen still writes to settings/ride_fares in
+  // Firestore, but nothing in the app reads that document to compute
+  // a fare anymore, so edits made here currently have NO EFFECT on
+  // what customers are charged. Kept in the nav (not deleted) because
+  // a future v2.0 may reintroduce a Firestore-driven pricing engine
+  // that reads this same document — at that point this notice should
+  // come out.
+  Widget _buildInactiveNotice() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _secondary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _secondary, width: 1.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: _secondary, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'This screen is currently INACTIVE',
+                  style: GoogleFonts.outfit(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: _text,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Fares for this MVP release are hardcoded in the app '
+                  '(lib/config/fare_rates.dart), not read from Firestore, '
+                  'to save database costs. Saving changes here updates '
+                  'settings/ride_fares in Firestore, but the app no longer '
+                  'reads that document to price rides — so edits made here '
+                  'have NO EFFECT on what customers or heroes see. A future '
+                  'v2.0 Firestore-driven pricing engine may reactivate this '
+                  'screen; until then, change rates by editing fare_rates.dart '
+                  'and shipping a new build.',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12.5,
+                    color: _muted,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -284,10 +349,12 @@ class _FareManagementScreenState extends State<FareManagementScreen> {
                   child: Icon(icon, color: _secondary, size: 24),
                 ),
                 const SizedBox(width: 12),
+                // FIX (UI standardization, Aug 11 2026): section headers
+                // are 16sp app-wide, distinct from 18sp app-bar titles.
                 Text(
                   '$emoji $title',
                   style: GoogleFonts.outfit(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: _text,
                   ),

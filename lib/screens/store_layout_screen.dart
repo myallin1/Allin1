@@ -3,11 +3,13 @@
 // Premium Dark/Pink theme — NJ TECH Super App — May 2026
 // ================================================================
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'order_tracking_screen.dart'; // Task 3
+import 'order_tracking_screen.dart';
+import 'package:erode_superapp/widgets/cached_cloud_image.dart'; // Task 3
 
 // ── Brand tokens (mirrors dashboard) ─────────────────────────────
 const _kBg     = Color(0xFF0D0B1A);
@@ -148,10 +150,16 @@ const _products = <String, List<_Product>>{
 // ================================================================
 class StoreLayoutScreen extends StatefulWidget {
   final String storeType; // 'food' | 'grocery'
-  const StoreLayoutScreen({super.key, required this.storeType});
+  const StoreLayoutScreen({required this.storeType, super.key});
 
   @override
   State<StoreLayoutScreen> createState() => _StoreLayoutScreenState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty('storeType', storeType));
+  }
 }
 
 class _StoreLayoutScreenState extends State<StoreLayoutScreen> {
@@ -183,7 +191,7 @@ class _StoreLayoutScreenState extends State<StoreLayoutScreen> {
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.dark,
-    ));
+    ),);
 
     return Scaffold(
       backgroundColor: _kBg,
@@ -193,16 +201,16 @@ class _StoreLayoutScreenState extends State<StoreLayoutScreen> {
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             _buildCategorySidebar(),
             Expanded(child: _buildProductGrid()),
-          ]),
+          ],),
         ),
-      ]),
+      ],),
       bottomNavigationBar: _cartCount > 0 ? _buildCartBar() : null,
     );
   }
 
   // ── App header ─────────────────────────────────────────────────
   Widget _buildHeader(BuildContext context) {
-    return Container(
+    return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [_kPink, _kPinkD],
@@ -216,7 +224,7 @@ class _StoreLayoutScreenState extends State<StoreLayoutScreen> {
           child: Row(children: [
             IconButton(
               icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                  color: Colors.white, size: 20),
+                  color: Colors.white, size: 20,),
               onPressed: () => Navigator.pop(context),
             ),
             Expanded(
@@ -225,11 +233,11 @@ class _StoreLayoutScreenState extends State<StoreLayoutScreen> {
                 Text(_title,
                     style: GoogleFonts.outfit(
                         color: Colors.white, fontSize: 18,
-                        fontWeight: FontWeight.w800)),
+                        fontWeight: FontWeight.w800,),),
                 Text('Fast delivery · Premium quality',
                     style: GoogleFonts.outfit(
-                        color: Colors.white70, fontSize: 11)),
-              ]),
+                        color: Colors.white70, fontSize: 11,),),
+              ],),
             ),
             // Cart badge
             Stack(clipBehavior: Clip.none, children: [
@@ -240,7 +248,7 @@ class _StoreLayoutScreenState extends State<StoreLayoutScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(Icons.shopping_bag_outlined,
-                    color: Colors.white, size: 22),
+                    color: Colors.white, size: 22,),
               ),
               if (_cartCount > 0)
                 Positioned(
@@ -248,17 +256,17 @@ class _StoreLayoutScreenState extends State<StoreLayoutScreen> {
                   child: Container(
                     width: 18, height: 18,
                     decoration: const BoxDecoration(
-                        color: Colors.white, shape: BoxShape.circle),
+                        color: Colors.white, shape: BoxShape.circle,),
                     child: Center(
                       child: Text('$_cartCount',
-                          style: TextStyle(
+                          style: const TextStyle(
                               color: _kPink, fontSize: 10,
-                              fontWeight: FontWeight.w900)),
+                              fontWeight: FontWeight.w900,),),
                     ),
                   ),
                 ),
-            ]),
-          ]),
+            ],),
+          ],),
         ),
       ),
     );
@@ -268,9 +276,9 @@ class _StoreLayoutScreenState extends State<StoreLayoutScreen> {
   Widget _buildCategorySidebar() {
     return Container(
       width: 90,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: _kCard,
-        border: Border(right: BorderSide(color: _kBorder, width: 1)),
+        border: Border(right: BorderSide(color: _kBorder)),
       ),
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -313,12 +321,12 @@ class _StoreLayoutScreenState extends State<StoreLayoutScreen> {
                     boxShadow: selected
                         ? [BoxShadow(
                             color: _kPink.withValues(alpha: 0.35),
-                            blurRadius: 12, spreadRadius: 1)]
+                            blurRadius: 12, spreadRadius: 1,),]
                         : [],
                   ),
                   child: Icon(cat.icon,
                       size: 22,
-                      color: selected ? _kPink : _kMuted),
+                      color: selected ? _kPink : _kMuted,),
                 ),
                 const SizedBox(height: 6),
                 Text(cat.label,
@@ -327,16 +335,16 @@ class _StoreLayoutScreenState extends State<StoreLayoutScreen> {
                     style: GoogleFonts.outfit(
                         fontSize: 10,
                         fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
-                        color: selected ? _kPink : _kMuted)),
+                        color: selected ? _kPink : _kMuted,),),
                 if (selected)
                   Container(
                     margin: const EdgeInsets.only(top: 4),
                     width: 18, height: 2,
                     decoration: BoxDecoration(
                         color: _kPink,
-                        borderRadius: BorderRadius.circular(1)),
+                        borderRadius: BorderRadius.circular(1),),
                   ),
-              ]),
+              ],),
             ),
           );
         },
@@ -353,7 +361,7 @@ class _StoreLayoutScreenState extends State<StoreLayoutScreen> {
         opacity: anim,
         child: SlideTransition(
           position: Tween<Offset>(
-              begin: const Offset(0.04, 0), end: Offset.zero)
+              begin: const Offset(0.04, 0), end: Offset.zero,)
               .animate(anim),
           child: child,
         ),
@@ -382,7 +390,7 @@ class _StoreLayoutScreenState extends State<StoreLayoutScreen> {
   Widget _buildCartBar() {
     final total = _cart.entries.fold<double>(0, (sum, e) {
       final p = _currentProducts.firstWhere(
-          (p) => p.name == e.key, orElse: () => const _Product('', '', '', 0));
+          (p) => p.name == e.key, orElse: () => const _Product('', '', '', 0),);
       return sum + p.price * e.value;
     });
     // Task 3: tap → Order Tracking screen
@@ -390,7 +398,7 @@ class _StoreLayoutScreenState extends State<StoreLayoutScreen> {
       onTap: () {
         final cartItems = _cart.entries.map((e) {
           final p = _currentProducts.firstWhere(
-              (p) => p.name == e.key, orElse: () => const _Product('', '', '', 0));
+              (p) => p.name == e.key, orElse: () => const _Product('', '', '', 0),);
           return CartItem(name: p.name, qty: e.value, price: p.price);
         }).where((ci) => ci.name.isNotEmpty).toList();
         Navigator.push<void>(context,
@@ -400,7 +408,7 @@ class _StoreLayoutScreenState extends State<StoreLayoutScreen> {
                 total: total,
                 storeType: widget.storeType,
               ),
-            ));
+            ),);
       },
       child: Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 16),
@@ -410,33 +418,33 @@ class _StoreLayoutScreenState extends State<StoreLayoutScreen> {
         borderRadius: BorderRadius.circular(18),
         boxShadow: [BoxShadow(
             color: _kPink.withValues(alpha: 0.35),
-            blurRadius: 16, offset: const Offset(0, 6))],
+            blurRadius: 16, offset: const Offset(0, 6),),],
       ),
       child: Row(children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(8)),
+              borderRadius: BorderRadius.circular(8),),
           child: Text('$_cartCount items',
               style: GoogleFonts.outfit(
                   color: Colors.white, fontSize: 12,
-                  fontWeight: FontWeight.w700)),
+                  fontWeight: FontWeight.w700,),),
         ),
         const Spacer(),
         Text('View Cart',
             style: GoogleFonts.outfit(
                 color: Colors.white, fontSize: 14,
-                fontWeight: FontWeight.w800)),
+                fontWeight: FontWeight.w800,),),
         const SizedBox(width: 8),
         Text('₹${total.toStringAsFixed(0)}',
             style: GoogleFonts.outfit(
                 color: Colors.white70, fontSize: 12,
-                fontWeight: FontWeight.w600)),
+                fontWeight: FontWeight.w600,),),
         const SizedBox(width: 4),
         const Icon(Icons.arrow_forward_ios_rounded,
-            color: Colors.white, size: 14),
-      ]),
+            color: Colors.white, size: 14,),
+      ],),
     ), // end Container
     ); // end GestureDetector
   }
@@ -450,10 +458,18 @@ class _ProductCard extends StatefulWidget {
   final int qty;
   final VoidCallback onAdd;
   const _ProductCard({required this.product, required this.qty,
-      required this.onAdd});
+      required this.onAdd,});
 
   @override
   State<_ProductCard> createState() => _ProductCardState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<_Product>('product', product));
+    properties.add(IntProperty('qty', qty));
+    properties.add(ObjectFlagProperty<VoidCallback>.has('onAdd', onAdd));
+  }
 }
 
 class _ProductCardState extends State<_ProductCard>
@@ -472,14 +488,14 @@ class _ProductCardState extends State<_ProductCard>
   @override
   Widget build(BuildContext context) {
     final p = widget.product;
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: _kCard,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _kBorder, width: 1),
+        border: Border.all(color: _kBorder),
         boxShadow: [
           BoxShadow(color: _kPink.withValues(alpha: 0.07),
-              blurRadius: 14, offset: const Offset(0, 4)),
+              blurRadius: 14, offset: const Offset(0, 4),),
         ],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -489,16 +505,16 @@ class _ProductCardState extends State<_ProductCard>
           child: AspectRatio(
             aspectRatio: 1.45, // wide enough to show image without crop
             child: Stack(children: [
-              Image.network(
+              CachedCloudImage(
                 p.imageUrl,
                 width: double.infinity,
                 height: double.infinity,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
+                errorBuilder: (_, __, ___) => ColoredBox(
                   color: _kCard,
                   child: Center(child: Text(
                       widget.product.name[0],
-                      style: const TextStyle(fontSize: 36, color: _kText))),
+                      style: const TextStyle(fontSize: 36, color: _kText),),),
                 ),
               ),
               // Tag badge
@@ -514,10 +530,10 @@ class _ProductCardState extends State<_ProductCard>
                     child: Text(p.tag,
                         style: const TextStyle(
                             color: Colors.white, fontSize: 8,
-                            fontWeight: FontWeight.w800)),
+                            fontWeight: FontWeight.w800,),),
                   ),
                 ),
-            ]),
+            ],),
           ),
         ),
         // Info
@@ -527,22 +543,22 @@ class _ProductCardState extends State<_ProductCard>
               maxLines: 2, overflow: TextOverflow.ellipsis,
               style: GoogleFonts.outfit(
                   fontSize: 12, fontWeight: FontWeight.w700,
-                  color: _kText)),
+                  color: _kText,),),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
           child: Text('₹${p.price.toStringAsFixed(0)}',
               style: GoogleFonts.outfit(
                   fontSize: 13, fontWeight: FontWeight.w800,
-                  color: _kPink)),
+                  color: _kPink,),),
         ),
         const Spacer(),
         // Add to cart button
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
           child: ScaleTransition(
-            scale: Tween<double>(begin: 1.0, end: 0.93).animate(
-                CurvedAnimation(parent: _pulse, curve: Curves.easeOut)),
+            scale: Tween<double>(begin: 1, end: 0.93).animate(
+                CurvedAnimation(parent: _pulse, curve: Curves.easeOut),),
             child: GestureDetector(
               onTap: _tap,
               child: AnimatedContainer(
@@ -561,33 +577,34 @@ class _ProductCardState extends State<_ProductCard>
                   boxShadow: widget.qty > 0
                       ? [BoxShadow(
                             color: _kPink.withValues(alpha: 0.4),
-                            blurRadius: 10, offset: const Offset(0, 3))]
+                            blurRadius: 10, offset: const Offset(0, 3),),]
                       : null,
                 ),
                 child: Row(mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                   if (widget.qty > 0) ...[
                     const Icon(Icons.check_rounded,
-                        color: Colors.white, size: 14),
+                        color: Colors.white, size: 14,),
                     const SizedBox(width: 4),
                     Text('${widget.qty} Added',
                         style: GoogleFonts.outfit(
                             color: Colors.white, fontSize: 11,
-                            fontWeight: FontWeight.w700)),
+                            fontWeight: FontWeight.w700,),),
                   ] else ...[
-                    Icon(Icons.add_rounded, color: _kPink, size: 14),
+                    const Icon(Icons.add_rounded, color: _kPink, size: 14),
                     const SizedBox(width: 4),
                     Text('Add',
                         style: GoogleFonts.outfit(
                             color: _kPink, fontSize: 11,
-                            fontWeight: FontWeight.w700)),
+                            fontWeight: FontWeight.w700,),),
                   ],
-                ]),
+                ],),
               ),
             ),
           ),
         ),
-      ]),
+      ],),
     );
   }
 }
+

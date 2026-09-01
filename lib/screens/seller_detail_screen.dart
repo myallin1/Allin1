@@ -3,13 +3,49 @@
 // Seller details with product menu and cart integration
 // ================================================================
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
+// GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../services/auth_prompt_service.dart';
+import '../services/auth_service.dart';
 import '../services/cart_service.dart';
 import '../services/category_gateway_service.dart';
+import '../services/service_request_service.dart';
+import '../services/theme_service.dart';
+import '../widgets/cached_cloud_image.dart';
 import '../widgets/product_card.dart';
+import 'custom_hotel_view_screen.dart';
+import 'food_checkout_screen.dart';
+import 'service_request_tracking_screen.dart';
+
+/// Reusing service_requests (rather than a separate food_orders
+/// hero-assignment pipeline) — see the decision in the seller
+/// home-kitchen / catalog-checkout work: same proven broadcast-to-all-
+/// eligible-heroes mechanism as hero_booking / grocery_order /
+/// custom_food_order, no separate admin dispatch or tracking screen
+/// needed to build.
+const String kCatalogFoodOrderRequestType = 'catalog_food_order';
+
+// ── Brand palette (Aug 20 2026 — Global Food Theme Overhaul) ───────
+// This screen was the last DARK-themed screen in the customer food
+// flow (0xFF0A0A12 scaffold etc.) — recolored to the same premium
+// 'Pure White + Vibrant Hot Pink' brand as custom_food_order_screen.
+const Color _kPink = Color(0xFFFF4FA3);
+const Color _kPinkDark = Color(0xFFBE2A7A);
+const Color _kBg = Color(0xFFFFFFFF);
+const Color _kSurface = Color(0xFFF8F8FF);
+const Color _kCard2 = Color(0xFFF0F0FA);
+const Color _kText = Color(0xFF1A1A2E);
+const Color _kMuted = Color(0xFF9999BB);
+const Color _kBorder = Color(0xFFEEEEF5);
+const Color _kGreen = Color(0xFF00C853);
+const Color _kRed = Color(0xFFFF5252);
 
 class SellerDetailScreen extends StatefulWidget {
   final Map<String, dynamic> seller;
@@ -39,6 +75,15 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
   final CartService _cart = CartService();
   int _cartItemCount = 0;
 
+  // FIX (Aug 20 2026 — audit Task 4, custom-food routing): whether this
+  // seller also maintains a Custom-Hotel menu (custom_hotels/{sellerId}
+  // with visible items). When true, the seller's custom food renders
+  // HERE — inside their own shop menu — and ONLY here; the duplicated
+  // global "Custom Hotels" grids were removed from food_hub_screen.dart
+  // and custom_food_order_screen.dart.
+  bool _hasCustomMenu = false;
+  String _customHotelName = '';
+
   @override
   void initState() {
     super.initState();
@@ -67,6 +112,36 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
       final products = await CategoryGatewayService()
           .loadSellerProducts(sellerId, widget.category);
 
+      // FIX (Aug 20 2026 — audit Task 4): detect whether this seller
+      // also runs a Custom-Hotel menu, so it can render INSIDE this
+      // shop page (and nowhere else). One-time read, not a listener;
+      // deliberately best-effort — a failure here must never break the
+      // main menu load below.
+      try {
+        final hotelSnap = await FirebaseFirestore.instance
+            .collection('custom_hotels')
+            .doc(sellerId)
+            .get();
+        if (hotelSnap.exists) {
+          final visibleItems = await FirebaseFirestore.instance
+              .collection('custom_hotels')
+              .doc(sellerId)
+              .collection('items')
+              .where('isVisible', isEqualTo: true)
+              .limit(1)
+              .get();
+          if (visibleItems.docs.isNotEmpty && mounted) {
+            setState(() {
+              _hasCustomMenu = true;
+              _customHotelName =
+                  (hotelSnap.data()?['hotelName'] as String?)?.trim() ?? '';
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint('[SellerDetailScreen] custom-menu probe skipped: $e');
+      }
+
       if (mounted) {
         setState(() {
           _products = products;
@@ -89,7 +164,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
     final isOpen = _isOpen();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A12),
+      backgroundColor: _kBg,
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           return [
@@ -98,11 +173,11 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
         },
         body: _isLoading
             ? const Center(
-                child: CircularProgressIndicator(color: Color(0xFFFFBB00)),
+                child: CircularProgressIndicator(color: _kPink),
               )
             : _error != null
                 ? _buildErrorState()
-                : _products.isEmpty
+                : _products.isEmpty && !_hasCustomMenu
                     ? _buildEmptyState()
                     : _buildProductList(),
       ),
@@ -130,6 +205,29 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
         ),
         onPressed: () => Navigator.pop(context),
       ),
+      // NEW (Aug 19 2026 — WhatsApp deep link share): lets a customer OR
+      // the seller themselves (this screen has no role gating — a seller
+      // viewing their own shop hits the same code path) share a link that
+      // opens straight to this shop, in the app if installed or the PWA
+      // otherwise. Matches the existing leading-button's pill styling.
+      actions: [
+        IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.ios_share_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
+          ),
+          onPressed: () => _shareShop(shopName),
+        ),
+        const SizedBox(width: 8),
+      ],
       flexibleSpace: FlexibleSpaceBar(
         background: Stack(
           fit: StackFit.expand,
@@ -160,7 +258,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
                     style: GoogleFonts.outfit(
                       fontSize: 24,
                       fontWeight: FontWeight.w800,
-                      color: const Color(0xFFEEEEF5),
+                      color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -172,7 +270,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
                         rating.toStringAsFixed(1),
                         style: GoogleFonts.outfit(
                           fontSize: 14,
-                          color: const Color(0xFFEEEEF5),
+                          color: Colors.white,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -210,15 +308,44 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
     );
   }
 
+  // ── Share (Aug 19 2026 — WhatsApp deep link) ────────────────
+  // Deep link points at Firebase's DEFAULT hosting domain for the
+  // customer target (my-allin1.web.app — see .firebaserc/firebase.json,
+  // "customer" -> "my-allin1"). Path is parsed by
+  // dashboard_screen.dart's _parseDeepLinkPath() on both web
+  // (Uri.base.path) and native (app_links uriLinkStream) cold/warm start.
+  void _shareShop(String shopName) {
+    final sellerId = widget.seller['id'] as String? ?? '';
+    if (sellerId.isEmpty) return;
+    final deepLink = 'https://my-allin1.web.app/shop/$sellerId';
+    SharePlus.instance.share(
+      ShareParams(
+        text: 'Order from $shopName on MyAllin1 Erode! 🍽️\n$deepLink',
+      ),
+    );
+  }
+
   // ── Product List ────────────────────────────────────────────
   Widget _buildProductList() {
     final productsByCategory = _groupProductsByCategory();
+    final hasCustomMenu = _hasCustomMenu;
+    // FIX (Aug 20 2026 — audit Task 4): the custom-menu card occupies
+    // the first list slot when this seller runs a Custom-Hotel menu.
+    final headerCount = hasCustomMenu ? 1 : 0;
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: productsByCategory.length,
+      itemCount: productsByCategory.length + headerCount,
       itemBuilder: (context, i) {
-        final category = productsByCategory.keys.elementAt(i);
+        if (hasCustomMenu && i == 0) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 20),
+            child: _buildCustomMenuCard(),
+          );
+        }
+
+        final listIndex = i - headerCount;
+        final category = productsByCategory.keys.elementAt(listIndex);
         final products = productsByCategory[category]!;
 
         return Column(
@@ -232,7 +359,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
                 style: GoogleFonts.outfit(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: const Color(0xFFEEEEF5),
+                  color: _kText,
                 ),
               ),
             ),
@@ -261,6 +388,119 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
     );
   }
 
+  // ── Custom Menu Card (Aug 20 2026 — audit Task 4) ───────────
+  // The seller's custom food renders ONLY here — inside their own shop
+  // menu — and nowhere else. The global "Custom Hotels" grids were
+  // removed from food_hub_screen.dart / custom_food_order_screen.dart
+  // so a seller's dishes can never appear in two places. Tapping opens
+  // CustomHotelViewScreen (the same screen the removed grids pushed),
+  // so the existing custom_hotel_order checkout pipeline is untouched.
+  Widget _buildCustomMenuCard() {
+    final sellerId = widget.seller['id'] as String? ?? '';
+    final title = _customHotelName.isNotEmpty ? _customHotelName : widget.seller['shopName'] as String? ?? 'This shop';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CustomHotelViewScreen(
+              hotelId: sellerId,
+              hotelName: title,
+            ),
+          ),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [_kPink, _kPinkDark],
+            ),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                // UI polish (3D Pink Icons pass) — same theme-gated swap
+                // pattern already used in dashboard_screen.dart/
+                // custom_food_order_screen.dart: falls back to the flat
+                // Material icon whenever the pink 3D icon theme isn't
+                // active, so nothing changes for users on other themes.
+                child: Builder(
+                  builder: (context) {
+                    final iconTheme = context.watch<ThemeService>().iconThemeKey;
+                    if (iconTheme == 'photo_realistic') {
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: CachedCloudImage(
+                          'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=200&q=80',
+                          width: 26,
+                          height: 26,
+                          fit: BoxFit.cover,
+                          cacheWidth: 104,
+                          errorWidget: const Icon(Icons.storefront_rounded, color: Colors.white, size: 26),
+                        ),
+                      );
+                    }
+                    final isPink = iconTheme == 'pink_white_3d';
+                    if (!isPink) {
+                      return const Icon(Icons.storefront_rounded, color: Colors.white, size: 26);
+                    }
+                    return Image.asset(
+                      'assets/images/pink_icons/food_1_a.webp',
+                      width: 26,
+                      height: 26,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) =>
+                          const Icon(Icons.storefront_rounded, color: Colors.white, size: 26),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.outfit(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Custom Menu · Tap to view live menu & order',
+                      style: GoogleFonts.outfit(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right_rounded, color: Colors.white, size: 26),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // ── Group Products by Category ──────────────────────────────
   Map<String, List<Map<String, dynamic>>> _groupProductsByCategory() {
     final Map<String, List<Map<String, dynamic>>> grouped = {};
@@ -285,11 +525,23 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
       return;
     }
 
+    // PHASE 3 (Aug 17 2026): charge the OFFER price when the seller has
+    // set one. This is the load-bearing half of the offer feature — a
+    // discount the customer can see but is not actually charged is worse
+    // than no discount at all, because they find out at checkout.
+    //
+    // Guarded on `< base`, matching the seller-side validation, so a
+    // malformed or stale discountedPrice can never RAISE the price.
+    final basePrice = (product['price'] as num?)?.toDouble() ?? 0.0;
+    final offer = (product['discountedPrice'] as num?)?.toDouble();
+    final effectivePrice =
+        (offer != null && offer > 0 && offer < basePrice) ? offer : basePrice;
+
     final item = CartItem(
       id: product['id'] as String? ?? '',
       sellerId: sellerId,
       name: product['name'] as String? ?? 'Unknown',
-      price: (product['price'] as num?)?.toDouble() ?? 0.0,
+      price: effectivePrice,
       image: product['image'] as String?,
       category: product['category'] as String?,
     );
@@ -318,32 +570,32 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A2A),
+        backgroundColor: _kBg,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
         title: const Text(
           '🛒 Clear Cart?',
           style: TextStyle(
-            color: Color(0xFFEEEEF5),
+            color: _kText,
             fontWeight: FontWeight.w700,
           ),
         ),
         content: Text(
           'Your cart has items from another shop. Clear existing cart to add items from $sellerName?',
-          style: const TextStyle(color: Color(0xFF7777A0)),
+          style: const TextStyle(color: _kMuted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text(
               'Cancel',
-              style: TextStyle(color: Color(0xFF7777A0)),
+              style: TextStyle(color: _kMuted),
             ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF5252),
+              backgroundColor: _kRed,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -367,10 +619,10 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
   Widget _buildCartButton() {
     return FloatingActionButton.extended(
       onPressed: _showCartBottomSheet,
-      backgroundColor: const Color(0xFFFFBB00),
+      backgroundColor: _kPink,
       icon: Stack(
         children: [
-          const Icon(Icons.shopping_cart, color: Colors.black),
+          const Icon(Icons.shopping_cart, color: Colors.white),
           if (_cartItemCount > 0)
             Positioned(
               right: 0,
@@ -378,7 +630,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
               child: Container(
                 padding: const EdgeInsets.all(4),
                 decoration: const BoxDecoration(
-                  color: Color(0xFFFF5252),
+                  color: _kRed,
                   shape: BoxShape.circle,
                 ),
                 child: Text(
@@ -396,7 +648,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
       label: Text(
         '₹${_cart.subtotal.toStringAsFixed(0)}',
         style: const TextStyle(
-          color: Colors.black,
+          color: Colors.white,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -407,7 +659,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
   void _showCartBottomSheet() {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF12121E),
+      backgroundColor: _kBg,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -430,11 +682,38 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
               'Failed to load products',
               style: GoogleFonts.outfit(
                 fontSize: 16,
-                color: const Color(0xFFEEEEF5),
+                color: _kText,
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 8),
+            // FIX (Aug 17 2026 — "failed to load products nu red error
+            // varuthu" and nobody could say WHY).
+            //
+            // CategoryGatewayService.loadSellerProducts() deliberately
+            // rethrows instead of swallowing, precisely so a real
+            // failure (permission-denied, missing index, offline) is
+            // distinguishable from an empty menu — its own comment says
+            // so. But this screen caught that error into `_error` and
+            // then never displayed it, throwing away the one piece of
+            // information the rethrow existed to deliver.
+            //
+            // Now shown. Firestore error strings name their own cause
+            // ('permission-denied', 'failed-precondition: The query
+            // requires an index'), so this turns a dead end into a
+            // one-glance diagnosis for whoever is standing in the shop.
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 11.5,
+                  height: 1.4,
+                  color: _kMuted,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
             ElevatedButton(
               onPressed: _loadProducts,
               child: const Text('Retry'),
@@ -453,13 +732,45 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('📦', style: TextStyle(fontSize: 48)),
+            // UI polish (3D Pink Icons pass) — same theme-gated swap
+            // pattern as the storefront badge above; falls back to the
+            // flat emoji on every other theme.
+            Builder(
+              builder: (context) {
+                final iconTheme = context.watch<ThemeService>().iconThemeKey;
+                if (iconTheme == 'photo_realistic') {
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: CachedCloudImage(
+                      'https://images.unsplash.com/photo-1607166452427-7e4477079cb9?w=200&q=80',
+                      width: 64,
+                      height: 64,
+                      fit: BoxFit.cover,
+                      cacheWidth: 256,
+                      errorWidget: const Text('📦', style: TextStyle(fontSize: 48)),
+                    ),
+                  );
+                }
+                final isPink = iconTheme == 'pink_white_3d';
+                if (!isPink) {
+                  return const Text('📦', style: TextStyle(fontSize: 48));
+                }
+                return Image.asset(
+                  'assets/images/pink_icons/food_2_a.webp',
+                  width: 64,
+                  height: 64,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) =>
+                      const Text('📦', style: TextStyle(fontSize: 48)),
+                );
+              },
+            ),
             const SizedBox(height: 16),
             Text(
               'No products available',
               style: GoogleFonts.outfit(
                 fontSize: 16,
-                color: const Color(0xFFEEEEF5),
+                color: _kText,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -485,31 +796,36 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
 
   // ── Category Config ─────────────────────────────────────────
   _CategoryConfig _getCategoryConfig() {
+    // Aug 20 2026 (Global Food Theme Overhaul): these were dark navy/
+    // near-black per-category banners that clashed with the new pure
+    // white scaffold. Kept the per-category identity via the palette's
+    // theme-independent accent colors (see app_palette.dart), all on a
+    // light theme — food stays brand hot pink.
     switch (widget.category) {
       case Category.food:
         return const _CategoryConfig(
           emoji: '🍔',
-          bgColor: Color(0xFF1E0E0E),
+          bgColor: Color(0xFFFF4FA3),
         );
       case Category.grocery:
         return const _CategoryConfig(
           emoji: '🛒',
-          bgColor: Color(0xFF0A1E0E),
+          bgColor: Color(0xFF00BFA5),
         );
       case Category.tech:
         return const _CategoryConfig(
           emoji: '📱',
-          bgColor: Color(0xFF10102A),
+          bgColor: Color(0xFF7B6FE0),
         );
       case Category.pharmacy:
         return const _CategoryConfig(
           emoji: '💊',
-          bgColor: Color(0xFF1E1008),
+          bgColor: Color(0xFF00C853),
         );
       default:
         return const _CategoryConfig(
           emoji: '🏪',
-          bgColor: Color(0xFF1A1A2A),
+          bgColor: Color(0xFFFF4FA3),
         );
     }
   }
@@ -527,13 +843,261 @@ class _CategoryConfig {
 }
 
 // ── Cart Bottom Sheet ─────────────────────────────────────────
-class _CartBottomSheet extends StatelessWidget {
+class _CartBottomSheet extends StatefulWidget {
   final CartService cart;
 
   const _CartBottomSheet({required this.cart});
 
   @override
+  State<_CartBottomSheet> createState() => _CartBottomSheetState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<CartService>('cart', cart));
+  }
+}
+
+class _CartBottomSheetState extends State<_CartBottomSheet> {
+  bool _isPlacingOrder = false;
+
+  Future<void> _checkout() async {
+    final cart = widget.cart;
+    if (cart.isEmpty || _isPlacingOrder) return;
+
+    // GUEST MODE (Aug 11 2026): NOT in the original spec's list of nine
+    // screens — found by grepping every createServiceRequest() call site
+    // in lib/ rather than trusting the list. This is the catalog/menu
+    // checkout ('catalog_food_order'), which writes to service_requests
+    // exactly like the other order screens, so isRealUser() rejects it
+    // from a guest too. Without this guard the seller's order simply
+    // never arrives and nobody finds out why.
+    if (!await requireRealAuth(
+      context,
+      reason: 'Sign in and this shop will start packing your order',
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) {
+        // GUEST MODE: was the harsh 0xFFFF5252 red.
+        showSignInRequiredSnack(context, message: 'Sign in to place your order');
+      }
+      return;
+    }
+
+    // NEW (Aug 18 2026 — Nizam: "order book pannunathum udane order
+    // aiduchu... namma food order form open agi... delevery details
+    // nammakita ketu fill pannunathum, payment pannitu than order
+    // confirm aganum"). Previously "Place Order" went straight from
+    // this bottom sheet into the stock transaction + order creation
+    // below with zero screens in between — no delivery address, no
+    // payment step. FoodCheckoutScreen is the missing middle step: it
+    // writes nothing itself, it only collects delivery details + a
+    // payment decision and hands them back here. Everything below
+    // (stock transaction, createServiceRequest, deferBroadcast, the
+    // tracking-screen redirect) is completely unchanged — it now just
+    // runs with real delivery/payment data instead of none at all.
+    final itemsPreview = cart.items
+        .map((item) => {
+              'name': item.name,
+              'quantity': item.quantity,
+              'total': item.total,
+            })
+        .toList();
+    final checkoutResult = await Navigator.push<FoodCheckoutResult>(
+      context,
+      MaterialPageRoute<FoodCheckoutResult>(
+        builder: (_) => FoodCheckoutScreen(
+          hotelName: cart.currentSellerName ?? 'Seller',
+          items: itemsPreview,
+          subtotal: cart.subtotal,
+        ),
+      ),
+    );
+    if (checkoutResult == null || !mounted) return; // customer backed out
+
+    setState(() => _isPlacingOrder = true);
+    try {
+      final sellerId = cart.currentSellerId ?? '';
+      final sellerName = cart.currentSellerName ?? 'Seller';
+      
+      // 1. Reserve stock via Transaction (Strict Concurrency Lock)
+      final db = FirebaseFirestore.instance;
+      await db.runTransaction((tx) async {
+        final itemDocs = <String, DocumentSnapshot>{};
+
+        // FIX (checkout race condition — seller closes shop between
+        // menu-load and "Place Order"): _isOpen() only ever reflects the
+        // seller data loaded when this screen first opened; nothing
+        // re-checked it at checkout time, so a seller flipping
+        // isOpen:false (or getting deactivated) mid-browse never blocked
+        // the order — it silently landed on their dashboard anyway with
+        // no one to prepare it. Reading the seller doc INSIDE this same
+        // transaction (rather than a separate live fetch beforehand,
+        // which would leave its own race window between the fetch and
+        // the write) makes the open/active check atomic with the stock
+        // check below — the same live-data guarantee custom_hotel_view_
+        // screen.dart already gets for free from its isOpen StreamBuilder.
+        final sellerSnap =
+            await tx.get(db.collection('sellers').doc(sellerId));
+        if (!sellerSnap.exists) {
+          throw Exception('This shop is no longer available.');
+        }
+        final sellerData = sellerSnap.data()! as Map<String, dynamic>;
+        final sellerStatus = sellerData['status'] as String? ?? 'active';
+        final sellerIsOpen = sellerData['isOpen'] as bool? ?? true;
+        if (sellerStatus != 'active' || !sellerIsOpen) {
+          throw Exception(
+              "This shop just closed and can't accept new orders right now.");
+        }
+
+        // Read phase
+        //
+        // FIX (Aug 17 2026 seller-app audit — "seller app dummy mari
+        // iruku"): this read `sellers/{id}/menu`, a subcollection that
+        // DOES NOT EXIST. Menu items are written to
+        // `sellers/{id}/menu_items` (FoodSellerService._menuItemsRef)
+        // and displayed from `menu_items`
+        // (CategoryGatewayService.loadSellerProducts, which carries its
+        // own comment saying the codebase standardised on that name).
+        // Only this checkout transaction was left on the old name, so
+        // tx.get() always came back !exists and every single catalog
+        // checkout threw 'Item ... not found' before an order could be
+        // created. This one word was blocking the ENTIRE catalog order
+        // pipeline — the seller's menu rendered fine, so it looked like
+        // a dead "dummy" app rather than a broken write path.
+        for (final item in cart.items) {
+          final docRef = db
+              .collection('sellers')
+              .doc(sellerId)
+              .collection('menu_items')
+              .doc(item.id);
+          final snap = await tx.get(docRef);
+          if (!snap.exists) throw Exception('Item ${item.name} not found');
+          itemDocs[item.id] = snap;
+        }
+        
+        // Validation phase
+        for (final item in cart.items) {
+          final data = itemDocs[item.id]!.data() as Map<String, dynamic>;
+          final isAvailable = data['isAvailable'] as bool? ?? true;
+          final stockQuantity = (data['stockQuantity'] as num?)?.toInt();
+
+          if (!isAvailable) {
+            throw Exception('${item.name} is currently unavailable.');
+          }
+          if (stockQuantity != null && stockQuantity < item.quantity) {
+            throw Exception('Only $stockQuantity ${item.name} left in stock.');
+          }
+        }
+
+        // Write phase — DELIBERATELY REMOVED (Aug 17 2026 audit).
+        //
+        // This used to decrement stockQuantity on each menu item from
+        // the CUSTOMER's session. That could never have worked:
+        // firestore.rules:302 allows `update` on
+        // sellers/{id}/menu_items/{itemId} only for isSellerOwner() or
+        // isAdminAny(), so a customer's decrement is rejected with
+        // permission-denied. Fixing the subcollection name above without
+        // also removing this would simply have traded the old
+        // 'Item not found' failure for a permission-denied one — the
+        // checkout would still have been 100% broken.
+        //
+        // Not "fixed" by loosening the rule on purpose: letting any
+        // signed-in customer write stock counts on someone else's shop
+        // means one malicious account can zero out a hotel's entire menu.
+        // Client-authoritative stock cannot be made safe without a
+        // trusted server, and we are on the Spark plan (no Cloud
+        // Functions), so the read-side validation above is kept (it still
+        // blocks ordering an unavailable / insufficient-stock item) and
+        // the seller stays the only writer of stock.
+        //
+        // Zero behavioural regression today: stockQuantity is never
+        // populated by the dish editor UI, so it is null for every real
+        // menu item and this loop was already a no-op in practice.
+        // Seller-side stock entry is Phase 3 of the audit plan; when it
+        // lands, decrement moves to the seller's own order-accept step.
+      });
+
+      // 2. Create the Order
+      final itemsDetail = cart.items
+          .map((item) => {
+                'itemId': item.id,
+                'name': item.name,
+                'price': item.price,
+                'quantity': item.quantity,
+                'total': item.total,
+              })
+          .toList();
+
+      // customerPhone/customerName now come from the checkout form the
+      // customer just filled (FoodCheckoutScreen) rather than only
+      // whatever Firebase Auth happened to have — same
+      // resolveCustomerPhone() fallback kept for the rare case the form
+      // field was left blank.
+      final resolvedCustomerPhone = checkoutResult.customerPhone.isNotEmpty
+          ? checkoutResult.customerPhone
+          : await AuthService().resolveCustomerPhone(user);
+      final requestId = await ServiceRequestService().createServiceRequest(
+        // Aug 17 2026 seller audit: hold the hero ping until the hotel
+        // marks the food ready. Previously heroes were pinged the
+        // instant the customer paid, so a hero rode out and waited at
+        // the counter for however long the cooking took.
+        deferBroadcast: true,
+        requestType: kCatalogFoodOrderRequestType,
+        customerId: user.uid,
+        customerName: checkoutResult.customerName,
+        customerPhone: resolvedCustomerPhone,
+        details: {
+          'sellerId': sellerId,
+          'sellerName': sellerName,
+          'items': itemsDetail,
+          'subtotal': cart.subtotal,
+          // NEW (Aug 18 2026): catalog_food_order previously carried no
+          // delivery address at all — a hero accepting it had nowhere
+          // to navigate to. custom_hotel_order already has this shape
+          // (deliveryAddress/lat/lng), matched here for consistency.
+          'deliveryAddress': checkoutResult.address,
+          if (checkoutResult.lat != null) 'deliveryLat': checkoutResult.lat,
+          if (checkoutResult.lng != null) 'deliveryLng': checkoutResult.lng,
+          'paymentMethod': checkoutResult.paymentMethod,
+        },
+      );
+
+      cart.clear();
+
+      if (!mounted) return;
+      Navigator.pop(context); // close the cart bottom sheet
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => ServiceRequestTrackingScreen(
+            requestId: requestId,
+            requestType: kCatalogFoodOrderRequestType,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to place order: $e'),
+            backgroundColor: const Color(0xFFFF5252),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isPlacingOrder = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final cart = widget.cart;
     return StreamBuilder<List<CartItem>>(
       stream: cart.cartStream,
       initialData: cart.items,
@@ -553,7 +1117,7 @@ class _CartBottomSheet extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFFEEEEF5),
+                      color: _kText,
                     ),
                   ),
                   const Spacer(),
@@ -572,10 +1136,56 @@ class _CartBottomSheet extends StatelessWidget {
               // Cart Items
               Expanded(
                 child: items.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'Your cart is empty',
-                          style: TextStyle(color: Color(0xFF7777A0)),
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // UI polish (3D Pink Icons pass) — same
+                            // theme-gated swap pattern used elsewhere in
+                            // this screen.
+                            Builder(
+                              builder: (context) {
+                                final iconTheme =
+                                    context.watch<ThemeService>().iconThemeKey;
+                                if (iconTheme == 'photo_realistic') {
+                                  return ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: CachedCloudImage(
+                                      'https://images.unsplash.com/photo-1584473457406-6240486418e9?w=200&q=80',
+                                      width: 56,
+                                      height: 56,
+                                      fit: BoxFit.cover,
+                                      cacheWidth: 224,
+                                      errorWidget: const Icon(
+                                          Icons.shopping_cart_outlined,
+                                          size: 48,
+                                          color: _kMuted),
+                                    ),
+                                  );
+                                }
+                                final isPink = iconTheme == 'pink_white_3d';
+                                if (!isPink) {
+                                  return const Icon(Icons.shopping_cart_outlined,
+                                      size: 48, color: _kMuted);
+                                }
+                                return Image.asset(
+                                  'assets/images/pink_icons/food_3_a.webp',
+                                  width: 56,
+                                  height: 56,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, __, ___) => const Icon(
+                                      Icons.shopping_cart_outlined,
+                                      size: 48,
+                                      color: _kMuted),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Your cart is empty',
+                              style: TextStyle(color: _kMuted),
+                            ),
+                          ],
                         ),
                       )
                     : ListView.builder(
@@ -594,7 +1204,7 @@ class _CartBottomSheet extends StatelessWidget {
 
               // Checkout Button
               if (items.isNotEmpty) ...[
-                const Divider(color: Color(0xFF7777A0)),
+                const Divider(color: _kBorder),
                 const SizedBox(height: 16),
                 Row(
                   children: [
@@ -602,7 +1212,7 @@ class _CartBottomSheet extends StatelessWidget {
                       'Total:',
                       style: TextStyle(
                         fontSize: 16,
-                        color: Color(0xFFEEEEF5),
+                        color: _kText,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -611,7 +1221,7 @@ class _CartBottomSheet extends StatelessWidget {
                       '₹${cart.subtotal.toStringAsFixed(2)}',
                       style: GoogleFonts.outfit(
                         fontSize: 20,
-                        color: const Color(0xFFFFBB00),
+                        color: _kPink,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -622,31 +1232,30 @@ class _CartBottomSheet extends StatelessWidget {
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: () {
-                      // TODO: Navigate to checkout
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('🚧 Checkout coming soon!'),
-                            backgroundColor: Color(0xFFFFBB00),
-                          ),
-                        );
-                      }
-                    },
+                    onPressed: _isPlacingOrder ? null : _checkout,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFFBB00),
+                      backgroundColor: _kPink,
+                      disabledBackgroundColor:
+                          _kPink.withValues(alpha: 0.4),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text(
-                      'Proceed to Checkout',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    child: _isPlacingOrder
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2.5, color: Colors.white,),
+                          )
+                        : const Text(
+                            'Proceed to Checkout',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                   ),
                 ),
               ],
@@ -660,7 +1269,7 @@ class _CartBottomSheet extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<CartService>('cart', cart));
+    properties.add(DiagnosticsProperty<CartService>('cart', widget.cart));
   }
 }
 
@@ -682,7 +1291,7 @@ class _CartItemTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A2A),
+        color: _kSurface,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -694,7 +1303,7 @@ class _CartItemTile extends StatelessWidget {
                 Text(
                   item.name,
                   style: const TextStyle(
-                    color: Color(0xFFEEEEF5),
+                    color: _kText,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -702,7 +1311,7 @@ class _CartItemTile extends StatelessWidget {
                 Text(
                   '₹${item.price.toStringAsFixed(0)}',
                   style: const TextStyle(
-                    color: Color(0xFFFFBB00),
+                    color: _kPink,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -715,26 +1324,26 @@ class _CartItemTile extends StatelessWidget {
               IconButton(
                 onPressed: () => onUpdateQty(item.quantity - 1),
                 icon: const Icon(Icons.remove_circle_outline, size: 20),
-                color: const Color(0xFF7777A0),
+                color: _kMuted,
               ),
               Text(
                 '${item.quantity}',
                 style: const TextStyle(
-                  color: Color(0xFFEEEEF5),
+                  color: _kText,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               IconButton(
                 onPressed: () => onUpdateQty(item.quantity + 1),
                 icon: const Icon(Icons.add_circle_outline, size: 20),
-                color: const Color(0xFF7777A0),
+                color: _kMuted,
               ),
             ],
           ),
           IconButton(
             onPressed: onRemove,
             icon: const Icon(Icons.delete_outline, size: 20),
-            color: const Color(0xFFFF5252),
+            color: _kRed,
           ),
         ],
       ),

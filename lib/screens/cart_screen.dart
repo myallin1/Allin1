@@ -11,19 +11,49 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../providers/cart_provider.dart';
+// GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../services/auth_prompt_service.dart';
+import '../services/auth_service.dart';
 
-const Color kSurface = Color(0xFF0D0D18);
-const Color kCard = Color(0xFF141420);
-const Color kCard2 = Color(0xFF1A1A28);
+// ── Theme tokens (Aug 20 2026 — Global Food Theme Overhaul) ─────
+// Recolored from the old dark palette to the brand's pure white +
+// hot pink. This screen is currently UNREACHABLE dead code (see the
+// header comment on CartScreen) but stays brand-consistent.
+const Color kSurface = Color(0xFFF8F8FF);
+const Color kCard = Color(0xFFFFFFFF);
+const Color kCard2 = Color(0xFFF0F0FA);
 const Color kPurple = Color(0xFF7B6FE0);
 const Color kGreen = Color(0xFF3DBA6F);
 const Color kGold = Color(0xFFF5C542);
 const Color kRed = Color(0xFFE05555);
-const Color kText = Color(0xFFEEEEF5);
-const Color kMuted = Color(0xFF7777A0);
-const Color kBorder = Color(0x267B6FE0);
+const Color kText = Color(0xFF1A1A2E);
+const Color kMuted = Color(0xFF9999BB);
+const Color kBorder = Color(0x26FF4FA3);
 
 class CartScreen extends StatefulWidget {
+  // ================================================================
+  // ⚠️ UNREACHABLE SCREEN — DO NOT WIRE UP WITHOUT READING THIS
+  // (Aug 17 2026 order-pipeline audit, Phase 2)
+  // ================================================================
+  // Nothing in lib/ navigates to CartScreen — verified by grep; the only
+  // occurrence of the class name in the entire codebase is this file
+  // itself. That is the ONLY reason it is not currently losing customer
+  // orders.
+  //
+  // Its _placeOrder() writes to the `orders` collection. NOTHING READS
+  // THAT COLLECTION: not the seller dashboard, not any hero screen, not
+  // dispatch. The only readers are admin_orders_cleanup_screen.dart and
+  // admin_deletion_service.dart, both of which only DELETE. So an order
+  // placed here would tell the customer "Order Placed", and then no
+  // seller and no hero would ever learn it existed.
+  //
+  // If a cart screen is wanted, point it at ServiceRequestService
+  // .createServiceRequest() (requestType 'catalog_food_order') the way
+  // seller_detail_screen.dart's checkout does — that is the pipeline the
+  // seller dashboard and hero dispatch are actually wired to.
+  //
+  // Left in place rather than deleted: it is a complete, working cart UI
+  // and the fix is a write-target change, not a rewrite.
   const CartScreen({super.key});
 
   @override
@@ -56,7 +86,7 @@ class _CartScreenState extends State<CartScreen> {
         ),
         title: Text(
           'My Cart',
-          style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w600),
+          style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: kText),
         ),
         actions: [
           Consumer<CartProvider>(
@@ -394,8 +424,27 @@ class _CartScreenState extends State<CartScreen> {
       return;
     }
 
+    // GUEST MODE (Aug 11 2026): also not in the spec's list — found by
+    // grepping direct writes to the gated collections. This one writes
+    // straight to orders/{id}, which isRealUser() now blocks for guests.
+    // Note the bare `return` below: before this guard, a signed-out
+    // customer tapping "Place Order" got absolutely no feedback at all.
+    if (!await requireRealAuth(
+      context,
+      reason: 'Sign in and we’ll get this order moving',
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
+      // GUEST MODE: this used to be a bare `return` — the button did
+      // nothing at all and said nothing about why. Silent failure is
+      // worse than a harsh red box, so it gets the branded snack too.
+      if (mounted) {
+        showSignInRequiredSnack(context, message: 'Sign in to place your order');
+      }
       return;
     }
 
@@ -403,6 +452,7 @@ class _CartScreenState extends State<CartScreen> {
 
     try {
       final orderId = const Uuid().v4();
+      final resolvedCustomerPhone = await AuthService().resolveCustomerPhone(user);
 
       await FirebaseFirestore.instance.collection('orders').doc(orderId).set({
         'items': cart.items.map((i) => i.toJson()).toList(),
@@ -413,7 +463,7 @@ class _CartScreenState extends State<CartScreen> {
         'status': 'pending',
         'category': 'food', // Default category
         'customerId': user.uid,
-        'customerPhone': user.phoneNumber ?? '',
+        'customerPhone': resolvedCustomerPhone,
         'paymentStatus': 'pending',
         'estimatedTime': '30-45 minutes',
         'createdAt': FieldValue.serverTimestamp(),
