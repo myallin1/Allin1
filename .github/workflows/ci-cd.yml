@@ -39,7 +39,15 @@ on:
 # Environment Variables
 # ================================================================
 env:
-  FLUTTER_VERSION: '3.19.0'
+  # FIX (Sep 2 2026): pinned to 3.19.0 (ships Dart 3.3.0), which cannot
+  # resolve the repo's current dependencies —
+  # extension_google_sign_in_as_googleapis_auth needs Dart ^3.4.0, so
+  # every CI run's `flutter pub get` failed at dependency resolution
+  # before any test/build step ever ran. This is unrelated to any
+  # Chitti call-assistant change; matches the Flutter version already
+  # used to build and test this app locally, and the version
+  # gemini-dispatch.yml's own Flutter setup step already uses.
+  FLUTTER_VERSION: '3.44.2'
   JAVA_VERSION: '17'
   NODE_VERSION: '18'
 
