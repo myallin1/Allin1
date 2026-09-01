@@ -26,6 +26,10 @@ class ChittiAccessibilityBridge {
   /// ongoing-call notification, so the app can open the live call UI.
   void Function()? onOpenInCallScreen;
 
+  /// NEW (Sep 2 2026 — launcher "Dialer" shortcut): fires when the
+  /// admin taps the static shortcut on the app icon.
+  void Function()? onOpenDialerScreen;
+
   /// NEW (Sep 1 2026 — native call-voice TTS): fires with "START",
   /// "DONE", or "ERROR..." as ChittiCallVoice's native TextToSpeech
   /// instance progresses through speaking — see [speakOnCallStream].
@@ -48,6 +52,8 @@ class ChittiAccessibilityBridge {
         onSmsReceived?.call(sender, body);
       } else if (call.method == 'onOpenInCallScreen') {
         onOpenInCallScreen?.call();
+      } else if (call.method == 'onOpenDialerScreen') {
+        onOpenDialerScreen?.call();
       } else if (call.method == 'onCallVoiceEvent') {
         final args = call.arguments as Map?;
         final event = args?['event'] as String? ?? 'unknown';
@@ -279,6 +285,15 @@ class ChittiAccessibilityBridge {
   Future<void> stopCallVoice() async {
     try {
       await _channel.invokeMethod<void>('stopCallVoice');
+    } catch (_) {}
+  }
+
+  /// Voicemail-style beep on the call's own audio stream — see
+  /// ChittiCallVoice.playBeep. Used right after the quick-greeting so
+  /// the caller gets a clear cue it's their turn to speak.
+  Future<void> playCallBeep() async {
+    try {
+      await _channel.invokeMethod<bool>('playCallBeep');
     } catch (_) {}
   }
 

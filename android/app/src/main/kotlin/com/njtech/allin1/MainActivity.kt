@@ -30,6 +30,13 @@ class MainActivity : FlutterActivity() {
         // rather than dropping the admin on the app's home screen.
         @JvmField
         var openInCallScreenCallback: (() -> Unit)? = null
+
+        // NEW (Sep 2 2026 — Nizam: "dialer ah homescreen shorcut vaiya
+        // vachu pandrathu than best"). Fired when the launcher's static
+        // "Dialer" shortcut (long-press the app icon) is tapped, via
+        // AdminDialerShortcutActivity — see that file's header.
+        @JvmField
+        var openDialerScreenCallback: (() -> Unit)? = null
     }
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
@@ -37,6 +44,7 @@ class MainActivity : FlutterActivity() {
         maybeWakeOverLockScreen(intent)
         maybeHandleAssistTrigger(intent)
         maybeHandleOpenInCall(intent)
+        maybeHandleOpenDialer(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -44,6 +52,7 @@ class MainActivity : FlutterActivity() {
         maybeWakeOverLockScreen(intent)
         maybeHandleAssistTrigger(intent)
         maybeHandleOpenInCall(intent)
+        maybeHandleOpenDialer(intent)
 
         val voiceCmd = intent.getStringExtra("voice_command")
         if (!voiceCmd.isNullOrEmpty()) {
@@ -66,6 +75,12 @@ class MainActivity : FlutterActivity() {
         if (intent?.getBooleanExtra("open_in_call_screen", false) != true) return
         intent.removeExtra("open_in_call_screen")
         openInCallScreenCallback?.invoke()
+    }
+
+    private fun maybeHandleOpenDialer(intent: Intent?) {
+        if (intent?.getBooleanExtra("open_dialer", false) != true) return
+        intent.removeExtra("open_dialer")
+        openDialerScreenCallback?.invoke()
     }
 
     private fun maybeHandleAssistTrigger(intent: Intent?) {
@@ -484,6 +499,22 @@ class MainActivity : FlutterActivity() {
                     } catch (_: Exception) {}
                     result.success(true)
                 }
+                // NEW (Sep 2 2026 — quick-greeting beep, see
+                // ChittiCallVoice.playBeep). Blocks for the tone's
+                // duration, so it runs on a background thread rather
+                // than the method-channel/UI thread; result is returned
+                // immediately since the Dart side doesn't need to wait
+                // for the beep to actually finish playing.
+                "playCallBeep" -> {
+                    Thread {
+                        try {
+                            val clazz = Class.forName("com.njtech.allin1.ChittiCallVoice")
+                            val method = clazz.getMethod("playBeep", Int::class.java)
+                            method.invoke(null, 400)
+                        } catch (_: Exception) {}
+                    }.start()
+                    result.success(true)
+                }
                 // NEW (Sep 1 2026 — minimal dialer, see
                 // admin_dialer_screen.dart). Once this app holds
                 // ROLE_DIALER the OS stops offering its own phone UI,
@@ -600,6 +631,13 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        // Setup listener for the launcher's static "Dialer" shortcut
+        openDialerScreenCallback = {
+            runOnUiThread {
+                channel.invokeMethod("onOpenDialerScreen", null)
+            }
+        }
+
         // Setup listener for the assistant-gesture trigger (ChittiVoiceInteractionSession)
         assistTriggerCallback = {
             runOnUiThread {
@@ -708,6 +746,7 @@ class MainActivity : FlutterActivity() {
         assistTriggerCallback = null
         smsReceivedCallback = null
         openInCallScreenCallback = null
+        openDialerScreenCallback = null
         super.onDestroy()
     }
 }

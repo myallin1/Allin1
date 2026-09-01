@@ -11,6 +11,10 @@
          hold RoleManager.ROLE_DIALER and to relay ACTION_DIAL taps to
          TelecomManager.placeCall() from ChittiDialerActivity. -->
     <uses-permission android:name="android.permission.CALL_PHONE"/>
+    <!-- NEW (Sep 2 2026 — Nizam: dialer needs call history and contacts,
+         "already namma record system" ). Read-only: this screen shows the
+         same call log/contacts stock dialers do, it never writes them. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
 
     <application>
         <!-- Chitti System-Wide Autonomous Assistant Service -->
@@ -87,6 +91,25 @@
              this app's calls. Not exported: only this app's own
              notification ever sends these actions. -->
         <receiver android:name=".ChittiCallNotificationActionReceiver" android:exported="false" />
+
+        <!-- NEW (Sep 2 2026 — launcher "Dialer" shortcut). No-UI
+             trampoline the shortcut targets — see
+             AdminDialerShortcutActivity's header. -->
+        <activity
+            android:name=".AdminDialerShortcutActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true" />
+
+        <!-- Adds the "android.app.shortcuts" declaration (xml/shortcuts.
+             xml) to the shared MainActivity — merged onto the
+             declaration in the main manifest, not a second activity. -->
+        <activity android:name=".MainActivity">
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+        </activity>
 
         <!-- Broadcast Receiver for incoming SMS messages -->
         <receiver android:name=".SmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_SMS">

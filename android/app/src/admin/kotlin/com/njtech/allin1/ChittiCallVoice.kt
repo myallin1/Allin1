@@ -222,4 +222,27 @@ object ChittiCallVoice {
             tts?.stop()
         } catch (_: Exception) {}
     }
+
+    // NEW (Sep 2 2026 — Nizam: "quick greeting ah konjam storng
+    // pannuvom... beep kapram customer soldra voice ah record
+    // pannanum"). A short voicemail-style beep on the same
+    // STREAM_VOICE_CALL the greeting itself plays on, so the caller
+    // gets a clear, familiar cue that it's their turn to speak — the
+    // same reason voicemail systems use one. Blocks for the tone's
+    // duration since callers are expected to speak right after it.
+    @JvmStatic
+    fun playBeep(durationMs: Int = 400) {
+        var toneGen: android.media.ToneGenerator? = null
+        try {
+            toneGen = android.media.ToneGenerator(AudioManager.STREAM_VOICE_CALL, 90)
+            toneGen.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, durationMs)
+            Thread.sleep(durationMs.toLong())
+        } catch (e: Exception) {
+            Log.w(TAG, "playBeep failed: ${e.message}")
+        } finally {
+            try {
+                toneGen?.release()
+            } catch (_: Exception) {}
+        }
+    }
 }

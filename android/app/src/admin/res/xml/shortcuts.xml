@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- NEW (Sep 2 2026 — Nizam: "dialer ah homescreen shorcut vaiya vachu
+     pandrathu than best"). Long-pressing the admin app's launcher icon
+     shows this as a jump-list entry, going straight to the Dialer via
+     AdminDialerShortcutActivity instead of opening the app to its
+     normal home screen first. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="dialer"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_dialer_short"
+        android:shortcutLongLabel="@string/shortcut_dialer_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.njtech.allin1"
+            android:targetClass="com.njtech.allin1.AdminDialerShortcutActivity" />
+    </shortcut>
+</shortcuts>

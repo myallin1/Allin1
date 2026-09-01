@@ -221,13 +221,26 @@ class ChittiCallScreeningService {
     // Wait 1.5 seconds for call audio routing setup to complete on the device speaker
     await Future.delayed(const Duration(milliseconds: 1500));
 
+    // STRENGTHENED (Sep 2 2026 — Nizam: "quick greeting ah innum
+    // konjam storng pannuvom"). Names the business, states this is a
+    // one-way recording (not a back-and-forth Chitti will reply to),
+    // and tells the caller explicitly to wait for the beep — voicemail
+    // phrasing on purpose, since that is exactly the mental model this
+    // mode uses.
     final greeting = _languageCode == 'ta'
-        ? "வணக்கம், பாஸ் பிஸியா இருக்காரு. உங்க இம்போர்ட்டன்ட் தேவையை சொல்லுங்க, நான் பாஸ்கிட்ட இன்ஃபார்ம் பண்றேன்."
-        : "Hello, Boss is busy right now. Please tell me your important need, I'll inform Boss.";
+        ? "வணக்கம், இது NJ Tech, Erode. பாஸ் நிஜாம் இப்போ பிஸியா இருக்காரு, "
+            "உங்க கால் கனெக்ட் பண்ண முடியாம இருக்கு. பீப் சத்தத்துக்கு அப்புறம், "
+            "உங்க பெயர், தேவை, தொடர்பு விவரம் தெளிவா சொல்லுங்க — இது ரெக்கார்ட் "
+            "ஆகி பாஸ்கிட்ட நேரடியா போகும்."
+        : "Hello, this is NJ Tech, Erode. Nizam is busy right now and "
+            "couldn't take this call. After the beep, please clearly say "
+            "your name, what you need, and how to reach you — this is "
+            "being recorded and will go straight to Nizam.";
     _conversation.add('Assistant: $greeting');
     await _speak(greeting);
-    await _log('[ChittiCallScreeningService] Quick-greeting mode: greeting played. No live conversation loop — '
-        'the native call recorder is now the only thing capturing the rest of this call.');
+    await ChittiAccessibilityBridge.instance.playCallBeep();
+    await _log('[ChittiCallScreeningService] Quick-greeting mode: greeting + beep played. No live conversation '
+        'loop — the native call recorder is now the only thing capturing the rest of this call.');
   }
 
   /// True when an AI reply is really a developer/config message rather

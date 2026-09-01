@@ -243,14 +243,50 @@ object PhoneCallService {
                 @Suppress("DEPRECATION")
                 MediaRecorder()
             }
-            recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+            // FIX (Sep 2 2026 — Nizam: "oppo la o dialer and samsung
+            // dialersla call record pannuna sound varathu, namma record
+            // um athe system ah maathu"). Stock dialers are privileged
+            // system apps that read both sides of the call directly
+            // (AudioSource.VOICE_CALL); a third-party app recording via
+            // the plain microphone during a live call is exactly the
+            // case several Android telephony stacks inject an audible
+            // "this call is being recorded" tone for. VOICE_CALL isn't
+            // guaranteed available to a non-system app on every OEM —
+            // where it's blocked, MediaRecorder throws at setAudioSource
+            // or prepare(), so this falls back to MIC rather than fail
+            // recording outright.
+            var usedVoiceCallSource = false
+            try {
+                recorder.setAudioSource(MediaRecorder.AudioSource.VOICE_CALL)
+                usedVoiceCallSource = true
+            } catch (e: Exception) {
+                Log.w("PhoneCallService", "VOICE_CALL audio source unavailable, falling back to MIC: ${e.message}")
+                recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+            }
             recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
             recorder.setAudioEncodingBitRate(64000)
             recorder.setAudioSamplingRate(44100)
             recorder.setOutputFile(file.absolutePath)
-            recorder.prepare()
-            recorder.start()
+            try {
+                recorder.prepare()
+                recorder.start()
+            } catch (e: Exception) {
+                if (usedVoiceCallSource) {
+                    Log.w("PhoneCallService", "VOICE_CALL source rejected at prepare/start, retrying with MIC: ${e.message}")
+                    recorder.reset()
+                    recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+                    recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                    recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                    recorder.setAudioEncodingBitRate(64000)
+                    recorder.setAudioSamplingRate(44100)
+                    recorder.setOutputFile(file.absolutePath)
+                    recorder.prepare()
+                    recorder.start()
+                } else {
+                    throw e
+                }
+            }
             // BUG FIX (Sep 1 2026): the started recorder was never stored
             // in `mediaRecorder`, so stopRecording()'s `mediaRecorder?.`
             // was always null — stop()/release() never ran and the .m4a
