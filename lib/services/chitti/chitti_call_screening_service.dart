@@ -17,10 +17,37 @@ class ChittiCallScreeningService {
   final GuruAdminApiService _api = GuruAdminApiService();
 
   bool _isScreening = false;
+  bool get isScreening => _isScreening && !_pausedForManualRecording;
   String _callerNumber = '';
   final List<String> _conversation = [];
   int _turnCount = 0;
   static const int _maxTurns = 5;
+
+  // NEW (Sep 2 2026 — Nizam: manual "Record" button on the in-call
+  // screen and Chitti's own speech recognizer both want the single
+  // microphone Android grants to one caller at a time; pressing Record
+  // while Chitti is mid-conversation silently starved Chitti's STT
+  // (customer speech never reached it), with no indication why. Rather
+  // than let both fight for the mic, the admin's explicit manual
+  // recording wins: Chitti's listening pauses for as long as manual
+  // recording is on, and resumes cleanly once it's switched off.
+  bool _pausedForManualRecording = false;
+
+  void pauseForManualRecording() {
+    if (!_isScreening || _pausedForManualRecording) return;
+    _pausedForManualRecording = true;
+    try {
+      _speech.stop();
+    } catch (_) {}
+    _log('[ChittiCallScreeningService] Paused listening — admin started manual recording');
+  }
+
+  void resumeAfterManualRecording() {
+    if (!_isScreening || !_pausedForManualRecording) return;
+    _pausedForManualRecording = false;
+    _log('[ChittiCallScreeningService] Resuming listening — manual recording stopped');
+    _listenLoop();
+  }
 
   String _languageCode = 'en';
 
@@ -269,7 +296,7 @@ class ChittiCallScreeningService {
   }
 
   void _listenLoop() async {
-    if (!_isScreening) return;
+    if (!_isScreening || _pausedForManualRecording) return;
 
     try {
       _speech.listen(

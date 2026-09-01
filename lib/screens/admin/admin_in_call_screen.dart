@@ -24,6 +24,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/chitti/chitti_accessibility_bridge.dart';
+import '../../services/chitti/chitti_call_screening_service.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _text = Color(0xFFEEEEF5);
@@ -195,13 +196,59 @@ class _AdminInCallScreenState extends State<AdminInCallScreen> {
                     onTap: _callGone
                         ? null
                         : () async {
+                            final turningOn = !_recording;
+                            // FIX (Sep 2 2026 — Nizam: pressing Record made
+                            // Chitti stop hearing the customer). Android
+                            // only grants the mic to one recorder at a
+                            // time, so manual recording and Chitti's own
+                            // listening can't run together — instead of
+                            // letting them silently fight over it, pause
+                            // Chitti's STT for as long as recording is on,
+                            // and hand the mic straight back once it's off.
+                            if (turningOn && ChittiCallScreeningService.instance.isScreening) {
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder: (dialogContext) => AlertDialog(
+                                  backgroundColor: const Color(0xFF141420),
+                                  title: const Text('Chitti is talking to this caller',
+                                      style: TextStyle(color: _text)),
+                                  content: const Text(
+                                    'Chitti is currently listening to this customer. '
+                                    'Starting manual recording will pause Chitti — it '
+                                    'will not hear anything the customer says until you '
+                                    'stop recording. Continue?',
+                                    style: TextStyle(color: _muted),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.of(dialogContext).pop(false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.of(dialogContext).pop(true),
+                                      child: const Text('Pause Chitti & Record', style: TextStyle(color: _red)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirmed != true) return;
+                            }
+                            if (turningOn) {
+                              ChittiCallScreeningService.instance.pauseForManualRecording();
+                            }
                             final now = await ChittiAccessibilityBridge.instance
-                                .setCallRecording(!_recording);
+                                .setCallRecording(turningOn);
                             if (!mounted) return;
                             setState(() => _recording = now);
-                            if (!now && !_recording) {
+                            if (turningOn && !now) {
+                              ChittiCallScreeningService.instance.resumeAfterManualRecording();
                               _snack('Recording could not start — the mic may be '
                                   'in use by Chitti conversation mode');
+                            } else if (!turningOn) {
+                              ChittiCallScreeningService.instance.resumeAfterManualRecording();
+                              _snack('Recording stopped — Chitti is listening again');
+                            } else {
+                              _snack('Recording — Chitti will not hear the customer until you stop this');
                             }
                           },
                   ),

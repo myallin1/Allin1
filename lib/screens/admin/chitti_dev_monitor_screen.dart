@@ -25,6 +25,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/chitti/chitti_dev_monitor_service.dart';
+import '../../services/chitti/chitti_dev_task_service.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _card = Color(0xFF141420);
@@ -115,6 +116,9 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
                     _emptyCard('No dev tasks opened yet.')
                   else
                     ...snap.issues.map(_issueTile),
+                  const SizedBox(height: 18),
+                  _sectionHeader('4 · REPO CONFIGURATION', Icons.rocket_launch_rounded),
+                  const _GithubRepoConfigCard(),
                   const SizedBox(height: 30),
                 ],
               ),
@@ -367,5 +371,232 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     return '${diff.inDays}d ago';
+  }
+}
+
+// MOVED (Sep 2 2026 — Nizam: "developer option la app automation la
+// repo name, owner name, git token inthellam Iruku atha apdiye line
+// and logic maarama namma dev option kulla vachuru"). Same three
+// fields, same ChittiDevTaskService.readToken/readRepo/saveToken/
+// saveRepo calls as before on the Chitti AI settings screen — only
+// moved to live under this Dev tab, next to everything else about the
+// automation pipeline. Starts read-only (so the token never sits
+// visible on screen by accident); "Edit" reveals the fields, "Save"
+// writes through the same secure storage and collapses back.
+class _GithubRepoConfigCard extends StatefulWidget {
+  const _GithubRepoConfigCard();
+
+  @override
+  State<_GithubRepoConfigCard> createState() => _GithubRepoConfigCardState();
+}
+
+class _GithubRepoConfigCardState extends State<_GithubRepoConfigCard> {
+  final _tokenCtrl = TextEditingController();
+  final _ownerCtrl = TextEditingController();
+  final _repoCtrl = TextEditingController();
+  bool _editing = false;
+  bool _saving = false;
+  bool _loading = true;
+  bool _hasToken = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final token = await ChittiDevTaskService.readToken();
+    final repo = await ChittiDevTaskService.readRepo();
+    if (!mounted) return;
+    setState(() {
+      _tokenCtrl.text = token ?? '';
+      _ownerCtrl.text = repo.owner;
+      _repoCtrl.text = repo.name;
+      _hasToken = (token ?? '').isNotEmpty;
+      _loading = false;
+    });
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      await ChittiDevTaskService.saveToken(_tokenCtrl.text);
+      await ChittiDevTaskService.saveRepo(owner: _ownerCtrl.text, name: _repoCtrl.text);
+      if (!mounted) return;
+      setState(() {
+        _editing = false;
+        _hasToken = _tokenCtrl.text.trim().isNotEmpty;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('GitHub automation settings saved.')),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not save: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _tokenCtrl.dispose();
+    _ownerCtrl.dispose();
+    _repoCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: _purple)),
+      );
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Lets Chitti open a GitHub issue tagging @claude when you ask it "
+            "to build or fix something — the Claude Code GitHub App picks it "
+            "up automatically. Use a fine-grained token scoped to ONLY this "
+            "repo, with ONLY 'Issues: Write' permission.",
+            style: GoogleFonts.outfit(color: _muted, fontSize: 11.5, height: 1.35),
+          ),
+          const SizedBox(height: 12),
+          if (!_editing) ...[
+            _readOnlyRow('Owner', _ownerCtrl.text.isEmpty ? '—' : _ownerCtrl.text),
+            _readOnlyRow('Repo', _repoCtrl.text.isEmpty ? '—' : _repoCtrl.text),
+            _readOnlyRow('Token', _hasToken ? '•' * 24 : 'Not set'),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => setState(() => _editing = true),
+                icon: const Icon(Icons.edit_rounded, size: 16),
+                label: const Text('Edit'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _purple,
+                  side: const BorderSide(color: _purple),
+                  padding: const EdgeInsets.symmetric(vertical: 11),
+                ),
+              ),
+            ),
+          ] else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _ownerCtrl,
+                    style: const TextStyle(color: _text),
+                    decoration: InputDecoration(
+                      hintText: 'Repo owner (e.g. myallin1)',
+                      hintStyle: const TextStyle(color: _muted),
+                      filled: true,
+                      fillColor: _bg,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: _repoCtrl,
+                    style: const TextStyle(color: _text),
+                    decoration: InputDecoration(
+                      hintText: 'Repo name (e.g. Allin1)',
+                      hintStyle: const TextStyle(color: _muted),
+                      filled: true,
+                      fillColor: _bg,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _tokenCtrl,
+              obscureText: true,
+              style: const TextStyle(color: _text),
+              decoration: InputDecoration(
+                hintText: 'Paste your GitHub fine-grained token',
+                hintStyle: const TextStyle(color: _muted),
+                prefixIcon: const Icon(Icons.key_rounded, color: _red),
+                filled: true,
+                fillColor: _bg,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _saving ? null : () => setState(() { _editing = false; _load(); }),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _muted,
+                      side: const BorderSide(color: _border),
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _saving ? null : _save,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 14, height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                        : const Icon(Icons.check_rounded, size: 17),
+                    label: const Text('Save'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _green,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _readOnlyRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 56,
+            child: Text(label, style: GoogleFonts.outfit(color: _muted, fontSize: 12)),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.outfit(color: _text, fontSize: 12.5, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
