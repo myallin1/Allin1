@@ -294,6 +294,79 @@ jobs:
           retention-days: 30
 
   # ============================================================
+  # Job 3c: Customer Web — Preview then Promote
+  # ============================================================
+  # NEW (Sep 2 2026 — Nizam: "new build pandra customer app ah nan
+  # firebase test hosting valiya deploy panni check pannaum apram
+  # athu ok na namma main customer app link la deploy panirlam").
+  #
+  # FirebaseExtended/action-hosting-deploy is built for exactly this:
+  # on a pull_request event it deploys to a TEMPORARY preview channel
+  # URL and comments that link on the PR (production untouched, no
+  # CLI needed by anyone); on a push to main it deploys straight to
+  # the live "customer" hosting target (my-allin1). One job, one
+  # action, the trigger context decides preview vs. live — that is
+  # this action's whole design, not something built manually here.
+  #
+  # Uses the same FIREBASE_SERVICE_ACCOUNT secret already configured
+  # for the FCM admin-build notification (notify-admin-build.js) --
+  # no new secret to add.
+  customer_web_deploy:
+    name: Customer Web — Preview/Deploy
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      pull-requests: write # to comment the preview URL on the PR
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      # Same reasoning as publish_admin_test_build's identical step:
+      # pubspec.yaml declares .env as a required asset; it's gitignored
+      # and never in a fresh CI checkout. An empty placeholder is
+      # enough to satisfy the asset bundler.
+      - name: Create placeholder .env for asset bundling
+        run: touch .env
+
+      - name: Build customer web app
+        run: flutter build web --release -t lib/main_customer.dart
+
+      # Split into two explicit steps rather than one step with a
+      # ternary channelId -- an empty-string channelId is not the
+      # same as omitting the key, and this action's own docs treat
+      # "no channelId" (PR event) vs "channelId: live" (push) as the
+      # two distinct, supported modes.
+      - name: Deploy preview channel (pull request)
+        if: ${{ github.event_name == 'pull_request' && secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+          projectId: erode-super-app
+          target: customer
+
+      - name: Deploy live (push to main)
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+          projectId: erode-super-app
+          target: customer
+          channelId: live
+
+  # ============================================================
   # Job 3b: Publish Admin Test Build — the missing link in the
   # "Chitti voice -> GitHub issue -> Claude -> merge -> testable APK"
   # pipeline (Sep 1 2026, Nizam: "namma automation work ah fullfill ah
