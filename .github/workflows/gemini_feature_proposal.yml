@@ -42,6 +42,13 @@ on:
 jobs:
   propose-feature:
     runs-on: ubuntu-latest
+    # Gemini CLI refuses to act in a headless/CI directory unless told
+    # it's trusted (confirmed by the first live run of this workflow:
+    # "Gemini CLI is not running in a trusted directory" — it exited
+    # without creating anything). gemini-dispatch.yml already sets this
+    # the same way for its own Gemini CLI step.
+    env:
+      GEMINI_CLI_TRUST_WORKSPACE: 'true'
     permissions:
       contents: read
       issues: write
