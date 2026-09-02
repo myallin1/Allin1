@@ -18,9 +18,15 @@ jobs:
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
+    # FIX (Sep 2 2026, superseding PR #23): contents/pull-requests were
+    # read-only, so Claude could plan a fix but never push a branch or
+    # open a PR -- confirmed by a live run (issue #22) that got past
+    # the trigger check, ran, and failed with is_error:true plus
+    # "HttpError: Not Found" from a git-compare call, with GITHUB_TOKEN
+    # Permissions in the job log showing only read access.
     permissions:
-      contents: read
-      pull-requests: read
+      contents: write
+      pull-requests: write
       issues: read
       id-token: write
       actions: read # Required for Claude to read CI results on PRs
@@ -50,12 +56,20 @@ jobs:
           # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
           # prompt: 'Update the pull request description to include a summary of changes.'
 
-          # NEW (Sep 2 2026 — Nizam: "claude 2 model ah vachu... sonnet ah
-          # coding ku set pannirlaam" — moving off Gemini as CTO reviewer
-          # since its free-tier quota ran out, onto two Claude models
-          # instead: Sonnet does the coding here, Haiku audits in
-          # claude-code-review.yml). Pinned explicitly rather than relying
-          # on the action's current default, so a future default change
-          # upstream can't silently switch which model writes the code.
-          claude_args: '--model claude-sonnet-5'
+          # REVERTED (Sep 2 2026): pinning --model claude-sonnet-5 broke
+          # this workflow -- a live run (issue #29) showed the model
+          # accepted at init ("model": "claude-sonnet-5") but then
+          # failing immediately after with is_error:true, num_turns:1,
+          # total_cost_usd:0 -- consistent with "claude-sonnet-5" being
+          # this chat product's own short internal name rather than a
+          # real, resolvable Anthropic API model identifier the CLI can
+          # actually call. claude-code-action's own docs give full
+          # dated IDs as examples (e.g. claude-3-7-sonnet-20250219),
+          # not short aliases. The action's documented default is
+          # already Sonnet, so omitting claude_args here still gives
+          # Nizam's "Sonnet does the coding" without guessing at an
+          # exact dated ID. (claude-haiku-4-5-20251001 in
+          # claude-code-review.yml is a real, confirmed-working ID --
+          # that one stays as-is.)
+
 
