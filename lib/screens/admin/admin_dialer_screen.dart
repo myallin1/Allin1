@@ -675,7 +675,14 @@ class _RecentsTabState extends State<_RecentsTab> {
       return;
     }
     try {
-      final entries = await android_call_log.CallLog.get();
+      // FIX (Sep 2 2026 — Nizam: "slow va iruku"). CallLog.get() has
+      // no limit — it marshals the phone's ENTIRE call history across
+      // the platform channel before .take(100) ever runs in Dart,
+      // which is the actual slow part on a phone with years of calls.
+      // query()'s dateFrom filter cuts that at the source instead.
+      final entries = await android_call_log.CallLog.query(
+        dateFrom: DateTime.now().subtract(const Duration(days: 30)).millisecondsSinceEpoch,
+      );
       if (!mounted) return;
       setState(() => _entries = entries.take(100).toList());
     } catch (e) {
@@ -776,6 +783,17 @@ class _ContactsTabState extends State<_ContactsTab> {
     super.dispose();
   }
 
+  // FIX (Sep 2 2026 — Nizam: "mobile device dialer mari speed ilama
+  // slow va iruku"). getContacts(withProperties: true) was fetching
+  // every phone/email/address for every contact before the list could
+  // render at all — exactly the flutter_contacts slowness trap; the
+  // stock dialer shows names instantly and only reads a number when
+  // you actually tap one. Two-phase load: names-only first (fast),
+  // then upgrade in the background with full properties so search-by-
+  // number and calling keep working once that finishes. If the admin
+  // taps a contact before phase 2 lands, _callContact() below fetches
+  // that one contact's number on demand instead of waiting on the
+  // whole list.
   Future<void> _load() async {
     final granted = await FlutterContacts.requestPermission(readonly: true);
     if (!granted) {
@@ -783,13 +801,32 @@ class _ContactsTabState extends State<_ContactsTab> {
       return;
     }
     try {
-      final contacts = await FlutterContacts.getContacts(withProperties: true);
-      contacts.sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+      final names = await FlutterContacts.getContacts(withProperties: false, withPhoto: false);
+      names.sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
       if (!mounted) return;
-      setState(() => _contacts = contacts);
+      setState(() => _contacts = names);
     } catch (e) {
       if (mounted) setState(() => _contacts = []);
+      return;
     }
+    try {
+      final full = await FlutterContacts.getContacts(withProperties: true);
+      full.sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+      if (mounted) setState(() => _contacts = full);
+    } catch (_) {
+      // Names-only list from phase 1 is still shown — full properties
+      // are a nice-to-have upgrade, not required to use this tab.
+    }
+  }
+
+  Future<void> _callContact(Contact c) async {
+    if (c.phones.isNotEmpty) {
+      widget.onCall(c.phones.first.number);
+      return;
+    }
+    final full = await FlutterContacts.getContact(c.id);
+    final phone = full?.phones.isNotEmpty == true ? full!.phones.first.number : null;
+    if (phone != null) widget.onCall(phone);
   }
 
   List<Contact> get _filtered {
@@ -851,13 +888,14 @@ class _ContactsTabState extends State<_ContactsTab> {
                       subtitle: phone != null
                           ? Text(phone, style: GoogleFonts.outfit(color: _muted, fontSize: 11.5))
                           : null,
-                      trailing: phone != null
-                          ? IconButton(
-                              icon: const Icon(Icons.call_rounded, color: _green),
-                              onPressed: () => widget.onCall(phone),
-                            )
-                          : null,
-                      onTap: phone != null ? () => widget.onCall(phone) : null,
+                      // Always tappable, even before phase 2's full
+                      // properties land — _callContact() fetches this
+                      // one contact's number on demand when needed.
+                      trailing: IconButton(
+                        icon: const Icon(Icons.call_rounded, color: _green),
+                        onPressed: () => _callContact(c),
+                      ),
+                      onTap: () => _callContact(c),
                     );
                   },
                 ),
