@@ -26,6 +26,7 @@
 // scan will start flagging live images as "unused".
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import './firestore_usage_tracking.dart';
 
 class CloudinaryOrphanScanner {
   /// Reads every known image-URL field across the app's Cloudinary
@@ -41,7 +42,7 @@ class CloudinaryOrphanScanner {
     }
 
     // Heroes — 4 KYC/selfie photo fields per hero.
-    final heroes = await fs.collection('heroes').get();
+    final heroes = await fs.collection('heroes').trackedGet();
     for (final d in heroes.docs) {
       final data = d.data();
       addUrl(data['aadhaarDocUrl']);
@@ -51,7 +52,7 @@ class CloudinaryOrphanScanner {
     }
 
     // SOS KYC verification — same 3 document fields, separate flow.
-    final sos = await fs.collection('sos_kyc_requests').get();
+    final sos = await fs.collection('sos_kyc_requests').trackedGet();
     for (final d in sos.docs) {
       final data = d.data();
       addUrl(data['aadhaarDocUrl']);
@@ -73,22 +74,22 @@ class CloudinaryOrphanScanner {
     // seller running a custom hotel), so listing hotels then each
     // hotel's own items is a bounded, small N+1 rather than a blind
     // cross-collection query.
-    final hotels = await fs.collection('custom_hotels').get();
+    final hotels = await fs.collection('custom_hotels').trackedGet();
     for (final hotelDoc in hotels.docs) {
-      final items = await hotelDoc.reference.collection('items').get();
+      final items = await hotelDoc.reference.collection('items').trackedGet();
       for (final item in items.docs) {
         addUrl(item.data()['photoUrl']);
       }
     }
 
     // Admin-managed Erode Offers banners.
-    final offers = await fs.collection('erode_offers').get();
+    final offers = await fs.collection('erode_offers').trackedGet();
     for (final d in offers.docs) {
       addUrl(d.data()['imageUrl']);
     }
 
     // Admin-managed ad banners.
-    final ads = await fs.collection('ads').get();
+    final ads = await fs.collection('ads').trackedGet();
     for (final d in ads.docs) {
       addUrl(d.data()['imageUrl']);
     }

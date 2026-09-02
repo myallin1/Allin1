@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/task_model.dart';
+import '../services/firestore_usage_tracking.dart';
 
 class TaskProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -47,7 +48,7 @@ class TaskProvider extends ChangeNotifier {
       final snapshot = await _firestore
           .collection('affiliate_tasks')
           .where('isActive', isEqualTo: true)
-          .get();
+          .trackedGet();
 
       _tasks = snapshot.docs
           .map((doc) => TaskModel.fromFirestore(doc.data(), doc.id))

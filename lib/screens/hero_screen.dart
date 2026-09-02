@@ -82,7 +82,7 @@ class _CaptainScreenState extends State<CaptainScreen>
           .collection('rides')
           .where('status', isEqualTo: 'completed')
           .where('acceptedAt', isGreaterThan: Timestamp.fromDate(startDay))
-          .get();
+          .trackedGet();
       double total = 0;
       double ratingSum = 0;
       int ratingCount = 0;
@@ -115,7 +115,7 @@ class _CaptainScreenState extends State<CaptainScreen>
         await FirebaseFirestore.instance
             .collection('rides')
             .doc(rideId)
-            .update({'captainLat': pos.latitude, 'captainLng': pos.longitude});
+            .trackedUpdate({'captainLat': pos.latitude, 'captainLng': pos.longitude});
       } catch (e) {
         debugPrint('Location update error: $e');
       }
@@ -168,7 +168,7 @@ class _CaptainScreenState extends State<CaptainScreen>
   Future<void> _completeRide(String rideId) async {
     // Fetch ride data for fare display
     final rideSnap =
-        await FirebaseFirestore.instance.collection('rides').doc(rideId).get();
+        await FirebaseFirestore.instance.collection('rides').doc(rideId).trackedGet();
     if (!rideSnap.exists) {
       return;
     }

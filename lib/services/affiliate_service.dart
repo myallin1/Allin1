@@ -323,8 +323,8 @@ class AffiliateService {
   Future<bool> isCodeAvailable(String code) async {
     try {
       final results = await Future.wait([
-        _codesRef.doc(code).get(),
-        _linksRef.doc(code).get(),
+        _codesRef.doc(code).trackedGet(),
+        _linksRef.doc(code).trackedGet(),
       ]);
       return !results[0].exists && !results[1].exists;
     } catch (e) {
@@ -428,8 +428,8 @@ class AffiliateService {
   /// page sends the visitor to the app root instead of the campaign
   /// destination — so a retired poster never 404s.
   Future<void> setActive(String code, bool active) async {
-    await _codesRef.doc(code).set({'active': active}, SetOptions(merge: true));
-    await _linksRef.doc(code).set({'active': active}, SetOptions(merge: true));
+    await _codesRef.doc(code).trackedSet({'active': active}, SetOptions(merge: true));
+    await _linksRef.doc(code).trackedSet({'active': active}, SetOptions(merge: true));
   }
 
   // ================================================================
@@ -472,8 +472,8 @@ class AffiliateService {
     // delete fails halfway, the worst outcome is an orphaned admin row
     // (visible, manageable, deletable again) rather than an orphaned
     // live redirect (invisible and unmanageable).
-    await _linksRef.doc(code).delete();
-    await _codesRef.doc(code).delete();
+    await _linksRef.doc(code).trackedDelete();
+    await _codesRef.doc(code).trackedDelete();
 
     if (!alsoDeleteScans) return;
     try {
@@ -481,7 +481,7 @@ class AffiliateService {
           .collection('affiliate_scans')
           .where('code', isEqualTo: code)
           .limit(scanDeleteLimit)
-          .get();
+          .trackedGet();
       if (snap.docs.isEmpty) return;
       final batch = _fs.batch();
       for (final d in snap.docs) {
@@ -515,7 +515,7 @@ class AffiliateService {
       data['campaignEnd'] = Timestamp.fromDate(campaignEnd);
     }
     if (data.isEmpty) return;
-    await _codesRef.doc(code).set(data, SetOptions(merge: true));
+    await _codesRef.doc(code).trackedSet(data, SetOptions(merge: true));
   }
 
   // ── Customer self-referral (Aug 13 2026) ────────────────────────

@@ -68,7 +68,7 @@ import 'coming_soon_screen.dart';
 import 'construction_screen.dart';
 import 'eseva_service_screen.dart';
 import 'custom_food_order_screen.dart';
-import 'grocery_order_screen.dart';
+import 'grocery_hub_screen.dart';
 import '../services/guru_overlay_service.dart';
 import 'guru_chat_screen.dart';
 import 'hero_booking_screen.dart';
@@ -219,7 +219,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
-          .get();
+          .trackedGet();
       final data = doc.data();
       final freshName = (data?['name'] as String?)?.trim();
       if (freshName != null && freshName.isNotEmpty) {
@@ -907,11 +907,20 @@ class _DashboardScreenState extends State<DashboardScreen>
       case 'taxi':        _navigate(const BikeBookingScreen()); break;
       case 'broadband':   _launchBroadband(); break;
       case 'food':        _navigate(const CustomFoodOrderScreen()); break;
-      case 'grocery':     _navigate(const GroceryOrderScreen()); break;
+      case 'grocery':     _navigate(const GroceryHubScreen()); break;
       case 'njtech':      _navigate(const NJTechStoreScreen()); break;
       case 'carwash':     _navigate(const CarWashScreen()); break;
       case 'puncture':    Navigator.push<void>(context, MaterialPageRoute<void>(builder: (_) => const HeroBookingScreen(initialCategory: 'puncture'))); break;
-      case 'electrician': Navigator.push<void>(context, MaterialPageRoute<void>(builder: (_) => const HeroBookingScreen(initialCategory: 'electrician'))); break;
+      // FIX (Sep 2 2026 — service-booking flow audit): this used to open
+      // HeroBookingScreen(initialCategory: 'electrician') — the OLD
+      // generic hero_booking pipeline, which skillHeroServiceAccess()
+      // explicitly BLOCKS every registered electrician from receiving
+      // (heroBooking: false). A customer tapping this got dispatched to
+      // a random vehicle hero with no electrical skill, while every real
+      // electrician never saw it. SkilledServicesScreen is the correct
+      // pipeline (electronics_service + requiredSkill, see
+      // hero_skill_catalog.dart) — same one 'homeservices' below uses.
+      case 'electrician': _navigate(const SkilledServicesScreen()); break;
       case 'construction':_navigate(const ConstructionScreen()); break;
       case 'homeservices': _navigate(const SkilledServicesScreen()); break;
       case 'custom':      _navigate(const HeroBookingScreen(initialCategory: 'custom_order')); break;
@@ -1484,7 +1493,7 @@ class _HomeBannerOffersSectionState extends State<_HomeBannerOffersSection> {
         final snap = await FirebaseFirestore.instance
             .collection('home_banner_offers')
             .where('isActive', isEqualTo: true)
-            .get();
+            .trackedGet();
         return snap.docs.map((d) {
           final data = Map<String, dynamic>.from(d.data());
           final ts = data['createdAt'];
@@ -2422,7 +2431,7 @@ class _HomeTab extends StatelessWidget {
           GestureDetector(
             onTap: () => Navigator.push<void>(
               context,
-              MaterialPageRoute<void>(builder: (_) => const GroceryOrderScreen()),
+              MaterialPageRoute<void>(builder: (_) => const GroceryHubScreen()),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2464,7 +2473,7 @@ class _HomeTab extends StatelessWidget {
             key: const Key('dashboard_tile_grocery'),
             onTap: () => Navigator.push<void>(
               context,
-              MaterialPageRoute<void>(builder: (_) => const GroceryOrderScreen()),
+              MaterialPageRoute<void>(builder: (_) => const GroceryHubScreen()),
             ),
             child: Container(
               width: double.infinity,
@@ -2756,7 +2765,12 @@ class _HomeTab extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GestureDetector(
-            onTap: () => Navigator.push<void>(context, MaterialPageRoute<void>(builder: (_) => const HeroBookingScreen(initialCategory: 'electrician'))),
+            // FIX (Sep 2 2026 — service-booking flow audit, same bug as
+            // _tap('electrician') above): was routing to the OLD
+            // hero_booking pipeline, which every registered electrician
+            // is explicitly blocked from receiving. SkilledServicesScreen
+            // is the correct skill-dispatch pipeline.
+            onTap: () => Navigator.push<void>(context, MaterialPageRoute<void>(builder: (_) => const SkilledServicesScreen())),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -2794,7 +2808,12 @@ class _HomeTab extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           GestureDetector(
-            onTap: () => Navigator.push<void>(context, MaterialPageRoute<void>(builder: (_) => const HeroBookingScreen(initialCategory: 'electrician'))),
+            // FIX (Sep 2 2026 — service-booking flow audit, same bug as
+            // _tap('electrician') above): was routing to the OLD
+            // hero_booking pipeline, which every registered electrician
+            // is explicitly blocked from receiving. SkilledServicesScreen
+            // is the correct skill-dispatch pipeline.
+            onTap: () => Navigator.push<void>(context, MaterialPageRoute<void>(builder: (_) => const SkilledServicesScreen())),
             child: Container(
               width: double.infinity,
               height: 56,

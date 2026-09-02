@@ -40,6 +40,7 @@ import '../widgets/tutorial_videos_section.dart';
 // HeroVerificationPendingScreen — see hero_pending_screen.dart.
 import 'hero_pending_screen.dart';
 import 'selfie_capture_screen.dart';
+import '../services/firestore_usage_tracking.dart';
 
 // THEME FIX (merge duplicate registration forms): this screen used to be
 // a dark theme, separate from the light pink/white ProfileSetupScreen
@@ -994,7 +995,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
             .collection('heroes')
             .where('phone', isEqualTo: enteredPhone)
             .limit(1)
-            .get();
+            .trackedGet();
         final duplicate = existing.docs
             .any((doc) => doc.id != user.uid);
         if (duplicate) {

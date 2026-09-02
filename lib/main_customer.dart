@@ -760,7 +760,7 @@ Future<void> _restoreActiveRideIfNeeded() async {
     final snap = await FirebaseFirestore.instance
         .collection('rides')
         .doc(rideDocId)
-        .get();
+        .trackedGet();
     final status = snap.data()?['status'] as String? ?? '';
     final activeStatuses = ['accepted', 'arriving', 'in_progress'];
     if (!activeStatuses.contains(status)) {
@@ -1021,7 +1021,7 @@ class _FoodShopDetailRestoreLoader extends StatelessWidget {
       future: FirebaseFirestore.instance
           .collection('sellers')
           .doc(sellerId)
-          .get(),
+          .trackedGet(),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Scaffold(

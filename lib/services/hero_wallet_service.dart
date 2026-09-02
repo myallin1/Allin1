@@ -240,7 +240,7 @@ class HeroWalletService {
     required String sentByAdminUid,
     double minOwed = 1.0,
   }) async {
-    final snap = await _firestore.collection('hero_wallets').limit(500).get();
+    final snap = await _firestore.collection('hero_wallets').limit(500).trackedGet();
 
     final targets = <String, double>{};
     for (final d in snap.docs) {

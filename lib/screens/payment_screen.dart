@@ -132,7 +132,7 @@ class _PaymentScreenState extends State<PaymentScreen>
   Future<void> _checkPaymentStatus() async {
     final rideDocId = _rideDocId;
     if (rideDocId == null) return;
-    final snap = await FirebaseFirestore.instance.collection('rides').doc(rideDocId).get();
+    final snap = await FirebaseFirestore.instance.collection('rides').doc(rideDocId).trackedGet();
     final data = snap.data();
     if (data == null) return;
     final paymentStatus = (data['paymentStatus'] as String? ?? '').trim();
@@ -246,7 +246,7 @@ class _PaymentScreenState extends State<PaymentScreen>
       }
 
       final doc =
-          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+          await FirebaseFirestore.instance.collection('users').doc(uid).trackedGet();
       if (!mounted || !doc.exists) {
         return;
       }
@@ -480,7 +480,7 @@ class _PaymentScreenState extends State<PaymentScreen>
       final snap = await FirebaseFirestore.instance
           .collection('rides')
           .doc(rideDocId)
-          .get();
+          .trackedGet();
       final data = snap.data();
       final paymentStatus = (data?['paymentStatus'] as String? ?? '').trim();
       if (!mounted) return;

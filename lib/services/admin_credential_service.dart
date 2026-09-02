@@ -256,7 +256,7 @@ class AdminCredentialService {
       // Save to Firestore
       await _adminCredentialsCollection
           .doc(credentialId)
-          .set(credential.toJson());
+          .trackedSet(credential.toJson());
 
       return AdminCredentialResult.success(data: {'id': credentialId});
     } on FirebaseException catch (e) {
@@ -323,7 +323,7 @@ class AdminCredentialService {
         return null;
       }
 
-      final doc = await _adminCredentialsCollection.doc(credentialId).get();
+      final doc = await _adminCredentialsCollection.doc(credentialId).trackedGet();
       if (!doc.exists) {
         return null;
       }
@@ -445,7 +445,7 @@ class AdminCredentialService {
 
       await _adminCredentialsCollection
           .doc(credentialId)
-          .update(updated.toJson());
+          .trackedUpdate(updated.toJson());
 
       return AdminCredentialResult.success();
     } on FirebaseException catch (e) {
@@ -536,12 +536,12 @@ class AdminCredentialService {
         return AdminCredentialResult.failure('Admin access required');
       }
 
-      final doc = await _adminCredentialsCollection.doc(credentialId).get();
+      final doc = await _adminCredentialsCollection.doc(credentialId).trackedGet();
       if (!doc.exists) {
         return AdminCredentialResult.failure('Credential not found');
       }
 
-      await _adminCredentialsCollection.doc(credentialId).delete();
+      await _adminCredentialsCollection.doc(credentialId).trackedDelete();
 
       return AdminCredentialResult.success();
     } on FirebaseException catch (e) {
@@ -617,7 +617,7 @@ class AdminCredentialService {
 
       final userId = currentUserId!;
 
-      final doc = await _adminCredentialsCollection.doc(credentialId).get();
+      final doc = await _adminCredentialsCollection.doc(credentialId).trackedGet();
       if (!doc.exists) {
         return null;
       }
@@ -653,7 +653,7 @@ class AdminCredentialService {
   /// Get user details by ID
   Future<Map<String, dynamic>?> getUserDetails(String userId) async {
     try {
-      final doc = await _usersCollection.doc(userId).get();
+      final doc = await _usersCollection.doc(userId).trackedGet();
       if (!doc.exists) {
         return null;
       }

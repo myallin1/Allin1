@@ -45,9 +45,9 @@
 // CLAIMABLE; the existing atomic accept decides who gets it. Nor does
 // it touch money, pricing, or the customer's payment.
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_database/firebase_database.dart' as rtdb;
 import 'package:flutter/foundation.dart';
 import '../firestore_usage_tracking.dart';
+import '../service_request_service.dart';
 
 /// How the escalation ended, so callers can say something true.
 enum EscalationOutcome {
@@ -168,7 +168,22 @@ class ChittiOrderEscalationService {
       // transaction may be retried, and re-running a broadcast or
       // re-sending the customer a message on every retry would spam
       // both sides.
-      await _makeClaimable(requestId);
+      //
+      // FIX (Sep 2 2026 — audit): this used to call a local
+      // _makeClaimable() that only ever flipped
+      // active_service_requests/{requestId}'s status — it never wrote a
+      // single hero_service_pings/{heroId}/{requestId} node, which is
+      // the ONLY thing any hero client actually listens on to discover
+      // new work. The banner told the hero "Sent to all heroes" and
+      // genuinely notified nobody. rebroadcastForEscalation() is the
+      // real fix — see its doc comment in service_request_service.dart
+      // for the full story, including why a skill trade needs its
+      // requiredSkill/location re-derived, not just a bare status flip.
+      try {
+        await ServiceRequestService().rebroadcastForEscalation(requestId);
+      } catch (e) {
+        debugPrint('[ChittiEscalation] rebroadcastForEscalation failed: $e');
+      }
       await _tellCustomer(ref);
       return EscalationOutcome.escalated;
     } catch (e) {
@@ -176,56 +191,6 @@ class ChittiOrderEscalationService {
       return EscalationOutcome.failed;
     }
   }
-
-  /// Flips the RTDB node so the existing hero ping listeners see it.
-  ///
-  /// Mirrors requestDeliveryBroadcast()'s shape rather than inventing
-  /// one: the hero clients already discard a ping past `pingExpiresAt`,
-  /// so a node written any other way would be ignored on sight.
-  Future<void> _makeClaimable(String requestId) async {
-    try {
-      final node =
-          rtdb.FirebaseDatabase.instance.ref('active_service_requests/$requestId');
-      final snap = await node.get();
-      final expiresAt = DateTime.now().toUtc().millisecondsSinceEpoch +
-          _pingExpirySeconds * 1000;
-
-      if (!snap.exists) {
-        // A call-centre booking may never have had an RTDB node, since
-        // it was never broadcast. Without one no hero can see it, so
-        // escalating would change a status and nothing else.
-        final doc = await _db.collection('service_requests').doc(requestId).get();
-        final d = doc.data() ?? <String, dynamic>{};
-        await node.set(<String, dynamic>{
-          'requestId': requestId,
-          'requestType': d['requestType'] ?? '',
-          'customerId': d['customerId'] ?? '',
-          'customerName': d['customerName'] ?? 'Customer',
-          'customerPhone': d['customerPhone'] ?? '',
-          'details': d['details'] ?? <String, dynamic>{},
-          'status': 'pinging',
-          'currentPingHeroId': '',
-          'acceptedHeroId': '',
-          'pingExpiresAt': expiresAt,
-          'city': d['city'] ?? 'erode',
-          'createdAt': rtdb.ServerValue.timestamp,
-        });
-        return;
-      }
-
-      await node.update(<String, dynamic>{
-        'status': 'pinging',
-        'pingExpiresAt': expiresAt,
-      });
-    } catch (e) {
-      debugPrint('[ChittiEscalation] makeClaimable failed: $e');
-    }
-  }
-
-  /// Mirrors kServiceRequestPingExpirySeconds. Duplicated rather than
-  /// imported to keep this file free of a dependency on the whole
-  /// request service; the two must stay in step.
-  static const int _pingExpirySeconds = 60;
 
   /// Tells the customer their order is moving.
   ///

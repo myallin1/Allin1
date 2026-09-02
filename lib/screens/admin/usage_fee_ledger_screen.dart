@@ -32,6 +32,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/db_usage_tracker.dart';
 import '../../widgets/admin/cached_analytics_view.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -66,7 +67,7 @@ class _UsageFeeLedgerScreenState extends State<UsageFeeLedgerScreen> {
     final snap = await FirebaseFirestore.instance
         .collectionGroup('transactions')
         .limit(500)
-        .get();
+        .trackedGet();
     // Report the real document count so the DB Usage Monitor reflects
     // what this query actually cost (a collection-group read bills per
     // document returned, not per query).

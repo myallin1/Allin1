@@ -28,6 +28,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/db_usage_tracker.dart';
 import '../../widgets/admin/cached_analytics_view.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -75,7 +76,7 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
         .collection('company_payments_received')
         .orderBy('collectedAt', descending: true)
         .limit(500)
-        .get();
+        .trackedGet();
     DbUsageTracker.instance.recordRead(snap.docs.length, 'payments_received', 'fetch_company_payments');
     // Flattened to plain maps (epoch millis instead of Timestamp) so the
     // snapshot can be stored in Hive.
@@ -101,7 +102,7 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
         .collection('rides')
         .where('paymentDispute', isEqualTo: true)
         .limit(300)
-        .get();
+        .trackedGet();
     DbUsageTracker.instance.recordRead(snap.docs.length, 'payments_received', 'fetch_disputes');
     return snap.docs.map((d) {
       final data = d.data();
@@ -311,7 +312,7 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
                               await FirebaseFirestore.instance
                                   .collection('company_payments_received')
                                   .doc(id)
-                                  .update({
+                                  .trackedUpdate({
                                 'verified': true,
                                 'verifiedAt': FieldValue.serverTimestamp(),
                               });
@@ -426,7 +427,7 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
                         await FirebaseFirestore.instance
                             .collection('rides')
                             .doc(id)
-                            .update({
+                            .trackedUpdate({
                           'adminAlertRequired': false,
                           'disputeResolvedAt': FieldValue.serverTimestamp(),
                         });

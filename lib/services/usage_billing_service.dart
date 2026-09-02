@@ -20,6 +20,7 @@
 // problems fixed elsewhere this session.
 // ================================================================
 import 'package:cloud_firestore/cloud_firestore.dart';
+import './firestore_usage_tracking.dart';
 
 class UsageBillingService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -36,7 +37,7 @@ class UsageBillingService {
         .collection('service_requests')
         .where('requestType', isEqualTo: 'catalog_food_order')
         .where('status', isEqualTo: 'completed')
-        .get();
+        .trackedGet();
 
     final counts = <String, int>{};
     for (final doc in snapshot.docs) {
@@ -80,7 +81,7 @@ class UsageBillingService {
     final ridesSnapshot = await _firestore
         .collection('rides')
         .where('status', isEqualTo: 'completed')
-        .get();
+        .trackedGet();
     for (final doc in ridesSnapshot.docs) {
       final data = doc.data();
       final completedAt = (data['completedAt'] as Timestamp?)?.toDate();
@@ -97,7 +98,7 @@ class UsageBillingService {
     final requestsSnapshot = await _firestore
         .collection('service_requests')
         .where('status', isEqualTo: 'completed')
-        .get();
+        .trackedGet();
     for (final doc in requestsSnapshot.docs) {
       final data = doc.data();
       final updatedAt = (data['updatedAt'] as Timestamp?)?.toDate();

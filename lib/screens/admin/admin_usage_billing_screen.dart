@@ -19,6 +19,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../services/usage_billing_service.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF0D0D18);
@@ -106,7 +107,7 @@ class _AdminUsageBillingScreenState extends State<AdminUsageBillingScreen> {
         final doc = await FirebaseFirestore.instance
             .collection(collection)
             .doc(entry.key)
-            .get();
+            .trackedGet();
         final data = doc.data();
         if (data != null && data[nameField] is String) {
           name = data[nameField] as String;

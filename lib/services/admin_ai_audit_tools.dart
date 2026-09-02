@@ -12,6 +12,7 @@
 // comment for the full read/write boundary explanation). This file
 // never imports or references that gate; it only returns data.
 import 'package:cloud_firestore/cloud_firestore.dart';
+import './firestore_usage_tracking.dart';
 
 class AdminAiAuditTools {
   AdminAiAuditTools._();
@@ -93,7 +94,7 @@ class AdminAiAuditTools {
           .collection('ux_audit_reports')
           .orderBy('timestamp', descending: true)
           .limit(100)
-          .get();
+          .trackedGet();
       if (snap.docs.isEmpty) {
         return 'No QA test bot runs found yet — the Synthetic QA Test-Bot '
             '(integration_test/qa_five_screens_test.dart) has not been executed, '
@@ -144,7 +145,7 @@ class AdminAiAuditTools {
   static Future<KycReportResult?> generateHeroKycReport({String? targetUid}) async {
     final firestore = FirebaseFirestore.instance;
     if (targetUid != null && targetUid.trim().isNotEmpty) {
-      final snap = await firestore.collection('heroes').doc(targetUid.trim()).get();
+      final snap = await firestore.collection('heroes').doc(targetUid.trim()).trackedGet();
       if (!snap.exists) return null;
       return _buildHeroReport(snap.id, snap.data()!);
     }
@@ -157,7 +158,7 @@ class AdminAiAuditTools {
         .collection('heroes')
         .where('approvalStatus', isEqualTo: 'pending')
         .limit(10)
-        .get();
+        .trackedGet();
     if (query.docs.isEmpty) return null;
     final sorted = query.docs.toList()
       ..sort((a, b) {
@@ -233,7 +234,7 @@ class AdminAiAuditTools {
   static Future<KycReportResult?> generateSellerKycReport({String? targetUid}) async {
     final firestore = FirebaseFirestore.instance;
     if (targetUid != null && targetUid.trim().isNotEmpty) {
-      final snap = await firestore.collection('sellers').doc(targetUid.trim()).get();
+      final snap = await firestore.collection('sellers').doc(targetUid.trim()).trackedGet();
       if (!snap.exists) return null;
       return _buildSellerReport(snap.id, snap.data()!);
     }
@@ -241,7 +242,7 @@ class AdminAiAuditTools {
         .collection('sellers')
         .where('status', isEqualTo: 'pending')
         .limit(10)
-        .get();
+        .trackedGet();
     if (query.docs.isEmpty) return null;
     final sorted = query.docs.toList()
       ..sort((a, b) {
@@ -300,7 +301,7 @@ class AdminAiAuditTools {
   static Future<KycReportResult?> generateSosKycReport({String? targetUid}) async {
     final firestore = FirebaseFirestore.instance;
     if (targetUid != null && targetUid.trim().isNotEmpty) {
-      final snap = await firestore.collection('sos_kyc_requests').doc(targetUid.trim()).get();
+      final snap = await firestore.collection('sos_kyc_requests').doc(targetUid.trim()).trackedGet();
       if (!snap.exists) return null;
       return _buildSosReport(snap.id, snap.data()!);
     }
@@ -308,7 +309,7 @@ class AdminAiAuditTools {
         .collection('sos_kyc_requests')
         .where('status', isEqualTo: 'pending')
         .limit(10)
-        .get();
+        .trackedGet();
     if (query.docs.isEmpty) return null;
     final sorted = query.docs.toList()
       ..sort((a, b) {

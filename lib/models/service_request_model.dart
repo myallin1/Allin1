@@ -145,6 +145,15 @@ class ServiceRequestModel {
   final String? paymentStatus;
   final bool? estimateApprovedByCustomer;
 
+  /// True once the seller has attested (in seller_dashboard_screen.dart)
+  /// that the customer's direct-to-seller UPI payment
+  /// (details.paymentMethod == 'seller_direct_upi') actually landed in
+  /// their own account. Gates "Book Delivery Partner" for that payment
+  /// method only — see ServiceRequestService.confirmSellerPaymentReceived().
+  /// Irrelevant (and never set) for every other paymentMethod, which
+  /// keeps booking a hero exactly as unconditional as it always was.
+  final bool? sellerPaymentConfirmed;
+
   /// Seller's own kitchen stage for shop-menu food orders — 'new',
   /// 'accepted', 'preparing', 'ready', 'delivery_requested'.
   /// (Aug 17 2026 seller audit.)
@@ -195,6 +204,7 @@ class ServiceRequestModel {
     this.finalAmountRoot,
     this.paymentStatus,
     this.estimateApprovedByCustomer,
+    this.sellerPaymentConfirmed,
     this.sellerStage,
     this.sellerStageAt,
     this.createdAt,
@@ -282,6 +292,7 @@ class ServiceRequestModel {
       finalAmountRoot: map['finalAmount'] as num?,
       paymentStatus: map['paymentStatus'] as String?,
       estimateApprovedByCustomer: map['estimateApprovedByCustomer'] as bool?,
+      sellerPaymentConfirmed: map['sellerPaymentConfirmed'] as bool?,
       sellerStage: map['sellerStage'] as String?,
       sellerStageAt: parseFlexibleTimestamp(map['sellerStageAt']),
       createdAt: parseFlexibleTimestamp(map['createdAt']),

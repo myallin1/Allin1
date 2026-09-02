@@ -18,6 +18,7 @@ import '../widgets/server_busy_dialog.dart' show kCallCenterNumberIntl;
 import '../widgets/soundbox_easter_egg_overlay.dart';
 import 'erode_offers_section.dart';
 import 'guru_chat_screen.dart';
+import '../services/firestore_usage_tracking.dart';
 
 const Color _paytmBlue = Color(0xFF00BAF2);
 const Color _paytmDarkBlue = Color(0xFF002970);
@@ -96,7 +97,7 @@ class _RewardsScreenState extends State<RewardsScreen>
       final snap = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
-          .get();
+          .trackedGet();
       DbUsageTracker.instance.recordRead(1, 'rewards_screen', 'profile_fetch');
       final data = snap.data() ?? <String, dynamic>{};
       final rewardsV2 = (data['rewardsV2'] as Map<String, dynamic>?) ?? {};

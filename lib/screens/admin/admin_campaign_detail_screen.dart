@@ -26,6 +26,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../services/affiliate_service.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0E0B10);
 const Color _surface = Color(0xFF1A151D);
@@ -67,14 +68,14 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
     try {
       final fs = FirebaseFirestore.instance;
       final campaignDoc =
-          await fs.collection('affiliate_codes').doc(widget.code).get();
+          await fs.collection('affiliate_codes').doc(widget.code).trackedGet();
       final scanSnap = await AffiliateService.instance.fetchScans(widget.code);
       // Leads carry the refCode, so this is the true attributed-signup
       // count rather than the denormalised counter.
       final leadSnap = await fs
           .collection('affiliate_leads')
           .where('refCode', isEqualTo: widget.code)
-          .get();
+          .trackedGet();
 
       if (!mounted) return;
       setState(() {

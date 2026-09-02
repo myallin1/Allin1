@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import './firestore_usage_tracking.dart';
 
 class AiActivationService extends ChangeNotifier {
   // FIX (per Nizam/CTO's "bring your own key" pivot — customers now
@@ -134,7 +135,7 @@ class AiActivationService extends ChangeNotifier {
       final snapshot = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
-          .get();
+          .trackedGet();
       final data = snapshot.data() ?? <String, dynamic>{};
       final claims =
           (data['promoClaims'] as Map<String, dynamic>?) ??

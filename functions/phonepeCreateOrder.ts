@@ -14,9 +14,25 @@
  *      pays via whichever UPI app they have installed.
  *   4. PhonePe calls phonepeWebhook.ts server-to-server with the
  *      result — THAT write (not anything from the client) is what
- *      flips payment_orders/.status to 'paid' and cascades to the
- *      linked service_requests/orders doc. This function never marks
- *      anything paid itself.
+ *      flips payment_orders/.status to 'paid'. If the linked order doc
+ *      already exists at that point, the webhook also cascades
+ *      paymentStatus onto it directly; if not (see below), the client
+ *      finishes that link explicitly via phonepeConfirmLink.ts. This
+ *      function never marks anything paid itself.
+ *
+ * PAY-BEFORE-ORDER-EXISTS (food checkout, Sep 2026): unlike a payment
+ * for an order that's already sitting in Firestore (e.g. a completed
+ * hero task's final bill), food_checkout_screen.dart collects payment
+ * BEFORE seller_detail_screen.dart ever creates the service_requests
+ * doc — there is nothing to check ownership against yet. [requestId]
+ * here is only a RESERVED id (ServiceRequestService.reserveRequestId(),
+ * which allocates a Firestore doc id without writing anything) that the
+ * client commits to using as the eventual order's real id via
+ * createServiceRequest's preGeneratedRequestId param — so once that doc
+ * is created, this payment_orders record and the real order agree on
+ * the same id, and phonepeConfirmLink.ts can join them. Ownership is
+ * therefore anchored to context.auth.uid alone (the customer who is
+ * paying, right now, in this call) rather than to a pre-existing doc.
  * ================================================================
  */
 
@@ -55,7 +71,29 @@ interface CreateOrderRequest {
   collection?: string; // defaults to 'service_requests'
 }
 
-export const createPhonePeOrder = functions.https.onCall(
+// FIX (audit pass — critical gap): this function reads
+// PHONEPE_MERCHANT_ID/PHONEPE_SALT_KEY/etc. via process.env, and Nizam
+// set those as Secret Manager secrets (`firebase functions:secrets:set`).
+// For a 1st-gen Cloud Function (this file uses `functions.https.onCall`,
+// not the v2 API), Secret Manager values are NEVER auto-injected into
+// process.env — they only land there if the function explicitly
+// declares `.runWith({ secrets: [...] })`. Without this, the function
+// would deploy successfully and then throw "PhonePe is not configured"
+// on every single call, forever, regardless of how correctly the
+// secrets were set — a structural gap in THIS function, not a missing
+// setup step on Nizam's end.
+export const createPhonePeOrder = functions
+  .runWith({
+    secrets: [
+      'PHONEPE_MERCHANT_ID',
+      'PHONEPE_SALT_KEY',
+      'PHONEPE_SALT_INDEX',
+      'PHONEPE_ENV',
+      'PHONEPE_CALLBACK_URL',
+      'PHONEPE_APP_REDIRECT_URL',
+    ],
+  })
+  .https.onCall(
   async (data: CreateOrderRequest, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'User must be logged in');
@@ -77,13 +115,16 @@ export const createPhonePeOrder = functions.https.onCall(
     const uid = context.auth.uid;
     const amountPaise = Math.round(data.amount * 100);
 
-    // Ownership check — a customer can only start a payment for their
-    // own order, never on someone else's requestId.
+    // Ownership check — reversed from a "does this doc exist and belong
+    // to me" lookup (which food checkout can't satisfy — the order
+    // doesn't exist yet, see this file's header) to simply anchoring the
+    // payment record to whoever is authenticated right now. If a source
+    // doc DOES already exist for this requestId (the pay-after-order-
+    // exists case, e.g. a completed hero task's bill), still verify it's
+    // actually theirs — never let one customer pay against, and thereby
+    // silently flip paymentStatus on, another customer's existing order.
     const sourceDoc = await db.collection(sourceCollection).doc(data.requestId).get();
-    if (!sourceDoc.exists) {
-      throw new functions.https.HttpsError('not-found', 'Order not found');
-    }
-    if (sourceDoc.data()?.customerId !== uid) {
+    if (sourceDoc.exists && sourceDoc.data()?.customerId !== uid) {
       throw new functions.https.HttpsError('permission-denied', 'Not your order');
     }
 

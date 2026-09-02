@@ -13,6 +13,17 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../services/phonepe_payment_service.dart';
 
+/// What the caller gets back once the WebView closes. [merchantTransactionId]
+/// is populated whenever an order was actually created here — even on
+/// failure, since a caller may want it for support/reconciliation — and is
+/// what a "pay before the order doc exists" caller (food checkout) later
+/// passes to PhonePePaymentService.confirmLink() once it has created that doc.
+class PhonePeCheckoutOutcome {
+  final bool success;
+  final String? merchantTransactionId;
+  const PhonePeCheckoutOutcome({required this.success, this.merchantTransactionId});
+}
+
 class PhonePeCheckoutScreen extends StatefulWidget {
   final String requestId;
   final double amount;
@@ -80,10 +91,14 @@ class _PhonePeCheckoutScreenState extends State<PhonePeCheckoutScreen> {
     if (_resolved || !mounted) return;
     if (status == PhonePeOrderStatus.paid) {
       _resolved = true;
-      Navigator.of(context).pop(true);
+      Navigator.of(context).pop(
+        PhonePeCheckoutOutcome(success: true, merchantTransactionId: _merchantTransactionId),
+      );
     } else if (status == PhonePeOrderStatus.failed) {
       _resolved = true;
-      Navigator.of(context).pop(false);
+      Navigator.of(context).pop(
+        PhonePeCheckoutOutcome(success: false, merchantTransactionId: _merchantTransactionId),
+      );
     }
   }
 

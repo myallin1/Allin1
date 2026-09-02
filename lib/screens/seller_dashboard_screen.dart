@@ -487,7 +487,15 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
     if (_busyRequestIds.contains(request.requestId)) return;
     setState(() => _busyRequestIds.add(request.requestId));
     try {
-      await ServiceRequestService().advanceSellerStage(request.requestId, stage, sellerId: _seller?.id);
+      await ServiceRequestService().advanceSellerStage(
+        request.requestId,
+        stage,
+        sellerId: _seller?.id,
+        // Only meaningful on the Accepted transition (see
+        // advanceSellerStage's own doc comment) — harmless to pass on
+        // every call.
+        etaMinutes: _seller?.estimatedPrepTimeMin,
+      );
       if (mounted && successMessage != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(successMessage), backgroundColor: _teal),
@@ -497,6 +505,28 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not update order: $e'), backgroundColor: _red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busyRequestIds.remove(request.requestId));
+    }
+  }
+
+  /// Seller's own "I checked my UPI/bank app, the money is in" gate —
+  /// see the kSellerStageReady case above for why this exists. A plain
+  /// honest-attestation write, same trust model as a hero's own
+  /// markServiceRequestPaymentReceived(); no server verification is
+  /// possible here since there is deliberately no payment gateway in
+  /// this path.
+  Future<void> _confirmSellerPayment(ServiceRequestModel request) async {
+    if (_busyRequestIds.contains(request.requestId)) return;
+    setState(() => _busyRequestIds.add(request.requestId));
+    try {
+      await ServiceRequestService().confirmSellerPaymentReceived(request.requestId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not confirm payment: $e'), backgroundColor: _red),
         );
       }
     } finally {
@@ -694,6 +724,29 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
           ),
         );
       case ServiceRequestService.kSellerStageReady:
+        // NEW (Sep 2026 — direct-to-seller UPI payment): when the
+        // customer chose to pay the SELLER directly (paymentMethod
+        // 'seller_direct_upi' — see FoodCheckoutScreen), the seller must
+        // check their own bank/UPI app and confirm the money actually
+        // arrived BEFORE a hero is booked, exactly per Nizam's spec:
+        // "hotel karan customer pay pannunathu paathutu than food
+        // delivery book panna hero vaye assign pannuvaru." Every other
+        // paymentMethod (cod, upi, phonepe_upi) is completely unaffected
+        // — falls straight through to the unconditional "Book Delivery
+        // Partner" button exactly as before this change.
+        final paymentMethod = request.rawDetails['paymentMethod'] as String?;
+        final needsSellerPaymentConfirm =
+            paymentMethod == 'seller_direct_upi' &&
+                request.sellerPaymentConfirmed != true;
+        if (needsSellerPaymentConfirm) {
+          return _actionButton(
+            label: 'Confirm Payment Received',
+            icon: Icons.verified_rounded,
+            color: _gold,
+            busy: busy,
+            onTap: () => _confirmSellerPayment(request),
+          );
+        }
         // THE step the whole audit was about — this is what actually
         // notifies heroes. Before this change the seller saw only a
         // passive "Waiting for Hero to pick up" label that pinged nobody.

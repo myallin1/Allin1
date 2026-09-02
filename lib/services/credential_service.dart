@@ -261,7 +261,7 @@ class CredentialService {
         }
       }
 
-      final doc = await _credentialsCollection.doc(credentialId).get();
+      final doc = await _credentialsCollection.doc(credentialId).trackedGet();
       if (!doc.exists) {
         return null;
       }
@@ -616,7 +616,7 @@ class CredentialService {
         return CredentialResult.failure('User not logged in');
       }
 
-      final doc = await _credentialsCollection.doc(credentialId).get();
+      final doc = await _credentialsCollection.doc(credentialId).trackedGet();
       if (!doc.exists) {
         return CredentialResult.failure('Credential not found');
       }
@@ -661,13 +661,13 @@ class CredentialService {
       }
 
       // Get credential to verify
-      final doc = await _credentialsCollection.doc(credentialId).get();
+      final doc = await _credentialsCollection.doc(credentialId).trackedGet();
       if (!doc.exists) {
         return CredentialResult.failure('Credential not found');
       }
 
       // Delete from Firestore
-      await _credentialsCollection.doc(credentialId).delete();
+      await _credentialsCollection.doc(credentialId).trackedDelete();
 
       // Also delete any access records
       await _deleteAccessRecords(credentialId);
@@ -722,7 +722,7 @@ class CredentialService {
         createdAt: now,
       );
 
-      await _categoriesCollection.doc(categoryId).set(category.toJson());
+      await _categoriesCollection.doc(categoryId).trackedSet(category.toJson());
 
       return CredentialResult.success();
     } on FirebaseException catch (e) {
@@ -820,7 +820,7 @@ class CredentialService {
         return CredentialResult.failure('User not logged in');
       }
 
-      final doc = await _categoriesCollection.doc(categoryId).get();
+      final doc = await _categoriesCollection.doc(categoryId).trackedGet();
       if (!doc.exists) {
         return CredentialResult.failure('Category not found');
       }
@@ -859,7 +859,7 @@ class CredentialService {
         return CredentialResult.failure('User not logged in');
       }
 
-      final doc = await _categoriesCollection.doc(categoryId).get();
+      final doc = await _categoriesCollection.doc(categoryId).trackedGet();
       if (!doc.exists) {
         return CredentialResult.failure('Category not found');
       }
@@ -874,7 +874,7 @@ class CredentialService {
         );
       }
 
-      await _categoriesCollection.doc(categoryId).delete();
+      await _categoriesCollection.doc(categoryId).trackedDelete();
 
       return CredentialResult.success();
     } on FirebaseException catch (e) {
@@ -1286,7 +1286,7 @@ class CredentialService {
       if (existingCategories.isEmpty) {
         final defaults = CredentialCategory.getDefaultCategories(userId);
         for (final category in defaults) {
-          await _categoriesCollection.doc(category.id).set(category.toJson());
+          await _categoriesCollection.doc(category.id).trackedSet(category.toJson());
         }
       }
     } catch (e) {

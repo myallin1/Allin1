@@ -20,6 +20,8 @@ import 'config/app_variant.dart';
 import 'config/web_push_config.dart';
 import 'firebase_options.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
+import 'screens/admin/admin_dialer_screen.dart';
+import 'screens/admin/admin_incoming_call_screen.dart';
 import 'screens/admin/admin_in_call_screen.dart';
 import 'screens/admin/ads_management_screen.dart';
 import 'screens/admin/credentials_admin_screen.dart';
@@ -351,6 +353,27 @@ void main() {
         if (nav == null) return;
         nav.push(MaterialPageRoute<void>(
           builder: (_) => const AdminInCallScreen(),
+        ));
+      };
+      // NEW (Sep 2 2026 — launcher "Dialer" shortcut): long-pressing the
+      // app icon and tapping "Dialer" jumps straight here instead of
+      // the app's normal home screen first.
+      ChittiAccessibilityBridge.instance.onOpenDialerScreen = () {
+        final nav = navigatorKey.currentState;
+        if (nav == null) return;
+        nav.push(MaterialPageRoute<void>(
+          builder: (_) => const AdminDialerScreen(),
+        ));
+      };
+      // NEW (Sep 2 2026 — Nizam: "incoming call vantha attend panna
+      // screen ila"). Fires as soon as a call starts ringing (see
+      // PhoneCallService.onCallRinging), including a cold start where
+      // the ringing call itself launched this app.
+      ChittiAccessibilityBridge.instance.onIncomingCallRinging = (number) {
+        final nav = navigatorKey.currentState;
+        if (nav == null) return;
+        nav.push(MaterialPageRoute<void>(
+          builder: (_) => AdminIncomingCallScreen(number: number),
         ));
       };
       if (!hasSeenSplashVideoEver) {

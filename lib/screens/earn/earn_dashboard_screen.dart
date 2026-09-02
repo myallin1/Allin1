@@ -168,7 +168,7 @@ class _EarnDashboardScreenState extends State<EarnDashboardScreen>
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(_user!.uid)
-          .get();
+          .trackedGet();
       if (doc.exists && mounted) {
         setState(() {
           _pendingCoins = (doc.data()?['pending_coins'] as int?) ?? 0;
@@ -193,7 +193,7 @@ class _EarnDashboardScreenState extends State<EarnDashboardScreen>
       final snap = await FirebaseFirestore.instance
           .collection('coin_transactions')
           .where('userId', isEqualTo: _user!.uid)
-          .get();
+          .trackedGet();
       if (mounted) {
         setState(() {
           for (final doc in snap.docs) {

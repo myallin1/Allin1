@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import 'cache_service.dart';
+import './firestore_usage_tracking.dart';
 
 enum Category {
   bikeTaxi,
@@ -94,7 +95,7 @@ class CategoryGatewayService {
           .where('category', isEqualTo: _getCategoryFilter(category))
           .where('status', isEqualTo: 'active')
           .limit(50)
-          .get();
+          .trackedGet();
 
       final sellers = snapshot.docs
           .map(
@@ -207,7 +208,7 @@ class CategoryGatewayService {
           .collection('menu_items')
           .where('isAvailable', isEqualTo: true)
           .limit(100)
-          .get();
+          .trackedGet();
 
       final products = snapshot.docs
           .map(
@@ -279,7 +280,7 @@ class CategoryGatewayService {
       }
 
       final doc =
-          await _firestore.collection('platformSettings').doc('global').get();
+          await _firestore.collection('platformSettings').doc('global').trackedGet();
 
       if (!doc.exists) {
         return _getDefaultSettings();
@@ -317,7 +318,7 @@ class CategoryGatewayService {
         return cachedFares;
       }
 
-      final doc = await _firestore.collection('settings').doc('ride_fares').get();
+      final doc = await _firestore.collection('settings').doc('ride_fares').trackedGet();
 
       if (!doc.exists) {
         return _getDefaultRideFares();
@@ -348,7 +349,7 @@ class CategoryGatewayService {
           .where('isActive', isEqualTo: true)
           .orderBy('createdAt', descending: true)
           .limit(10)
-          .get();
+          .trackedGet();
 
       final ads = snapshot.docs
           .map(

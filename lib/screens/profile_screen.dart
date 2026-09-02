@@ -15,6 +15,7 @@ import 'package:provider/provider.dart';
 import '../services/hive_cache.dart';
 import '../services/local_sync_service.dart';
 import '../services/theme_service.dart';
+import '../services/firestore_usage_tracking.dart';
 
 // NOTE (Nizam's full Option 2 rollout): kPurple/kPurple2 here are this
 // screen's PRIMARY/SECONDARY brand color (not a decorative accent), so
@@ -106,7 +107,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadProfileFromFirestore(String uid) async {
     try {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).trackedGet();
       final data = doc.data() ?? {};
       final phone = (data['phoneNumber'] as String?)?.trim();
       final phoneAlt = (data['phone'] as String?)?.trim();

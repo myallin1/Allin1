@@ -46,6 +46,7 @@ import '../payment_screen.dart';
 import 'ride_search_screen.dart';
 import 'ride_tracking_screen.dart';
 import '../../widgets/cached_tile_provider.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 // Approximate Erode road paths aligned to major corridors such as
 // Brough Road, EVN Road, and Perundurai Road for ambient traffic.
@@ -684,7 +685,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       final rideSnap = await FirebaseFirestore.instance
           .collection('rides')
           .doc(rideDocId)
-          .get();
+          .trackedGet();
       if (!mounted) {
         return;
       }
@@ -862,7 +863,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       await FirebaseFirestore.instance
           .collection('rides')
           .doc(rideDocId)
-          .update({
+          .trackedUpdate({
         'status': 'cancelled',
         'cancelledBy': 'customer',
         'cancelledAt': FieldValue.serverTimestamp(),

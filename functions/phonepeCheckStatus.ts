@@ -36,7 +36,13 @@ interface CheckStatusRequest {
   merchantTransactionId: string;
 }
 
-export const checkPhonePeOrderStatus = functions.https.onCall(
+// FIX (audit pass — critical gap, same as phonepeCreateOrder.ts /
+// phonepeWebhook.ts): without this, MERCHANT_ID/SALT_KEY read as ''
+// and every status-check call would send PhonePe a checksum computed
+// against an empty salt, which PhonePe will reject.
+export const checkPhonePeOrderStatus = functions
+  .runWith({ secrets: ['PHONEPE_MERCHANT_ID', 'PHONEPE_SALT_KEY', 'PHONEPE_SALT_INDEX', 'PHONEPE_ENV'] })
+  .https.onCall(
   async (data: CheckStatusRequest, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'User must be logged in');

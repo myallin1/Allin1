@@ -19,6 +19,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/db_usage_tracker.dart';
 import '../../widgets/admin/cached_analytics_view.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _card = Color(0xFF15152A);
@@ -55,14 +56,14 @@ class _CustomerUsageTrackingScreenState
     final funnelFuture = FirebaseFirestore.instance
         .collection('app_usage_stats')
         .doc('funnel')
-        .get();
+        .trackedGet();
     final aggFuture =
-        FirebaseFirestore.instance.collection('users').count().get();
+        FirebaseFirestore.instance.collection('users').count().trackedGet();
     final posterAggFuture = FirebaseFirestore.instance
         .collection('users')
         .where('source', isEqualTo: 'poster_campaign')
         .count()
-        .get();
+        .trackedGet();
 
     final funnel = await funnelFuture;
     final results = await Future.wait([aggFuture, posterAggFuture]);

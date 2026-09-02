@@ -42,6 +42,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/admin/cached_analytics_view.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/hero_wallet_service.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -165,7 +166,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
     // the whole point of item (2) above. One bounded read of the hero
     // roster, reused for every row and every filter afterwards.
     final heroesSnap =
-        await db.collection('heroes').limit(500).get();
+        await db.collection('heroes').limit(500).trackedGet();
     final heroes = <String, dynamic>{};
     for (final d in heroesSnap.docs) {
       final h = d.data();
@@ -188,7 +189,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
     final txSnap = await db
         .collection('wallet_transactions')
         .limit(2000)
-        .get();
+        .trackedGet();
 
     final rows = <Map<String, dynamic>>[];
     for (final d in txSnap.docs) {
@@ -214,7 +215,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
     // minus, how deep, and who has topped up. One bounded read on the
     // same explicit Fetch as everything else on this screen.
     final walletSnap =
-        await db.collection('hero_wallets').limit(500).get();
+        await db.collection('hero_wallets').limit(500).trackedGet();
     final wallets = <String, dynamic>{};
     for (final d in walletSnap.docs) {
       final w = d.data();

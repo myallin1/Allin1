@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/firestore_usage_tracking.dart';
 
 const Color _kGold = Color(0xFFFFBB00);
 const Color _kMuted = Color(0xFF9999BB);
@@ -85,7 +86,7 @@ class _RatingFeedbackSheetState extends State<RatingFeedbackSheet> {
             .collection(widget.completionCollection)
             .where(idField, isEqualTo: rateeId)
             .where('customerRating', isGreaterThan: 0)
-            .get();
+            .trackedGet();
         final avg = snap.docs.fold<double>(0, (s, d) {
               final r = (d.data()['customerRating'] as num?)?.toDouble() ?? 0;
               return s + r;
@@ -94,7 +95,7 @@ class _RatingFeedbackSheetState extends State<RatingFeedbackSheet> {
         await FirebaseFirestore.instance
             .collection(rateeCollection)
             .doc(rateeId)
-            .set({ratingField: avg}, SetOptions(merge: true));
+            .trackedSet({ratingField: avg}, SetOptions(merge: true));
       }
     } catch (e) {
       debugPrint('[RatingFeedbackSheet] Save failed: $e');

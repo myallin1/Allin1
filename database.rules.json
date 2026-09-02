@@ -95,6 +95,30 @@
         ".read": "auth != null",
         ".write": "auth != null"
       }
+    },
+    "hero_precaution_pings": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$heroId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "$requestId": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      }
+    },
+    "service_request_precaution_willing": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$requestId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "$heroId": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      }
     }
   }
 }

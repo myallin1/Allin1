@@ -305,7 +305,7 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
       final snap = await FirebaseFirestore.instance
           .collection('heroes')
           .doc(currentUser.uid)
-          .get();
+          .trackedGet();
       final status = snap.data()?['approvalStatus']?.toString().trim().toLowerCase();
       if (!mounted) return;
       if (status != null && status != _approvalStatus) {

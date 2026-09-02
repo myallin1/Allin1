@@ -18,6 +18,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/service_request_model.dart';
 import '../../utils/service_request_labels.dart';
 import '../../widgets/manual_refresh_header.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF0D0D18);
@@ -59,7 +60,7 @@ class _AdminFoodOrdersScreenState extends State<AdminFoodOrdersScreen> {
           .collection('service_requests')
           .where('requestType', whereIn: _kFoodOrderRequestTypes)
           .limit(200)
-          .get();
+          .trackedGet();
       final models = snap.docs
           .map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id))
           .toList()

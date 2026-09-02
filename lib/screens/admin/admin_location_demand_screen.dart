@@ -18,6 +18,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF0D0D18);
@@ -62,7 +63,7 @@ class _AdminLocationDemandScreenState
           .collection('location_search_logs')
           .orderBy('createdAt', descending: true)
           .limit(2000)
-          .get();
+          .trackedGet();
 
       final counts = <String, int>{};
       var total = 0;

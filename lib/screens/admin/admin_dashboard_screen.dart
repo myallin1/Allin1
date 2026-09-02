@@ -25,6 +25,7 @@ import '../../services/usage_tracking_service.dart';
 import '../../widgets/manual_refresh_header.dart';
 import 'admin_detailed_reports_screen.dart';
 import 'admin_hero_dispatch_screen.dart';
+import 'admin_master_catalog_screen.dart';
 import 'admin_new_orders_screen.dart';
 import 'admin_ride_tracking_screen.dart';
 import 'admin_seller_approval_screen.dart';
@@ -229,7 +230,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         .where('createdAt', isLessThan: Timestamp.fromDate(endOfToday))
         .orderBy('createdAt', descending: true)
         .limit(300)
-        .get();
+        .trackedGet();
     DbUsageTracker.instance
         .recordRead(snap.docs.length, 'admin_dashboard_today_rides');
     if (!mounted) return;
@@ -263,7 +264,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         .collection('wallet_transactions')
         .orderBy('createdAt', descending: true)
         .limit(15)
-        .get();
+        .trackedGet();
     DbUsageTracker.instance
         .recordRead(snap.docs.length, 'admin_dashboard_recent_transactions');
     if (!mounted) return;
@@ -592,14 +593,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         await FirebaseFirestore.instance
                             .collection('users')
                             .doc(userId)
-                            .update({
+                            .trackedUpdate({
                           fieldName: FieldValue.increment(amount),
                         });
 
                         // Log transaction
                         await FirebaseFirestore.instance
                             .collection('wallet_transactions')
-                            .add({
+                            .trackedAdd({
                           'userId': userId,
                           'amount': amount,
                           'type': 'credit',
@@ -1975,6 +1976,24 @@ class _MoreSheet extends StatelessWidget {
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const AdminSellerApprovalScreen()));
+              },
+            ),
+            // NEW (Sep 2026 — universal catalog build): the shared
+            // grocery SKU list every grocery seller toggles items on
+            // from — see admin_master_catalog_screen.dart's header.
+            _sheetTile(
+              context,
+              icon: Icons.category_outlined,
+              iconColor: _teal,
+              label: 'Grocery Catalog',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AdminMasterCatalogScreen(department: 'grocery'),
+                  ),
+                );
               },
             ),
             _sheetTile(

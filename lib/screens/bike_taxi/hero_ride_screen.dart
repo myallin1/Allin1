@@ -618,7 +618,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         await FirebaseFirestore.instance
             .collection('heroes')
             .doc(uid)
-            .set({'isAvailable': true}, SetOptions(merge: true));
+            .trackedSet({'isAvailable': true}, SetOptions(merge: true));
         await FirebaseDatabase.instance
             .ref('online_heroes/$uid')
             .update({'isAvailable': true});
@@ -1162,7 +1162,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         // an admin-verifiable record.
         await FirebaseFirestore.instance
             .collection('company_payments_received')
-            .add({
+            .trackedAdd({
           'rideId': widget.rideDocId,
           'heroId': user.uid,
           'heroName': widget.ride.heroName ?? '',
@@ -1205,7 +1205,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         );
         await FirebaseFirestore.instance
             .collection('wallet_transactions')
-            .add({
+            .trackedAdd({
           'heroId': user.uid,
           'type': 'credit',
           'amount': netEarnings,
@@ -1278,7 +1278,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         final walletSnap = await FirebaseFirestore.instance
             .collection('hero_wallets')
             .doc(user.uid)
-            .get();
+            .trackedGet();
         walletEligible =
             (walletSnap.data()?['isEligibleForRequests'] as bool?) ?? true;
       } catch (e) {
@@ -1315,9 +1315,20 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
           ),
         );
       }
+      // FIX (Sep 2 2026 — "no live monitor" audit, same fix as
+      // hero_home_screen.dart's service_requests flow): this already
+      // showed a confirmation, but never the actual amount — a hero
+      // collecting cash/QR had no in-app number to check against what
+      // they physically received. Amount only on 'self' (the credited
+      // path); 'myallin1' never touches the hero's own wallet, so
+      // printing a figure there would misleadingly imply a credit.
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Payment received. You are back online now.'),
+        SnackBar(
+          content: Text(
+            method == 'self'
+                ? 'Payment received ✓ ₹${fare.toStringAsFixed(0)} — you are back online.'
+                : 'Payment received. You are back online now.',
+          ),
           backgroundColor: _green,
           behavior: SnackBarBehavior.floating,
         ),

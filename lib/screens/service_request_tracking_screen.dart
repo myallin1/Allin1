@@ -16,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/service_request_model.dart';
 import '../services/service_request_service.dart';
 import '../utils/service_request_labels.dart';
+import '../widgets/cancellation_reason_sheet.dart';
 import '../widgets/delivery_challan_card.dart';
 import '../widgets/estimate_approval_card.dart';
 
@@ -201,9 +202,62 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
                     ),
                   ),
                 _StatusStepper(labels: labels, currentIndex: currentIndex),
+                // FIX (Sep 2 2026 — service-booking flow audit): this
+                // screen — shared by custom orders, food, grocery, NJ
+                // Tech/mobile service, and every skill trade including
+                // Acting Driver, see file header — had NO cancel action
+                // anywhere at all. The one button that looked like
+                // cancellation (hero_search_radar_screen.dart's
+                // "Cancel", fixed separately last round) never actually
+                // cancelled anything; a customer had no way to withdraw
+                // a request once submitted. Mirrors
+                // hero_booking_tracking_screen.dart's own cancel gate
+                // exactly — same reason sheet, same cutoff (index <= 1:
+                // pending/admin_review/hero_assigned only; once the hero
+                // has actually started, self-cancel is no longer
+                // offered, same policy as every other flow in this app).
+                if (currentIndex <= 1) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => _confirmAndCancel(context, requestId),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        side: const BorderSide(color: Colors.red),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text('Cancel Request'),
+                    ),
+                  ),
+                ],
               ],
             ),
           );
+  }
+
+  Future<void> _confirmAndCancel(BuildContext context, String requestId) async {
+    final reason = await showCancellationReasonSheet(context);
+    if (reason == null || !context.mounted) return;
+
+    try {
+      await ServiceRequestService().cancelServiceRequest(requestId, reason: reason);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Request cancelled.')),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not cancel: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   @override

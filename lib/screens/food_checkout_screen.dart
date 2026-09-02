@@ -36,6 +36,8 @@
 //     exactly the honesty-preserving pattern the rest of the app uses
 //     for UPI (there is no server here to verify a webhook on Spark).
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -45,7 +47,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config/payment_config.dart';
 import '../services/auth_service.dart';
+import '../services/food_seller_service.dart';
+import '../services/service_request_service.dart';
 import '../widgets/location_capture_field.dart';
+import 'phonepe_checkout_screen.dart';
 
 const Color _kBg = Color(0xFFFFF6FA);
 const Color _kSurface = Color(0xFFFFFFFF);
@@ -66,7 +71,19 @@ class FoodCheckoutResult {
   final double? lng;
   final String customerName;
   final String customerPhone;
-  final String paymentMethod; // 'cod' | 'upi'
+  final String paymentMethod; // 'cod' | 'upi' | 'phonepe_upi'
+
+  // NEW (PhonePe gateway integration, Sep 2026): populated ONLY when
+  // paymentMethod == 'phonepe_upi'. Payment for a gateway order is
+  // collected BEFORE the service_requests doc exists (see
+  // phonepe_payment_service.dart's confirmLink() doc comment), so the
+  // caller MUST create that doc with `preGeneratedRequestId:
+  // reservedRequestId` — using any other id would create an order the
+  // payment can never be linked to — and then call
+  // PhonePePaymentService.instance.confirmLink(merchantTransactionId,
+  // requestId: reservedRequestId) right after, to close the loop.
+  final String? reservedRequestId;
+  final String? merchantTransactionId;
 
   const FoodCheckoutResult({
     required this.address,
@@ -75,6 +92,8 @@ class FoodCheckoutResult {
     required this.paymentMethod,
     this.lat,
     this.lng,
+    this.reservedRequestId,
+    this.merchantTransactionId,
   });
 }
 
@@ -83,12 +102,20 @@ class FoodCheckoutScreen extends StatefulWidget {
     required this.hotelName,
     required this.items, // [{name, price, quantity, total}]
     required this.subtotal,
+    this.sellerId,
     super.key,
   });
 
   final String hotelName;
   final List<Map<String, dynamic>> items;
   final double subtotal;
+
+  /// When set, this screen fetches the seller's own UPI VPA/QR (Sep
+  /// 2026 — merchant-account-free direct payment) and offers "Pay
+  /// [hotelName] directly" alongside Cash/UPI-now/PhonePe. Null for any
+  /// caller that hasn't wired a sellerId through yet — that caller
+  /// simply never sees the extra option, no other behavior changes.
+  final String? sellerId;
 
   @override
   State<FoodCheckoutScreen> createState() => _FoodCheckoutScreenState();
@@ -114,10 +141,23 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
 
   bool _upiOpened = false;
   bool _confirming = false;
+  bool _phonePeStarting = false;
+
+  // Seller's own direct-payment details (Sep 2026) — fetched ONCE (a
+  // plain get(), not a stream; this screen is a one-shot checkout, not
+  // a live view) when [FoodCheckoutScreen.sellerId] is set.
+  String? _sellerUpiVpa;
+  Uint8List? _sellerQrBytes;
+  bool _sellerPaymentLoaded = false;
+  bool _confirmingSellerDirect = false;
+  bool _sellerUpiOpened = false;
 
   @override
   void initState() {
     super.initState();
+    if (widget.sellerId != null) {
+      unawaited(_loadSellerPaymentInfo(widget.sellerId!));
+    }
     final user = FirebaseAuth.instance.currentUser;
     _nameCtrl.text = user?.displayName ?? '';
     _phoneCtrl.text = user?.phoneNumber ?? '';
@@ -218,6 +258,136 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
     );
   }
 
+  Future<void> _loadSellerPaymentInfo(String sellerId) async {
+    try {
+      final seller = await FoodSellerService().getSeller(sellerId);
+      if (!mounted) return;
+      final qrB64 = seller?.sellerPaymentQrBase64;
+      setState(() {
+        _sellerUpiVpa = seller?.sellerUpiVpa;
+        _sellerQrBytes = (qrB64 != null && qrB64.isNotEmpty) ? base64Decode(qrB64) : null;
+        _sellerPaymentLoaded = true;
+      });
+    } catch (e) {
+      debugPrint('[FoodCheckoutScreen] seller payment info load failed: $e');
+      if (mounted) setState(() => _sellerPaymentLoaded = true);
+    }
+  }
+
+  /// Opens whichever the seller configured — a UPI deep link if they set
+  /// a VPA, or just shows the QR image for the customer to scan/screenshot
+  /// if they only set a QR. Mirrors PaymentConfig.buildUpiIntentUri's own
+  /// platform split, generalized to an arbitrary VPA instead of the
+  /// company one.
+  Future<void> _openSellerUpi() async {
+    final vpa = _sellerUpiVpa;
+    if (vpa == null || vpa.isEmpty) return;
+    final encodedPn = Uri.encodeComponent(widget.hotelName);
+    final fallback = Uri.encodeComponent('https://www.npci.org.in/what-we-do/upi/product-overview');
+    final uri = kIsWeb
+        ? Uri.parse(
+            'intent://pay?pa=$vpa&pn=$encodedPn&am=${widget.subtotal.toStringAsFixed(2)}&cu=INR'
+            '#Intent;scheme=upi;action=android.intent.action.VIEW;'
+            'S.browser_fallback_url=$fallback;end',
+          )
+        : Uri.parse(
+            'upi://pay?pa=$vpa&pn=$encodedPn&am=${widget.subtotal.toStringAsFixed(2)}&cu=INR',
+          );
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (mounted) setState(() => _sellerUpiOpened = opened || _sellerUpiOpened);
+    } catch (e) {
+      if (mounted) setState(() => _sellerUpiOpened = true);
+    }
+  }
+
+  Future<void> _confirmSellerDirectPaid() async {
+    setState(() => _confirmingSellerDirect = true);
+    // Same honesty-preserving pattern as _confirmUpiPaid — there is
+    // deliberately no gateway in this path (that's the whole point of
+    // paying the seller directly instead of a merchant account), so the
+    // seller themselves re-verifies this against their own bank/UPI app
+    // before booking a hero — see seller_dashboard_screen.dart's
+    // "Confirm Payment Received" gate.
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+    setState(() => _confirmingSellerDirect = false);
+    Navigator.pop(
+      context,
+      FoodCheckoutResult(
+        address: _addressCtrl.text.trim(),
+        lat: _lat,
+        lng: _lng,
+        customerName: _nameCtrl.text.trim().isNotEmpty
+            ? _nameCtrl.text.trim()
+            : (FirebaseAuth.instance.currentUser?.displayName ?? 'Customer'),
+        customerPhone: _phoneCtrl.text.trim(),
+        paymentMethod: 'seller_direct_upi',
+      ),
+    );
+  }
+
+  /// Full gateway path: reserve an id, collect payment against it via a
+  /// WebView checkout, and only pop this screen once PhonePe's own
+  /// webhook has SERVER-VERIFIED the payment — the caller then creates
+  /// the order with that exact reserved id and calls confirmLink().
+  Future<void> _payWithPhonePe() async {
+    setState(() => _phonePeStarting = true);
+    try {
+      // Free — allocates a Firestore doc id without writing anything.
+      final reservedRequestId = ServiceRequestService().reserveRequestId();
+
+      final outcome = await Navigator.push<PhonePeCheckoutOutcome>(
+        context,
+        MaterialPageRoute<PhonePeCheckoutOutcome>(
+          builder: (_) => PhonePeCheckoutScreen(
+            requestId: reservedRequestId,
+            amount: widget.subtotal,
+          ),
+        ),
+      );
+
+      if (!mounted) return;
+      setState(() => _phonePeStarting = false);
+
+      if (outcome == null || !outcome.success) {
+        // Cancelled, backed out, or the gateway itself reported failure
+        // — stay on this screen exactly like a cancelled UPI-intent
+        // attempt does. Nothing was ever created, so there is nothing to
+        // roll back.
+        if (outcome != null && !outcome.success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Payment was not completed.')),
+          );
+        }
+        return;
+      }
+
+      Navigator.pop(
+        context,
+        FoodCheckoutResult(
+          address: _addressCtrl.text.trim(),
+          lat: _lat,
+          lng: _lng,
+          customerName: _nameCtrl.text.trim().isNotEmpty
+              ? _nameCtrl.text.trim()
+              : (FirebaseAuth.instance.currentUser?.displayName ?? 'Customer'),
+          customerPhone: _phoneCtrl.text.trim(),
+          paymentMethod: 'phonepe_upi',
+          reservedRequestId: reservedRequestId,
+          merchantTransactionId: outcome.merchantTransactionId,
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _phonePeStarting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not start PhonePe checkout: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -292,6 +462,19 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
         const SizedBox(height: 20),
         _sectionLabel('Choose Payment Method'),
         const SizedBox(height: 10),
+        // NEW (PhonePe gateway, Sep 2026 — Blaze plan confirmed):
+        // server-verified UPI, unlike the "Pay via UPI now" card below,
+        // which is a self-attested manual flow kept only as a fallback
+        // if the gateway itself is ever unreachable. Shown first since
+        // it's now the recommended path.
+        _paymentOptionCard(
+          icon: Icons.verified_rounded,
+          title: 'Pay via UPI (Recommended)',
+          subtitle: 'GPay / PhonePe / Paytm — instantly verified, no manual confirmation.',
+          busy: _phonePeStarting,
+          onTap: _phonePeStarting ? null : _payWithPhonePe,
+        ),
+        const SizedBox(height: 12),
         // Cash on Delivery
         _paymentOptionCard(
           icon: Icons.payments_rounded,
@@ -299,8 +482,18 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
           subtitle: 'Pay the delivery hero when your order arrives.',
           onTap: _confirmCod,
         ),
+        // NEW (Sep 2026 — merchant-account-free direct payment): only
+        // rendered once seller payment info has loaded AND the seller
+        // actually configured a VPA or QR — a seller who hasn't set
+        // either up in Settings simply never shows this card, same
+        // "additive, never a dead end" pattern as every other card here.
+        if (_sellerPaymentLoaded &&
+            ((_sellerUpiVpa?.isNotEmpty ?? false) || _sellerQrBytes != null)) ...[
+          const SizedBox(height: 12),
+          _buildSellerDirectCard(),
+        ],
         const SizedBox(height: 12),
-        // UPI now
+        // Manual UPI (fallback — kept for when the gateway is unreachable)
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -379,11 +572,103 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
     );
   }
 
+  /// "Pay [hotelName] directly" — the seller's own UPI VPA/QR, set by
+  /// them in seller_settings_screen.dart. Cash reaches the seller
+  /// same-day with no merchant account; the trade-off is the same one
+  /// the manual "Pay via UPI now" card below already accepts — no
+  /// server verification, self-attested (by the SELLER, not the
+  /// customer, this time — see seller_dashboard_screen.dart's "Confirm
+  /// Payment Received" gate before a hero can be booked).
+  Widget _buildSellerDirectCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _kSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFFFEAF3), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.storefront_rounded, color: _kPink, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Pay ${widget.hotelName} directly',
+                    style: GoogleFonts.outfit(
+                        color: _kText, fontWeight: FontWeight.w800, fontSize: 14)),
+              ),
+              Text('₹${widget.subtotal.toStringAsFixed(0)}',
+                  style: GoogleFonts.outfit(
+                      color: _kPinkDark, fontWeight: FontWeight.w800, fontSize: 14)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (_sellerQrBytes != null) ...[
+            Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.memory(_sellerQrBytes!, width: 160, height: 160, fit: BoxFit.cover),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text('Scan with any UPI app, or use the button below.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(color: _kMuted, fontSize: 11.5)),
+            const SizedBox(height: 10),
+          ],
+          if (_sellerUpiVpa?.isNotEmpty ?? false)
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  await _openSellerUpi();
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _kPink,
+                  side: const BorderSide(color: _kPink),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.qr_code_rounded, size: 18),
+                label: Text(_sellerUpiOpened ? 'Open UPI App Again' : 'Open UPI App',
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 13)),
+              ),
+            ),
+          if ((_sellerUpiOpened) || (_sellerQrBytes != null && (_sellerUpiVpa?.isEmpty ?? true))) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _confirmingSellerDirect ? null : _confirmSellerDirectPaid,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _kGreen,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: _confirmingSellerDirect
+                    ? const SizedBox(
+                        width: 14, height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),)
+                    : const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                label: Text("I've Paid — Confirm Order",
+                    style: GoogleFonts.outfit(
+                        color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13.5)),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _paymentOptionCard({
     required IconData icon,
     required String title,
     required String subtitle,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
+    bool busy = false,
   }) {
     return InkWell(
       onTap: onTap,
@@ -412,7 +697,13 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: _kMuted),
+            busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: _kPink),
+                  )
+                : const Icon(Icons.chevron_right_rounded, color: _kMuted),
           ],
         ),
       ),

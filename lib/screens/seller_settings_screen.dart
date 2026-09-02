@@ -12,7 +12,9 @@
 // ================================================================
 import 'dart:async';
 
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -26,9 +28,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/cloudinary_upload_service.dart';
 import '../services/custom_hotel_service.dart';
+import '../services/food_seller_service.dart';
 import '../services/localization_service.dart';
 import '../services/theme_service.dart';
 import '../widgets/cached_cloud_image.dart';
+import '../widgets/hero_qr_pick_crop.dart';
 
 class SellerSettingsScreen extends StatefulWidget {
   const SellerSettingsScreen({super.key});
@@ -51,11 +55,164 @@ class _SellerSettingsScreenState extends State<SellerSettingsScreen> {
   String _hotelLogoUrl = '';
   bool _isUploadingLogo = false;
 
+  // ── Direct-to-seller UPI payment collection (Sep 2026) ─────────────
+  // See SellerModel.sellerUpiVpa/sellerPaymentQrBase64's own comments
+  // for why this is a Firestore field rather than the hero QR's
+  // local-only pattern — a food order's checkout happens on the
+  // CUSTOMER's phone, remotely, so the seller's payment details must
+  // actually reach Firestore to be visible there at all.
+  final _upiVpaCtrl = TextEditingController();
+  Uint8List? _paymentQrBytes; // decoded from Firestore for preview
+  bool _isSavingPayment = false;
+  bool _loadedPaymentSettings = false;
+
+  // A cropped QR PNG is normally tens of KB; this is a generous ceiling
+  // (before base64, which adds ~33%) that still keeps the whole
+  // sellers/{id} doc comfortably under Firestore's 1MB document limit
+  // even with everything else already on that doc.
+  static const int _kMaxQrBytes = 700 * 1024;
+
   @override
   void initState() {
     super.initState();
     _loadSettings();
     _checkCustomHotelStatus();
+    _loadPaymentSettings();
+  }
+
+  Future<void> _loadPaymentSettings() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      final seller = await FoodSellerService().getSeller(uid);
+      if (!mounted || seller == null) return;
+      setState(() {
+        _upiVpaCtrl.text = seller.sellerUpiVpa ?? '';
+        final qrB64 = seller.sellerPaymentQrBase64;
+        _paymentQrBytes =
+            (qrB64 != null && qrB64.isNotEmpty) ? base64Decode(qrB64) : null;
+        _loadedPaymentSettings = true;
+      });
+    } catch (e) {
+      debugPrint('[SellerSettings] Payment settings load error: $e');
+      if (mounted) setState(() => _loadedPaymentSettings = true);
+    }
+  }
+
+  Future<void> _saveUpiVpa() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final vpa = _upiVpaCtrl.text.trim();
+    setState(() => _isSavingPayment = true);
+    try {
+      await FoodSellerService().updateSellerProfile(uid, {
+        // Empty string clears it — food_checkout_screen.dart treats an
+        // empty/null VPA as "not configured" either way.
+        'sellerUpiVpa': vpa.isEmpty ? null : vpa,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              vpa.isEmpty ? 'UPI ID removed' : 'UPI ID saved — customers will see this at checkout',
+              style: GoogleFonts.outfit(),
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[SellerSettings] UPI VPA save error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save UPI ID', style: GoogleFonts.outfit()),
+              backgroundColor: Colors.red,),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSavingPayment = false);
+    }
+  }
+
+  Future<void> _pickAndSavePaymentQr() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      // Reuses the exact same pick+crop flow hero_register_screen.dart /
+      // hero_payment_qr_screen.dart already use for a hero's own payment
+      // QR — same 1:1 crop, same "never silently no-op" fallback.
+      final bytes = await pickAndCropPaymentQr(context);
+      if (bytes == null) return; // cancelled
+      if (bytes.length > _kMaxQrBytes) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'That QR image is too large (${(bytes.length / 1024).round()} KB). '
+                'Please pick a smaller/cleaner screenshot.',
+                style: GoogleFonts.outfit(),
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      setState(() => _isSavingPayment = true);
+      final b64 = base64Encode(bytes);
+      await FoodSellerService().updateSellerProfile(uid, {
+        'sellerPaymentQrBase64': b64,
+      });
+      if (mounted) {
+        setState(() {
+          _paymentQrBytes = bytes;
+          _isSavingPayment = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Payment QR saved — customers will see this at checkout',
+                style: GoogleFonts.outfit(),),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[SellerSettings] Payment QR save error: $e');
+      if (mounted) {
+        setState(() => _isSavingPayment = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save QR', style: GoogleFonts.outfit()),
+              backgroundColor: Colors.red,),
+        );
+      }
+    }
+  }
+
+  Future<void> _removePaymentQr() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    setState(() => _isSavingPayment = true);
+    try {
+      await FoodSellerService().updateSellerProfile(uid, {
+        'sellerPaymentQrBase64': null,
+      });
+      if (mounted) {
+        setState(() {
+          _paymentQrBytes = null;
+          _isSavingPayment = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[SellerSettings] Payment QR remove error: $e');
+      if (mounted) setState(() => _isSavingPayment = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _upiVpaCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _checkCustomHotelStatus() async {
@@ -127,6 +284,14 @@ class _SellerSettingsScreenState extends State<SellerSettingsScreen> {
               _buildHotelProfileSection(),
               const SizedBox(height: 28),
             ],
+            // NEW (Sep 2026 — merchant-account-free UPI collection):
+            // lets this seller receive food payment straight into their
+            // OWN UPI account, no gateway, same-day settlement. See
+            // food_checkout_screen.dart for where the customer sees this.
+            _buildSectionHeader('Payment Collection'),
+            const SizedBox(height: 12),
+            _buildPaymentCollectionSection(),
+            const SizedBox(height: 28),
             _buildSectionHeader('Notifications'),
             const SizedBox(height: 12),
             _buildNotificationSettings(),
@@ -455,6 +620,119 @@ class _SellerSettingsScreenState extends State<SellerSettingsScreen> {
         );
       }
     }
+  }
+
+  Widget _buildPaymentCollectionSection() {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _pink.withValues(alpha: 0.2)),
+        boxShadow: const [
+          BoxShadow(color: Color(0x12FF4FA3), blurRadius: 16, offset: Offset(0, 6)),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Get paid directly — no company account, no delay',
+              style: GoogleFonts.outfit(color: _text, fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Set either (or both) below. Customers will see whichever '
+              "you've set at checkout and pay you directly.",
+              style: GoogleFonts.outfit(color: _muted, fontSize: 11.5),
+            ),
+            const SizedBox(height: 16),
+            Text('Your UPI ID', style: GoogleFonts.outfit(color: _text, fontSize: 12.5, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _upiVpaCtrl,
+                    enabled: !_isSavingPayment,
+                    style: GoogleFonts.outfit(fontSize: 13.5),
+                    decoration: InputDecoration(
+                      hintText: 'e.g. hotelname@ybl',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _isSavingPayment ? null : _saveUpiVpa,
+                  style: ElevatedButton.styleFrom(backgroundColor: _pink),
+                  child: _isSavingPayment
+                      ? const SizedBox(
+                          width: 14, height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),)
+                      : const Text('Save', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Text('Your Payment QR', style: GoogleFonts.outfit(color: _text, fontSize: 12.5, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: _pink.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _pink.withValues(alpha: 0.2)),
+                  ),
+                  child: !_loadedPaymentSettings
+                      ? const Center(child: CircularProgressIndicator(strokeWidth: 2, color: _pink))
+                      : _paymentQrBytes != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.memory(_paymentQrBytes!, fit: BoxFit.cover),
+                            )
+                          : const Icon(Icons.qr_code_2_rounded, color: _muted, size: 32),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _isSavingPayment ? null : _pickAndSavePaymentQr,
+                        icon: const Icon(Icons.upload_rounded, size: 16),
+                        label: Text(_paymentQrBytes != null ? 'Change QR' : 'Upload QR'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _pink,
+                          side: const BorderSide(color: _pink),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        ),
+                      ),
+                      if (_paymentQrBytes != null) ...[
+                        const SizedBox(height: 6),
+                        TextButton(
+                          onPressed: _isSavingPayment ? null : _removePaymentQr,
+                          style: TextButton.styleFrom(foregroundColor: Colors.red, padding: EdgeInsets.zero),
+                          child: const Text('Remove', style: TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildLanguageSettings() {

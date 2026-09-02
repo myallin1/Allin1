@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/admin_ride_dispatch_service.dart';
 import '../../widgets/allin1_map_widget.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -177,7 +178,7 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
       final snap = await FirebaseFirestore.instance
           .collection('heroes')
           .where('approvalStatus', isEqualTo: 'approved')
-          .get();
+          .trackedGet();
       if (!mounted) return;
       setState(() {
         _allHeroes = snap.docs.map((doc) {

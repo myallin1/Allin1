@@ -71,6 +71,7 @@ import '../admin_kyc_write_service.dart';
 import '../gemini_api_service.dart';
 import '../guru_admin_api_service.dart';
 import 'package:http/http.dart' as http;
+import '../firestore_usage_tracking.dart';
 
 /// What the host should do as a result of running one tool.
 ///
@@ -767,7 +768,7 @@ class ChittiActionExecutor {
         .collection('service_requests')
         .where('customerId', isEqualTo: uid)
         .limit(20)
-        .get();
+        .trackedGet();
 
     final cancellable = snap.docs
         .where((d) => (d.data()['status'] as String?) == 'pending')
@@ -1110,7 +1111,7 @@ class ChittiActionExecutor {
     }
 
     try {
-      final reqDoc = await FirebaseFirestore.instance.collection('service_requests').doc(query).get();
+      final reqDoc = await FirebaseFirestore.instance.collection('service_requests').doc(query).trackedGet();
       if (reqDoc.exists) {
         final data = reqDoc.data() as Map<String, dynamic>? ?? {};
         final type = data['requestType'] as String? ?? data['request_type'] as String? ?? 'hero_booking';
@@ -1121,7 +1122,7 @@ class ChittiActionExecutor {
         );
       }
 
-      final rideDoc = await FirebaseFirestore.instance.collection('rides').doc(query).get();
+      final rideDoc = await FirebaseFirestore.instance.collection('rides').doc(query).trackedGet();
       if (rideDoc.exists) {
         return ChittiActionResult(
           text: "Found ride $query. Opening details page...",
@@ -1134,7 +1135,7 @@ class ChittiActionExecutor {
           .collection('service_requests')
           .where('customerId', isEqualTo: query)
           .limit(1)
-          .get();
+          .trackedGet();
       if (reqSearch.docs.isNotEmpty) {
         final id = reqSearch.docs.first.id;
         final data = reqSearch.docs.first.data() as Map<String, dynamic>? ?? {};
@@ -1150,7 +1151,7 @@ class ChittiActionExecutor {
           .collection('rides')
           .where('customerId', isEqualTo: query)
           .limit(1)
-          .get();
+          .trackedGet();
       if (rideSearch.docs.isNotEmpty) {
         final id = rideSearch.docs.first.id;
         return ChittiActionResult(
@@ -1183,13 +1184,13 @@ class ChittiActionExecutor {
             .collection('users')
             .where('phone', isEqualTo: query)
             .limit(1)
-            .get();
+            .trackedGet();
       } else {
         userSnap = await FirebaseFirestore.instance
             .collection('users')
             .where('name', isEqualTo: query)
             .limit(1)
-            .get();
+            .trackedGet();
       }
 
       if (userSnap.docs.isEmpty) {
@@ -1197,7 +1198,7 @@ class ChittiActionExecutor {
             .collection('heroes')
             .where('name', isEqualTo: query)
             .limit(1)
-            .get();
+            .trackedGet();
         
         if (heroSnap.docs.isNotEmpty) {
           final h = heroSnap.docs.first.data() as Map<String, dynamic>? ?? {};
@@ -1428,7 +1429,7 @@ class ChittiActionExecutor {
           .collection('chitti_appointments')
           .orderBy('timestamp', descending: true)
           .limit(1)
-          .get();
+          .trackedGet();
 
       if (snap.docs.isEmpty) {
         return ChittiActionResult(

@@ -9,6 +9,7 @@ import '../../screens/dashboard_screen.dart';
 import '../../screens/hero_pending_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/session_service.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
   const ProfileSetupScreen({
@@ -115,7 +116,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           final heroDoc = await FirebaseFirestore.instance
               .collection('heroes')
               .doc(user.uid)
-              .get();
+              .trackedGet();
           final approvalStatus = heroDoc.data()?['approvalStatus']
               ?.toString()
               .trim()

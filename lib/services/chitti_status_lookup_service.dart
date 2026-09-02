@@ -129,7 +129,7 @@ class ChittiStatusLookupService {
         final status = (data['status'] as String?) ?? 'pending';
         if (_terminalRequestStatuses.contains(status)) continue;
         final requestType = (data['requestType'] as String?) ?? 'order';
-        lines.add('Your ${_humanizeRequestType(requestType)} is currently: ${_humanizeStatus(status)}.');
+        lines.add('Your ${_humanizeRequestType(requestType, data['details'] as Map?)} is currently: ${_humanizeStatus(status)}.');
         // Only the most recent couple of active orders — enough to be
         // useful without turning the reply into a wall of text.
         if (lines.length >= 5) break;
@@ -169,7 +169,21 @@ class ChittiStatusLookupService {
     }
   }
 
-  static String _humanizeRequestType(String requestType) {
+  // FIX (Sep 2 2026 — service-booking flow audit, same class of bug
+  // fixed in hero_home_screen.dart's ping dialog): every skill trade
+  // (electrician, plumber, ..., acting_driver — see
+  // hero_skill_catalog.dart) shares requestType 'electronics_service',
+  // so this fell through to the generic default and told a customer
+  // asking "where is my order" that their "electronics service" was
+  // in progress, regardless of whether they'd actually booked a
+  // plumber or an acting driver. `details` (optional, so every
+  // existing call site keeps compiling unchanged) carries
+  // `categoryLabel`, written verbatim by skilled_services_screen.dart.
+  static String _humanizeRequestType(String requestType, [Map? details]) {
+    if (requestType == 'electronics_service') {
+      final categoryLabel = (details?['categoryLabel'] as String?)?.trim();
+      if (categoryLabel != null && categoryLabel.isNotEmpty) return categoryLabel;
+    }
     switch (requestType) {
       case 'grocery_order':
         return 'grocery order';
@@ -260,10 +274,11 @@ class ChittiStatusLookupService {
         final data = doc.data();
         final when = (data['createdAt'] as Timestamp?)?.toDate();
         if (when == null) continue;
+        final details = data['details'];
         final type = _humanizeRequestType(
           (data['requestType'] as String?) ?? 'order',
+          details is Map ? details : null,
         );
-        final details = data['details'];
         final items = details is Map<String, dynamic>
             ? (details['items'] as String?)?.trim()
             : null;

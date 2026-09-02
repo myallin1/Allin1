@@ -24,6 +24,7 @@ import '../services/migration_gate_service.dart';
 import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 import '../widgets/premium_theme.dart';
 import 'mobiles/listing_video_player.dart' show ListingVideoPlayer;
+import '../services/firestore_usage_tracking.dart';
 
 const Color _offerInk = Color(0xFF121A3D);
 const Color _offerPink = Color(0xFFFF4FA3);
@@ -283,7 +284,7 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
         final snap = await FirebaseFirestore.instance
             .collection('erode_offers')
             .where('active', isEqualTo: true)
-            .get();
+            .trackedGet();
         // Stored as a plain List<Map> so it survives Hive serialization.
         // createdAt (a Timestamp) is converted to epoch millis for the
         // same reason, and used only for sorting.

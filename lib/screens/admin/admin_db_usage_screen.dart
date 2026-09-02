@@ -33,6 +33,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/hive_cache.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 // ── Firebase Spark (free) plan daily ceilings ──────────────────────
 // Hardcoded because they're a property of the PLAN, not of our data —
@@ -243,7 +244,7 @@ class _AdminDbUsageScreenState extends State<AdminDbUsageScreen> {
           .collection('db_usage_stats')
           .where('dateHour', isGreaterThanOrEqualTo: startKey)
           .where('dateHour', isLessThanOrEqualTo: endKey)
-          .get();
+          .trackedGet();
 
       final perApp = <String, _AppUsageRow>{};
       // UPGRADED (Aug 12 2026 — deep granularity): keyed "app · screen",

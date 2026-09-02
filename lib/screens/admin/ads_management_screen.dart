@@ -103,7 +103,7 @@ class _AdsManagementScreenState extends State<AdsManagementScreen> {
         'createdAt': FieldValue.serverTimestamp(),
       };
 
-      await FirebaseFirestore.instance.collection('ads').add(adData);
+      await FirebaseFirestore.instance.collection('ads').trackedAdd(adData);
 
       if (mounted) {
         Navigator.pop(context);
@@ -119,7 +119,7 @@ class _AdsManagementScreenState extends State<AdsManagementScreen> {
       await FirebaseFirestore.instance
           .collection('ads')
           .doc(adId)
-          .update(updates);
+          .trackedUpdate(updates);
       _snack('Ad updated!', _green);
     } catch (e) {
       _snack('Update error: $e', _red);
@@ -129,7 +129,7 @@ class _AdsManagementScreenState extends State<AdsManagementScreen> {
   Future<void> _deleteAd(String adId) async {
     try {
       // Delete from Firestore only (external image URL - no storage cleanup needed)
-      await FirebaseFirestore.instance.collection('ads').doc(adId).delete();
+      await FirebaseFirestore.instance.collection('ads').doc(adId).trackedDelete();
 
       _snack('Ad deleted!', _green);
     } catch (e) {

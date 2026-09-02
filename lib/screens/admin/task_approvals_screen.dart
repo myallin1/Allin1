@@ -536,7 +536,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
               future: FirebaseFirestore.instance
                   .collection('captains')
                   .doc(captainId)
-                  .get(),
+                  .trackedGet(),
               builder: (context, captainSnap) {
                 final captainData =
                     captainSnap.data?.data() as Map<String, dynamic>?;

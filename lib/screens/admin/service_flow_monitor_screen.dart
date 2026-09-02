@@ -40,6 +40,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../services/admin_deletion_service.dart';
 import '../../widgets/admin/admin_selection_mixin.dart';
 import '../../widgets/admin/cached_analytics_view.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A12);
 const Color _card = Color(0xFF141420);
@@ -230,7 +231,7 @@ class _ServiceFlowMonitorScreenState extends State<ServiceFlowMonitorScreen>
         .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(w.from))
         .where('createdAt', isLessThan: Timestamp.fromDate(w.to))
         .orderBy('createdAt', descending: true)
-        .get();
+        .trackedGet();
 
     for (final doc in serviceSnap.docs) {
       final d = doc.data();
@@ -253,7 +254,7 @@ class _ServiceFlowMonitorScreenState extends State<ServiceFlowMonitorScreen>
         .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(w.from))
         .where('createdAt', isLessThan: Timestamp.fromDate(w.to))
         .orderBy('createdAt', descending: true)
-        .get();
+        .trackedGet();
 
     for (final doc in ridesSnap.docs) {
       final d = doc.data();
@@ -708,6 +709,8 @@ class _ServiceFlowMonitorScreenState extends State<ServiceFlowMonitorScreen>
         return 'Catalog Food Order';
       case 'custom_hotel_order':
         return 'Hotel Order';
+      case 'catalog_grocery_order':
+        return 'Catalog Grocery Order';
       default:
         return key.replaceAll('_', ' ');
     }

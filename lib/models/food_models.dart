@@ -48,6 +48,34 @@ class SellerModel {
   // existed.
   final String city;
 
+  // ── Direct-to-seller payment collection (Sep 2026 — merchant-account-
+  // free UPI flow) ──────────────────────────────────────────────────
+  // Lets a hotel collect food payment straight into their OWN UPI
+  // account instead of a company merchant account — no gateway, no T+1
+  // settlement delay, cash reaches them same-day. Set by the seller
+  // themselves in seller_settings_screen.dart; read by
+  // food_checkout_screen.dart to build a "Pay <Hotel> directly" option.
+  //
+  // Deliberately NOT stored via the same local-only pattern as a hero's
+  // own payment QR (hero_payment_qr_service.dart) — that pattern only
+  // works because the customer scans the HERO's phone screen in person
+  // after a ride/task. A food order is placed remotely: the customer's
+  // OWN phone needs this at checkout time, so it must live in Firestore
+  // (small text/base64 fields, no Cloudinary needed — see this field's
+  // own size guard in seller_settings_screen.dart).
+  /// The seller's own UPI VPA (e.g. 'hotelname@ybl'), used to build a
+  /// `upi://pay` deep link pre-filled with the order amount. Null if the
+  /// seller hasn't set one — food_checkout_screen.dart then falls back
+  /// to whichever OTHER payment options the seller/customer have.
+  final String? sellerUpiVpa;
+
+  /// Base64-encoded PNG of the seller's own payment QR, for a customer
+  /// who prefers scanning over a deep link (e.g. checking out on a
+  /// different device than the one they'll pay from). Capped small at
+  /// upload time (see seller_settings_screen.dart's size guard) so this
+  /// never meaningfully grows the seller doc.
+  final String? sellerPaymentQrBase64;
+
   SellerModel({
     required this.id,
     required this.name,
@@ -68,6 +96,8 @@ class SellerModel {
     this.totalSettled = 0.0,
     this.walletBalance = 0.0,
     this.totalFeesDeducted = 0.0,
+    this.sellerUpiVpa,
+    this.sellerPaymentQrBase64,
   });
 
   factory SellerModel.fromJson(Map<String, dynamic> json) {
@@ -100,6 +130,8 @@ class SellerModel {
       totalSettled: (json['totalSettled'] as num?)?.toDouble() ?? 0.0,
       walletBalance: (json['walletBalance'] as num?)?.toDouble() ?? 0.0,
       totalFeesDeducted: (json['totalFeesDeducted'] as num?)?.toDouble() ?? 0.0,
+      sellerUpiVpa: json['sellerUpiVpa'] as String?,
+      sellerPaymentQrBase64: json['sellerPaymentQrBase64'] as String?,
     );
   }
 
@@ -196,6 +228,8 @@ class SellerModel {
     double? totalSettled,
     double? totalFeesDeducted,
     double? walletBalance,
+    String? sellerUpiVpa,
+    String? sellerPaymentQrBase64,
   }) {
     return SellerModel(
       id: id ?? this.id,
@@ -232,6 +266,14 @@ class SellerModel {
       // full profile reload) — exactly the kind of stale/wrong financial
       // number this whole audit exists to eliminate.
       walletBalance: walletBalance ?? this.walletBalance,
+      // FIX (same class of bug as walletBalance above, caught while
+      // adding these two fields): without an explicit ?? fallback here,
+      // seller_dashboard_screen.dart's `_seller!.copyWith(isOpen: ...)`
+      // (the online/offline toggle) would silently wipe the seller's own
+      // payment VPA/QR out of the in-memory model — not Firestore, but
+      // visibly gone from Settings until the next full profile reload.
+      sellerUpiVpa: sellerUpiVpa ?? this.sellerUpiVpa,
+      sellerPaymentQrBase64: sellerPaymentQrBase64 ?? this.sellerPaymentQrBase64,
     );
   }
 }
@@ -260,6 +302,38 @@ class MenuItemModel {
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
+  // ── Universal catalog (Sep 2026) ────────────────────────────────
+  // This model already fit grocery items perfectly (name/price/stock/
+  // isAvailable) — these four fields are the only additions needed to
+  // extend it beyond food, rather than building a parallel model.
+  /// Which vertical this item belongs to — 'food' (default, matches
+  /// every item written before this field existed) or 'grocery'. Not
+  /// strictly required for filtering (a seller's businessVertical
+  /// already fixes them to one type) but keeps items self-describing.
+  final String department;
+
+  /// Links back to the `master_catalog/{itemId}` doc this item was
+  /// toggled ON from (seller_grocery_products_screen.dart), if any.
+  /// Null for a seller-authored item with no shared-catalog origin
+  /// (every existing food dish, and any grocery item a seller adds
+  /// that isn't in the master catalog).
+  final String? sourceCatalogItemId;
+
+  /// Lifetime count of units sold through an app order (incremented
+  /// ONLY by functions/reserveMenuItemStock.ts's server-side
+  /// transaction — never client-writable in practice, since that's the
+  /// only code path that touches it). Kept separate from
+  /// [directSaleCount] per Nizam's explicit request: a seller's
+  /// dashboard needs to show app-driven vs. walk-in-shop sales as two
+  /// distinct numbers, not one merged total.
+  final int appOrderSoldCount;
+
+  /// Lifetime count of units the seller recorded as sold to a walk-in
+  /// customer in their physical shop (seller_grocery_products_screen
+  /// .dart's "Record Direct Sale" action) — money and stock that never
+  /// touched this app's order pipeline at all.
+  final int directSaleCount;
+
   MenuItemModel({
     required this.id,
     required this.name,
@@ -275,6 +349,10 @@ class MenuItemModel {
     this.imageShape = 'square',
     this.createdAt,
     this.updatedAt,
+    this.department = 'food',
+    this.sourceCatalogItemId,
+    this.appOrderSoldCount = 0,
+    this.directSaleCount = 0,
   });
 
   factory MenuItemModel.fromJson(Map<String, dynamic> json) {
@@ -305,6 +383,10 @@ class MenuItemModel {
       updatedAt: json['updatedAt'] != null
           ? (json['updatedAt'] as Timestamp).toDate()
           : null,
+      department: (json['department'] as String?) ?? 'food',
+      sourceCatalogItemId: json['sourceCatalogItemId'] as String?,
+      appOrderSoldCount: (json['appOrderSoldCount'] as num?)?.toInt() ?? 0,
+      directSaleCount: (json['directSaleCount'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -318,6 +400,10 @@ class MenuItemModel {
       'isVeg': isVeg,
       'isAvailable': isAvailable,
       'stockQuantity': stockQuantity,
+      'department': department,
+      if (sourceCatalogItemId != null) 'sourceCatalogItemId': sourceCatalogItemId,
+      'appOrderSoldCount': appOrderSoldCount,
+      'directSaleCount': directSaleCount,
       'tags': tags,
       'imageUrl': imageUrl,
       // 'image'/'category' are display-layer aliases read directly by
@@ -343,6 +429,7 @@ class MenuItemModel {
     double? discountedPrice,
     bool? isVeg,
     bool? isAvailable,
+    int? stockQuantity,
     List<String>? tags,
     String? imageUrl,
     String? categoryName,
@@ -350,6 +437,10 @@ class MenuItemModel {
     String? imageShape,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? department,
+    String? sourceCatalogItemId,
+    int? appOrderSoldCount,
+    int? directSaleCount,
   }) {
     return MenuItemModel(
       id: id ?? this.id,
@@ -359,6 +450,14 @@ class MenuItemModel {
       discountedPrice: discountedPrice ?? this.discountedPrice,
       isVeg: isVeg ?? this.isVeg,
       isAvailable: isAvailable ?? this.isAvailable,
+      // FIX (found while adding grocery stock fields): copyWith() never
+      // took/returned stockQuantity at all — any caller doing
+      // `item.copyWith(isAvailable: false)` silently wiped stock back to
+      // null. Nothing used copyWith() on this model before now, so this
+      // was latent rather than an active bug, but the new seller
+      // products screen calls it constantly (toggling on/off, editing
+      // stock inline) and would have hit it immediately.
+      stockQuantity: stockQuantity ?? this.stockQuantity,
       tags: tags ?? this.tags,
       imageUrl: imageUrl ?? this.imageUrl,
       categoryName: categoryName ?? this.categoryName,
@@ -366,6 +465,10 @@ class MenuItemModel {
       imageShape: imageShape ?? this.imageShape,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      department: department ?? this.department,
+      sourceCatalogItemId: sourceCatalogItemId ?? this.sourceCatalogItemId,
+      appOrderSoldCount: appOrderSoldCount ?? this.appOrderSoldCount,
+      directSaleCount: directSaleCount ?? this.directSaleCount,
     );
   }
 }

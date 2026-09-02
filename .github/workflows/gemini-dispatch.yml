@@ -1,4 +1,4 @@
-﻿name: Gemini CLI Assistant
+name: Gemini CLI Assistant
 
 on:
   issue_comment:
@@ -10,6 +10,8 @@ jobs:
   gemini-agent:
     if: contains(github.event.comment.body, '@gemini-cli')
     runs-on: ubuntu-latest
+    env:
+      GEMINI_CLI_TRUST_WORKSPACE: 'true'
     permissions:
       contents: write
       pull-requests: write
@@ -21,6 +23,32 @@ jobs:
           ref: dev-nijam
           fetch-depth: 0
 
+      # MERGED (Sep 2 2026 — PR #13 conflict resolution): main and this
+      # branch had each independently changed this same job — main with
+      # the explicit prompt below (the version actually proven working
+      # in production), this branch with a newer, unconfigured action
+      # version that relies on undocumented default behavior instead.
+      # Kept main's proven prompt/target-branch logic rather than risk
+      # the pipeline silently doing something different, and layered
+      # this branch's real improvement (analyze+test before the PR can
+      # land) on top as steps that run AFTER Gemini, not by replacing
+      # the dispatch itself.
+      - name: Run Gemini CLI
+        uses: google-github-actions/run-gemini-cli@v0.1.18
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          gemini_model: 'gemini-2.5-flash'
+          settings: |
+            {"tools": {"sandbox": false}, "trustedFolders": ["*"]}
+          prompt: |
+            You are a coding agent working on the Allin1 Flutter repo.
+            Read GEMINI.md and AGENTS.md first and follow all rules there.
+            The user has requested a change in this issue comment:
+            ${{ github.event.comment.body }}
+            Make the requested change, create a new branch named
+            agent/issue-<number>-<slug>, commit with a clear message,
+            and open a pull request targeting the dev-nijam branch.
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -29,13 +57,6 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
-
-      - name: Run Gemini CLI
-        uses: google-github-actions/run-gemini-cli@v1
-        with:
-          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
-          github_pr_number: ${{ github.event.pull_request.number }}
-          github_issue_number: ${{ github.event.issue.number }}
 
       - name: Analyze (must pass before PR)
         run: flutter analyze

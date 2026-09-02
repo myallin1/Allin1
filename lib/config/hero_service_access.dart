@@ -121,6 +121,16 @@ String? serviceKeyForRequestType(String requestType) {
     case 'custom_food_order':
       return HeroServiceKeys.foodOrder;
     case 'grocery_order':
+    // FIX (audit pass, Sep 2026 — universal catalog build): the new
+    // catalog-based grocery order type was missing here entirely, which
+    // meant serviceKeyForRequestType() fell through to `default: null` —
+    // per this function's own doc comment, null means "dispatch must
+    // NOT filter." Every catalog_grocery_order was silently broadcast
+    // to ALL online heroes regardless of their own Grocery Order
+    // service-access toggle, bypassing the opt-out entirely. Same
+    // bucket as the free-text 'grocery_order' — a hero who disabled
+    // grocery work meant ALL grocery work, catalog or free-text.
+    case 'catalog_grocery_order':
       return HeroServiceKeys.groceryOrder;
     case 'custom_order':
       return HeroServiceKeys.customOrder;

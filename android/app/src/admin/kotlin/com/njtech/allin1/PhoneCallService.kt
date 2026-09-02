@@ -12,6 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import android.telecom.Call
 import android.telecom.TelecomManager
+import android.telecom.VideoProfile
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import java.io.File
@@ -112,14 +113,38 @@ object PhoneCallService {
         activeCallState = "ringing"
         activeCallerNumber = number
         clearPersistedAutoAnswerFlag(context)
-        Log.d("PhoneCallService", "Incoming call ringing from: $number. Scheduling auto-answer in 20s.")
+        // NEW (Sep 2 2026 — Nizam: "yevlo second la chitti call aaten
+        // pannanumnu set panniklam"). Was a hardcoded 20s; now reads
+        // the same admin-configurable delay the Dialer's call-settings
+        // sheet writes, defaulting to 20s when unset. Stored/read as a
+        // STRING deliberately: shared_preferences_android persists a
+        // Dart int as a Java Long under the hood, so a native getInt()
+        // on it throws ClassCastException — a plain string avoids that
+        // ambiguity entirely on both sides.
+        val delaySeconds = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString("flutter.kChittiAutoAnswerDelaySeconds", null)
+            ?.toIntOrNull() ?: 20
+        val delayMillis = delaySeconds.coerceIn(1, 60) * 1000L
+        Log.d("PhoneCallService", "Incoming call ringing from: $number. Scheduling auto-answer in ${delaySeconds}s.")
 
-        // Schedule auto-answering after 20 seconds delay
         answerRunnable = Runnable {
-            Log.d("PhoneCallService", "20s elapsed. Auto-answering incoming call now.")
+            Log.d("PhoneCallService", "${delaySeconds}s elapsed. Auto-answering incoming call now.")
             answerCall(context)
         }
-        handler.postDelayed(answerRunnable!!, 20000)
+        handler.postDelayed(answerRunnable!!, delayMillis)
+
+        // NEW (Sep 2 2026 — Nizam: "namma dialer la incoming call
+        // vantha attend panna screen ila"). Nothing woke the app or
+        // told Flutter a call was ringing at all before this — the
+        // phone just rang, with no way to answer or decline faster
+        // than the auto-answer timer above. Waking MainActivity here
+        // (same launcher-intent relaunch already used elsewhere in
+        // this file) plus the existing triggerFlutterCallState/
+        // onCallStateChanged channel now gives Flutter an actual
+        // "ringing" event to show an incoming-call screen from — see
+        // AdminIncomingCallScreen.
+        launchMainActivity(context)
+        triggerFlutterCallState("ringing", number)
     }
 
     fun onCallConnected(context: Context) {
@@ -243,6 +268,19 @@ object PhoneCallService {
                 @Suppress("DEPRECATION")
                 MediaRecorder()
             }
+            // REVERTED (Sep 2 2026 — Nizam: "chitti pesurathu admin app
+            // la than kekuthu, customer phone ku pogala"). The Sep 2
+            // AudioSource.VOICE_CALL attempt (tried as a fix for the
+            // Oppo/Samsung-style "recording tone") was a real
+            // regression: capturing MediaRecorder(VOICE_CALL) appears
+            // to take over this device's call audio path in a way that
+            // then keeps ChittiCallVoice's TTS AudioTrack — also
+            // targeting STREAM_VOICE_CALL — from ever reaching the
+            // network side, so the greeting stayed local to the admin's
+            // own phone. Recording plainly working (even without the
+            // stock-dialer-style silent tone) matters far more than a
+            // cosmetic beep fix, so this is back to MIC only until a
+            // way to get both at once is confirmed safe on-device.
             recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
             recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
@@ -356,6 +394,45 @@ object PhoneCallService {
             Log.e("PhoneCallService", "ANSWER_PHONE_CALLS permission not granted: ${e.message}")
         } catch (e: Exception) {
             Log.e("PhoneCallService", "Error accepting call programmatically: ${e.message}")
+        }
+    }
+
+    // NEW (Sep 2 2026 — Nizam: "incoming call vantha attend panna
+    // screen ila"). Distinct from answerCall() above on purpose:
+    // answerCall() marks wasAutoAnswered=true, which onCallConnected()
+    // uses to decide whether Chitti should greet/screen the call at
+    // all. When the admin taps Answer on the incoming-call screen to
+    // take the call personally, Chitti greeting them would be wrong —
+    // so this cancels the pending auto-answer timer and answers
+    // WITHOUT setting that flag, same as picking up a normal call.
+    @JvmStatic
+    fun manualAnswerCall(context: Context) {
+        try {
+            answerRunnable?.let { handler.removeCallbacks(it) }
+            wasAutoAnswered = false
+            clearPersistedAutoAnswerFlag(context)
+            val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                telecomManager.acceptRingingCall()
+            } else {
+                activeTelecomCall?.answer(VideoProfile.STATE_AUDIO_ONLY)
+            }
+        } catch (e: SecurityException) {
+            Log.e("PhoneCallService", "ANSWER_PHONE_CALLS permission not granted: ${e.message}")
+        } catch (e: Exception) {
+            Log.e("PhoneCallService", "Error manually accepting call: ${e.message}")
+        }
+    }
+
+    // Reuses the same disconnect() Telecom already calls to hang up an
+    // active call — on a still-ringing call this rejects it instead.
+    @JvmStatic
+    fun declineRingingCall() {
+        try {
+            answerRunnable?.let { handler.removeCallbacks(it) }
+            activeTelecomCall?.disconnect()
+        } catch (e: Exception) {
+            Log.e("PhoneCallService", "Error declining ringing call: ${e.message}")
         }
     }
 

@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/firestore_usage_tracking.dart';
 
 const Color _quizPink = Color(0xFFFF4FA3);
 const Color _paytmBlue = Color(0xFF00B9F1);
@@ -316,7 +317,7 @@ class _MegaQuizScreenState extends State<MegaQuizScreen> {
           .collection('quiz_participants')
           .where('aadhaarHash', isEqualTo: aadhaarHash)
           .limit(1)
-          .get();
+          .trackedGet();
 
       if (duplicate.docs.isNotEmpty) {
         setState(() {

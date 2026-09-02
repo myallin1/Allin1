@@ -22,6 +22,7 @@ import '../../widgets/cancellation_reason_sheet.dart';
 import '../../widgets/chitti_processing_steps.dart';
 import 'ride_tracking_screen.dart';
 import '../../config/hero_service_access.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 class RideSearchScreen extends StatefulWidget {
   final RideModel ride;
@@ -1033,7 +1034,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
       FirebaseFirestore.instance
           .collection('rides')
           .doc(_rideDocId)
-          .update({
+          .trackedUpdate({
             'status': 'cancelled',
             'cancelledAt': FieldValue.serverTimestamp(),
             'cancellationReason': reason,

@@ -22,6 +22,7 @@
 // download/visit.
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import './firestore_usage_tracking.dart';
 
 class UsageTrackingService {
   UsageTrackingService._();
@@ -223,7 +224,7 @@ class UsageTrackingService {
     final ridesSnap = await FirebaseFirestore.instance
         .collection('rides')
         .limit(limit)
-        .get();
+        .trackedGet();
     for (final doc in ridesSnap.docs) {
       final d = doc.data();
       ridesScanned++;
@@ -236,7 +237,7 @@ class UsageTrackingService {
     final reqSnap = await FirebaseFirestore.instance
         .collection('service_requests')
         .limit(limit)
-        .get();
+        .trackedGet();
     for (final doc in reqSnap.docs) {
       final d = doc.data();
       requestsScanned++;

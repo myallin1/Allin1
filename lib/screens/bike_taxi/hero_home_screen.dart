@@ -40,9 +40,11 @@ import '../../services/service_request_service.dart';
 import '../../services/sos_dispatch_service.dart';
 import '../../services/update_service.dart';
 import '../../utils/daily_boost_messages.dart';
+import '../../widgets/order_precaution_banner.dart';
 import '../../widgets/stranded_orders_banner.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../../widgets/hero_premium_loader.dart';
+import '../../widgets/hero_payment_qr_popup.dart';
 import '../../widgets/order_photo_gallery.dart';
 import '../earn/rewards_hub_screen.dart';
 import '../../widgets/economic_vision_banner.dart';
@@ -301,7 +303,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       final doc = await FirebaseFirestore.instance
           .collection('heroes')
           .doc(user.uid)
-          .get();
+          .trackedGet();
       final data = doc.data();
       final phone = (data?['phoneNumber'] as String?)?.trim();
       final phoneAlt = (data?['phone'] as String?)?.trim();
@@ -1007,7 +1009,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       final doc = await FirebaseFirestore.instance
           .collection('heroes')
           .doc(_user!.uid)
-          .get();
+          .trackedGet();
       DbUsageTracker.instance.recordRead(1, 'hero_home_screen', 'profile_fetch');
       final data = doc.data() ?? {};
       String vehicleType =
@@ -1018,7 +1020,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         final userDoc = await FirebaseFirestore.instance
             .collection('users')
             .doc(_user!.uid)
-            .get();
+            .trackedGet();
         DbUsageTracker.instance.recordRead(1, 'hero_home_screen', 'vehicle_type_lookup');
         final userVehicle = userDoc.data()?['vehicleType'] as String?;
         if (userVehicle != null && userVehicle.trim().isNotEmpty) {
@@ -1109,7 +1111,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               .collection('rides')
               .where('captainId', isEqualTo: _user!.uid)
               .where('status', isEqualTo: 'completed')
-              .get();
+              .trackedGet();
           DbUsageTracker.instance
               .recordRead(ridesSnap.docs.length, 'hero_completed_rides_count');
           double earn = 0;
@@ -2091,7 +2093,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         final doc = await FirebaseFirestore.instance
             .collection('rides')
             .doc(normalizedRideId)
-            .get();
+            .trackedGet();
         if (!mounted) {
           return;
         }
@@ -2281,7 +2283,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       final doc = await FirebaseFirestore.instance
           .collection('rides')
           .doc(rideId)
-          .get();
+          .trackedGet();
       if (!mounted || !doc.exists) {
         return;
       }
@@ -2394,7 +2396,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       defaultAppVariant: 'hero',
     )..['createdAt'] = FieldValue.serverTimestamp();
 
-    await FirebaseFirestore.instance.collection('notifications').add(payload);
+    await FirebaseFirestore.instance.collection('notifications').trackedAdd(payload);
   }
 
   // Check if captain has an active ride already
@@ -2407,7 +2409,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           .collection('rides')
           .where('heroId', isEqualTo: _user!.uid)
           .where('status', whereIn: _restorableRideStatuses)
-          .get();
+          .trackedGet();
       final cutoff = _staleRideCutoff();
       final docs = snap.docs.where((doc) {
         final activityAt = _rideActivityAt(doc.data());
@@ -2860,7 +2862,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(_serviceRequestTitle(requestType), style: GoogleFonts.outfit(fontWeight: FontWeight.w800)),
+        title: Text(_serviceRequestTitle(requestType, details), style: GoogleFonts.outfit(fontWeight: FontWeight.w800)),
         content: SingleChildScrollView(
           child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2984,7 +2986,16 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     });
   }
 
-  String _serviceRequestTitle(String requestType) {
+  // FIX (Sep 2 2026 — service-booking flow audit): 'electronics_service'
+  // (every skill trade — electrician, plumber, laptop_pc, tv_service,
+  // fridge_ac, and now acting_driver, see hero_skill_catalog.dart) fell
+  // through to the generic default here, so a hero deciding whether to
+  // accept/reject a job never saw WHICH trade it was — just "New Service
+  // Request" with no name attached. [details] carries `categoryLabel`
+  // (skilled_services_screen.dart writes it verbatim from
+  // HeroSkill.title), so this now names the actual trade the same way
+  // the admin queue's requestSummary() already does.
+  String _serviceRequestTitle(String requestType, Map details) {
     switch (requestType) {
       case 'hero_booking':
         return 'New Hero Booking';
@@ -2994,6 +3005,9 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         return 'New Food Order';
       case 'grocery_order':
         return 'New Grocery Order';
+      case 'electronics_service':
+        final catLabel = (details['categoryLabel'] as String?)?.trim() ?? '';
+        return catLabel.isNotEmpty ? 'New $catLabel Job' : 'New Service Request';
       default:
         return 'New Service Request';
     }
@@ -3035,6 +3049,19 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             : (details['listText'] as String?) ?? '';
         final hasImage = (details['listImageUrl'] as String?)?.isNotEmpty ?? false;
         return [if (text.isNotEmpty) text, if (hasImage) '📷 Photo list attached'].join('\n');
+      // FIX (Sep 2 2026 — service-booking flow audit): this fell through
+      // to the empty-string default, so a hero's accept/reject dialog
+      // for ANY skill trade (electrician, plumber, ..., acting_driver)
+      // showed no problem description at all — just "From: <name>" and
+      // a blank line, forcing a blind accept. Mirrors
+      // admin_new_orders_screen.dart's requestSummary() exactly, same
+      // fields (`categoryLabel`, `issue`) written by
+      // skilled_services_screen.dart's createServiceRequest() call.
+      case 'electronics_service':
+        final catLabel = (details['categoryLabel'] as String?)?.trim() ?? '';
+        final issue = (details['issue'] as String?)?.trim() ?? '';
+        return [if (catLabel.isNotEmpty) catLabel, if (issue.isNotEmpty) issue]
+            .join(' — ');
       default:
         return '';
     }
@@ -3076,6 +3103,22 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         return [
           if (from != null) _ServiceRequestLocationLine('🟢', 'FROM', from),
           if (to != null) _ServiceRequestLocationLine('🔴', 'TO', to),
+        ];
+      // FIX (Sep 2 2026 — service-booking flow audit, same class of bug
+      // as _serviceRequestSummary()'s missing case): every skill trade
+      // (electrician, plumber, ..., acting_driver) fell through to the
+      // empty default here too, so the hero's accept/reject dialog had
+      // NO address at all for a skill job — not even after the title/
+      // summary fix, since this is a separate render block. Address is
+      // arguably the most important field to see before accepting (the
+      // 5km dispatch radius already filtered on it, but the hero still
+      // needs to know WHERE). `address` is the single field
+      // skilled_services_screen.dart's LocationCaptureField writes —
+      // one line, not a from/to pair, since a skill job has one site.
+      case 'electronics_service':
+        final address = s('address');
+        return [
+          if (address != null) _ServiceRequestLocationLine('📍', 'LOCATION', address),
         ];
       default:
         return const [];
@@ -3318,7 +3361,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       await FirebaseFirestore.instance
           .collection('heroes')
           .doc(uid)
-          .set({'isAvailable': true}, SetOptions(merge: true));
+          .trackedSet({'isAvailable': true}, SetOptions(merge: true));
     } catch (e) {
       debugPrint('[HeroHomeScreen] Reject ride error: $e');
     }
@@ -3462,7 +3505,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       await FirebaseFirestore.instance
           .collection('heroes')
           .doc(uid)
-          .update({'isAvailable': false});
+          .trackedUpdate({'isAvailable': false});
       mark('STEP-3 Firestore update(heroes/uid)  <-- prime suspect');
 
       await FirebaseDatabase.instance
@@ -3592,7 +3635,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     late double actualFare;
     late double tipAmount;
     try {
-      final rideSnap = await db.collection('rides').doc(_activeRideId).get();
+      final rideSnap = await db.collection('rides').doc(_activeRideId).trackedGet();
       if (!rideSnap.exists) {
         debugPrint('[completeRide] Ride doc not found: $_activeRideId');
         return;
@@ -3862,6 +3905,12 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                 // renders a zero-height box when nothing is stranded,
                 // so it costs this screen nothing on a normal day.
                 const StrandedOrdersBanner(),
+                // NEW (Sep 2026 — reduce delivery delay): heads-up the
+                // moment a seller ACCEPTS an order, well before the real
+                // dispatch ping — see order_precaution_banner.dart's
+                // header. Fully independent of this screen's own ping/
+                // dialog state machine below; renders nothing normally.
+                const OrderPrecautionBanner(),
                 if (_isOnline) ...[
                   if (_activeRideId.isNotEmpty) ...[
                     _buildActiveRideCard(),
@@ -6481,17 +6530,67 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
     // pre-filled with the estimate but adjustable — mirrors the ride
     // flow's completion→billing pattern.
     if (newStatus == 'completed') {
+      // FIX (audit pass, Sep 2026 — wiring gap): catalog_food_order and
+      // catalog_grocery_order both carry a real, already-computed
+      // `details.subtotal` (the sum of the seller's own per-item
+      // prices) — but this dialog only ever pre-filled from
+      // widget.estimatedAmount, which nothing sets for a catalog order
+      // (there is no negotiate/approve-estimate step for a pre-priced
+      // cart). The hero saw a BLANK "Final amount" field and had to
+      // manually retype a number that was already sitting on the doc,
+      // risking a typo that under/overbills the customer for no reason.
+      // Falls back to subtotal only when estimatedAmount is genuinely
+      // absent — never overrides a real negotiated estimate for
+      // hero_booking/custom_order, which is what widget.estimatedAmount
+      // is for everywhere else in this widget.
+      final subtotalFallback = (widget.details['subtotal'] as num?)?.toDouble();
       final amount = await _promptForAmount(
         context,
         title: 'Final amount',
         message: 'Confirm or adjust the final amount to bill the customer.',
-        initialValue: widget.estimatedAmount,
+        initialValue: widget.estimatedAmount ?? subtotalFallback,
       );
       if (amount == null) return;
+
+      // FIX (hero-earnings audit — grocery overstatement): a grocery
+      // order has no seller/subtotal to split against (the hero fronts
+      // the shop's bill and gets reimbursed inside this same
+      // `finalAmount`), so without asking separately, the hero's whole
+      // collected amount — including money that was never theirs — was
+      // being credited as their own earning. This second prompt captures
+      // what the hero actually paid the shop, so the credit step
+      // (markServiceRequestPaymentReceived) can subtract it and credit
+      // only the hero's real delivery/service margin. Only asked for
+      // grocery_order — every other request type is unaffected.
+      double? goodsCost;
+      if (widget.requestType == 'grocery_order') {
+        goodsCost = await _promptForAmount(
+          context,
+          title: 'Goods cost',
+          message: 'How much did you actually pay the shop for the items? '
+              '(This is subtracted from your own earning — it is the '
+              "customer's reimbursement, not your fee.)",
+          initialValue: null,
+        );
+        if (goodsCost == null) return; // cancelled — stay on current status
+        if (goodsCost > amount) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Goods cost cannot be more than the final amount'),
+            ),
+          );
+          return;
+        }
+      }
+
       setState(() => _updating = true);
       try {
-        await ServiceRequestService()
-            .completeWithFinalAmount(widget.requestId, amount);
+        await ServiceRequestService().completeWithFinalAmount(
+          widget.requestId,
+          amount,
+          goodsCost: goodsCost,
+        );
       } catch (e) {
         debugPrint('[ServiceRequestStatusCard] completeWithFinalAmount error: $e');
         _showActionError(e);
@@ -6532,6 +6631,11 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
       case 'custom_hotel_order':
         return 'Food Order';
       case 'grocery_order':
+        return 'Grocery Order';
+      // FIX (audit pass, Sep 2026): the new catalog-based grocery order
+      // type was missing here — same class of bug as the catalog_food_
+      // order fix above, just reintroduced for grocery this time.
+      case 'catalog_grocery_order':
         return 'Grocery Order';
       default:
         return 'Service Request';
@@ -6706,7 +6810,7 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
                 width: double.infinity,
                 height: 38,
                 child: OutlinedButton(
-                  onPressed: _updating ? null : _markPaymentReceived,
+                  onPressed: _updating ? null : _showQrThenMarkPaymentReceived,
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF00C853),
                     side: const BorderSide(color: Color(0xFF00C853)),
@@ -6797,13 +6901,50 @@ class _ServiceRequestStatusCardState extends State<_ServiceRequestStatusCard> {
     }
   }
 
+  // FIX (Sep 2 2026 — QR/monitoring audit): Skill Hero jobs (Electrician,
+  // Plumber, Hero Booking, etc.) used to skip straight to
+  // markServiceRequestPaymentReceived() with no QR shown at all — the
+  // customer only ever saw a "pay your hero directly" text line, unlike
+  // the ride flow which pops HeroPaymentQrPopup first (see
+  // hero_ride_screen.dart's _showSelfQrThenMarkPaid()). Same reusable
+  // popup, same sequencing: show the hero's saved QR, wait for the
+  // hero's own close tap (i.e. after they've visually confirmed the
+  // customer paid), THEN run the real credit write.
+  Future<void> _showQrThenMarkPaymentReceived() async {
+    await HeroPaymentQrPopup.show(context);
+    if (!mounted) return;
+    await _markPaymentReceived();
+  }
+
   Future<void> _markPaymentReceived() async {
     setState(() => _updating = true);
     try {
       await ServiceRequestService()
           .markServiceRequestPaymentReceived(widget.requestId);
+      // FIX (Sep 2 2026 — "no live monitor" audit): the earnings screen
+      // is deliberately fetch-on-demand and even charges a micro-fee to
+      // refresh (see hero_earnings_screen.dart's header), so a hero got
+      // ZERO in-app confirmation that money they just collected actually
+      // landed. This costs no extra read — widget.finalAmount is already
+      // in memory from the same stream that rendered this card.
+      if (mounted && widget.finalAmount != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Payment received ✓ ₹${widget.finalAmount!.toStringAsFixed(0)}',
+            ),
+            backgroundColor: const Color(0xFF00C853),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     } catch (e) {
       debugPrint('[ServiceRequestStatusCard] markServiceRequestPaymentReceived error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not confirm payment: $e'), backgroundColor: Colors.red),
+        );
+      }
     } finally {
       if (mounted) setState(() => _updating = false);
     }

@@ -144,6 +144,21 @@ extension TrackedDocumentReference<T> on DocumentReference<T> {
   }
 }
 
+extension TrackedAggregateQuery on AggregateQuery {
+  /// Drop-in replacement for [get] on a `.count()`/`.sum()`/`.avg()`
+  /// aggregate query — Firestore bills these as exactly ONE read
+  /// regardless of how many documents matched, never the matched count.
+  Future<AggregateQuerySnapshot> trackedGet({
+    String? screen,
+    String? action,
+    AggregateSource source = AggregateSource.server,
+  }) async {
+    final snap = await get(source: source);
+    DbUsageTracker.instance.recordRead(1, screen ?? _autoLabel(this), action);
+    return snap;
+  }
+}
+
 extension TrackedCollectionReference<T> on CollectionReference<T> {
   /// Drop-in replacement for [add].
   Future<DocumentReference<T>> trackedAdd(T data, {String? screen, String? action}) {

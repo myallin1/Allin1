@@ -54,6 +54,7 @@ import 'package:flutter/foundation.dart';
 
 import '../config/app_knowledge.dart';
 import 'update_service.dart';
+import './firestore_usage_tracking.dart';
 
 class AppUpdateGateService {
   AppUpdateGateService._();
@@ -111,7 +112,7 @@ class AppUpdateGateService {
       final snap = await FirebaseFirestore.instance
           .collection('system_settings')
           .doc('app_versions')
-          .get();
+          .trackedGet();
       final d = snap.data();
       if (d == null) return;
       _latestBuild = (d['${flavor}_build'] as num?)?.toInt() ?? 0;

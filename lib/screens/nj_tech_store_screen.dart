@@ -1376,7 +1376,7 @@ class _EnquiriesListState extends State<_EnquiriesList> {
         .where('customerId', isEqualTo: widget.customerId)
         .where('requestType', isEqualTo: 'electronics_service')
         .orderBy('createdAt', descending: true)
-        .get();
+        .trackedGet();
     return snapshot.docs;
   }
 

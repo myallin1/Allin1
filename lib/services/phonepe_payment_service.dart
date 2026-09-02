@@ -113,4 +113,35 @@ class PhonePePaymentService {
       return PhonePeOrderStatus.created;
     }
   }
+
+  /// Closes the loop for a payment that was collected BEFORE its order
+  /// doc existed (food checkout: payment happens first, against a
+  /// RESERVED requestId via ServiceRequestService.reserveRequestId();
+  /// the service_requests doc is only created afterward, once stock is
+  /// confirmed). At payment time, phonepeWebhook.ts's own cascade finds
+  /// nothing to write paymentStatus onto yet and skips it — call this
+  /// immediately after actually creating the order (with that SAME
+  /// requestId as preGeneratedRequestId) to finish the link.
+  ///
+  /// Still never trusts the client — this re-checks
+  /// payment_orders/{merchantTransactionId}.status server-side and only
+  /// acts if PhonePe's webhook already verified it as 'paid'. Safe to
+  /// call even if that hasn't happened yet: returns `linked: false`
+  /// rather than throwing, since the webhook may simply be running late.
+  Future<bool> confirmLink({
+    required String merchantTransactionId,
+    required String requestId,
+  }) async {
+    try {
+      final callable = _functions.httpsCallable('confirmPhonePeLink');
+      final result = await callable.call<Map<String, dynamic>>({
+        'merchantTransactionId': merchantTransactionId,
+        'requestId': requestId,
+      });
+      return result.data['linked'] == true;
+    } catch (e) {
+      debugPrint('[PhonePePaymentService] confirmLink failed: $e');
+      return false;
+    }
+  }
 }

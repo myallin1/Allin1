@@ -26,6 +26,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../services/admin_deletion_service.dart';
 import '../../widgets/admin/admin_selection_mixin.dart';
 import '../../widgets/admin/cached_analytics_view.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A12);
 const Color _card = Color(0xFF141420);
@@ -65,7 +66,7 @@ class _AdminOrdersCleanupScreenState extends State<AdminOrdersCleanupScreen>
         .collection('orders')
         .orderBy('createdAt', descending: true)
         .limit(500)
-        .get();
+        .trackedGet();
     return snap.docs.map((doc) {
       final d = doc.data();
       final createdAt = d['createdAt'];

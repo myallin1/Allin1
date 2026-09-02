@@ -218,7 +218,7 @@ class _BannerAdminCard extends StatelessWidget {
             onChanged: (v) => FirebaseFirestore.instance
                 .collection(kHomeBannerCollection)
                 .doc(offerId)
-                .update({'isActive': v}),
+                .trackedUpdate({'isActive': v}),
           ),
           IconButton(
             icon: const Icon(Icons.edit_rounded, color: Colors.white70, size: 20),
@@ -244,7 +244,7 @@ class _BannerAdminCard extends StatelessWidget {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           TextButton(
             onPressed: () {
-              FirebaseFirestore.instance.collection(kHomeBannerCollection).doc(offerId).delete();
+              FirebaseFirestore.instance.collection(kHomeBannerCollection).doc(offerId).trackedDelete();
               Navigator.pop(context);
             },
             child: const Text('Delete', style: TextStyle(color: Color(0xFFFF5252))),
@@ -370,10 +370,10 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
         'isActive': widget.existing?['isActive'] as bool? ?? true,
       };
       if (widget.offerId != null) {
-        await FirebaseFirestore.instance.collection(kHomeBannerCollection).doc(widget.offerId).update(data);
+        await FirebaseFirestore.instance.collection(kHomeBannerCollection).doc(widget.offerId).trackedUpdate(data);
       } else {
         data['createdAt'] = FieldValue.serverTimestamp();
-        await FirebaseFirestore.instance.collection(kHomeBannerCollection).add(data);
+        await FirebaseFirestore.instance.collection(kHomeBannerCollection).trackedAdd(data);
       }
       if (mounted) Navigator.pop(context);
     } catch (e) {

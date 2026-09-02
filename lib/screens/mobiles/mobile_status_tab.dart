@@ -24,6 +24,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../services/db_usage_tracker.dart';
 import '../service_request_tracking_screen.dart';
 import 'mobile_hub_screen.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 class MobileStatusTab extends StatefulWidget {
   const MobileStatusTab({super.key});
@@ -73,7 +74,7 @@ class _MobileStatusTabState extends State<MobileStatusTab>
           .collection('service_requests')
           .where('customerId', isEqualTo: user.uid)
           .where('requestType', isEqualTo: 'electronics_service')
-          .get();
+          .trackedGet();
 
       DbUsageTracker.instance
           .recordRead(snap.docs.length, 'mobile_hub', 'my_status');

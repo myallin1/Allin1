@@ -37,6 +37,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/affiliate_service.dart';
+import '../../services/firestore_usage_tracking.dart';
 import '../../services/csv_export_stub.dart'
     if (dart.library.html) '../../services/csv_export_web.dart';
 
@@ -212,7 +213,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
       // full, and needed for the scans/conversion-rate analytics that
       // the leads rows alone cannot provide.
       final codesSnap =
-          await FirebaseFirestore.instance.collection('affiliate_codes').get();
+          await FirebaseFirestore.instance.collection('affiliate_codes').trackedGet();
       final codeMap = <String, Map<String, dynamic>>{};
       for (final d in codesSnap.docs) {
         codeMap[d.id] = d.data();

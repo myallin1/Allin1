@@ -68,7 +68,7 @@ class WalletProvider extends ChangeNotifier {
   // Refresh wallet manually (if needed)
   Future<void> refresh(String userId) async {
     try {
-      final doc = await _firestore.collection('users').doc(userId).get();
+      final doc = await _firestore.collection('users').doc(userId).trackedGet();
       if (doc.exists) {
         _wallet = UserWalletModel.fromFirestore(doc.data()!, doc.id);
         notifyListeners();

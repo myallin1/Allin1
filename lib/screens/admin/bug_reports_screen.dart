@@ -23,6 +23,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/db_usage_tracker.dart';
 import '../../widgets/admin/cached_analytics_view.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -54,7 +55,7 @@ class _BugReportsScreenState extends State<BugReportsScreen> {
         .collection('app_bug_reports')
         .orderBy('createdAt', descending: true)
         .limit(300)
-        .get();
+        .trackedGet();
     DbUsageTracker.instance.recordRead(snap.docs.length, 'bug_reports', 'fetch_reports');
     // Flattened to Hive-serializable primitives (Timestamps are not).
     return snap.docs.map((d) {
@@ -90,7 +91,7 @@ class _BugReportsScreenState extends State<BugReportsScreen> {
       await FirebaseFirestore.instance
           .collection('app_bug_reports')
           .doc(id)
-          .update({
+          .trackedUpdate({
         'status': resolved ? 'resolved' : 'open',
         'resolvedAt': resolved ? FieldValue.serverTimestamp() : null,
       });

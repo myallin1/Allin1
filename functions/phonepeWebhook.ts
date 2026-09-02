@@ -39,7 +39,16 @@ interface PhonePeCallbackBody {
   data: PhonePeCallbackData;
 }
 
-export const phonepeWebhook = functions.https.onRequest(async (req, res) => {
+// FIX (audit pass — critical gap, same as phonepeCreateOrder.ts): a
+// 1st-gen function must declare `.runWith({ secrets: [...] })` for a
+// Secret-Manager-stored value to ever reach process.env — without
+// this, PHONEPE_SALT_KEY reads as '', which means EVERY webhook
+// checksum verification fails (line ~65's comparison can never match
+// a real PhonePe-computed checksum against an empty salt), so every
+// real payment callback gets rejected as "Invalid signature."
+export const phonepeWebhook = functions
+  .runWith({ secrets: ['PHONEPE_SALT_KEY', 'PHONEPE_SALT_INDEX'] })
+  .https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).json({ success: false, message: 'Method not allowed' });
     return;
@@ -139,14 +148,38 @@ export const phonepeWebhook = functions.https.onRequest(async (req, res) => {
       // this is the one path allowed to set a GATEWAY-verified paid
       // status, distinct from the existing hero-marks-paid cash/UPI-QR
       // flow that service_requests' own security rules already govern.
+      //
+      // FIX (food-checkout pay-before-order-exists flow, Sep 2026): this
+      // used to call `transaction.update(sourceRef, ...)` unconditionally
+      // — but Firestore's transaction.update() throws NOT_FOUND at COMMIT
+      // time if the target doc doesn't exist yet, which aborts the ENTIRE
+      // transaction, including the payment_orders write above. Food
+      // checkout collects payment BEFORE seller_detail_screen.dart
+      // creates the service_requests doc (see phonepeCreateOrder.ts's
+      // header for why), so that doc genuinely does not exist yet at the
+      // moment this webhook fires — without this guard, the payment
+      // would come back from PhonePe successfully and this webhook would
+      // silently retry-and-fail forever, with payment_orders itself stuck
+      // on 'created'. Now: link immediately if the doc already exists
+      // (the pay-AFTER-order-exists case, unchanged); otherwise skip the
+      // cascade here and let phonepeConfirmLink.ts finish the link once
+      // the client creates that doc moments later.
       if (newStatus === 'paid') {
         const sourceRef = db.collection(order.sourceCollection || 'service_requests').doc(order.requestId);
-        transaction.update(sourceRef, {
-          paymentStatus: 'paid',
-          paymentMethod: 'phonepe',
-          paymentGatewayTxnId: transactionId || null,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+        const sourceSnap = await transaction.get(sourceRef);
+        if (sourceSnap.exists) {
+          transaction.update(sourceRef, {
+            paymentStatus: 'paid',
+            paymentMethod: 'phonepe',
+            paymentGatewayTxnId: transactionId || null,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        } else {
+          logger.info(
+            `phonepeWebhook: source doc ${order.sourceCollection}/${order.requestId} ` +
+            'not created yet — deferring paymentStatus cascade to phonepeConfirmLink.ts',
+          );
+        }
       }
 
       return { alreadyProcessed: false, status: newStatus };

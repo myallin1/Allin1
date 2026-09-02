@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/user_wallet_model.dart';
 import 'api_contracts.dart';
+import './firestore_usage_tracking.dart';
 
 class WalletService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -22,7 +23,7 @@ class WalletService {
         return const UserWalletModel(userId: 'temp');
       }
 
-      final doc = await _firestore.collection('users').doc(userId).get();
+      final doc = await _firestore.collection('users').doc(userId).trackedGet();
 
       if (!doc.exists) {
         return const UserWalletModel(userId: 'temp');
@@ -123,7 +124,7 @@ class WalletService {
       // return result.data;
 
       // For now, simulate server-side check
-      final userDoc = await _firestore.collection('users').doc(userId).get();
+      final userDoc = await _firestore.collection('users').doc(userId).trackedGet();
       final userData = userDoc.data()!;
 
       final currentBalance = userData['njCoinsBalance'] as int? ?? 0;
@@ -206,7 +207,7 @@ class WalletService {
         };
       }
 
-      final userDoc = await _firestore.collection('users').doc(userId).get();
+      final userDoc = await _firestore.collection('users').doc(userId).trackedGet();
       final userData = userDoc.data()!;
 
       final dailyCoinsUsed = userData['dailyCoinsUsed'] as int? ?? 0;

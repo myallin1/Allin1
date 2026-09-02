@@ -36,6 +36,7 @@ import 'widgets/branded_loading_screen.dart';
 import 'widgets/migration_notice_overlay.dart';
 import 'services/guru_overlay_service.dart';
 import 'services/chitti/hero_memory_service.dart';
+import './services/firestore_usage_tracking.dart';
 
 String? _rideIdFromPushData(Map<String, dynamic> data) {
   for (final key in const <String>[
@@ -882,9 +883,9 @@ class _HeroSetupGateState extends State<_HeroSetupGate> {
     }
     _cachedUid = uid;
     _usersDocFuture =
-        FirebaseFirestore.instance.collection('users').doc(uid).get();
+        FirebaseFirestore.instance.collection('users').doc(uid).trackedGet();
     _heroDocFuture =
-        FirebaseFirestore.instance.collection('heroes').doc(uid).get();
+        FirebaseFirestore.instance.collection('heroes').doc(uid).trackedGet();
   }
 
   // FIX (per Nizam's request — Hero app startup speed): this used to

@@ -200,6 +200,31 @@ final List<HeroSkill> kHeroSkills = <HeroSkill>[
     svgIcon: FluentEmojiFlat.snowflake,
     color: const Color(0xFF56CCF2),
   ),
+  // NEW (Sep 2 2026 — Nizam: "acting driver booking concept... yar
+  // acting nu register pandrangalo avangaluku mattum antha lead
+  // kidaikum"). Deliberately just another entry in this same list, not
+  // a new pipeline — see the file header ("no new pipeline"). A hero
+  // who drives the CUSTOMER's own vehicle for them is, mechanically,
+  // the exact same transaction as a plumber: customer describes what
+  // they need at a location, nearby matching heroes get an RTDB-only
+  // ping (zero Firestore fan-out cost, see
+  // _broadcastToEligibleHeroes/heroHasSkill), first to accept owns it
+  // and every other hero's ping is swept clear, and the job's interim
+  // status lives in RTDB (active_service_requests) — Firestore is only
+  // ever touched once at assignment and once at completion (see
+  // _foldAndRemoveActiveServiceRequestNode). All of that is exactly the
+  // "database waste pannama, rtdb ping, first accept wins, activity
+  // local-first" behaviour Nizam asked for, and none of it is new code
+  // — this one catalog entry is the entire feature.
+  HeroSkill(
+    key: 'acting_driver',
+    title: 'Acting Driver',
+    tamilTitle: 'ஆக்டிங் டிரைவர்',
+    subtitle: "Drive the customer's own vehicle",
+    icon: Icons.drive_eta_rounded,
+    svgIcon: FluentEmojiFlat.automobile,
+    color: const Color(0xFF5C6BC0),
+  ),
 ];
 
 /// All skill keys, for membership tests.

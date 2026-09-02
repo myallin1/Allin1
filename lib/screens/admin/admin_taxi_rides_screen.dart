@@ -498,7 +498,7 @@ class _AdminTaxiRidesScreenState extends State<AdminTaxiRidesScreen>
         'acceptedHeroVehicle': heroVehicle,
       });
       await FirebaseDatabase.instance.ref('online_heroes/$heroId').update({'isAvailable': false});
-      await FirebaseFirestore.instance.collection('heroes').doc(heroId).update({'isAvailable': false});
+      await FirebaseFirestore.instance.collection('heroes').doc(heroId).trackedUpdate({'isAvailable': false});
       await FirebaseFirestore.instance.collection('rides').doc(rideId).update({
         'status': 'accepted',
         'heroId': heroId,

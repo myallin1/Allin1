@@ -488,7 +488,7 @@ class _MenuItemsPreview extends StatelessWidget {
           .doc(sellerId)
           .collection('menu_items')
           .limit(20)
-          .get(),
+          .trackedGet(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Padding(

@@ -32,7 +32,24 @@ interface AffiliatePostback {
 /**
  * WEBHOOK ENDPOINT
  */
-export const affiliatePostbackWebhook = functions.https.onRequest(
+// FIX (audit pass, Sep 2026 — same structural gap as the PhonePe
+// functions, found while checking why THEIR secrets weren't reaching
+// process.env): a 1st-gen function only receives a Secret-Manager value
+// in process.env if it declares `.runWith({ secrets: [...] })` — this
+// never did, and AFFILIATE_HMAC_SECRET has in fact never been set as a
+// secret at all (confirmed via `firebase functions:secrets:access` —
+// not found). That means this webhook has been running in PRODUCTION
+// on the hardcoded fallback 'dev-secret-key' this whole time: anyone
+// who can guess or read that string can forge an affiliate postback and
+// credit themselves real NJ Coins (postback.payout * 0.4, see below) —
+// a live vulnerability, not a theoretical one. Adding the runWith
+// binding here only closes HALF of it — Nizam still needs to run
+// `firebase functions:secrets:set AFFILIATE_HMAC_SECRET` with a real
+// random value (e.g. `openssl rand -hex 32`) and redeploy before the
+// fallback stops being reachable.
+export const affiliatePostbackWebhook = functions
+  .runWith({ secrets: ['AFFILIATE_HMAC_SECRET'] })
+  .https.onRequest(
   async (req: functions.https.Request, res: functions.Response) => {
     // 1. Only accept POST
     if (req.method !== 'POST') {

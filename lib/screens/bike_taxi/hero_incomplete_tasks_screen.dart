@@ -312,8 +312,26 @@ class _HeroIncompleteTasksScreenState
     final status = (d['status'] as String?) ?? '';
     final busy = _busyId == doc.id;
 
+    // FIX (Sep 2 2026 — service-booking flow audit, same class of bug as
+    // hero_home_screen.dart's ping-dialog fixes): every skill trade
+    // (electrician, plumber, ..., acting_driver) shares requestType
+    // 'electronics_service', so _prettyCategory() showed the literal
+    // "electronics service" for every one of them here — a hero with
+    // three open skill tasks saw three identically-labeled cards with
+    // no way to tell which was which without opening each one. The
+    // actual trade name is on `details.categoryLabel` (written by
+    // skilled_services_screen.dart), so prefer that when present.
+    final requestType = (d['requestType'] as String?) ?? '';
+    final details = d['details'] as Map?;
+    final categoryLabel = requestType == 'electronics_service'
+        ? (details?['categoryLabel'] as String?)?.trim()
+        : null;
+    final title = (categoryLabel != null && categoryLabel.isNotEmpty)
+        ? categoryLabel
+        : _prettyCategory(requestType);
+
     return _taskCard(
-      title: _prettyCategory((d['requestType'] as String?) ?? ''),
+      title: title,
       subtitle: (d['customerName'] as String?)?.isNotEmpty ?? false
           ? d['customerName'] as String
           : 'Customer task',
@@ -522,6 +540,8 @@ class _HeroIncompleteTasksScreenState
         return 'Catalog Food Order';
       case 'custom_hotel_order':
         return 'Hotel Order';
+      case 'catalog_grocery_order':
+        return 'Catalog Grocery Order';
       default:
         return key.isEmpty ? 'Task' : key.replaceAll('_', ' ');
     }

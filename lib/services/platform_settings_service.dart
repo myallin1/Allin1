@@ -32,7 +32,7 @@ class PlatformSettingsService {
     }
 
     try {
-      final doc = await _settingsRef.doc('global').get();
+      final doc = await _settingsRef.doc('global').trackedGet();
       if (doc.exists && doc.data() != null) {
         _cachedSettings = PlatformSettings.fromMap(
           doc.data()! as Map<String, dynamic>,
@@ -77,7 +77,7 @@ class PlatformSettingsService {
       updatedBy: adminId,
     );
 
-    await _settingsRef.doc('global').set(defaultSettings.toMap());
+    await _settingsRef.doc('global').trackedSet(defaultSettings.toMap());
 
     // Invalidate cache
     _cachedSettings = defaultSettings;
@@ -87,7 +87,7 @@ class PlatformSettingsService {
   /// Get seller-specific override if exists
   Future<SellerOverride?> getSellerOverride(String storeId) async {
     try {
-      final doc = await _sellerOverridesRef.doc(storeId).get();
+      final doc = await _sellerOverridesRef.doc(storeId).trackedGet();
       if (doc.exists && doc.data() != null) {
         return SellerOverride.fromMap(
           doc.data()! as Map<String, dynamic>,
@@ -112,7 +112,7 @@ class PlatformSettingsService {
 
   /// Remove seller override
   Future<void> removeSellerOverride(String storeId) async {
-    await _sellerOverridesRef.doc(storeId).delete();
+    await _sellerOverridesRef.doc(storeId).trackedDelete();
   }
 
   /// Get all seller overrides

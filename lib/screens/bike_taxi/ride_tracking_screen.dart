@@ -510,7 +510,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
         await FirebaseFirestore.instance
             .collection('rides')
             .doc(widget.rideDocId)
-            .update({
+            .trackedUpdate({
           'customerRating': rating,
           'ratedAt': FieldValue.serverTimestamp(),
         });
@@ -519,7 +519,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
               .collection('rides')
               .where('heroId', isEqualTo: heroId)
               .where('customerRating', isGreaterThan: 0)
-              .get();
+              .trackedGet();
           final avg = ridesSnap.docs.fold<double>(0, (s, d) {
                 final r = (d.data()['customerRating'] as num?)?.toDouble() ?? 0;
                 return s + r;
@@ -528,7 +528,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
           await FirebaseFirestore.instance
               .collection('heroes')
               .doc(heroId)
-              .set({'heroRating': avg}, SetOptions(merge: true));
+              .trackedSet({'heroRating': avg}, SetOptions(merge: true));
         }
       } catch (e) {
         debugPrint('[Rating] Save failed: $e');
@@ -844,7 +844,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       final heroSnap = await FirebaseFirestore.instance
           .collection('heroes')
           .doc(heroId)
-          .get();
+          .trackedGet();
       String? phone =
           (heroSnap.data()?['phoneNumber'] as String?)?.trim().isNotEmpty ?? false
               ? (heroSnap.data()!['phoneNumber'] as String).trim()
@@ -854,7 +854,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
         final userSnap = await FirebaseFirestore.instance
             .collection('users')
             .doc(heroId)
-            .get();
+            .trackedGet();
         phone =
             (userSnap.data()?['phoneNumber'] as String?)?.trim().isNotEmpty ?? false
                 ? (userSnap.data()!['phoneNumber'] as String).trim()

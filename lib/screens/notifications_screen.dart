@@ -841,7 +841,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     await FirebaseFirestore.instance
         .collection('notifications')
         .doc(docId)
-        .update({'read': true});
+        .trackedUpdate({'read': true});
   }
 
   Future<void> _markAllRead(BuildContext context, String? userId) async {
@@ -851,7 +851,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         .collection('notifications')
         .where('userId', isEqualTo: userId)
         .where('read', isEqualTo: false)
-        .get();
+        .trackedGet();
 
     final batch = FirebaseFirestore.instance.batch();
     for (final doc in snapshot.docs) {
@@ -892,7 +892,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
               FirebaseFirestore.instance
                   .collection('notifications')
                   .doc(docId)
-                  .delete();
+                  .trackedDelete();
               Navigator.pop(ctx);
             },
             child: Text('Delete', style: GoogleFonts.outfit(color: kRed)),

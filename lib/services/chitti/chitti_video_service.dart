@@ -30,6 +30,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../models/mobile_models.dart' show youtubeVideoId;
+import '../firestore_usage_tracking.dart';
 
 /// One publishable clip.
 @immutable
@@ -71,7 +72,7 @@ class ChittiVideoService {
           .collection('ads')
           .where('isActive', isEqualTo: true)
           .limit(20)
-          .get();
+          .trackedGet();
 
       _cache = snap.docs
           .map((doc) {

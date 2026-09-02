@@ -12,6 +12,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/credential.dart';
 import '../models/credential_category.dart';
+import '../services/firestore_usage_tracking.dart';
 
 const Color kSurface = Color(0xFF0D0D18);
 const Color kCard = Color(0xFF141420);
@@ -666,7 +667,7 @@ class _CredentialDetailScreenState extends State<CredentialDetailScreen> {
       await FirebaseFirestore.instance
           .collection('credentials')
           .doc(credentialId)
-          .set(credential.toJson());
+          .trackedSet(credential.toJson());
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -747,7 +748,7 @@ class _CredentialDetailScreenState extends State<CredentialDetailScreen> {
       await FirebaseFirestore.instance
           .collection('credentials')
           .doc(widget.credential!.id)
-          .update({
+          .trackedUpdate({
         'isDeleted': true,
         'updatedAt': DateTime.now(),
       });

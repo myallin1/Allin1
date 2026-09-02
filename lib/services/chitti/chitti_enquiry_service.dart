@@ -144,7 +144,7 @@ class ChittiEnquiryService {
       await FirebaseFirestore.instance
           .collection(collectionPath)
           .doc(id)
-          .update({
+          .trackedUpdate({
         'status': 'answered',
         'answeredAt': FieldValue.serverTimestamp(),
       });

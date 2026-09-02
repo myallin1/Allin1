@@ -378,10 +378,26 @@ class ServiceRequestService {
   /// idempotency layer enforced by firestore.rules itself (no `update`
   /// rule exists for wallet_transactions, so a second create attempt at
   /// the same id is rejected outright regardless of this Dart guard).
-  Future<void> advanceSellerStage(String requestId, String stage, {String? sellerId}) async {
+  Future<void> advanceSellerStage(
+    String requestId,
+    String stage, {
+    String? sellerId,
+    /// Passed by the caller (seller_dashboard_screen.dart /
+    /// seller_grocery_dashboard_screen.dart already hold the seller's
+    /// own SellerModel in memory, so this avoids an extra Firestore
+    /// read here just to fetch estimatedPrepTimeMin) — how many minutes
+    /// the seller estimates until this order is ready. Used ONLY for
+    /// the precaution ping fired on the first Accepted transition; null
+    /// or omitted simply skips that ping (every existing caller that
+    /// hasn't been updated to pass this keeps working exactly as before).
+    int? etaMinutes,
+  }) async {
     final reqRef = FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId);
+
+    Map<String, dynamic>? requestDataForPrecaution;
+    bool isFirstAcceptTransition = false;
 
     await FirebaseFirestore.instance.runTransaction((tx) async {
       final snap = await tx.get(reqRef);
@@ -396,6 +412,8 @@ class ServiceRequestService {
       if (stage == kSellerStageAccepted &&
           sellerId != null &&
           currentStage != kSellerStageAccepted) {
+        isFirstAcceptTransition = true;
+        requestDataForPrecaution = snap.data();
         final sellerRef =
             FirebaseFirestore.instance.collection('sellers').doc(sellerId);
         tx.update(sellerRef, {
@@ -423,6 +441,27 @@ class ServiceRequestService {
       }
     });
 
+    // PRECAUTION PING (Sep 2026 — Nizam: "order accept pandratrhu...
+    // avanga mention pandra time la ipdi oru new order varapoguthunu
+    // precaution messege kudukanum... ride delay agurathu kurayum").
+    // Fired the moment the seller accepts — a heads-up to nearby
+    // eligible heroes so they stay positioned instead of wandering off,
+    // BEFORE the real dispatch ping (which only fires later, at "Book
+    // Delivery Partner" / requestDeliveryBroadcast()). Best-effort and
+    // non-blocking: a failure here must never stop the seller's actual
+    // Accept action, which already committed above.
+    if (isFirstAcceptTransition && requestDataForPrecaution != null) {
+      unawaited(
+        _broadcastPrecautionPing(
+          requestId: requestId,
+          requestData: requestDataForPrecaution!,
+          etaMinutes: etaMinutes,
+        ).catchError((Object e) {
+          debugPrint('[ServiceRequestService] precaution ping failed (non-fatal): $e');
+        }),
+      );
+    }
+
     // 1GB RTDB budget cleanup safety net: the seller_pings/ node this
     // order created (see createServiceRequest) is normally deleted the
     // instant main_seller.dart's listener reads it, but a seller can
@@ -440,6 +479,178 @@ class ServiceRequestService {
         }),
       );
     }
+  }
+
+  /// Heads-up ping to nearby eligible heroes the moment a seller accepts
+  /// an order — see advanceSellerStage()'s call site for the full
+  /// rationale. Deliberately a SEPARATE, simpler broadcast than
+  /// _broadcastToEligibleHeroes(): no skill-dispatch radius logic (a
+  /// precaution ping is informational only, never a claimable job), and
+  /// it writes to `hero_precaution_pings` — a path the real accept-race
+  /// code (acceptServiceRequest/hero_service_pings) never reads, so this
+  /// can never be mistaken for, or interfere with, a real dispatch ping.
+  Future<void> _broadcastPrecautionPing({
+    required String requestId,
+    required Map<String, dynamic> requestData,
+    int? etaMinutes,
+  }) async {
+    final snap = await rtdb.FirebaseDatabase.instance.ref('online_heroes').get();
+    if (!snap.exists || snap.value is! Map) return;
+
+    final requestType = (requestData['requestType'] as String?) ?? '';
+    final requestCity = (requestData['city'] as String?) ?? kDefaultCity;
+    final details = requestData['details'] as Map<String, dynamic>? ?? {};
+    final sellerName = (details['sellerName'] as String?) ?? 'the seller';
+    final eta = (etaMinutes != null && etaMinutes > 0) ? etaMinutes : 20;
+
+    // Same window the real ping would eventually use, plus the ETA
+    // itself — a precaution notice for an order ready in 20 minutes
+    // that vanished after 90 seconds would be worse than not sending it.
+    final expiresAt = DateTime.now().toUtc().millisecondsSinceEpoch +
+        (eta + 10) * 60 * 1000;
+
+    final heroes = Map<dynamic, dynamic>.from(snap.value! as Map);
+    final futures = <Future<void>>[];
+
+    heroes.forEach((heroId, heroDataRaw) {
+      if (heroDataRaw is! Map) return;
+      final heroData = Map<String, dynamic>.from(heroDataRaw);
+      final isAvailable = heroData['isAvailable'] as bool?;
+      if (isAvailable == false) return;
+      final heroCity = (heroData['city'] as String?)?.trim().toLowerCase().isNotEmpty ?? false
+          ? (heroData['city'] as String).trim().toLowerCase()
+          : kDefaultCity;
+      if (heroCity != requestCity) return;
+      final serviceKey = serviceKeyForRequestType(requestType);
+      if (serviceKey != null && !isServiceAllowed(heroData, serviceKey)) return;
+
+      futures.add(
+        rtdb.FirebaseDatabase.instance
+            .ref('hero_precaution_pings/$heroId/$requestId')
+            .set({
+          'requestId': requestId,
+          'requestType': requestType,
+          'sellerName': sellerName,
+          'etaMinutes': eta,
+          'expiresAt': expiresAt,
+        }),
+      );
+    });
+
+    await Future.wait(futures);
+  }
+
+  /// Hero's "I'll wait nearby for this one" response to a precaution
+  /// ping (OrderPrecautionBanner) — read by requestDeliveryBroadcast()
+  /// to give this hero first crack at the REAL ping once the order is
+  /// actually ready, instead of a cold city-wide broadcast. Does NOT
+  /// assign or reserve anything by itself — acceptServiceRequest()'s
+  /// existing atomic first-accept-wins transaction is still the only
+  /// thing that ever assigns a job, so marking willing (even by several
+  /// heroes for the same order) can never bypass that safety.
+  Future<void> markWillingForPrecaution({
+    required String requestId,
+    required String heroId,
+    required String heroName,
+    required String heroPhone,
+  }) async {
+    await rtdb.FirebaseDatabase.instance
+        .ref('service_request_precaution_willing/$requestId/$heroId')
+        .set({
+      'heroName': heroName,
+      'heroPhone': heroPhone,
+      'respondedAt': rtdb.ServerValue.timestamp,
+    });
+  }
+
+  /// Seller's own attestation that a direct-to-seller UPI payment
+  /// (paymentMethod 'seller_direct_upi' — see SellerModel's payment
+  /// field comments) actually landed in their account, checked against
+  /// their own bank/UPI app OUTSIDE this app entirely — there is no
+  /// gateway here to verify it server-side, by design (that's the whole
+  /// point of avoiding a merchant account: same-day cash, no T+1
+  /// settlement). Gates seller_dashboard_screen.dart's "Book Delivery
+  /// Partner" button for that payment method only, mirroring the
+  /// existing trust model of a hero's own
+  /// markServiceRequestPaymentReceived() self-attestation — just on the
+  /// seller's side of the same order, before a hero is even involved.
+  Future<void> confirmSellerPaymentReceived(String requestId) async {
+    await FirebaseFirestore.instance
+        .collection('service_requests')
+        .doc(requestId)
+        .trackedUpdate({
+      'sellerPaymentConfirmed': true,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Re-runs the REAL per-hero broadcast for an existing request — the
+  /// hero-side "stranded order" safety net's actual dispatch step.
+  ///
+  /// FIX (Sep 2 2026 — service-booking flow audit): CRITICAL bug found
+  /// tracing chitti_order_escalation_service.dart end to end. That
+  /// service's `_makeClaimable()` only ever wrote a status flip to
+  /// `active_service_requests/{requestId}` — it never wrote a single
+  /// `hero_service_pings/{heroId}/{requestId}` node for any hero. Every
+  /// hero client (this file's own acceptServiceRequest() family,
+  /// hero_home_screen.dart's ping listener) discovers NEW work purely
+  /// from that per-hero path; nothing listens on `active_service_requests`
+  /// for first-contact discovery. Net effect: tapping "Release" on the
+  /// StrandedOrdersBanner told the hero "Sent to all heroes. Accept it
+  /// from your ride alerts." — a real, confidently-worded promise — and
+  /// then genuinely notified NOBODY. The order sat in Firestore status
+  /// 'pending' with no live ping to a single hero, silently undoing the
+  /// entire feature Nizam asked for ("customer ku message
+  /// anupuravaraikkum" — the point was to guarantee dispatch even when
+  /// no admin is watching).
+  ///
+  /// This method is the fix: it re-derives every parameter
+  /// `_broadcastToEligibleHeroes()` needs — including `requiredSkill`
+  /// and `customerLat`/`customerLng` for a skill trade (electrician,
+  /// plumber, ..., acting_driver), which the OLD code path had no
+  /// concept of at all, so even a naive fix that just added the missing
+  /// ping write would have broadcast every stranded skill job to every
+  /// hero city-wide instead of the matching trade within 5km.
+  Future<void> rebroadcastForEscalation(String requestId) async {
+    final doc = await FirebaseFirestore.instance
+        .collection('service_requests')
+        .doc(requestId)
+        .trackedGet();
+    final data = doc.data();
+    if (data == null) return;
+
+    final requestType = (data['requestType'] as String?) ?? '';
+    final details = data['details'] is Map
+        ? Map<String, dynamic>.from(data['details'] as Map)
+        : <String, dynamic>{};
+    final requiredSkill = requestType == 'electronics_service'
+        ? (details[kSkillRequestCategoryKey] as String?)
+        : null;
+    final customerLat = (details['locationLat'] as num?)?.toDouble();
+    final customerLng = (details['locationLng'] as num?)?.toDouble();
+    final requestCity = (data['city'] as String?) ?? kDefaultCity;
+    final pingExpiresAt = DateTime.now().toUtc().millisecondsSinceEpoch +
+        kServiceRequestPingExpirySeconds * 1000;
+
+    await rtdb.FirebaseDatabase.instance
+        .ref('active_service_requests/$requestId')
+        .update({
+      'status': 'pinging',
+      'pingExpiresAt': pingExpiresAt,
+    });
+
+    await _broadcastToEligibleHeroes(
+      requestId: requestId,
+      requestType: requestType,
+      customerName: (data['customerName'] as String?) ?? 'Customer',
+      customerPhone: (data['customerPhone'] as String?) ?? '',
+      details: details,
+      pingExpiresAt: pingExpiresAt,
+      requestCity: requestCity,
+      requiredSkill: requiredSkill,
+      customerLat: customerLat,
+      customerLng: customerLng,
+    );
   }
 
   /// Fires the held-back hero broadcast for a deferred order — the
@@ -487,6 +698,33 @@ class ServiceRequestService {
       'pingExpiresAt': pingExpiresAt,
     });
 
+    // PRECAUTION-PING PRIORITY (Sep 2026 — Nizam: reduce delivery delay
+    // by pinging a hero who ALREADY marked "I'll wait nearby" for this
+    // exact order — see advanceSellerStage()'s precaution broadcast and
+    // OrderPrecautionBanner's markWillingForPrecaution() call — FIRST,
+    // instead of a cold city-wide broadcast that might land on someone
+    // far away. Only on the FIRST fire (status was 'awaiting_seller');
+    // isExpiredPinging means the willing heroes already had their
+    // chance and didn't accept in time, so a retry goes straight to the
+    // unrestricted full broadcast — never leaves the seller stuck
+    // re-pinging the same unresponsive hero forever.
+    Set<String>? restrictToHeroIds;
+    if (!isExpiredPinging) {
+      try {
+        final willingSnap = await rtdb.FirebaseDatabase.instance
+            .ref('service_request_precaution_willing/$requestId')
+            .get();
+        if (willingSnap.exists && willingSnap.value is Map) {
+          final willing = Map<dynamic, dynamic>.from(willingSnap.value! as Map);
+          if (willing.isNotEmpty) {
+            restrictToHeroIds = willing.keys.map((k) => k.toString()).toSet();
+          }
+        }
+      } catch (e) {
+        debugPrint('[ServiceRequestService] precaution-willing read failed (non-fatal): $e');
+      }
+    }
+
     await _broadcastToEligibleHeroes(
       requestId: requestId,
       requestType: (node['requestType'] as String?) ?? '',
@@ -497,7 +735,19 @@ class ServiceRequestService {
           : <String, dynamic>{},
       pingExpiresAt: pingExpiresAt,
       requestCity: (node['city'] as String?) ?? kDefaultCity,
+      restrictToHeroIds: restrictToHeroIds,
     );
+
+    // Consumed — whether or not it ended up non-empty, this order's
+    // "who's waiting nearby" list AND every hero's precaution notice for
+    // it have done their job for this fire (the real ping has now gone
+    // out, so a lingering "coming soon" banner would be stale/confusing).
+    unawaited(
+      _sweepClearPrecautionPings(requestId).catchError((Object e) {
+        debugPrint('[ServiceRequestService] precaution-ping cleanup failed (non-fatal): $e');
+      }),
+    );
+
     return true;
   }
 
@@ -518,6 +768,16 @@ class ServiceRequestService {
     String? requiredSkill,
     double? customerLat,
     double? customerLng,
+    /// Precaution-ping priority (Sep 2026 — Nizam: "riders anga irunthu
+    /// vera yengayum move agama wait panni irukunu... antha order antha
+    /// riderku assign aidum"). When non-null and non-empty, ONLY heroes
+    /// in this set are pinged — every other eligibility check below
+    /// (online, same city, skill/service match) still applies as a
+    /// safety net, so a hero who marked willingness but then went
+    /// offline or moved city is correctly excluded rather than force-
+    /// pinged. See requestDeliveryBroadcast()'s own comment for how this
+    /// set is built and why it's dropped on a retry.
+    Set<String>? restrictToHeroIds,
   }) async {
     final snap =
         await rtdb.FirebaseDatabase.instance.ref('online_heroes').get();
@@ -538,6 +798,7 @@ class ServiceRequestService {
 
     heroes.forEach((heroId, heroDataRaw) {
       if (heroDataRaw is! Map) return;
+      if (restrictToHeroIds != null && !restrictToHeroIds.contains(heroId)) return;
       final heroData = Map<String, dynamic>.from(heroDataRaw);
 
       // FIX (Aug 11 2026 — presence-semantics mismatch found while
@@ -697,7 +958,7 @@ class ServiceRequestService {
     await FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
-        .update({
+        .trackedUpdate({
       'status': 'hero_assigned',
       'assignedHeroId': heroId,
       'assignedHeroName': heroName,
@@ -945,7 +1206,7 @@ class ServiceRequestService {
       await FirebaseFirestore.instance
           .collection('service_requests')
           .doc(requestId)
-          .update({
+          .trackedUpdate({
         'status': newStatus,
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -964,7 +1225,7 @@ class ServiceRequestService {
     await FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
-        .update({
+        .trackedUpdate({
       'status': newStatus,
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -988,7 +1249,7 @@ class ServiceRequestService {
     await FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
-        .update({
+        .trackedUpdate({
       'estimatedAmount': amount,
       // Reset to null (not-yet-responded) on every write — covers both
       // the hero's first entry and a re-entry after the customer
@@ -1013,7 +1274,7 @@ class ServiceRequestService {
     await FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
-        .update({
+        .trackedUpdate({
       'estimateApprovedByCustomer': true,
       'estimateRespondedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -1039,7 +1300,7 @@ class ServiceRequestService {
     await FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
-        .update({
+        .trackedUpdate({
       'estimatedAmount': null,
       'estimateApprovedByCustomer': null,
       'estimateRespondedAt': null,
@@ -1060,8 +1321,19 @@ class ServiceRequestService {
   /// "mark payment received" action both have a status to key off.
   Future<void> completeWithFinalAmount(
     String requestId,
-    double finalAmount,
-  ) async {
+    double finalAmount, {
+    /// Grocery-order-only (hero-earnings audit, Sep 2026): what the hero
+    /// actually paid the shop for the items, as distinct from
+    /// [finalAmount] (which also includes the customer's reimbursement
+    /// of that same goods cost, since a grocery order has no
+    /// seller/subtotal split the way a hotel order does). Persisted so
+    /// markServiceRequestPaymentReceived() can subtract it from the
+    /// hero's own credited earning — without it, the hero would be
+    /// credited money that was never theirs (the shop's reimbursement),
+    /// not just their delivery margin. Null for every other request
+    /// type, which never prompts for this.
+    double? goodsCost,
+  }) async {
     // FIX (Phase 4b): this is the REAL terminal write for the hero-driven
     // completion flow (advanceStatus('completed') is only reachable from
     // admin's no-amount-gate manual control) — so this is where the
@@ -1072,6 +1344,7 @@ class ServiceRequestService {
         await _foldAndRemoveActiveServiceRequestNode(requestId);
     await _completeAndCreditSeller(requestId, requestFields: {
       'finalAmount': finalAmount,
+      if (goodsCost != null) 'goodsCost': goodsCost,
       'status': 'completed',
       'paymentStatus': 'pending_collection',
       'updatedAt': FieldValue.serverTimestamp(),
@@ -1091,7 +1364,7 @@ class ServiceRequestService {
     await FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
-        .update({
+        .trackedUpdate({
       'paymentStatus': 'paid',
       'paymentMethod': method,
       'paidAt': FieldValue.serverTimestamp(),
@@ -1158,17 +1431,35 @@ class ServiceRequestService {
       // What the SELLER is credited for this same order — the exact same
       // resolution _completeAndCreditSeller() uses, so the two figures
       // can never disagree about how one payment was split. Zero when
-      // there is no seller at all (hero_booking, custom_order,
-      // grocery_order carry no details.sellerId), and in that case the
-      // hero is credited the full collected amount — which is precisely
-      // how the ride flow already behaves.
+      // there is no seller at all (hero_booking, custom_order carry no
+      // details.sellerId), and in that case the hero is credited the
+      // full collected amount — which is precisely how the ride flow
+      // already behaves.
       final sellerPortion = (sellerId != null && sellerId.isNotEmpty)
           ? ((details?['subtotal'] as num?)?.toDouble() ??
               (details?['totalAmount'] as num?)?.toDouble() ??
               0.0)
           : 0.0;
 
-      final heroEarning = collected - sellerPortion;
+      // FIX (hero-earnings audit, Sep 2026 — "grocery orders overstate
+      // hero earning"): a grocery order has no seller/sellerId at all —
+      // the HERO fronts the shop's bill and gets reimbursed as part of
+      // this same `finalAmount`. Without this, `sellerPortion` above
+      // resolved to 0 for grocery_order (no sellerId), so the hero was
+      // credited the FULL collected amount, including the shop
+      // reimbursement that was never theirs to keep. `goodsCost` (root
+      // field, written by completeWithFinalAmount()'s new optional
+      // parameter, prompted only for grocery_order in
+      // hero_home_screen.dart's Mark Complete flow) is what the hero
+      // actually paid the shop — subtracting it leaves only the hero's
+      // real delivery/service margin. Zero for every order placed before
+      // this field existed, which correctly falls back to the prior
+      // (overstated) behavior rather than crediting nothing.
+      final goodsCost = data['requestType'] == 'grocery_order'
+          ? (data['goodsCost'] as num?)?.toDouble() ?? 0.0
+          : 0.0;
+
+      final heroEarning = collected - sellerPortion - goodsCost;
 
       // Idempotency, same two-layer discipline as _completeAndCreditSeller
       // above: this flag guards the common retry (double-tap, app killed
@@ -1229,6 +1520,7 @@ class ServiceRequestService {
           // reconstructed from this one row without re-reading the order.
           'grossCollected': collected,
           'sellerPortion': sellerPortion,
+          if (goodsCost > 0) 'goodsCost': goodsCost,
           'requestId': requestId,
           'requestType': data['requestType'],
           'paymentMethod': method,
@@ -1313,6 +1605,45 @@ class ServiceRequestService {
     }
   }
 
+  /// FIX (audit pass, Sep 2026 — RTDB budget leak): `hero_precaution_
+  /// pings/{heroId}/{requestId}` and `service_request_precaution_
+  /// willing/{requestId}` (see _broadcastPrecautionPing /
+  /// markWillingForPrecaution) had NO cleanup path on cancel/release —
+  /// only requestDeliveryBroadcast()'s own fire consumed the willing
+  /// list, and OrderPrecautionBanner's client-side self-expiry only
+  /// ever runs if that specific hero happens to reopen the app after
+  /// expiresAt. A hero who never reopens, or an order cancelled/
+  /// released before ever reaching "Book Delivery Partner", left both
+  /// nodes sitting in RTDB indefinitely — exactly the kind of unbounded
+  /// growth this app's other ping paths are already careful to sweep
+  /// (see _sweepClearPings above, which this mirrors). Best-effort: a
+  /// failure here must never block the cancel/release/dispatch action
+  /// it's called from.
+  Future<void> _sweepClearPrecautionPings(String requestId) async {
+    try {
+      final onlineSnap =
+          await rtdb.FirebaseDatabase.instance.ref('online_heroes').get();
+      final sweepFutures = <Future<void>>[
+        rtdb.FirebaseDatabase.instance
+            .ref('service_request_precaution_willing/$requestId')
+            .remove(),
+      ];
+      if (onlineSnap.exists && onlineSnap.value is Map) {
+        final heroes = Map<dynamic, dynamic>.from(onlineSnap.value! as Map);
+        for (final heroId in heroes.keys) {
+          sweepFutures.add(
+            rtdb.FirebaseDatabase.instance
+                .ref('hero_precaution_pings/$heroId/$requestId')
+                .remove(),
+          );
+        }
+      }
+      await Future.wait(sweepFutures);
+    } catch (e) {
+      debugPrint('[ServiceRequestService] Precaution-ping sweep-clear failed: $e');
+    }
+  }
+
   /// Admin manually assigns a hero after confirming by phone — no
   /// broadcast ping needed since the admin already coordinated directly.
   ///
@@ -1338,13 +1669,13 @@ class ServiceRequestService {
     final requestDoc = await FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
-        .get();
+        .trackedGet();
     final requestData = requestDoc.data();
 
     await FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
-        .update({
+        .trackedUpdate({
       'status': 'hero_assigned',
       'assignedHeroId': heroId,
       'assignedHeroName': heroName,
@@ -1439,6 +1770,12 @@ class ServiceRequestService {
     }
 
     await _sweepClearPings(requestId);
+    // FIX (audit pass, Sep 2026): a cancelled order that never reached
+    // "Book Delivery Partner" would otherwise leave its precaution
+    // notices telling heroes "an order is coming" for something that no
+    // longer exists — both confusing and an RTDB leak (see
+    // _sweepClearPrecautionPings' own doc comment).
+    unawaited(_sweepClearPrecautionPings(requestId));
 
     // FIX (Issue 3 — cancellation cleanup): _sweepClearPings above only
     // ever cleared hero_service_pings, never seller_pings. A deferred
@@ -1455,7 +1792,7 @@ class ServiceRequestService {
       final snap = await FirebaseFirestore.instance
           .collection('service_requests')
           .doc(requestId)
-          .get();
+          .trackedGet();
       requestData = snap.data();
       final details = requestData?['details'] as Map<String, dynamic>?;
       final sellerId = details?['sellerId'] as String?;
@@ -1474,7 +1811,7 @@ class ServiceRequestService {
       try {
         await FirebaseFirestore.instance
             .collection('cancellation_analytics')
-            .add({
+            .trackedAdd({
           'requestId': requestId,
           'source': 'service_requests',
           'requestType': requestData?['requestType'],
@@ -1492,7 +1829,7 @@ class ServiceRequestService {
     await FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
-        .delete();
+        .trackedDelete();
   }
 
   /// Hero-side "give this back" action for a task they accepted but no
@@ -1523,11 +1860,16 @@ class ServiceRequestService {
     }
 
     await _sweepClearPings(requestId);
+    // Defensive — same reasoning as cancelServiceRequest()'s identical
+    // call. Normally already consumed by the time a hero can release
+    // (a real ping only exists after requestDeliveryBroadcast fired,
+    // which already sweeps this), but cheap enough to not assume that.
+    unawaited(_sweepClearPrecautionPings(requestId));
 
     await FirebaseFirestore.instance
         .collection('service_requests')
         .doc(requestId)
-        .update({
+        .trackedUpdate({
       'status': 'admin_review',
       'assignedHeroId': null,
       'assignedHeroName': null,

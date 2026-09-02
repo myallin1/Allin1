@@ -4,7 +4,7 @@
  * Entry Point
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifyAdminOnNewServiceRequest = exports.notifyAdminOnNewRide = exports.notifyHeroOnServicePing = exports.notifyHeroOnPing = exports.notifyHeroOnRideAssigned = exports.manageHeroApproval = exports.notifyCustomerOnCouponReady = exports.armStaleGiftCoupons = exports.revokeCouponOnServiceDeleted = exports.redeemGiftCoupon = exports.scratchGiftCoupon = exports.onServiceRequestUpdated = exports.checkDeviceFingerprint = exports.checkPhonePeOrderStatus = exports.phonepeWebhook = exports.createPhonePeOrder = exports.verifyAndProcessPayment = exports.affiliatePostbackWebhook = void 0;
+exports.notifyAdminOnNewServiceRequest = exports.notifyAdminOnNewRide = exports.notifyHeroOnServicePing = exports.notifyHeroOnPing = exports.notifyHeroOnRideAssigned = exports.manageHeroApproval = exports.notifyCustomerOnCouponReady = exports.armStaleGiftCoupons = exports.revokeCouponOnServiceDeleted = exports.redeemGiftCoupon = exports.scratchGiftCoupon = exports.onServiceRequestUpdated = exports.checkDeviceFingerprint = exports.releaseExpiredStockHoldsScheduled = exports.releaseMenuItemStockHold = exports.confirmMenuItemStockHold = exports.holdMenuItemStock = exports.confirmPhonePeLink = exports.checkPhonePeOrderStatus = exports.phonepeWebhook = exports.createPhonePeOrder = exports.verifyAndProcessPayment = exports.affiliatePostbackWebhook = void 0;
 var affiliatePostbackWebhook_1 = require("./affiliatePostbackWebhook");
 Object.defineProperty(exports, "affiliatePostbackWebhook", { enumerable: true, get: function () { return affiliatePostbackWebhook_1.affiliatePostbackWebhook; } });
 var verifyAndProcessPayment_1 = require("./verifyAndProcessPayment");
@@ -21,6 +21,25 @@ var phonepeWebhook_1 = require("./phonepeWebhook");
 Object.defineProperty(exports, "phonepeWebhook", { enumerable: true, get: function () { return phonepeWebhook_1.phonepeWebhook; } });
 var phonepeCheckStatus_1 = require("./phonepeCheckStatus");
 Object.defineProperty(exports, "checkPhonePeOrderStatus", { enumerable: true, get: function () { return phonepeCheckStatus_1.checkPhonePeOrderStatus; } });
+// Closes the pay-before-order-exists loop for food checkout — see
+// phonepeConfirmLink.ts's header.
+var phonepeConfirmLink_1 = require("./phonepeConfirmLink");
+Object.defineProperty(exports, "confirmPhonePeLink", { enumerable: true, get: function () { return phonepeConfirmLink_1.confirmPhonePeLink; } });
+// Universal catalog (Sep 2026) — stock HOLD system, generic over any
+// sellers/{id}/menu_items doc. Replaces the old single-shot
+// reserveMenuItemStock (structurally closed its payment-race/abuse
+// gap) — see stockHoldHelpers.ts's header for the full design:
+// hold at checkout-start (before any payment method is shown) ->
+// confirm once the order is real -> release on cancel, with a
+// scheduled sweep as the safety net for anything abandoned.
+var holdMenuItemStock_1 = require("./holdMenuItemStock");
+Object.defineProperty(exports, "holdMenuItemStock", { enumerable: true, get: function () { return holdMenuItemStock_1.holdMenuItemStock; } });
+var confirmMenuItemStockHold_1 = require("./confirmMenuItemStockHold");
+Object.defineProperty(exports, "confirmMenuItemStockHold", { enumerable: true, get: function () { return confirmMenuItemStockHold_1.confirmMenuItemStockHold; } });
+var releaseMenuItemStockHold_1 = require("./releaseMenuItemStockHold");
+Object.defineProperty(exports, "releaseMenuItemStockHold", { enumerable: true, get: function () { return releaseMenuItemStockHold_1.releaseMenuItemStockHold; } });
+var releaseExpiredStockHoldsScheduled_1 = require("./releaseExpiredStockHoldsScheduled");
+Object.defineProperty(exports, "releaseExpiredStockHoldsScheduled", { enumerable: true, get: function () { return releaseExpiredStockHoldsScheduled_1.releaseExpiredStockHoldsScheduled; } });
 var checkDeviceFingerprint_1 = require("./checkDeviceFingerprint");
 Object.defineProperty(exports, "checkDeviceFingerprint", { enumerable: true, get: function () { return checkDeviceFingerprint_1.checkDeviceFingerprint; } });
 // Gift Coupons (repair/replacement -> Hero/Hotel bill discount, per

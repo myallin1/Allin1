@@ -164,7 +164,7 @@ class _AdminCoinCreditScreenState extends State<AdminCoinCreditScreen> {
     await FirebaseFirestore.instance
         .collection('coin_transactions')
         .doc(txnId)
-        .update(
+        .trackedUpdate(
       {'status': 'failed', 'rejectedAt': FieldValue.serverTimestamp()},
     );
   }

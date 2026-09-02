@@ -3,6 +3,8 @@
 // Seller details with product menu and cart integration
 // ================================================================
 
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' hide Category;
@@ -16,6 +18,7 @@ import '../services/auth_prompt_service.dart';
 import '../services/auth_service.dart';
 import '../services/cart_service.dart';
 import '../services/category_gateway_service.dart';
+import '../services/phonepe_payment_service.dart';
 import '../services/service_request_service.dart';
 import '../services/theme_service.dart';
 import '../widgets/cached_cloud_image.dart';
@@ -23,6 +26,7 @@ import '../widgets/product_card.dart';
 import 'custom_hotel_view_screen.dart';
 import 'food_checkout_screen.dart';
 import 'service_request_tracking_screen.dart';
+import '../services/firestore_usage_tracking.dart';
 
 /// Reusing service_requests (rather than a separate food_orders
 /// hero-assignment pipeline) — see the decision in the seller
@@ -121,7 +125,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
         final hotelSnap = await FirebaseFirestore.instance
             .collection('custom_hotels')
             .doc(sellerId)
-            .get();
+            .trackedGet();
         if (hotelSnap.exists) {
           final visibleItems = await FirebaseFirestore.instance
               .collection('custom_hotels')
@@ -129,7 +133,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
               .collection('items')
               .where('isVisible', isEqualTo: true)
               .limit(1)
-              .get();
+              .trackedGet();
           if (visibleItems.docs.isNotEmpty && mounted) {
             setState(() {
               _hasCustomMenu = true;
@@ -915,6 +919,10 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
           hotelName: cart.currentSellerName ?? 'Seller',
           items: itemsPreview,
           subtotal: cart.subtotal,
+          // NEW (Sep 2026 — merchant-account-free direct payment): lets
+          // the checkout screen offer "Pay [hotel] directly" whenever
+          // this seller has set a UPI VPA/QR in their own Settings.
+          sellerId: cart.currentSellerId,
         ),
       ),
     );
@@ -1043,6 +1051,16 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
           ? checkoutResult.customerPhone
           : await AuthService().resolveCustomerPhone(user);
       final requestId = await ServiceRequestService().createServiceRequest(
+        // FIX (PhonePe gateway, Sep 2026): a phonepe_upi checkout already
+        // collected payment against checkoutResult.reservedRequestId
+        // BEFORE this stock transaction even ran — see
+        // food_checkout_screen.dart's _payWithPhonePe() and
+        // phonepeCreateOrder.ts's header for why payment happens first.
+        // This order doc MUST be created with that exact same id, or the
+        // payment this customer already completed can never be linked to
+        // it. Null for 'cod'/'upi', which keeps the pre-existing
+        // auto-generated-id behavior exactly as it was.
+        preGeneratedRequestId: checkoutResult.reservedRequestId,
         // Aug 17 2026 seller audit: hold the hero ping until the hotel
         // marks the food ready. Previously heroes were pinged the
         // instant the customer paid, so a hero rode out and waited at
@@ -1067,6 +1085,32 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
           'paymentMethod': checkoutResult.paymentMethod,
         },
       );
+
+      // FIX (PhonePe gateway, Sep 2026): closes the loop opened above —
+      // phonepeWebhook.ts's own cascade ran at PAYMENT time, before this
+      // doc existed, and skipped setting paymentStatus for exactly that
+      // reason (see that file's comment). Now that the doc exists with
+      // the matching id, this re-verifies the payment server-side
+      // (never trusts checkoutResult's own success flag) and stamps
+      // paymentStatus:'paid' on it. Best-effort by design: if this
+      // single call fails (network blip), the order and payment both
+      // still exist correctly linked by requestId — admin can reconcile
+      // from payment_orders, and nothing about the order pipeline itself
+      // is blocked on this succeeding.
+      if (checkoutResult.paymentMethod == 'phonepe_upi' &&
+          checkoutResult.merchantTransactionId != null) {
+        unawaited(
+          PhonePePaymentService.instance
+              .confirmLink(
+                merchantTransactionId: checkoutResult.merchantTransactionId!,
+                requestId: requestId,
+              )
+              .catchError((Object e) {
+            debugPrint('[SellerDetailScreen] PhonePe confirmLink failed (non-fatal): $e');
+            return false;
+          }),
+        );
+      }
 
       cart.clear();
 

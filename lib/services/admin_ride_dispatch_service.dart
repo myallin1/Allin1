@@ -11,6 +11,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
+import './firestore_usage_tracking.dart';
 
 class AdminRideDispatchService {
   AdminRideDispatchService._();
@@ -48,7 +49,7 @@ class AdminRideDispatchService {
         .collection('users')
         .where('phone', isEqualTo: trimmedPhone)
         .limit(1)
-        .get();
+        .trackedGet();
     if (existing.docs.isNotEmpty) {
       return existing.docs.first.id;
     }

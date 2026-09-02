@@ -23,6 +23,7 @@ import 'package:intl/intl.dart';
 import '../../models/hero_wallet_model.dart';
 import '../../services/cloudinary_upload_service.dart';
 import '../../services/hero_wallet_service.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
 const Color _kPurple = Color(0xFF6C63FF);
@@ -345,7 +346,7 @@ class _HeroWalletScreenState extends State<HeroWalletScreen> {
           .collection('wallet_transactions')
           .where('heroId', isEqualTo: heroId)
           .limit(500)
-          .get();
+          .trackedGet();
       var total = 0.0;
       for (final d in snap.docs) {
         final raw = d.data()['amount'];

@@ -36,6 +36,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
+import './firestore_usage_tracking.dart';
 
 class AdminKycWriteResult {
   const AdminKycWriteResult({required this.success, this.error});
@@ -86,11 +87,11 @@ class AdminKycWriteService {
       // TASK 3: hard block, same as the human approvals screen — the
       // AI co-pilot must never be able to approve an incomplete hero
       // just because it wasn't told to check.
-      final heroSnap = await firestore.collection('heroes').doc(uid).get();
+      final heroSnap = await firestore.collection('heroes').doc(uid).trackedGet();
       final heroData = heroSnap.data() ?? <String, dynamic>{};
       Map<String, dynamic> pendingData = <String, dynamic>{};
       final pendingSnap =
-          await firestore.collection('heroes_pending').doc(uid).get();
+          await firestore.collection('heroes_pending').doc(uid).trackedGet();
       if (pendingSnap.exists) pendingData = pendingSnap.data() ?? {};
       // A field may live on either doc depending on registration path —
       // check whichever one actually has it.

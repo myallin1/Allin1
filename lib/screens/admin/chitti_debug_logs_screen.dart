@@ -147,7 +147,7 @@ class _ChittiDebugLogsScreenState extends State<ChittiDebugLogsScreen> {
         .collection('chitti_screening_debug_logs')
         .orderBy('timestamp', descending: true)
         .limit(_pageSize)
-        .get();
+        .trackedGet();
     final buffer = StringBuffer();
     for (final d in snap.docs) {
       final data = d.data();

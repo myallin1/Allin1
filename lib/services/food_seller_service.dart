@@ -143,7 +143,7 @@ class FoodSellerService {
   /// Add a new menu item to a seller's menu.
   Future<void> addMenuItem(String sellerId, MenuItemModel item) async {
     try {
-      await _menuItemsRef(sellerId).doc(item.id).set(item.toJson());
+      await _menuItemsRef(sellerId).doc(item.id).trackedSet(item.toJson());
       debugPrint(
           '[FoodSellerService] Menu item added: ${item.id} for seller: $sellerId',);
     } catch (e) {
@@ -157,7 +157,7 @@ class FoodSellerService {
       String sellerId, String itemId, Map<String, dynamic> updates,) async {
     try {
       updates['updatedAt'] = FieldValue.serverTimestamp();
-      await _menuItemsRef(sellerId).doc(itemId).update(updates);
+      await _menuItemsRef(sellerId).doc(itemId).trackedUpdate(updates);
       debugPrint('[FoodSellerService] Menu item updated: $itemId');
     } catch (e) {
       debugPrint('[FoodSellerService] Failed to update menu item: $e');
@@ -168,7 +168,7 @@ class FoodSellerService {
   /// Delete a menu item from a seller's menu.
   Future<void> deleteMenuItem(String sellerId, String itemId) async {
     try {
-      await _menuItemsRef(sellerId).doc(itemId).delete();
+      await _menuItemsRef(sellerId).doc(itemId).trackedDelete();
       debugPrint('[FoodSellerService] Menu item deleted: $itemId');
     } catch (e) {
       debugPrint('[FoodSellerService] Failed to delete menu item: $e');

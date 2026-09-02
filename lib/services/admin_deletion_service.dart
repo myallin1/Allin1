@@ -46,6 +46,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart' as rtdb;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import './firestore_usage_tracking.dart';
 
 /// One item queued for deletion — carries just enough to clean up its
 /// RTDB traces alongside the Firestore doc.
@@ -67,7 +68,7 @@ class AdminDeletionService {
   // best-effort hero_service_pings via assignedHeroId.
   // ================================================================
   Future<void> deleteServiceRequest(DeletableRequest item) async {
-    await _db.collection('service_requests').doc(item.id).delete();
+    await _db.collection('service_requests').doc(item.id).trackedDelete();
     await _deleteRtdbPath('active_service_requests/${item.id}');
     if ((item.assignedHeroId ?? '').trim().isNotEmpty) {
       await _deleteRtdbPath(
@@ -112,7 +113,7 @@ class AdminDeletionService {
   // skipping it rather than adding an unindexed RTDB scan.
   // ================================================================
   Future<void> deleteRide(String rideId) async {
-    await _db.collection('rides').doc(rideId).delete();
+    await _db.collection('rides').doc(rideId).trackedDelete();
   }
 
   Future<int> bulkDeleteRides(List<String> rideIds) async {
@@ -134,7 +135,7 @@ class AdminDeletionService {
   // cart_screen.dart writes).
   // ================================================================
   Future<void> deleteOrder(String orderId) async {
-    await _db.collection('orders').doc(orderId).delete();
+    await _db.collection('orders').doc(orderId).trackedDelete();
   }
 
   Future<int> bulkDeleteOrders(List<String> orderIds) async {

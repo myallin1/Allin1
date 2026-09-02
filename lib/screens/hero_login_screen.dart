@@ -14,6 +14,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import 'hero_pending_screen.dart';
 import 'hero_register_screen.dart';
+import '../services/firestore_usage_tracking.dart';
 
 // THEME FIX: was a dark theme, inconsistent with the customer app's
 // language/sign-in page (welcome_screen.dart), which Nizam pointed to as
@@ -220,7 +221,7 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
       final heroDoc = await FirebaseFirestore.instance
           .collection('heroes')
           .doc(user.uid)
-          .get();
+          .trackedGet();
 
       final heroData = heroDoc.data();
       if (heroDoc.exists) {
@@ -248,7 +249,7 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
       final pendingDoc = await FirebaseFirestore.instance
           .collection('heroes_pending')
           .doc(user.uid)
-          .get();
+          .trackedGet();
 
       if (pendingDoc.exists) {
         if (mounted) {
@@ -320,7 +321,7 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
       final heroDoc = await FirebaseFirestore.instance
           .collection('heroes')
           .doc(user.uid)
-          .get();
+          .trackedGet();
 
       final heroData = heroDoc.data();
       if (heroDoc.exists) {
@@ -348,7 +349,7 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
       final pendingDoc = await FirebaseFirestore.instance
           .collection('heroes_pending')
           .doc(user.uid)
-          .get();
+          .trackedGet();
 
       if (pendingDoc.exists) {
         if (mounted) {
@@ -423,7 +424,7 @@ class _HeroLoginScreenState extends State<HeroLoginScreen> {
       final heroDoc = await FirebaseFirestore.instance
           .collection('heroes')
           .doc(user.uid)
-          .get();
+          .trackedGet();
  
       if (!mounted) return;
  

@@ -9,7 +9,9 @@
 // — those are product decisions that need Nizam's input, not something
 // to invent here. Collects only name/phone/address, same as any
 // seller needs at minimum, then drops the seller into
-// SellerGroceryDashboardScreen's "coming soon" placeholder.
+// SellerGroceryDashboardScreen — which now (Sep 2026 universal catalog
+// build) has a real "My Products" tool, not a placeholder; see
+// seller_grocery_products_screen.dart.
 // ================================================================
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -130,10 +132,15 @@ class _SellerGroceryOnboardingScreenState
                   border: Border.all(color: _border),
                 ),
                 child: Text(
-                  'Full grocery seller tools (inventory, stock, pricing) '
-                  'are coming soon. For now this saves your basic store '
-                  'profile so you can be reached — Nizam will finalize '
-                  'what grocery sellers need next.',
+                  // FIX (audit pass, Sep 2026): this said "coming soon"
+                  // for exactly the tools (My Products — catalog toggle,
+                  // pricing, stock, direct-sale tracking) that shipped
+                  // this session. A new seller landing here would be
+                  // told a live feature doesn't exist yet.
+                  'Save your basic store profile below, then set up your '
+                  'products from the "My Products" tool on your dashboard — '
+                  'pick items from our shared catalog, set your own price '
+                  'and stock, and start receiving orders.',
                   style: GoogleFonts.outfit(color: _muted, fontSize: 12.5),
                 ),
               ),

@@ -291,6 +291,20 @@ class _HeroSearchRadarScreenState extends State<HeroSearchRadarScreen>
           style: TextStyle(color: context.colors.mutedText, fontSize: 12),
         ),
         const SizedBox(height: 32),
+        // FIX (Sep 2 2026 — service-booking flow audit): this button was
+        // labeled "Cancel" but _leaveSearch() below has never cancelled
+        // anything — it just pops the screen while the request keeps
+        // broadcasting in the background, and its own snackbar SAYS so
+        // ("Still searching in the background — check Booking Status
+        // anytime"). A customer tapping "Cancel" believing they withdrew
+        // their request would be surprised when a hero later calls to
+        // accept it. This screen is shared by every non-ride request
+        // type (custom orders, food, grocery, NJ Tech/mobile service,
+        // every skill trade including Acting Driver — see file header),
+        // and genuine cancellation is nowhere in this pipeline at all
+        // (checked ServiceRequestTrackingScreen and every caller — none
+        // wire cancelServiceRequest()), so the safe, correct fix here is
+        // the label: say what the button actually does.
         OutlinedButton(
           onPressed: _leaveSearch,
           style: OutlinedButton.styleFrom(
@@ -298,7 +312,7 @@ class _HeroSearchRadarScreenState extends State<HeroSearchRadarScreen>
             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           ),
-          child: Text('Cancel',
+          child: Text('Search in Background',
               style: TextStyle(color: context.colors.accent, fontWeight: FontWeight.w700),),
         ),
       ],

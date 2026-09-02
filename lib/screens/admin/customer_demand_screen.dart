@@ -27,6 +27,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../services/db_usage_tracker.dart';
 import '../../services/usage_tracking_service.dart';
 import '../../widgets/admin/cached_analytics_view.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -54,7 +55,7 @@ class _CustomerDemandScreenState extends State<CustomerDemandScreen> {
     final snap = await FirebaseFirestore.instance
         .collection('app_usage_stats')
         .doc('customer_demand')
-        .get();
+        .trackedGet();
     // Report this read so the DB Usage Monitor stays accurate — an
     // un-instrumented read is invisible there, which would make the
     // Spark-headroom bars under-report.

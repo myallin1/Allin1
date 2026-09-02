@@ -19,6 +19,7 @@ import 'hive_cache.dart';
 // lost when a customer signs up from the auth sheet instead.
 import 'package:shared_preferences/shared_preferences.dart';
 import 'session_service.dart';
+import './firestore_usage_tracking.dart';
 
 // ================================================================
 // Auth Result Class
@@ -65,7 +66,7 @@ class AuthService {
         .collection('users')
         .where('usernameLower', isEqualTo: normalizedUsername)
         .limit(1)
-        .get();
+        .trackedGet();
     return querySnapshot.docs.isNotEmpty;
   }
 
@@ -839,7 +840,7 @@ class AuthService {
   // Private: Get User Data from Firestore
   // ================================================================
   Future<Map<String, dynamic>?> getUserData(String uid) async {
-    final doc = await _firestore.collection('users').doc(uid).get();
+    final doc = await _firestore.collection('users').doc(uid).trackedGet();
     if (!doc.exists) {
       return null;
     }
@@ -946,7 +947,7 @@ class AuthService {
   // "Auth phoneNumber only set by real phone-OTP auth" gap.
   Future<String> resolveHeroPhone(User user) async {
     try {
-      final doc = await _firestore.collection('heroes').doc(user.uid).get();
+      final doc = await _firestore.collection('heroes').doc(user.uid).trackedGet();
       final data = doc.data();
       final resolved = _normalizedPhone(data, user).trim();
       if (resolved.isNotEmpty) {
@@ -976,7 +977,7 @@ class AuthService {
   // the Auth object — same fallback order as _normalizedPhone above.
   Future<String> resolveSellerPhone(String sellerId, {User? user}) async {
     try {
-      final doc = await _firestore.collection('sellers').doc(sellerId).get();
+      final doc = await _firestore.collection('sellers').doc(sellerId).trackedGet();
       final data = doc.data();
       final phone = (data?['phone'] as String?)?.trim() ?? '';
       if (phone.isNotEmpty) {

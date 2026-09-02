@@ -188,7 +188,7 @@ class CustomHotelService {
   }
 
   Future<void> deleteItem({required String sellerId, required String itemId}) {
-    return _itemsRef(sellerId).doc(itemId).delete();
+    return _itemsRef(sellerId).doc(itemId).trackedDelete();
   }
 
   /// Seller's own management view — ALL items regardless of visibility

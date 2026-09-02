@@ -125,7 +125,7 @@ class MobileListingService {
   }
 
   Future<void> deleteListing(String sellerId, String listingId) {
-    return _refFor(sellerId).doc(listingId).delete();
+    return _refFor(sellerId).doc(listingId).trackedDelete();
   }
 
   // ── Customer side ──────────────────────────────────────────────

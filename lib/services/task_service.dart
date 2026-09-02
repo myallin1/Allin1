@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 import '../models/task_completion_model.dart';
 import '../models/task_model.dart';
 import 'api_contracts.dart';
+import './firestore_usage_tracking.dart';
 
 class TaskService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -49,7 +50,7 @@ class TaskService {
 
       // STEP 2: Get task details
       final taskDoc =
-          await _firestore.collection('affiliate_tasks').doc(taskId).get();
+          await _firestore.collection('affiliate_tasks').doc(taskId).trackedGet();
 
       if (!taskDoc.exists) {
         return TaskCompletionResponse(
@@ -69,7 +70,7 @@ class TaskService {
           .where('taskId', isEqualTo: taskId)
           .where('coinStatus', whereIn: ['pending', 'verified'])
           .limit(1)
-          .get();
+          .trackedGet();
 
       if (existingCompletion.docs.isNotEmpty) {
         return TaskCompletionResponse(
@@ -134,7 +135,7 @@ class TaskService {
           .where('deviceId', isEqualTo: deviceId)
           .where('coinStatus', whereIn: ['pending', 'verified'])
           .limit(1)
-          .get();
+          .trackedGet();
 
       if (completions.docs.isNotEmpty) {
         return {
@@ -247,7 +248,7 @@ class TaskService {
           .where('coinStatus', isEqualTo: 'pending')
           .orderBy('submittedAt', descending: true)
           .limit(50)
-          .get();
+          .trackedGet();
 
       return snapshot.docs
           .map((doc) => TaskCompletionModel.fromFirestore(doc.data(), doc.id))
@@ -275,7 +276,7 @@ class TaskService {
           .where('coinStatus', isEqualTo: 'verified')
           .orderBy('creditedAt', descending: true)
           .limit(50)
-          .get();
+          .trackedGet();
 
       return snapshot.docs
           .map((doc) => TaskCompletionModel.fromFirestore(doc.data(), doc.id))

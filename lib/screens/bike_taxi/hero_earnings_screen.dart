@@ -40,6 +40,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/hero_wallet_service.dart';
 import '../../widgets/admin/cached_analytics_view.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFFFFF7FB);
 const Color _card = Colors.white;
@@ -115,7 +116,7 @@ class _HeroEarningsScreenState extends State<HeroEarningsScreen> {
         .collection('wallet_transactions')
         .where('heroId', isEqualTo: uid)
         .limit(500)
-        .get();
+        .trackedGet();
     final earnings = earningsSnap.docs.map((doc) {
       final d = doc.data();
       final ts = d['timestamp'];
@@ -130,7 +131,7 @@ class _HeroEarningsScreenState extends State<HeroEarningsScreen> {
         .collection('hero_sessions')
         .where('heroId', isEqualTo: uid)
         .limit(500)
-        .get();
+        .trackedGet();
     final sessions = sessionsSnap.docs.map((doc) {
       final d = doc.data();
       final ts = d['startedAt'];

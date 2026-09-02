@@ -285,7 +285,7 @@ class _OfferAdminCard extends StatelessWidget {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           TextButton(
             onPressed: () {
-              FirebaseFirestore.instance.collection('erode_offers').doc(offerId).delete();
+              FirebaseFirestore.instance.collection('erode_offers').doc(offerId).trackedDelete();
               Navigator.pop(context);
             },
             child: const Text('Delete', style: TextStyle(color: Color(0xFFFF5252))),
@@ -454,10 +454,10 @@ class _OfferFormDialogState extends State<_OfferFormDialog> {
         'active': widget.existing?['active'] as bool? ?? true,
       };
       if (widget.offerId != null) {
-        await FirebaseFirestore.instance.collection('erode_offers').doc(widget.offerId).update(data);
+        await FirebaseFirestore.instance.collection('erode_offers').doc(widget.offerId).trackedUpdate(data);
       } else {
         data['createdAt'] = FieldValue.serverTimestamp();
-        await FirebaseFirestore.instance.collection('erode_offers').add(data);
+        await FirebaseFirestore.instance.collection('erode_offers').trackedAdd(data);
       }
       if (mounted) Navigator.pop(context);
     } catch (e) {

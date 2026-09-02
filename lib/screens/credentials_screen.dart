@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/credential.dart';
 import '../models/credential_category.dart';
 import 'credential_detail_screen.dart';
+import '../services/firestore_usage_tracking.dart';
 
 const Color kSurface = Color(0xFF0D0D18);
 const Color kCard = Color(0xFF141420);
@@ -69,7 +70,7 @@ class _CredentialsScreenState extends State<CredentialsScreen> {
           .where('userId', isEqualTo: user.uid)
           .where('isDeleted', isEqualTo: false)
           .orderBy('updatedAt', descending: true)
-          .get();
+          .trackedGet();
 
       final credentials =
           snapshot.docs.map((doc) => Credential.fromJson(doc.data())).toList();
@@ -104,7 +105,7 @@ class _CredentialsScreenState extends State<CredentialsScreen> {
           .collection('credentialCategories')
           .where('userId', isEqualTo: user.uid)
           .orderBy('sortOrder')
-          .get();
+          .trackedGet();
 
       final categories = snapshot.docs
           .map((doc) => CredentialCategory.fromJson(doc.data()))
@@ -472,7 +473,7 @@ class _CredentialsScreenState extends State<CredentialsScreen> {
       await FirebaseFirestore.instance
           .collection('credentialCategories')
           .doc(id)
-          .set(category.toJson());
+          .trackedSet(category.toJson());
 
       await _loadCategories();
 

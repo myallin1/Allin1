@@ -130,6 +130,10 @@ class _ServiceRequestPaymentScreenState
   String _memoryServiceKeyFor(String requestType) {
     switch (requestType) {
       case 'grocery_order':
+      // FIX (audit pass, Sep 2026): catalog_grocery_order was missing
+      // here — same class of bug as catalog_food_order's own case
+      // below, just for the new catalog-based grocery type.
+      case 'catalog_grocery_order':
         return 'grocery';
       case 'custom_food_order':
       case 'catalog_food_order':
@@ -146,6 +150,10 @@ class _ServiceRequestPaymentScreenState
       case 'grocery_order':
         return (address != null && address.isNotEmpty)
             ? 'grocery order to $address'
+            : 'a grocery order';
+      case 'catalog_grocery_order':
+        return (shopName != null && shopName.trim().isNotEmpty)
+            ? 'grocery order from ${shopName.trim()}'
             : 'a grocery order';
       case 'custom_food_order':
       case 'catalog_food_order':

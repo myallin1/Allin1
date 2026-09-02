@@ -15,6 +15,21 @@ export { verifyAndProcessPayment } from './verifyAndProcessPayment';
 export { createPhonePeOrder } from './phonepeCreateOrder';
 export { phonepeWebhook } from './phonepeWebhook';
 export { checkPhonePeOrderStatus } from './phonepeCheckStatus';
+// Closes the pay-before-order-exists loop for food checkout — see
+// phonepeConfirmLink.ts's header.
+export { confirmPhonePeLink } from './phonepeConfirmLink';
+
+// Universal catalog (Sep 2026) — stock HOLD system, generic over any
+// sellers/{id}/menu_items doc. Replaces the old single-shot
+// reserveMenuItemStock (structurally closed its payment-race/abuse
+// gap) — see stockHoldHelpers.ts's header for the full design:
+// hold at checkout-start (before any payment method is shown) ->
+// confirm once the order is real -> release on cancel, with a
+// scheduled sweep as the safety net for anything abandoned.
+export { holdMenuItemStock } from './holdMenuItemStock';
+export { confirmMenuItemStockHold } from './confirmMenuItemStockHold';
+export { releaseMenuItemStockHold } from './releaseMenuItemStockHold';
+export { releaseExpiredStockHoldsScheduled } from './releaseExpiredStockHoldsScheduled';
 export { checkDeviceFingerprint } from './checkDeviceFingerprint';
 // Gift Coupons (repair/replacement -> Hero/Hotel bill discount, per
 // Nizam's request). Server-authoritative redemption — see

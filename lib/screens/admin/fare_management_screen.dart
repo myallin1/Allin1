@@ -6,6 +6,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 class FareManagementScreen extends StatefulWidget {
   const FareManagementScreen({super.key});
@@ -70,7 +71,7 @@ class _FareManagementScreenState extends State<FareManagementScreen> {
 
   Future<void> _fetchFares() async {
     try {
-      final doc = await _firestore.collection('settings').doc('ride_fares').get();
+      final doc = await _firestore.collection('settings').doc('ride_fares').trackedGet();
       if (doc.exists) {
         final data = doc.data() ?? {};
         

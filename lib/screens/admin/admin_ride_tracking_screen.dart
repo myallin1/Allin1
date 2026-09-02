@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import 'admin_ride_tracking_detail_screen.dart';
+import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -63,7 +64,7 @@ class _AdminRideTrackingScreenState extends State<AdminRideTrackingScreen> {
         .where('status', whereIn: _activeStatuses)
         .orderBy('createdAt', descending: true)
         .limit(_maxResults)
-        .get();
+        .trackedGet();
   }
 
   Future<void> _refresh() async {

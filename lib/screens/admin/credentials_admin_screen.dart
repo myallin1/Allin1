@@ -72,11 +72,11 @@ class _CredentialsAdminScreenState extends State<CredentialsAdminScreen>
     try {
       // Get total user credentials
       final credentialsSnapshot =
-          await FirebaseFirestore.instance.collection('credentials').get();
+          await FirebaseFirestore.instance.collection('credentials').trackedGet();
 
       // Get admin credentials
       final adminCredSnapshot =
-          await FirebaseFirestore.instance.collection('adminCredentials').get();
+          await FirebaseFirestore.instance.collection('adminCredentials').trackedGet();
 
       // Calculate credentials by type
       final byType = <CredentialType, int>{};
@@ -528,7 +528,7 @@ class _UserCredentialsViewState extends State<_UserCredentialsView> {
                       future: FirebaseFirestore.instance
                           .collection('users')
                           .doc(credential.userId)
-                          .get(),
+                          .trackedGet(),
                       builder: (context, snapshot) {
                         if (snapshot.hasData && snapshot.data != null) {
                           final username =
@@ -552,7 +552,7 @@ class _UserCredentialsViewState extends State<_UserCredentialsView> {
                           ? FirebaseFirestore.instance
                               .collection('credentialCategories')
                               .doc(credential.categoryId)
-                              .get()
+                              .trackedGet()
                           : Future<DocumentSnapshot?>.value(),
                       builder: (context, snapshot) {
                         if (snapshot.hasData &&
@@ -761,7 +761,7 @@ class _UserCredentialsViewState extends State<_UserCredentialsView> {
         await FirebaseFirestore.instance
             .collection('credentials')
             .doc(credentialId)
-            .delete();
+            .trackedDelete();
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1323,7 +1323,7 @@ class _AdminManagedViewState extends State<_AdminManagedView> {
       await FirebaseFirestore.instance
           .collection('adminCredentials')
           .doc(docId)
-          .update({
+          .trackedUpdate({
         'title': title,
         'type': type.toJson(),
         'encryptedUsername': encryptedUsername,
@@ -1386,7 +1386,7 @@ class _AdminManagedViewState extends State<_AdminManagedView> {
         await FirebaseFirestore.instance
             .collection('adminCredentials')
             .doc(docId)
-            .delete();
+            .trackedDelete();
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1416,7 +1416,7 @@ class _AdminManagedViewState extends State<_AdminManagedView> {
   ) async {
     // Get all users
     final usersSnapshot =
-        await FirebaseFirestore.instance.collection('users').get();
+        await FirebaseFirestore.instance.collection('users').trackedGet();
 
     final users = usersSnapshot.docs.map((doc) {
       return {
@@ -1490,7 +1490,7 @@ class _AdminManagedViewState extends State<_AdminManagedView> {
         await FirebaseFirestore.instance
             .collection('adminCredentials')
             .doc(docId)
-            .update({
+            .trackedUpdate({
           'assignedUserIds': selectedUserIds,
           'updatedAt': DateTime.now(),
         });
@@ -1734,7 +1734,7 @@ class _UserAssignmentsViewState extends State<_UserAssignmentsView> {
                         future: FirebaseFirestore.instance
                             .collection('users')
                             .doc(assignment.userId)
-                            .get(),
+                            .trackedGet(),
                         builder: (context, snapshot) {
                           if (snapshot.hasData &&
                               snapshot.data != null &&
@@ -1842,7 +1842,7 @@ class _UserAssignmentsViewState extends State<_UserAssignmentsView> {
         final doc = await FirebaseFirestore.instance
             .collection('adminCredentials')
             .doc(credentialId)
-            .get();
+            .trackedGet();
 
         final List<String> assignedUsers = List.from(
           doc.get('assignedUserIds') as List<dynamic>? ?? [],
@@ -1852,7 +1852,7 @@ class _UserAssignmentsViewState extends State<_UserAssignmentsView> {
         await FirebaseFirestore.instance
             .collection('adminCredentials')
             .doc(credentialId)
-            .update({
+            .trackedUpdate({
           'assignedUserIds': assignedUsers,
           'updatedAt': DateTime.now(),
         });

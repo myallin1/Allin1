@@ -462,7 +462,13 @@ service cloud.firestore {
                    'rating', 'isOpen', 'estimatedPrepTimeMin', 'status',
                    'imageUrl', 'coverImageUrl', 'emoji', 'metadata',
                    'businessVertical', 'city', 'role', 'hours',
-                   'fcmToken', 'fcmTokenUpdatedAt', 'updatedAt'
+                   'fcmToken', 'fcmTokenUpdatedAt', 'updatedAt',
+                   // Direct-to-seller UPI payment collection (Sep 2026,
+                   // merchant-account-free flow) — see SellerModel's own
+                   // field comments. Non-financial (just a VPA string and
+                   // a QR image), so belongs in this profile-fields
+                   // clause, not the money-gated ones below.
+                   'sellerUpiVpa', 'sellerPaymentQrBase64'
                  ]))
         // Clause C: the seller's own ₹5 platform-fee debit
         // (advanceSellerStage → 'accepted'). Locked to EXACTLY that
@@ -911,7 +917,18 @@ service cloud.firestore {
         || (isAuth()
             && resource.data.details.sellerId == request.auth.uid
             && request.resource.data.diff(resource.data).affectedKeys()
-                 .hasOnly(['sellerStage', 'sellerStageAt', 'updatedAt', 'status', 'pingExpiresAt'])
+                 .hasOnly([
+                   'sellerStage', 'sellerStageAt', 'updatedAt', 'status', 'pingExpiresAt',
+                   // Direct-to-seller UPI payment attestation (Sep 2026 —
+                   // seller_dashboard_screen.dart's "Confirm Payment
+                   // Received" gate before Book Delivery Partner, for the
+                   // 'seller_direct_upi' paymentMethod only). A seller's
+                   // own honest-attestation flag on THEIR OWN order —
+                   // same trust model as a hero's own
+                   // markServiceRequestPaymentReceived() self-attestation,
+                   // just scoped to this different payment path.
+                   'sellerPaymentConfirmed'
+                 ])
             && (!('status' in request.resource.data.diff(resource.data).affectedKeys()) ||
                 (resource.data.status == 'awaiting_seller' && request.resource.data.status == 'pinging')));
 
@@ -1291,6 +1308,25 @@ service cloud.firestore {
     }
 
     // ==============================================================
+    // STOCK_HOLDS (Sep 2026 — structural close-out of the
+    // reserveMenuItemStock gap; see functions/stockHoldHelpers.ts's
+    // header for the full hold -> confirm/release design). Same
+    // "Cloud-Functions-only write" shape as payment_orders above and
+    // for the identical reason: this doc's status transitions
+    // (held/confirmed/released/expired) directly control how much of a
+    // seller's real inventory is currently locked, so a client must
+    // never be able to set them directly — only holdMenuItemStock.ts /
+    // confirmMenuItemStockHold.ts / releaseMenuItemStockHold.ts /
+    // releaseExpiredStockHoldsScheduled.ts (all Admin SDK) ever touch
+    // this collection. A customer may only read their OWN hold, to
+    // show "reserving your items…" progress if the checkout UI wants it.
+    // ==============================================================
+    match /stock_holds/{holdId} {
+      allow read: if isAdminAny() || (isAuth() && resource.data.customerId == request.auth.uid);
+      allow write: if false;
+    }
+
+    // ==============================================================
     // HERO_WALLETS / HERO_WALLET_TRANSACTIONS / WALLET_RECHARGE_REQUESTS
     // (Revenue Master Plan — prepaid commission wallet, per Nizam's
     // explicit "NO Cloud Functions" constraint: Spark plan doesn't
@@ -1360,6 +1396,19 @@ service cloud.firestore {
     // readable, admin-only writable.
     // ==============================================================
     match /ads/{adId} {
+      allow read: if isAuth();
+      allow write: if isAdminAny();
+    }
+    // ==============================================================
+    // MASTER_CATALOG (Sep 2026 — universal shared product catalog).
+    // One admin-curated SKU list (name/category/unit/photo), reused by
+    // every seller who carries that item — see
+    // master_catalog_model.dart's header for why this exists. Public
+    // config exactly like ads/platformSettings above: any authenticated
+    // user can read it (sellers browse it to build their own product
+    // list; harmless for a customer to see too), only admin writes it.
+    // ==============================================================
+    match /master_catalog/{itemId} {
       allow read: if isAuth();
       allow write: if isAdminAny();
     }

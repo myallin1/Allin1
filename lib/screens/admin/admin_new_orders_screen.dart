@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../config/hero_skill_catalog.dart';
 import '../../models/service_request_model.dart';
 import '../../services/admin_deletion_service.dart';
 import '../../services/service_request_service.dart';
@@ -32,6 +33,7 @@ const Color _green = Color(0xFF00C853);
 const Color _red = Color(0xFFFF5252);
 const Color _pink = Color(0xFFFF4FA3);
 const Color _border = Color(0x1AFFFFFF);
+const Color _amber = Color(0xFFFFA726);
 
 // Public — also used by admin_service_requests_screen.dart's
 // type-filtered lists. Keep the two files sharing this single mapping.
@@ -410,7 +412,24 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
                 Expanded(
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: _pink),
-                    onPressed: () => _showAssignSheet(context, request.requestId, customerName),
+                    // FIX (Sep 2 2026 — service-booking flow audit): this
+                    // screen is exactly the "auto-dispatch already failed"
+                    // fallback (see file header — status only reaches
+                    // 'admin_review' after a 90s broadcast with nobody
+                    // accepting), so the admin had ZERO way to tell which
+                    // online hero actually knows the trade — the sheet
+                    // listed every hero with no skill info at all. A
+                    // plumber job could be handed to a bike-taxi hero by
+                    // mistake. Now passes the required skill through so
+                    // the sheet can badge/sort by qualification.
+                    onPressed: () => _showAssignSheet(
+                      context,
+                      request.requestId,
+                      customerName,
+                      requestType == 'electronics_service'
+                          ? (details[kSkillRequestCategoryKey] as String?)
+                          : null,
+                    ),
                     child: const Text('Assign to Hero', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 ),
@@ -543,12 +562,21 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
     }
   }
 
-  void _showAssignSheet(BuildContext context, String requestId, String customerName) {
+  void _showAssignSheet(
+    BuildContext context,
+    String requestId,
+    String customerName, [
+    String? requiredSkill,
+  ]) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => AssignHeroSheet(requestId: requestId, customerName: customerName),
+      builder: (_) => AssignHeroSheet(
+        requestId: requestId,
+        customerName: customerName,
+        requiredSkill: requiredSkill,
+      ),
     );
   }
 }
@@ -561,9 +589,15 @@ class _AdminNewOrdersScreenState extends State<AdminNewOrdersScreen>
 class AssignHeroSheet extends StatefulWidget {
   final String requestId;
   final String customerName;
+  /// Non-null only for an 'electronics_service' request — the skill key
+  /// (see hero_skill_catalog.dart) the customer actually needs. Null for
+  /// every other requestType, where any online hero is a valid target,
+  /// same as before this fix.
+  final String? requiredSkill;
   const AssignHeroSheet({
     required this.requestId,
     required this.customerName,
+    this.requiredSkill,
     super.key,
   });
 
@@ -575,6 +609,7 @@ class AssignHeroSheet extends StatefulWidget {
     super.debugFillProperties(properties);
     properties.add(StringProperty('requestId', requestId));
     properties.add(StringProperty('customerName', customerName));
+    properties.add(StringProperty('requiredSkill', requiredSkill));
   }
 }
 
@@ -606,9 +641,23 @@ class AssignHeroSheetState extends State<AssignHeroSheet> {
             'phone': (value['phone'] as String?) ?? '',
             'vehicleType': (value['vehicleType'] as String?) ?? 'bike',
             'isAvailable': (value['isAvailable'] as bool?) ?? true,
+            // FIX (Sep 2 2026 — audit): needed to badge/sort by
+            // qualification below. online_heroes/{uid} already mirrors
+            // this (hero_home_screen.dart's presence writes), just never
+            // read here before.
+            'qualified': widget.requiredSkill == null ||
+                heroHasSkill(Map<String, dynamic>.from(value), widget.requiredSkill!),
           });
         }
       });
+      // Qualified heroes first — this screen is the auto-dispatch
+      // FAILURE fallback (see file header), so unqualified heroes are
+      // deliberately kept visible, not hidden, in case the admin needs
+      // to override for a real reason; they're just no longer the ones
+      // an admin's thumb lands on first for a plumber/electrician/
+      // acting_driver job.
+      heroes.sort((a, b) =>
+          (b['qualified'] as bool ? 1 : 0) - (a['qualified'] as bool ? 1 : 0));
       if (mounted) setState(() => _onlineHeroes = heroes);
     });
   }
@@ -618,6 +667,38 @@ class AssignHeroSheetState extends State<AssignHeroSheet> {
     _heroesSub?.cancel();
     _estimateCtrl.dispose();
     super.dispose();
+  }
+
+  // FIX (Sep 2 2026 — audit): does not block the assign entirely — this
+  // screen only shows up after auto-dispatch already found nobody
+  // qualified within range, so a hard block could leave the admin with
+  // no way to resolve the request at all. It just makes the mismatch
+  // impossible to tap past by accident.
+  Future<void> _confirmUnqualifiedThenAssign(Map<String, dynamic> hero) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _surface,
+        title: const Text('Not a registered specialist', style: TextStyle(color: _text)),
+        content: Text(
+          '${hero['name']} is not registered as ${heroSkillLabel(widget.requiredSkill)}. '
+          'Assign anyway only if you have confirmed by phone that they can do this job.',
+          style: const TextStyle(color: _muted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: _amber),
+            child: const Text('Assign Anyway'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await _assign(hero);
   }
 
   Future<void> _assign(Map<String, dynamic> hero) async {
@@ -697,19 +778,37 @@ class AssignHeroSheetState extends State<AssignHeroSheet> {
                     itemBuilder: (ctx, i) {
                       final hero = _onlineHeroes[i];
                       final isAvailable = hero['isAvailable'] == true;
+                      // FIX (Sep 2 2026 — audit): see build-time sort
+                      // comment above. Only meaningful when the request
+                      // actually needs a skill; null requiredSkill marks
+                      // every hero qualified, so this row is unchanged
+                      // for every non-skill requestType.
+                      final qualified = hero['qualified'] == true;
                       return Card(
                         color: _card,
                         margin: const EdgeInsets.symmetric(vertical: 4),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: qualified
+                              ? BorderSide.none
+                              : const BorderSide(color: _amber, width: 1),
+                        ),
                         child: ListTile(
                           enabled: !_assigning,
-                          onTap: () => _assign(hero),
+                          onTap: () => qualified
+                              ? _assign(hero)
+                              : _confirmUnqualifiedThenAssign(hero),
                           leading: CircleAvatar(
                             backgroundColor: isAvailable ? _green.withValues(alpha: 0.2) : _red.withValues(alpha: 0.2),
                             child: Text(((hero['name'] as String).isNotEmpty ? hero['name'] as String : 'H')[0].toUpperCase(), style: TextStyle(color: isAvailable ? _green : _red)),
                           ),
                           title: Text(hero['name'] as String, style: const TextStyle(color: _text)),
-                          subtitle: Text('${hero['vehicleType']}${isAvailable ? '' : ' · on a task'}', style: const TextStyle(color: _muted, fontSize: 11)),
+                          subtitle: Text(
+                            qualified
+                                ? '${hero['vehicleType']}${isAvailable ? '' : ' · on a task'}'
+                                : '${hero['vehicleType']} · ⚠ not registered as ${heroSkillLabel(widget.requiredSkill)}${isAvailable ? '' : ' · on a task'}',
+                            style: TextStyle(color: qualified ? _muted : _amber, fontSize: 11),
+                          ),
                           trailing: _assigning ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _pink)) : null,
                         ),
                       );
