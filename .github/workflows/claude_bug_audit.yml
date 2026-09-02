@@ -1,0 +1,81 @@
+name: Claude Bug Audit (Haiku)
+
+# NEW (Sep 3 2026 — Nizam: "cto haiku plan and audit and coder sonnet
+# coding so ipdi oru loop 2 agent ku idaila set panni vachcha night
+# kulla namma works automatic ah complete aidum").
+#
+# Replaces gemini_feature_proposal.yml's engine. That file did the
+# same job with Gemini CLI, but Gemini's free-tier quota ran out
+# (RATE_LIMIT_EXCEEDED, confirmed via job logs) and this session
+# already moved the OTHER review layer (claude-code-review.yml) from
+# Gemini to Claude Haiku for the same reason. This is that same swap
+# applied to the proposal step, so the full loop is now:
+#
+#   Haiku (this file, every 15 min) finds one real bug in EXISTING
+#   code, opens a GitHub issue tagged @claude
+#     -> claude.yml (Sonnet) picks it up, opens a PR
+#       -> claude-code-review.yml (Haiku) reviews that PR
+#         -> Nizam merges (or the next Haiku audit run just keeps
+#            going regardless — capped by the open-proposal count
+#            below so it can't pile up unbounded overnight)
+#
+# SAFETY, unchanged from the Gemini version this replaces:
+#   - Audits EXISTING code for confirmed bugs only — never proposes
+#     new features, never touches payments/wallets/PhonePe/auth/KYC/
+#     firestore.rules, never changes working behaviour.
+#   - Skips entirely once 3+ "chitti-proposed" issues are still open,
+#     so a slow Claude run can't let these pile up.
+#   - schedule + workflow_dispatch: runs on its own, but can also be
+#     fired by hand from the Actions tab.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  propose-feature:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Count unaddressed proposals
+        id: count
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          count=$(gh issue list --repo "${{ github.repository }}" --label "chitti-proposed" --state open --json number --jq 'length')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "Open unaddressed chitti-proposed issues: $count"
+
+      - name: Ensure the chitti-proposed label exists
+        if: fromJSON(steps.count.outputs.count) < 3
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh label create chitti-proposed --color BFD4F2 --description "Bug/gap found by the Claude Haiku audit workflow" --force
+
+      - name: Audit for one bug and open an issue
+        if: fromJSON(steps.count.outputs.count) < 3
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: '--model claude-haiku-4-5-20251001 --allowedTools "Bash,Read,Grep,Glob"'
+          prompt: |
+            You are the CTO auditing the Allin1 Flutter super app (NJ Tech, Erode) — read GEMINI.md and AGENTS.md first for context.
+
+            Your job is AUDIT, not new features: search lib/ (and android/app/src for native code) for ONE real, confirmed bug or gap in EXISTING functionality — examples: a null/exception path that is not handled, a race condition, a broken or dead-end navigation flow, a missing input validation, a state that never resets, duplicated logic that has drifted out of sync, a TODO/FIXME that was never resolved. It must be a genuine defect you can point to in the actual code, not a guess and not a new feature or enhancement.
+
+            Hard rules:
+            1. Never propose touching payments, wallets, PhonePe/payment gateways, authentication, KYC, firestore.rules, or anything that moves money or credentials.
+            2. The fix must NOT change or remove any existing working behavior/feature — it only corrects the confirmed defect.
+            3. Prefer something a single small, focused PR could safely fix.
+
+            Write it up as a GitHub issue: a short title, and a body with (1) the exact bug — file/function and what goes wrong, (2) how you confirmed it is real (quote the relevant code), (3) the smallest safe fix, (4) explicit scope boundaries: what must NOT change. End the body with a line '@claude please fix this — do not change any other existing behavior.'
+
+            Then actually create the issue with: gh issue create --repo ${{ github.repository }} --title "<title>" --body "<body>" --label chitti-proposed
