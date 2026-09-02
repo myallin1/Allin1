@@ -112,14 +112,25 @@ object PhoneCallService {
         activeCallState = "ringing"
         activeCallerNumber = number
         clearPersistedAutoAnswerFlag(context)
-        Log.d("PhoneCallService", "Incoming call ringing from: $number. Scheduling auto-answer in 20s.")
+        // NEW (Sep 2 2026 — Nizam: "yevlo second la chitti call aaten
+        // pannanumnu set panniklam"). Was a hardcoded 20s; now reads
+        // the same admin-configurable delay the Dialer's call-settings
+        // sheet writes, defaulting to 20s when unset. Stored/read as a
+        // STRING deliberately: shared_preferences_android persists a
+        // Dart int as a Java Long under the hood, so a native getInt()
+        // on it throws ClassCastException — a plain string avoids that
+        // ambiguity entirely on both sides.
+        val delaySeconds = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString("flutter.kChittiAutoAnswerDelaySeconds", null)
+            ?.toIntOrNull() ?: 20
+        val delayMillis = delaySeconds.coerceIn(1, 60) * 1000L
+        Log.d("PhoneCallService", "Incoming call ringing from: $number. Scheduling auto-answer in ${delaySeconds}s.")
 
-        // Schedule auto-answering after 20 seconds delay
         answerRunnable = Runnable {
-            Log.d("PhoneCallService", "20s elapsed. Auto-answering incoming call now.")
+            Log.d("PhoneCallService", "${delaySeconds}s elapsed. Auto-answering incoming call now.")
             answerCall(context)
         }
-        handler.postDelayed(answerRunnable!!, 20000)
+        handler.postDelayed(answerRunnable!!, delayMillis)
     }
 
     fun onCallConnected(context: Context) {
@@ -243,50 +254,27 @@ object PhoneCallService {
                 @Suppress("DEPRECATION")
                 MediaRecorder()
             }
-            // FIX (Sep 2 2026 — Nizam: "oppo la o dialer and samsung
-            // dialersla call record pannuna sound varathu, namma record
-            // um athe system ah maathu"). Stock dialers are privileged
-            // system apps that read both sides of the call directly
-            // (AudioSource.VOICE_CALL); a third-party app recording via
-            // the plain microphone during a live call is exactly the
-            // case several Android telephony stacks inject an audible
-            // "this call is being recorded" tone for. VOICE_CALL isn't
-            // guaranteed available to a non-system app on every OEM —
-            // where it's blocked, MediaRecorder throws at setAudioSource
-            // or prepare(), so this falls back to MIC rather than fail
-            // recording outright.
-            var usedVoiceCallSource = false
-            try {
-                recorder.setAudioSource(MediaRecorder.AudioSource.VOICE_CALL)
-                usedVoiceCallSource = true
-            } catch (e: Exception) {
-                Log.w("PhoneCallService", "VOICE_CALL audio source unavailable, falling back to MIC: ${e.message}")
-                recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
-            }
+            // REVERTED (Sep 2 2026 — Nizam: "chitti pesurathu admin app
+            // la than kekuthu, customer phone ku pogala"). The Sep 2
+            // AudioSource.VOICE_CALL attempt (tried as a fix for the
+            // Oppo/Samsung-style "recording tone") was a real
+            // regression: capturing MediaRecorder(VOICE_CALL) appears
+            // to take over this device's call audio path in a way that
+            // then keeps ChittiCallVoice's TTS AudioTrack — also
+            // targeting STREAM_VOICE_CALL — from ever reaching the
+            // network side, so the greeting stayed local to the admin's
+            // own phone. Recording plainly working (even without the
+            // stock-dialer-style silent tone) matters far more than a
+            // cosmetic beep fix, so this is back to MIC only until a
+            // way to get both at once is confirmed safe on-device.
+            recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
             recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
             recorder.setAudioEncodingBitRate(64000)
             recorder.setAudioSamplingRate(44100)
             recorder.setOutputFile(file.absolutePath)
-            try {
-                recorder.prepare()
-                recorder.start()
-            } catch (e: Exception) {
-                if (usedVoiceCallSource) {
-                    Log.w("PhoneCallService", "VOICE_CALL source rejected at prepare/start, retrying with MIC: ${e.message}")
-                    recorder.reset()
-                    recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
-                    recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                    recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                    recorder.setAudioEncodingBitRate(64000)
-                    recorder.setAudioSamplingRate(44100)
-                    recorder.setOutputFile(file.absolutePath)
-                    recorder.prepare()
-                    recorder.start()
-                } else {
-                    throw e
-                }
-            }
+            recorder.prepare()
+            recorder.start()
             // BUG FIX (Sep 1 2026): the started recorder was never stored
             // in `mediaRecorder`, so stopRecording()'s `mediaRecorder?.`
             // was always null — stop()/release() never ran and the .m4a

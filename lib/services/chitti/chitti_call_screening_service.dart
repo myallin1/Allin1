@@ -227,15 +227,27 @@ class ChittiCallScreeningService {
     // and tells the caller explicitly to wait for the beep — voicemail
     // phrasing on purpose, since that is exactly the mental model this
     // mode uses.
-    final greeting = _languageCode == 'ta'
-        ? "வணக்கம், இது NJ Tech, Erode. பாஸ் நிஜாம் இப்போ பிஸியா இருக்காரு, "
-            "உங்க கால் கனெக்ட் பண்ண முடியாம இருக்கு. பீப் சத்தத்துக்கு அப்புறம், "
-            "உங்க பெயர், தேவை, தொடர்பு விவரம் தெளிவா சொல்லுங்க — இது ரெக்கார்ட் "
-            "ஆகி பாஸ்கிட்ட நேரடியா போகும்."
-        : "Hello, this is NJ Tech, Erode. Nizam is busy right now and "
-            "couldn't take this call. After the beep, please clearly say "
-            "your name, what you need, and how to reach you — this is "
-            "being recorded and will go straight to Nizam.";
+    //
+    // NEW (Sep 2 2026 — Nizam: "chitti sollavendiya intro change
+    // panniklam"). An admin-set custom greeting (Dialer settings
+    // sheet, kChittiCustomGreeting) overrides this default when
+    // non-empty; blank means keep using it.
+    String? customGreeting;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString('kChittiCustomGreeting')?.trim();
+      if (saved != null && saved.isNotEmpty) customGreeting = saved;
+    } catch (_) {}
+    final greeting = customGreeting ??
+        (_languageCode == 'ta'
+            ? "வணக்கம், இது NJ Tech, Erode. பாஸ் நிஜாம் இப்போ பிஸியா இருக்காரு, "
+                "உங்க கால் கனெக்ட் பண்ண முடியாம இருக்கு. பீப் சத்தத்துக்கு அப்புறம், "
+                "உங்க பெயர், தேவை, தொடர்பு விவரம் தெளிவா சொல்லுங்க — இது ரெக்கார்ட் "
+                "ஆகி பாஸ்கிட்ட நேரடியா போகும்."
+            : "Hello, this is NJ Tech, Erode. Nizam is busy right now and "
+                "couldn't take this call. After the beep, please clearly say "
+                "your name, what you need, and how to reach you — this is "
+                "being recorded and will go straight to Nizam.");
     _conversation.add('Assistant: $greeting');
     await _speak(greeting);
     await ChittiAccessibilityBridge.instance.playCallBeep();
