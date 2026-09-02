@@ -58,7 +58,15 @@ jobs:
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
           prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
-          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment"'
+          # NEW (Sep 2 2026 — Nizam: "gemini ku limit mudinjuruthu so
+          # namma gemini cto va vachukama haiku va vachu audit
+          # pannanum"). This review layer now doubles as the "second
+          # model audits the first model's work" step Gemini's
+          # cto-review job was providing, using Haiku instead of
+          # burning quota on a rate-limited free-tier Gemini key --
+          # gemini_cto_review.yml is left as-is (harmless to leave; it
+          # simply fails/skips while Gemini is rate-limited).
+          claude_args: '--model claude-haiku-4-5-20251001 --allowedTools "mcp__github_inline_comment__create_inline_comment"'
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
 

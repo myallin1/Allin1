@@ -50,8 +50,12 @@ jobs:
           # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
           # prompt: 'Update the pull request description to include a summary of changes.'
 
-          # Optional: Add claude_args to customize behavior and configuration
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr *)'
+          # NEW (Sep 2 2026 — Nizam: "claude 2 model ah vachu... sonnet ah
+          # coding ku set pannirlaam" — moving off Gemini as CTO reviewer
+          # since its free-tier quota ran out, onto two Claude models
+          # instead: Sonnet does the coding here, Haiku audits in
+          # claude-code-review.yml). Pinned explicitly rather than relying
+          # on the action's current default, so a future default change
+          # upstream can't silently switch which model writes the code.
+          claude_args: '--model claude-sonnet-5'
 
