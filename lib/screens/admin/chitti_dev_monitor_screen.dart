@@ -26,6 +26,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/chitti/chitti_dev_monitor_service.dart';
 import '../../services/chitti/chitti_dev_task_service.dart';
+import 'github_embedded_screen.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _card = Color(0xFF141420);
@@ -71,6 +72,19 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  // NEW (Sep 2 2026): run/issue links are GitHub pages themselves —
+  // these stay in-app via GitHubEmbeddedScreen so tapping a run or
+  // issue from this monitor doesn't leave the app (and doesn't ask to
+  // log in again). The APK download button above still uses [_open]
+  // externally on purpose — a WebView is the wrong place to trigger an
+  // APK download; the OS's own download manager/browser is not.
+  void _openInApp(BuildContext context, String url) {
+    if (url.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => GitHubEmbeddedScreen(url: url)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final snap = _snapshot;
@@ -85,6 +99,18 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
           style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 16),
         ),
         actions: [
+          // NEW (Sep 2 2026 — Nizam: "admin app kullaye namma GitHub
+          // open aganum, login kekama"). Embedded WebView scoped to
+          // GitHub's own domains — see github_embedded_screen.dart's
+          // header for why a plain external browser link isn't the
+          // same thing (repeated login, leaves the app).
+          IconButton(
+            icon: const Icon(Icons.open_in_new_rounded, color: _text),
+            tooltip: 'Open GitHub in-app',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const GitHubEmbeddedScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: _text),
             tooltip: 'Refresh',
@@ -281,7 +307,7 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
                 : (_muted, Icons.remove_circle_outline_rounded, run.conclusion ?? 'Done');
 
     return _rowCard(
-      onTap: () => _open(run.url),
+      onTap: () => _openInApp(context, run.url),
       leading: Icon(icon, color: color, size: 17),
       title: run.name,
       subtitleWidgets: [
@@ -297,7 +323,7 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
   Widget _issueTile(DevTaskIssue issue) {
     final isOpen = issue.state == 'open';
     return _rowCard(
-      onTap: () => _open(issue.url),
+      onTap: () => _openInApp(context, issue.url),
       leading: Icon(
         isOpen ? Icons.radio_button_unchecked_rounded : Icons.check_circle_outline_rounded,
         color: isOpen ? _amber : _green,

@@ -27,9 +27,19 @@ import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/chitti/chitti_accessibility_bridge.dart';
 import 'admin_in_call_screen.dart';
+
+// NEW (Sep 2 2026 — Nizam: "athula nama quick greetings and call
+// recording ah manage panna option ila"). Same SharedPreferences keys
+// admin_ai_settings_screen.dart already reads/writes for these two
+// settings — this is a second, quicker place to flip them from, not a
+// second source of truth. Kept to exactly these two because they are
+// the ones a call is actually about to happen from here.
+const String _kCallAnsweringModeKey = 'kChittiCallAnsweringMode';
+const String _kCallRecordingEnabledKey = 'kChittiCallRecordingEnabled';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _card = Color(0xFF141420);
@@ -126,6 +136,11 @@ class _AdminDialerScreenState extends State<AdminDialerScreen>
         title: Text('Dialer',
             style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 16)),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: _text),
+            tooltip: 'Quick greeting & recording',
+            onPressed: () => _openCallSettingsSheet(context),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: _text),
             tooltip: 'Refresh call status',
@@ -336,6 +351,176 @@ class _AdminDialerScreenState extends State<AdminDialerScreen>
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _openCallSettingsSheet(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: _card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => const _CallSettingsSheet(),
+    );
+  }
+}
+
+// NEW (Sep 2 2026 — Nizam: "athula nama quick greetings and call
+// recording ah manage panna option ila"). A quick toggle right where a
+// call is about to be made or answered from, instead of only inside
+// the Chitti AI settings screen several taps away. Writes the same
+// SharedPreferences keys that screen uses, so nothing here is a second
+// source of truth for these two settings.
+class _CallSettingsSheet extends StatefulWidget {
+  const _CallSettingsSheet();
+
+  @override
+  State<_CallSettingsSheet> createState() => _CallSettingsSheetState();
+}
+
+class _CallSettingsSheetState extends State<_CallSettingsSheet> {
+  bool _loading = true;
+  String _mode = 'quick_record';
+  bool _recordingEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _mode = prefs.getString(_kCallAnsweringModeKey) ?? 'quick_record';
+      _recordingEnabled = prefs.getBool(_kCallRecordingEnabledKey) ?? true;
+      _loading = false;
+    });
+  }
+
+  Future<void> _setMode(String mode) async {
+    setState(() => _mode = mode);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kCallAnsweringModeKey, mode);
+  }
+
+  Future<void> _setRecording(bool enabled) async {
+    setState(() => _recordingEnabled = enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kCallRecordingEnabledKey, enabled);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 40),
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: _purple)),
+      );
+    }
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20, right: 20, top: 14,
+        bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('Call handling', style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800, fontSize: 15)),
+          const SizedBox(height: 14),
+          Text('WHEN CHITTI ANSWERS', style: GoogleFonts.outfit(color: _muted, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1)),
+          const SizedBox(height: 8),
+          _ModeOption(
+            title: 'Quick greeting + record',
+            subtitle: 'Chitti plays one greeting and a beep, then just records — no live back-and-forth',
+            selected: _mode == 'quick_record',
+            onTap: () => _setMode('quick_record'),
+          ),
+          const SizedBox(height: 8),
+          _ModeOption(
+            title: 'Full conversation',
+            subtitle: 'Chitti tries to listen and reply turn by turn',
+            selected: _mode == 'full',
+            onTap: () => _setMode('full'),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: Text('Record calls', style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13.5)),
+              ),
+              Switch(
+                value: _recordingEnabled,
+                activeThumbColor: _green,
+                onChanged: _setRecording,
+              ),
+            ],
+          ),
+          Text(
+            'Off automatically while Chitti is in Full conversation mode and actively listening.',
+            style: GoogleFonts.outfit(color: _muted, fontSize: 11, height: 1.3),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeOption extends StatelessWidget {
+  const _ModeOption({
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: selected ? _purple.withValues(alpha: 0.1) : _bg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: selected ? _purple : _border),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              selected ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
+              color: selected ? _purple : _muted, size: 18,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: GoogleFonts.outfit(color: _muted, fontSize: 11, height: 1.3)),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
