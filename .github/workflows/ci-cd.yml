@@ -39,7 +39,15 @@ on:
 # Environment Variables
 # ================================================================
 env:
-  FLUTTER_VERSION: '3.19.0'
+  # FIX (Sep 2 2026): pinned to 3.19.0 (ships Dart 3.3.0), which cannot
+  # resolve the repo's current dependencies —
+  # extension_google_sign_in_as_googleapis_auth needs Dart ^3.4.0, so
+  # every CI run's `flutter pub get` failed at dependency resolution
+  # before any test/build step ever ran. This is unrelated to any
+  # Chitti call-assistant change; matches the Flutter version already
+  # used to build and test this app locally, and the version
+  # gemini-dispatch.yml's own Flutter setup step already uses.
+  FLUTTER_VERSION: '3.44.2'
   JAVA_VERSION: '17'
   NODE_VERSION: '18'
 
@@ -330,7 +338,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notify admin app via FCM
-        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        # FIX (Sep 2 2026): a job-level `if:` referencing the `secrets`
+        # context directly caused GitHub to reject this entire workflow
+        # file outright (every run showed 0 jobs and the workflow's
+        # registered name fell back to its file path — the standard
+        # signature of a file GitHub could not parse/validate at all).
+        # The "is this secret set" check now lives inside the script
+        # instead, which is also what notify-admin-build.js already
+        # does on its own (see its early `if (!serviceAccountJson)`
+        # exit) — this step always runs, and simply no-ops when the
+        # secret hasn't been added yet.
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           RELEASE_URL: https://github.com/${{ github.repository }}/releases/tag/latest-admin-test
