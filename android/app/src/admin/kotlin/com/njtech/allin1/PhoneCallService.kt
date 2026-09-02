@@ -12,6 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import android.telecom.Call
 import android.telecom.TelecomManager
+import android.telecom.VideoProfile
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import java.io.File
@@ -131,6 +132,19 @@ object PhoneCallService {
             answerCall(context)
         }
         handler.postDelayed(answerRunnable!!, delayMillis)
+
+        // NEW (Sep 2 2026 — Nizam: "namma dialer la incoming call
+        // vantha attend panna screen ila"). Nothing woke the app or
+        // told Flutter a call was ringing at all before this — the
+        // phone just rang, with no way to answer or decline faster
+        // than the auto-answer timer above. Waking MainActivity here
+        // (same launcher-intent relaunch already used elsewhere in
+        // this file) plus the existing triggerFlutterCallState/
+        // onCallStateChanged channel now gives Flutter an actual
+        // "ringing" event to show an incoming-call screen from — see
+        // AdminIncomingCallScreen.
+        launchMainActivity(context)
+        triggerFlutterCallState("ringing", number)
     }
 
     fun onCallConnected(context: Context) {
@@ -380,6 +394,45 @@ object PhoneCallService {
             Log.e("PhoneCallService", "ANSWER_PHONE_CALLS permission not granted: ${e.message}")
         } catch (e: Exception) {
             Log.e("PhoneCallService", "Error accepting call programmatically: ${e.message}")
+        }
+    }
+
+    // NEW (Sep 2 2026 — Nizam: "incoming call vantha attend panna
+    // screen ila"). Distinct from answerCall() above on purpose:
+    // answerCall() marks wasAutoAnswered=true, which onCallConnected()
+    // uses to decide whether Chitti should greet/screen the call at
+    // all. When the admin taps Answer on the incoming-call screen to
+    // take the call personally, Chitti greeting them would be wrong —
+    // so this cancels the pending auto-answer timer and answers
+    // WITHOUT setting that flag, same as picking up a normal call.
+    @JvmStatic
+    fun manualAnswerCall(context: Context) {
+        try {
+            answerRunnable?.let { handler.removeCallbacks(it) }
+            wasAutoAnswered = false
+            clearPersistedAutoAnswerFlag(context)
+            val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                telecomManager.acceptRingingCall()
+            } else {
+                activeTelecomCall?.answer(VideoProfile.STATE_AUDIO_ONLY)
+            }
+        } catch (e: SecurityException) {
+            Log.e("PhoneCallService", "ANSWER_PHONE_CALLS permission not granted: ${e.message}")
+        } catch (e: Exception) {
+            Log.e("PhoneCallService", "Error manually accepting call: ${e.message}")
+        }
+    }
+
+    // Reuses the same disconnect() Telecom already calls to hang up an
+    // active call — on a still-ringing call this rejects it instead.
+    @JvmStatic
+    fun declineRingingCall() {
+        try {
+            answerRunnable?.let { handler.removeCallbacks(it) }
+            activeTelecomCall?.disconnect()
+        } catch (e: Exception) {
+            Log.e("PhoneCallService", "Error declining ringing call: ${e.message}")
         }
     }
 
