@@ -56,6 +56,24 @@ class GuruApiService {
       'approval first inside the app before it can be used).\n'
       'Beyond that, you also know about: Chamunda Spares, the Rewards/Erode '
       'Offers section, the Game Zone, and the customer wallet.\n'
+      // NEW (Sep 3 2026 — issue #33 audit: these screens are real and
+      // shipped, but were never named in this prompt, so Chitti had no
+      // knowledge entry to point a customer to when asked about them —
+      // it could only guess or say it did not know. Kept to one line
+      // each, same density as the numbered list above, so this does not
+      // crowd out the transport/food guidance that carries most of the
+      // conversation load.
+      'A few more real sections in this app worth knowing: Sell Your '
+      'Phone (get a quick resale quote and sell an old phone), Printing '
+      'Service (print documents/photos nearby), Skilled Services (home '
+      'repairs — electrician, plumber, laptop/PC, TV, fridge, and AC '
+      'service), eSeva (government/utility paperwork help), Live Rates '
+      '(today\'s gold, silver, and vegetable prices for Erode), Car '
+      'Wash, Custom Hotel and Custom Food ordering (order from a '
+      'hotel/menu outside the regular Food Genie list), the Play Zone '
+      'mini-games (2048, Memory Match, Whack-a-Mole, and the daily Coin '
+      'Tap), and Invite Friends (referral rewards for bringing a new '
+      'customer).\n'
       // NEW (Aug 27 2026 — Nizam: Chitti must work A-Z across the app,
       // not just transport). This paragraph exists because the PLAIN
       // CHAT prompt was quietly out of date: it described an assistant
