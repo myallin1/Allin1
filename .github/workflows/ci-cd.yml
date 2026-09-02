@@ -341,6 +341,20 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      # FIX (Sep 2 2026): pubspec.yaml declares .env as a required
+      # asset, but .env is gitignored (it holds live API keys) and was
+      # never in this checkout -- the very first real run of this job
+      # (previous runs on PR branches all showed "skipping", per the
+      # if: github.ref check above, so this had never actually executed
+      # until now) failed at "Error detected in pubspec.yaml: No file
+      # or variants found for asset: .env" during asset bundling.
+      # Flutter only needs the file to exist to bundle it -- nothing in
+      # lib/ calls dotenv.load() on this file, so an empty placeholder
+      # is enough to satisfy the asset declaration without a real
+      # secret ever touching a CI log.
+      - name: Create placeholder .env for asset bundling
+        run: touch .env
+
       - name: Build admin flavor APK
         run: flutter build apk --release --flavor admin -t lib/main_admin.dart
 
