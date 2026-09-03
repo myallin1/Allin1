@@ -61,6 +61,44 @@ class ChittiCallScreeningService {
   Timer? _screeningTimeoutTimer;
   int _errorRetryCount = 0;
 
+  // NEW (Sep 3 2026 — Nizam, from a real call's debug log: "chitti
+  // reconize pannama avan mic on-off oru 5 time panite irukan customer
+  // kekkalainu solli phone pannunathukapramum").
+  //
+  // Three separate problems that log made visible, all fixed below:
+  //
+  //  1. Every error_speech_timeout restarted the recognizer, and each
+  //     restart re-opens the microphone — audible to the caller as a
+  //     click/dropout, and pointless when the mic path is silent
+  //     (nothing was EVER recognized, so a 4th attempt cannot help).
+  //     `_everHeardSpeech` tells those two cases apart: real errors
+  //     mid-conversation still get retried, but a dead-silent mic path
+  //     now gives up after ONE retry instead of five.
+  //
+  //  2. When retries ran out, stopScreening() was called silently — the
+  //     caller heard the greeting and then a dead line, which is
+  //     exactly why they hung up and called back. Chitti now says a
+  //     closing line first (_speakCouldNotHearAndClose).
+  //
+  //  3. Listening resumed the instant TTS reported DONE, so the tail of
+  //     Chitti's own voice could be recognized as caller speech — the
+  //     self-echo Nizam heard on speaker mode. `_postSpeakSettle` adds
+  //     a short gap before the mic re-opens.
+  bool _everHeardSpeech = false;
+  bool _closingSpoken = false;
+
+  /// Max recognizer restarts when the mic path has produced nothing at
+  /// all. Deliberately small: on a silent path each extra attempt is
+  /// another audible mic toggle for the caller and buys nothing.
+  static const int _maxSilentRetries = 1;
+
+  /// Retries allowed once the caller HAS been heard at least once —
+  /// here a timeout usually just means they paused, so it is worth
+  /// listening again.
+  static const int _maxRetriesAfterSpeech = 3;
+
+  static const Duration _postSpeakSettle = Duration(milliseconds: 700);
+
   // NEW (Aug 31 2026 — Nizam: "oru time nadakura process oru name la
   // irukanum, antha time la yenna nadanthuchu-nu antha log paatha
   // theriyanum"). Every log line used to carry only `caller`, which is
@@ -130,6 +168,8 @@ class ChittiCallScreeningService {
     _conversation.clear();
     _turnCount = 0;
     _errorRetryCount = 0;
+    _everHeardSpeech = false;
+    _closingSpoken = false;
     _screeningTimeoutTimer?.cancel();
     _screeningTimeoutTimer = Timer(const Duration(seconds: 45), () {
       _log('[ChittiCallScreeningService] Auto-stopping screening after 45s inactivity.');
@@ -175,13 +215,21 @@ class ChittiCallScreeningService {
         onError: (errorNotification) {
           _log('[ChittiCallScreeningService] Speech recognizer error: ${errorNotification.errorMsg}');
           _errorRetryCount++;
-          if (_isScreening && _errorRetryCount <= 3) {
+          // See _everHeardSpeech's declaration: a mic path that has
+          // never produced a single word is not going to start on the
+          // 5th try, and each retry is another audible mic toggle for
+          // the caller.
+          final maxRetries =
+              _everHeardSpeech ? _maxRetriesAfterSpeech : _maxSilentRetries;
+          if (_isScreening && _errorRetryCount <= maxRetries) {
             Future.delayed(const Duration(seconds: 2), () {
               if (_isScreening) _listenLoop();
             });
-          } else if (_errorRetryCount > 3) {
-            _log('[ChittiCallScreeningService] Max retries reached. Stopping mic.');
-            stopScreening();
+          } else {
+            _log('[ChittiCallScreeningService] Giving up listening after '
+                '$_errorRetryCount error(s) (everHeardSpeech=$_everHeardSpeech, '
+                'limit=$maxRetries).');
+            _speakCouldNotHearAndClose();
           }
         },
       );
@@ -315,6 +363,12 @@ class ChittiCallScreeningService {
         );
       }
       ChittiAccessibilityBridge.instance.onCallVoiceEvent = null;
+
+      // See _postSpeakSettle's declaration: without this gap the mic
+      // re-opens while the tail of Chitti's own TTS is still decaying on
+      // the call stream, and that tail comes back as "caller speech" —
+      // the self-echo Nizam heard on speaker mode.
+      await Future.delayed(_postSpeakSettle);
     } catch (e) {
       await _log('[ChittiCallScreeningService] speak failed: $e');
     }
@@ -330,6 +384,7 @@ class ChittiCallScreeningService {
             final text = result.recognizedWords.trim();
             if (text.isNotEmpty) {
               _errorRetryCount = 0;
+              _everHeardSpeech = true;
               await _log('[ChittiCallScreeningService] Caller said: $text');
               _conversation.add('Caller: $text');
               await _handleCallerMessage(text);
@@ -356,12 +411,42 @@ class ChittiCallScreeningService {
     } catch (e) {
       _log('[ChittiCallScreeningService] listenLoop error: $e');
       _errorRetryCount++;
-      if (_isScreening && _errorRetryCount <= 3) {
+      final maxRetries =
+          _everHeardSpeech ? _maxRetriesAfterSpeech : _maxSilentRetries;
+      if (_isScreening && _errorRetryCount <= maxRetries) {
         Future.delayed(const Duration(seconds: 2), () {
           if (_isScreening) _listenLoop();
         });
+      } else if (_isScreening) {
+        _speakCouldNotHearAndClose();
       }
     }
+  }
+
+  /// Says one closing line and ends the session, instead of leaving the
+  /// caller on a silent line. See _everHeardSpeech's declaration for
+  /// why this exists — a caller who hears nothing back assumes the line
+  /// is dead, hangs up and calls again, which is what actually happened.
+  ///
+  /// Still saves the appointment/transcript: the native recorder has
+  /// been running the whole time, so even a call Chitti could not hear
+  /// leaves Nizam an audio file and a caller number to follow up on.
+  Future<void> _speakCouldNotHearAndClose() async {
+    if (_closingSpoken) return;
+    _closingSpoken = true;
+    try {
+      await _speech.stop();
+    } catch (_) {}
+
+    final closing = _languageCode == 'ta'
+        ? "மன்னிக்கணும் பாஸ், உங்க குரல் இங்க சரியா கேட்கல. உங்க நம்பர் பாஸ்கிட்ட "
+            "போயிடுச்சு, அவரு உங்களை உடனே கூப்பிடுவாரு. நன்றி!"
+        : "Sorry, I couldn't hear you clearly. Your number has reached "
+            "Nizam and he'll call you right back. Thank you!";
+    _conversation.add('Assistant: $closing');
+    await _speak(closing);
+    await _saveAppointment();
+    stopScreening();
   }
 
   Future<void> _handleCallerMessage(String message) async {
