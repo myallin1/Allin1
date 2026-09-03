@@ -26,6 +26,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/chitti/chitti_dev_monitor_service.dart';
 import '../../services/chitti/chitti_dev_task_service.dart';
+import 'admin_app_versions_screen.dart';
 import 'github_embedded_screen.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
@@ -284,6 +285,29 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
                 ),
               ),
             ),
+            // NEW (Sep 4 2026 — Nizam: "suppose lastversion problem
+            // iruntha admin previous versionuku poi switch panni
+            // pathukuramari set pannnamuidyuma?"). Every build's APK is
+            // already kept on this same release, so this is one tap to
+            // the full list — see AdminAppVersionsScreen.
+            if (release.apkAssets.length > 1) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => AdminAppVersionsScreen(release: release),
+                    ),
+                  ),
+                  icon: const Icon(Icons.history_rounded, size: 17),
+                  label: Text(
+                    'All versions (${release.apkAssets.length}) · roll back',
+                  ),
+                  style: TextButton.styleFrom(foregroundColor: _muted),
+                ),
+              ),
+            ],
           ] else
             Text(
               'This release has no .apk attached yet.',
