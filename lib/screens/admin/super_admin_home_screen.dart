@@ -25,6 +25,7 @@ import 'admin_ai_settings_screen.dart';
 import 'admin_cloudinary_dashboard_screen.dart';
 import 'admin_dashboard_screen.dart';
 import 'admin_chitti_lens_screen.dart';
+import 'admin_cm_presentation_screen.dart';
 import 'admin_dialer_screen.dart';
 import 'chitti_conversations_screen.dart';
 import 'chitti_debug_logs_screen.dart';
@@ -606,6 +607,21 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                   context,
                   MaterialPageRoute<void>(
                       builder: (_) => const AdminChittiLensScreen()),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // NEW (Sep 4 2026): the CM/ministers briefing. Kept next
+              // to Chitti Lens because they get used in the same room,
+              // minutes apart.
+              _ManageTile(
+                label: 'CM Presentation',
+                subtitle: 'Chitti introduces the app, asks permission, then briefs',
+                iconSvg: FluentEmojiFlat.microphone,
+                color: _orange,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                      builder: (_) => const AdminCmPresentationScreen()),
                 ),
               ),
             ],
