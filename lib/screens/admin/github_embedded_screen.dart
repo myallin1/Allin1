@@ -64,6 +64,36 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
     'githubcopilot.com',
   ];
 
+  // NEW (Sep 3 2026 — Nizam: "namma app la issue create panni anupitrum
+  // bothu namma admin app veliya vanthavo ila vera screen ku potu
+  // vanthavo nama vitta stage laye admin app la irukanum").
+  //
+  // The controller used to be created per-State in initState, which
+  // covered two of the three cases he asked about but not the third:
+  //
+  //   leaving the APP and coming back  -> already fine (the screen
+  //       stays on the navigator stack, WebView keeps its page)
+  //   logging in once                  -> already fine (cookie jar)
+  //   leaving this SCREEN inside the   -> BROKEN: popping disposed the
+  //       app and reopening GitHub        controller, so reopening
+  //                                       reloaded widget.url from
+  //                                       scratch and a half-typed
+  //                                       issue was gone.
+  //
+  // Hoisting the controller to a static makes the WebView outlive any
+  // single screen instance, so re-entering re-attaches to the exact
+  // page, scroll position and unsubmitted form the admin left behind.
+  // WebViewController is platform-backed and independent of the widget
+  // tree, so the same instance can legally be handed to a new
+  // WebViewWidget — this is the supported way to do it in
+  // webview_flutter 4.x.
+  //
+  // Deliberately never disposed: one WebView for the app's lifetime is
+  // the entire point, and Android reclaims it with the process. Only
+  // the FIRST screen instance loads a URL (see _isFresh below); later
+  // ones inherit whatever page is already open.
+  static WebViewController? _sharedController;
+
   late final WebViewController _controller;
   bool _loading = true;
 
@@ -77,12 +107,25 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
   @override
   void initState() {
     super.initState();
-    _controller = WebViewController()
+
+    final existing = _sharedController;
+    final isFresh = existing == null;
+    _controller = existing ?? WebViewController();
+
+    // The navigation delegate closes over THIS State's setState, so it
+    // is re-installed every time the screen is rebuilt — otherwise the
+    // second instance's spinner would be driven by the first (disposed)
+    // State and would never turn off.
+    _controller
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (_) => setState(() => _loading = true),
-          onPageFinished: (_) => setState(() => _loading = false),
+          onPageStarted: (_) {
+            if (mounted) setState(() => _loading = true);
+          },
+          onPageFinished: (_) {
+            if (mounted) setState(() => _loading = false);
+          },
           onNavigationRequest: (request) {
             final host = Uri.tryParse(request.url)?.host ?? '';
             if (_isAllowedHost(host)) return NavigationDecision.navigate;
@@ -95,20 +138,30 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
             return NavigationDecision.prevent;
           },
         ),
-      )
-      ..loadRequest(Uri.parse(widget.url));
-
-    // Same reasoning as DmartEmbeddedView: GitHub's login can redirect
-    // across its own subdomains (github.com -> githubusercontent.com
-    // for an avatar right after auth) which Android's WebView can
-    // treat as a third-party cookie context.
-    final platformController = _controller.platform;
-    if (platformController is AndroidWebViewController) {
-      unawaited(
-        AndroidWebViewCookieManager(
-          const PlatformWebViewCookieManagerCreationParams(),
-        ).setAcceptThirdPartyCookies(platformController, true),
       );
+
+    if (isFresh) {
+      _sharedController = _controller;
+      unawaited(_controller.loadRequest(Uri.parse(widget.url)));
+
+      // Same reasoning as DmartEmbeddedView: GitHub's login can redirect
+      // across its own subdomains (github.com -> githubusercontent.com
+      // for an avatar right after auth) which Android's WebView can
+      // treat as a third-party cookie context. Only needs doing once,
+      // on the controller that actually gets created.
+      final platformController = _controller.platform;
+      if (platformController is AndroidWebViewController) {
+        unawaited(
+          AndroidWebViewCookieManager(
+            const PlatformWebViewCookieManagerCreationParams(),
+          ).setAcceptThirdPartyCookies(platformController, true),
+        );
+      }
+    } else {
+      // Re-entering an already-loaded WebView: nothing is loading, so
+      // don't leave the spinner up waiting for an onPageFinished that
+      // will never fire.
+      _loading = false;
     }
   }
 
