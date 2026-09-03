@@ -28,6 +28,7 @@ import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/chitti/chitti_accessibility_bridge.dart';
 import 'admin_in_call_screen.dart';
@@ -723,7 +724,7 @@ class _RecentsTabState extends State<_RecentsTab> {
           final when = e.timestamp != null
               ? DateTime.fromMillisecondsSinceEpoch(e.timestamp!)
               : null;
-          return ListTile(
+          final tile = ListTile(
             leading: Icon(icon, color: color, size: 22),
             title: Text(
               (e.name != null && e.name!.isNotEmpty) ? e.name! : (number.isEmpty ? 'Unknown' : number),
@@ -738,9 +739,59 @@ class _RecentsTabState extends State<_RecentsTab> {
             ),
             onTap: number.isEmpty ? null : () => widget.onCall(number),
           );
+          if (number.isEmpty) return tile;
+          // NEW (Sep 3 2026 — Nizam: "call recent screen la irukka
+          // contacts ah right to left swipe pannuna antha number ku
+          // messege la chat open aganum, new vendam, ipo iruka messge
+          // app ku jump aganum avlo than"). Deliberately hands off to
+          // the phone's existing SMS app via an sms: intent rather than
+          // building any chat UI here.
+          //
+          // confirmDismiss always returns false on purpose: the swipe
+          // is a shortcut gesture, not a delete — the row springs back
+          // and nothing leaves the call log.
+          return Dismissible(
+            key: ValueKey('recent_${e.timestamp}_$number'),
+            direction: DismissDirection.endToStart,
+            background: Container(
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.only(right: 22),
+              color: _purple.withValues(alpha: 0.25),
+              child: const Icon(Icons.message_rounded, color: _purple),
+            ),
+            confirmDismiss: (_) async {
+              await _openSmsChat(number);
+              return false;
+            },
+            child: tile,
+          );
         },
       ),
     );
+  }
+
+  /// Opens the device's own messaging app on the thread for [number].
+  /// See the Dismissible above for why this is a hand-off and not an
+  /// in-app chat screen.
+  Future<void> _openSmsChat(String number) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      final ok = await launchUrl(
+        Uri.parse('sms:$number'),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!ok && mounted) {
+        messenger?.showSnackBar(
+          const SnackBar(content: Text('No messaging app found on this phone.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger?.showSnackBar(
+          SnackBar(content: Text('Could not open messages: $e')),
+        );
+      }
+    }
   }
 
   static String _formatWhen(DateTime dt) {

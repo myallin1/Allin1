@@ -42,6 +42,13 @@ class ChittiAccessibilityBridge {
   /// instance progresses through speaking — see [speakOnCallStream].
   void Function(String event)? onCallVoiceEvent;
 
+  /// NEW (Sep 3 2026 — Nizam: "call atten pannitu line cut anathum 3
+  /// popup shortcuts... messege, redial to same person, whatsapp
+  /// button"). Fires with the number as soon as a call ends, so the
+  /// app can offer the three follow-up actions without the admin
+  /// having to find the number again in Recents.
+  void Function(String number)? onCallEndedWithNumber;
+
   void initialize() {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'onVoiceCommand') {
@@ -84,6 +91,10 @@ class ChittiAccessibilityBridge {
           await ChittiCallScreeningService.instance.startScreening(number ?? '');
         } else if (event == 'ended') {
           ChittiCallScreeningService.instance.stopScreening(recordingPath: recordingPath);
+          final endedNumber = (number ?? '').trim();
+          if (endedNumber.isNotEmpty) {
+            onCallEndedWithNumber?.call(endedNumber);
+          }
         } else if (event == 'ringing') {
           onIncomingCallRinging?.call(number ?? '');
         }
