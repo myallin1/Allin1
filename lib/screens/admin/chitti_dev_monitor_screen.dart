@@ -26,6 +26,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/chitti/chitti_dev_monitor_service.dart';
 import '../../services/chitti/chitti_dev_task_service.dart';
+import 'github_embedded_screen.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _card = Color(0xFF141420);
@@ -71,6 +72,21 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  Future<void> _openInApp(BuildContext context, String url) async {
+    if (url.isEmpty) return;
+    if (url.toLowerCase().endsWith('.apk')) {
+      final uri = Uri.tryParse(url);
+      if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+      return;
+    }
+    if (!context.mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => GitHubEmbeddedScreen(url: url),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final snap = _snapshot;
@@ -85,6 +101,13 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
           style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 16),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.open_in_new_rounded, color: _text),
+            tooltip: 'Open GitHub in-app',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const GitHubEmbeddedScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: _text),
             tooltip: 'Refresh',
@@ -281,7 +304,7 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
                 : (_muted, Icons.remove_circle_outline_rounded, run.conclusion ?? 'Done');
 
     return _rowCard(
-      onTap: () => _open(run.url),
+      onTap: () => _openInApp(context, run.url),
       leading: Icon(icon, color: color, size: 17),
       title: run.name,
       subtitleWidgets: [
@@ -297,7 +320,7 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
   Widget _issueTile(DevTaskIssue issue) {
     final isOpen = issue.state == 'open';
     return _rowCard(
-      onTap: () => _open(issue.url),
+      onTap: () => _openInApp(context, issue.url),
       leading: Icon(
         isOpen ? Icons.radio_button_unchecked_rounded : Icons.check_circle_outline_rounded,
         color: isOpen ? _amber : _green,
