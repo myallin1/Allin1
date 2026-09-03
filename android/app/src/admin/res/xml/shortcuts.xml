@@ -11,9 +11,20 @@
         android:icon="@mipmap/ic_launcher"
         android:shortcutShortLabel="@string/shortcut_dialer_short"
         android:shortcutLongLabel="@string/shortcut_dialer_long">
+        <!-- FIX (Sep 3 2026 — Nizam: "shortcut ah admin app kulla iruka
+             dialer section mattum open panna mudila"). targetPackage was
+             com.njtech.allin1, which is the CUSTOMER flavor's
+             applicationId (see android/app/build.gradle.kts:78). The
+             admin flavor ships as com.njtech.admininallin1:89, so the
+             shortcut pointed at a package this app isn't, and Android
+             silently refused to launch it. targetClass stays on the
+             namespace package (com.njtech.allin1) — that's the class's
+             real package name, which is independent of applicationId.
+             Hardcoding the admin id is safe here: this file lives in the
+             admin-only source set (src/admin/res). -->
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetPackage="com.njtech.allin1"
+            android:targetPackage="com.njtech.admininallin1"
             android:targetClass="com.njtech.allin1.AdminDialerShortcutActivity" />
     </shortcut>
 </shortcuts>
