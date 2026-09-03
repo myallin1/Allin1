@@ -355,6 +355,32 @@ jobs:
       - name: Create placeholder .env for asset bundling
         run: touch .env
 
+      # FIX (Sep 3 2026): this job's first-ever real run (after the
+      # .env fix above got it past asset bundling) failed at
+      # packageAdminRelease with "SigningConfig 'release' is missing
+      # required property 'storeFile'" -- android/app/build.gradle.kts
+      # reads real signing credentials from android/key.properties,
+      # which is gitignored and never present on a fresh checkout.
+      # This is an internal sideload-only test build (not a Play Store
+      # upload -- Deploy to Stores is a separate, currently-skipped
+      # job), so a throwaway self-signed debug keystore generated at
+      # build time is enough to satisfy the release signingConfig --
+      # no real signing secret needs to exist for this job to work.
+      - name: Generate throwaway keystore for the test build signing config
+        run: |
+          keytool -genkeypair -v \
+            -keystore android/app/test-release.keystore \
+            -alias admintest \
+            -keyalg RSA -keysize 2048 -validity 3650 \
+            -storepass admintest123 -keypass admintest123 \
+            -dname "CN=Allin1 Admin Test, OU=NJ Tech, O=NJ Tech, L=Erode, ST=Tamil Nadu, C=IN"
+          cat > android/key.properties <<EOF
+          storePassword=admintest123
+          keyPassword=admintest123
+          keyAlias=admintest
+          storeFile=test-release.keystore
+          EOF
+
       - name: Build admin flavor APK
         run: flutter build apk --release --flavor admin -t lib/main_admin.dart
 
