@@ -550,6 +550,32 @@ class MainActivity : FlutterActivity() {
                         result.success(false)
                     }
                 }
+                // NEW (Sep 2 2026 — incoming-call screen, see
+                // AdminIncomingCallScreen). Answer/decline a still-
+                // RINGING call, distinct from placeCall/hangUpCall
+                // above which act on an already-connected call.
+                "answerIncomingCall" -> {
+                    try {
+                        val serviceClass = Class.forName("com.njtech.allin1.PhoneCallService")
+                        val method = serviceClass.getMethod("manualAnswerCall", android.content.Context::class.java)
+                        val instance = try { serviceClass.getField("INSTANCE").get(null) } catch (e: Exception) { null }
+                        method.invoke(instance, this)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                }
+                "declineIncomingCall" -> {
+                    try {
+                        val serviceClass = Class.forName("com.njtech.allin1.PhoneCallService")
+                        val method = serviceClass.getMethod("declineRingingCall")
+                        val instance = try { serviceClass.getField("INSTANCE").get(null) } catch (e: Exception) { null }
+                        method.invoke(instance)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                }
                 "toggleSpeaker" -> {
                     try {
                         val serviceClass = Class.forName("com.njtech.allin1.PhoneCallService")

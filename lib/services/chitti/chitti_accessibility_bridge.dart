@@ -30,6 +30,13 @@ class ChittiAccessibilityBridge {
   /// admin taps the static shortcut on the app icon.
   void Function()? onOpenDialerScreen;
 
+  /// NEW (Sep 2 2026 — incoming-call screen, Nizam: "incoming call
+  /// vantha attend panna screen ila"). Fires with the caller's number
+  /// as soon as a call starts ringing — both live (already running)
+  /// and via the cold-start pull above (app was woken up by the call
+  /// itself). See AdminIncomingCallScreen.
+  void Function(String number)? onIncomingCallRinging;
+
   /// NEW (Sep 1 2026 — native call-voice TTS): fires with "START",
   /// "DONE", or "ERROR..." as ChittiCallVoice's native TextToSpeech
   /// instance progresses through speaking — see [speakOnCallStream].
@@ -77,6 +84,8 @@ class ChittiAccessibilityBridge {
           await ChittiCallScreeningService.instance.startScreening(number ?? '');
         } else if (event == 'ended') {
           ChittiCallScreeningService.instance.stopScreening(recordingPath: recordingPath);
+        } else if (event == 'ringing') {
+          onIncomingCallRinging?.call(number ?? '');
         }
       }
       return null;
@@ -98,6 +107,8 @@ class ChittiAccessibilityBridge {
         );
         if (event == 'connected' && number != null) {
           await ChittiCallScreeningService.instance.startScreening(number);
+        } else if (event == 'ringing' && number != null) {
+          onIncomingCallRinging?.call(number);
         }
       } catch (_) {}
     });
@@ -318,6 +329,27 @@ class ChittiAccessibilityBridge {
     try {
       await _channel.invokeMethod<void>('hangUpCall');
     } catch (_) {}
+  }
+
+  /// Answers a still-RINGING call as the admin personally — distinct
+  /// from Chitti's own auto-answer, so Chitti does not also greet the
+  /// caller once this succeeds. See AdminIncomingCallScreen.
+  Future<bool> answerIncomingCall() async {
+    try {
+      final res = await _channel.invokeMethod<bool>('answerIncomingCall');
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> declineIncomingCall() async {
+    try {
+      final res = await _channel.invokeMethod<bool>('declineIncomingCall');
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Starts or stops call recording mid-call. Returns whether recording
