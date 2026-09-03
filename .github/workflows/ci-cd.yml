@@ -347,8 +347,34 @@ jobs:
       # same as omitting the key, and this action's own docs treat
       # "no channelId" (PR event) vs "channelId: live" (push) as the
       # two distinct, supported modes.
+      # FIX (Sep 3 2026): the two deploy steps below used to test
+      # `secrets.FIREBASE_SERVICE_ACCOUNT != ''` INSIDE their `if:`.
+      # The secrets context is not available in an if: expression, and
+      # using it there makes GitHub reject the ENTIRE workflow file --
+      # every run since then showed 0 jobs and the workflow's
+      # registered name fell back to its file path
+      # (".github/workflows/ci-cd.yml" instead of "CI/CD Pipeline"),
+      # which is the same signature this file already hit once before
+      # (see the notify-admin-build step's comment further down). Net
+      # effect: no CI ran at all after PR #28 merged, so none of the
+      # merged work was ever built.
+      #
+      # The presence check now happens in a step, where the secrets
+      # context IS allowed, and the deploy steps gate on its output.
+      - name: Check whether the Firebase secret is configured
+        id: fb_secret
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "FIREBASE_SERVICE_ACCOUNT is not set — skipping the Firebase deploy steps."
+          fi
+
       - name: Deploy preview channel (pull request)
-        if: ${{ github.event_name == 'pull_request' && secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        if: github.event_name == 'pull_request' && steps.fb_secret.outputs.present == 'true'
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
@@ -357,7 +383,7 @@ jobs:
           target: customer
 
       - name: Deploy live (push to main)
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.fb_secret.outputs.present == 'true'
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
