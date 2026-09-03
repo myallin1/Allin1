@@ -202,12 +202,26 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     return null;
   }
 
+  // FIX (issue #5 audit): this contains-chain fell through to 'bike' for
+  // a hero whose vehicle type is 'parcel', 'mini_truck', 'lorry', or
+  // 'emergency_manpower' — none of those substrings matched 'auto' or
+  // 'car'/'cab'/'truck'. Plain 'truck' also used to route to 'car',
+  // which would mis-tag a real mini_truck/lorry hero too. Now matches
+  // the 7 canonical category keys from AGENTS.md Section 3.
   String _normalizeHeroVehicleType(String? value) {
     final normalized = value?.trim().toLowerCase() ?? '';
     if (normalized.contains('auto')) return 'auto';
-    if (normalized.contains('car') ||
-        normalized.contains('cab') ||
-        normalized.contains('truck')) {
+    if (normalized.contains('emergency') || normalized.contains('manpower')) {
+      return 'emergency_manpower';
+    }
+    if (normalized.contains('parcel')) return 'parcel';
+    if (normalized.contains('lorry')) return 'lorry';
+    if (normalized.contains('mini_truck') ||
+        normalized.contains('mini-truck') ||
+        normalized == 'truck') {
+      return 'mini_truck';
+    }
+    if (normalized.contains('car') || normalized.contains('cab')) {
       return 'car';
     }
     return 'bike';
