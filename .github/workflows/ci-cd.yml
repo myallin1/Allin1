@@ -511,16 +511,39 @@ jobs:
             echo "Also add ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD."
             exit 1
           fi
-          echo "$KEYSTORE_B64" | base64 -d > android/app/admin-release.jks
+          # FIX (Sep 4 2026): the first run with a real secret failed with
+          # "base64: invalid input". The secret was set from PowerShell via
+          # `$b64 | gh secret set ...`, and PowerShell appends CRLF when it
+          # pipes into a native command, so the stored value carries
+          # characters base64 rejects. Rather than asking for it to be
+          # re-entered by hand and hitting the same trap next time, keep
+          # ONLY the characters base64 uses and drop everything else. A
+          # whitelist survives whatever a shell adds next time, and it
+          # cannot corrupt real key bytes since none of them can fall
+          # outside that set to begin with.
+          printf '%s' "$KEYSTORE_B64" | tr -cd 'A-Za-z0-9+/=' | base64 -d > android/app/admin-release.jks
+          if [ ! -s android/app/admin-release.jks ]; then
+            echo "::error::The keystore decoded to an empty file."
+            echo "ANDROID_KEYSTORE_BASE64 is set but is not valid base64."
+            echo "Re-create it with:  base64 -w0 admin-release.jks"
+            exit 1
+          fi
+          # Same reason, for the text secrets: a password carrying an
+          # invisible trailing CR is simply the wrong password, and that
+          # would surface much later during signing with a far less
+          # obvious message than "base64: invalid input".
+          STORE_PW=$(printf '%s' "$KEYSTORE_PASSWORD" | tr -d '[:space:]')
+          KEY_PW=$(printf '%s' "$KEY_PASSWORD" | tr -d '[:space:]')
+          ALIAS=$(printf '%s' "$KEY_ALIAS" | tr -d '[:space:]')
           cat > android/key.properties <<EOF
-          storePassword=$KEYSTORE_PASSWORD
-          keyPassword=$KEY_PASSWORD
-          keyAlias=$KEY_ALIAS
+          storePassword=$STORE_PW
+          keyPassword=$KEY_PW
+          keyAlias=$ALIAS
           storeFile=admin-release.jks
           EOF
           echo "Signing key restored. SHA-1 of the key this build will use:"
           keytool -list -v -keystore android/app/admin-release.jks \
-            -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" 2>/dev/null \
+            -storepass "$STORE_PW" -alias "$ALIAS" 2>/dev/null \
             | grep -E "SHA1:" || true
 
       # NEW (Sep 4 2026 — Nizam: "ovvoru pr merge pannunana app la athula
