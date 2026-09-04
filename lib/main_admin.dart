@@ -2,6 +2,7 @@
 // Allin1 — ADMIN Panel Entry Point
 // HIDDEN — Not for public!
 
+import 'package:app_links/app_links.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -19,6 +20,7 @@ import 'app_navigator.dart';
 import 'config/app_variant.dart';
 import 'config/web_push_config.dart';
 import 'firebase_options.dart';
+import 'screens/admin/admin_web_tabs_screen.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 import 'screens/admin/admin_dialer_screen.dart';
 import 'screens/admin/admin_incoming_call_screen.dart';
@@ -167,6 +169,39 @@ const String _kSplashVideoSeenEverKey = 'admin_splash_video_seen_ever_v1';
 // app hangs on this screen forever — hence the StatefulWidget + a
 // post-frame callback in initState (fires once per mount) rather than
 // calling it from build(), which can run many times.
+/// Routes an incoming github.com VIEW intent into the admin's own
+/// browser segment.
+///
+/// Both cases matter and missing either makes the feature look broken
+/// half the time: getInitialLink() is the link that COLD-STARTED the
+/// app (already waiting by the time Dart boots), uriLinkStream is one
+/// that arrives while it is already running.
+///
+/// Wrapped defensively throughout: a deep link that cannot be handled
+/// must never block or crash startup.
+Future<void> _listenForGitHubLinks() async {
+  Future<void> handle(Uri? uri) async {
+    if (uri == null) return;
+    final host = uri.host;
+    // The manifest filter is already scoped to github.com, but an
+    // intent can be sent by anything on the device — so re-check here
+    // rather than loading whatever URL an arbitrary app hands us.
+    if (host != 'github.com' && !host.endsWith('.github.com')) return;
+    await openInAdminBrowser(uri.toString());
+  }
+
+  try {
+    final links = AppLinks();
+    await handle(await links.getInitialLink());
+    links.uriLinkStream.listen(
+      (uri) => unawaited(handle(uri)),
+      onError: (Object e) => debugPrint('[AdminLinks] stream error: $e'),
+    );
+  } catch (e) {
+    debugPrint('[AdminLinks] init failed: $e');
+  }
+}
+
 class _BootLoadingApp extends StatefulWidget {
   const _BootLoadingApp({required this.onVideoFinished});
 
@@ -450,6 +485,15 @@ void main() {
       // to find out. Uses the SAME foreground-alert path as every other
       // admin notification above/below — no new UI needed.
       unawaited(FirebaseMessaging.instance.subscribeToTopic('chitti_dev_builds'));
+      // NEW (Sep 5 2026 — Nizam: a GitHub password-reset link tapped in
+      // Gmail offered Chrome and the system browser, not this app.)
+      //
+      // The manifest now puts the admin app in that chooser for
+      // github.com links; this is the Dart half that decides what to do
+      // with one when it arrives. It goes to the app's own browser
+      // segment, which already holds the GitHub session — so a reset
+      // finishes in the same place the rest of the work is happening.
+      unawaited(_listenForGitHubLinks());
       // Foreground messages are NOT auto-displayed by Android/FCM (only
       // background/killed states get that for free from the
       // `notification` block) — this is the foreground-only path.

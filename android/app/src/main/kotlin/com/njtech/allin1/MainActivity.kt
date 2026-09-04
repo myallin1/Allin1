@@ -11,6 +11,24 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val minimizeChannel = "com.njtech.allin1/minimize"
     private val accessibilityChannel = "com.njtech.allin1/accessibility"
+    private val webViewPowerChannel = "com.njtech.allin1/webview_power"
+
+    // NEW (Sep 5 2026 — Nizam: "app unwanted heating and mobile battery
+    // consumption ah maximum ah disturb pannatha architecture").
+    //
+    // The admin app keeps its GitHub and browser tabs alive so they stay
+    // where he left them. Unmounting the Flutter widget frees the
+    // compositing surface, but the PAGE keeps running behind it —
+    // GitHub polls for live updates, animations keep ticking — and
+    // webview_flutter exposes no pause API at all.
+    //
+    // WebView.pauseTimers() is documented as GLOBAL ("Pauses all layout,
+    // parsing, and JavaScript timers for all WebViews. This is a global
+    // requests, not restricted to this WebView"), so it does not matter
+    // which instance it is called on. This one throwaway instance is
+    // never attached to any view hierarchy; it exists only to reach that
+    // global switch without forking the plugin.
+    private var powerWebView: android.webkit.WebView? = null
 
     companion object {
         @JvmField
@@ -131,6 +149,32 @@ class MainActivity : FlutterActivity() {
                     result.success(true)
                 } else {
                     result.notImplemented()
+                }
+            }
+
+        // WebView power channel — see powerWebView above.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, webViewPowerChannel)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "pause", "resume" -> {
+                        try {
+                            val wv = powerWebView ?: android.webkit.WebView(this).also {
+                                powerWebView = it
+                            }
+                            if (call.method == "pause") {
+                                wv.pauseTimers()
+                            } else {
+                                wv.resumeTimers()
+                            }
+                            result.success(true)
+                        } catch (e: Exception) {
+                            // A device with no WebView provider (or one
+                            // mid-update) must not take the app down over a
+                            // battery optimisation.
+                            result.success(false)
+                        }
+                    }
+                    else -> result.notImplemented()
                 }
             }
 

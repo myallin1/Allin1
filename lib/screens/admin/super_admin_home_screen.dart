@@ -28,8 +28,11 @@ import 'admin_chitti_lens_screen.dart';
 import 'admin_cm_presentation_screen.dart';
 import 'admin_dialer_screen.dart';
 import 'admin_my_day_screen.dart';
+import 'admin_web_tabs_screen.dart';
 import 'clay_gallery_screen.dart';
 import 'github_embedded_screen.dart';
+import '../../services/admin_shell_nav.dart';
+import '../../services/admin_webview_power.dart';
 import 'chitti_conversations_screen.dart';
 import 'chitti_debug_logs_screen.dart';
 import 'chitti_dev_monitor_screen.dart';
@@ -162,6 +165,10 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
     _sosAlertsStream.listen((s) => DbUsageTracker.instance
         .recordRead(s.docs.length, 'admin_home_sos_alerts'));
 
+    AdminShellNav.registerTabSwitcher((index) {
+      if (mounted) _goToTab(index);
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ChittiOverlayService.instance.show(
@@ -173,6 +180,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
 
   @override
   void dispose() {
+    AdminShellNav.unregisterTabSwitcher();
     _alertSub?.cancel();
     _alertPlayer.dispose();
     super.dispose();
@@ -272,6 +280,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
       _tabIndex = index;
       _visitedTabs.add(index);
     });
+    unawaited(AdminWebViewPower.setActive(active: index == 4));
   }
 
   // FIX (per Nizam's request): App Settings / Check for Updates / Logout
@@ -306,12 +315,10 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
       Navigator.of(context).pop();
       return;
     }
-    // NEW (Sep 4 2026): on the GitHub tab, back walks GitHub's own
-    // history first. Falling straight through to the tab reset would
-    // throw the admin out of an issue thread to Overview on the first
-    // back press, which is not what back means inside a browser.
+    // NEW (Sep 5 2026): on the Web tab (GitHub/Browser), back walks the
+    // active segment's own history first.
     if (_tabIndex == 4) {
-      unawaited(GitHubEmbeddedScreen.goBackIfPossible().then((wentBack) {
+      unawaited(AdminWebTabsScreen.goBackIfPossible().then((wentBack) {
         if (!wentBack && mounted) _goToTab(0);
       }));
       return;
@@ -393,10 +400,9 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
             // leaving the screen entirely, and it now restores the last
             // page after the process is killed.
             //
-            // Same lazy-mount-once-visited rule as every tab above: an
-            // unvisited GitHub tab must not spin up a WebView (and a
-            // network load) on every admin app open.
-            if (_visitedTabs.contains(4)) const GitHubEmbeddedScreen(key: ValueKey('github_tab')) else const SizedBox.shrink(),
+            // NEW (Sep 5 2026 — Nizam: in-app browser beside GitHub).
+            // AdminWebTabsScreen houses GitHub and Browser side by side.
+            if (_visitedTabs.contains(4)) AdminWebTabsScreen(key: const ValueKey('github_tab'), visible: _tabIndex == 4) else const SizedBox.shrink(),
           ],
         ),
       ),
@@ -720,11 +726,8 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
       // _buildDevelopmentTab. No badge stream: nothing here is a queue
       // waiting on the admin, so a dot would be noise.
       (icon: '', label: 'Dev', isServicesAggregate: false, materialIcon: Icons.terminal_rounded),
-      // NEW (Sep 4 2026): GitHub, one tap from anywhere. No badge —
-      // PR/issue counts live inside the page itself, and a dot that
-      // needed an API poll to stay honest would cost a request on
-      // every app open for something he is about to look at anyway.
-      (icon: '', label: 'GitHub', isServicesAggregate: false, materialIcon: Icons.hub_rounded),
+      // NEW (Sep 5 2026): Web (GitHub + Browser), one tap from anywhere.
+      (icon: '', label: 'Web', isServicesAggregate: false, materialIcon: Icons.language_rounded),
     ];
     return DecoratedBox(
       decoration: BoxDecoration(
