@@ -575,45 +575,54 @@ jobs:
       - name: Build admin flavor APK
         run: flutter build apk --release --flavor admin -t lib/main_admin.dart
 
-      # NEW (Sep 4 2026 — Nizam: "ithukapram build pandra app la number
-      # version mention pannu ... number paathave easily understand panni
-      # correct app download panna easya irukum"). The old name was
-      # allin1-admin-<sha>.apk, and a page of eight identical-looking hex
-      # names with no order to them is genuinely unreadable — he could
-      # not tell which build was today's. Leading with a zero-padded,
-      # monotonically increasing build number makes the newest one
-      # obvious at a glance AND sorts correctly in any file list.
+      - name: Build customer flavor APK
+        run: flutter build apk --release --flavor customer -t lib/main_customer.dart
+
+      - name: Build hero flavor APK
+        run: flutter build apk --release --flavor hero -t lib/main_hero.dart
+
+      - name: Build seller flavor APK
+        run: flutter build apk --release --flavor seller -t lib/main_seller.dart
+
+      # NEW (Sep 5 2026 — Nizam: "other 3 apps um verify pannitu git la build
+      # panni kudu nan download panni check pannikuren").
+      # Builds all 4 distinct app flavors with unique package IDs so Nizam
+      # can install Admin, Customer, Hero, and Seller simultaneously.
       - name: Rename with version + build number
         id: apk
         run: |
-          SRC="build/app/outputs/flutter-apk/app-admin-release.apk"
           SHORT_SHA="$(git rev-parse --short HEAD)"
           APP_VERSION="$(grep -m1 '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//' | tr -d '[:space:]')"
           BUILD_NO="$(printf '%04d' '${{ github.run_number }}')"
           DATE="$(date -u +%Y%m%d)"
-          DEST="build/app/outputs/flutter-apk/allin1-admin-b${BUILD_NO}-v${APP_VERSION}-${DATE}-${SHORT_SHA}.apk"
-          cp "$SRC" "$DEST"
-          echo "path=$DEST" >> "$GITHUB_OUTPUT"
+          
+          ADMIN_APK="build/app/outputs/flutter-apk/allin1-admin-b${BUILD_NO}-v${APP_VERSION}-${DATE}-${SHORT_SHA}.apk"
+          CUSTOMER_APK="build/app/outputs/flutter-apk/allin1-customer-b${BUILD_NO}-v${APP_VERSION}-${DATE}-${SHORT_SHA}.apk"
+          HERO_APK="build/app/outputs/flutter-apk/allin1-hero-b${BUILD_NO}-v${APP_VERSION}-${DATE}-${SHORT_SHA}.apk"
+          SELLER_APK="build/app/outputs/flutter-apk/allin1-seller-b${BUILD_NO}-v${APP_VERSION}-${DATE}-${SHORT_SHA}.apk"
+          
+          cp build/app/outputs/flutter-apk/app-admin-release.apk "$ADMIN_APK"
+          cp build/app/outputs/flutter-apk/app-customer-release.apk "$CUSTOMER_APK"
+          cp build/app/outputs/flutter-apk/app-hero-release.apk "$HERO_APK"
+          cp build/app/outputs/flutter-apk/app-seller-release.apk "$SELLER_APK"
+          
           echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
           echo "build_no=$BUILD_NO" >> "$GITHUB_OUTPUT"
           echo "app_version=$APP_VERSION" >> "$GITHUB_OUTPUT"
-          echo "Built: $(basename "$DEST")"
+          echo "Built all 4 flavors: Admin, Customer, Hero, Seller"
 
       - name: Publish rolling GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: latest-admin-test
-          # Leads with the build number so the release title itself says
-          # which asset is the current one — the release page lists
-          # assets in no useful order, and matching title to filename was
-          # the only way to tell.
           name: "Build ${{ steps.apk.outputs.build_no }} · v${{ steps.apk.outputs.app_version }} · ${{ steps.apk.outputs.short_sha }}"
           body_path: assets/release_notes/changelog.txt
-          files: ${{ steps.apk.outputs.path }}
+          files: |
+            build/app/outputs/flutter-apk/allin1-admin-*.apk
+            build/app/outputs/flutter-apk/allin1-customer-*.apk
+            build/app/outputs/flutter-apk/allin1-hero-*.apk
+            build/app/outputs/flutter-apk/allin1-seller-*.apk
           prerelease: true
-          # Overwrites the existing "latest-admin-test" release instead
-          # of failing because the tag already exists — this tag is
-          # meant to move.
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
