@@ -542,11 +542,11 @@ jobs:
           KEY_PW=$(printf '%s' "$KEY_PASSWORD" | tr -cd '[:print:]')
           ALIAS=$(printf '%s' "$KEY_ALIAS" | tr -cd '[:print:]')
           cat > android/key.properties <<EOF
-          storePassword=$STORE_PW
-          keyPassword=$KEY_PW
-          keyAlias=$ALIAS
-          storeFile=admin-release.jks
-          EOF
+storePassword=$STORE_PW
+keyPassword=$KEY_PW
+keyAlias=$ALIAS
+storeFile=admin-release.jks
+EOF
           echo "Signing key restored. SHA-1 of the key this build will use:"
           keytool -list -v -keystore android/app/admin-release.jks \
             -storepass "$STORE_PW" -alias "$ALIAS" 2>/dev/null \
@@ -789,12 +789,14 @@ jobs:
         if: steps.check.outputs.status == 'failed'
         with:
           script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '❌ CI/CD pipeline failed. Please check the workflow logs.'
-            })
+            if (context.issue && context.issue.number) {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: '❌ CI/CD pipeline failed. Please check the workflow logs.'
+              });
+            }
 
 # ================================================================
 # Workflow Status Badge
