@@ -284,7 +284,6 @@ jobs:
             build/ios/**/*.ipa
             build/web/**
             build/windows/**/*.exe
-            build/linux/**/*.AppImage
           retention-days: 30
 
   # ============================================================
