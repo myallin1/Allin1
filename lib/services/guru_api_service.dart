@@ -374,7 +374,6 @@ class GuruApiService {
         'model': textModelId,
         'system': _buildSystemPrompt(languageLabel),
         'messages': anthropicMessages,
-        'temperature': 0.55,
         'max_tokens': 600,
       };
     } else {
@@ -573,7 +572,6 @@ class GuruApiService {
           message: input,
           hasAttachedImage: hasAttachedImage,
         ),
-        'temperature': 0,
         'max_tokens': 300,
       };
     } else {
