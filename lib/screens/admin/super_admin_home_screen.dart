@@ -27,6 +27,7 @@ import 'admin_dashboard_screen.dart';
 import 'admin_chitti_lens_screen.dart';
 import 'admin_cm_presentation_screen.dart';
 import 'admin_dialer_screen.dart';
+import 'admin_my_day_screen.dart';
 import 'github_embedded_screen.dart';
 import 'chitti_conversations_screen.dart';
 import 'chitti_debug_logs_screen.dart';
@@ -625,6 +626,17 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
               // app kulla vachcharlam"). Admin-only on purpose: it
               // spends a billable Vision API call per capture and is
               // aimed at the boss's own meetings, not customers.
+              _ManageTile(
+                label: 'My Day',
+                subtitle: "What you said you'd do — Chitti follows up",
+                iconSvg: FluentEmojiFlat.spiral_calendar,
+                color: _purple,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const AdminMyDayScreen()),
+                ),
+              ),
+              const SizedBox(height: 10),
               _ManageTile(
                 label: 'Chitti Lens',
                 subtitle: 'Point the camera — Chitti looks it up and can greet them',
