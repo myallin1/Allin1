@@ -81,8 +81,8 @@ const List<String> _kDeepSeekModels = [
   'deepseek-v4-pro',
 ];
 const List<String> _kAnthropicModels = [
-  'claude-sonnet-5',
   'claude-opus-5',
+  'claude-sonnet-5',
   'claude-fable-5-1',
   'claude-haiku-4-5',
   'claude-3-7-sonnet-20250219',
