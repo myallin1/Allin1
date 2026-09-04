@@ -423,6 +423,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        # NEW (Sep 4 2026): full history, because the changelog step
+        # below diffs against the previous build's tag. With the default
+        # depth-1 checkout there is nothing to diff against.
+        with:
+          fetch-depth: 0
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -465,44 +470,128 @@ jobs:
       # job), so a throwaway self-signed debug keystore generated at
       # build time is enough to satisfy the release signingConfig --
       # no real signing secret needs to exist for this job to work.
-      - name: Generate throwaway keystore for the test build signing config
+      # CRITICAL FIX (Sep 4 2026 — Nizam: "app already phone la
+      # irunthatha new version upload pannumbothu update kuduththa
+      # conflict varuthu ... conflict kaatave kudathu").
+      #
+      # ROOT CAUSE, and it was this step. It used to run `keytool
+      # -genkeypair` on EVERY run, so every build was signed with a
+      # BRAND NEW key. Android refuses to install an update whose
+      # signature differs from the installed app
+      # (INSTALL_FAILED_UPDATE_INCOMPATIBLE, surfaced to the user as the
+      # useless "App not installed"). So every single update conflicted,
+      # and the only way through was uninstall — which wipes app data.
+      # That is not a UX problem to soften, it is a broken update path.
+      #
+      # The fix is one stable key reused by every build. It comes from
+      # the ANDROID_KEYSTORE_BASE64 secret so no key material is ever
+      # committed. If that secret is missing the job now FAILS LOUDLY
+      # rather than quietly falling back to a fresh throwaway key —
+      # silently shipping an uninstallable APK is worse than not
+      # shipping one, because the breakage only shows up on Nizam's
+      # phone minutes later.
+      - name: Restore the stable signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          keytool -genkeypair -v \
-            -keystore android/app/test-release.keystore \
-            -alias admintest \
-            -keyalg RSA -keysize 2048 -validity 3650 \
-            -storepass admintest123 -keypass admintest123 \
-            -dname "CN=Allin1 Admin Test, OU=NJ Tech, O=NJ Tech, L=Erode, ST=Tamil Nadu, C=IN"
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is not set."
+            echo "Every build would be signed with a different key, and Android"
+            echo "would reject the update on any phone that already has the app"
+            echo "installed (INSTALL_FAILED_UPDATE_INCOMPATIBLE)."
+            echo ""
+            echo "Create the key ONCE on a laptop and add it as a secret:"
+            echo '  keytool -genkeypair -v -keystore admin-release.jks \'
+            echo '    -alias admin -keyalg RSA -keysize 2048 -validity 36500 \'
+            echo '    -storepass <pw> -keypass <pw> -dname "CN=NJ Tech, O=NJ Tech, C=IN"'
+            echo '  base64 -w0 admin-release.jks    # paste as ANDROID_KEYSTORE_BASE64'
+            echo "Also add ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD."
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > android/app/admin-release.jks
           cat > android/key.properties <<EOF
-          storePassword=admintest123
-          keyPassword=admintest123
-          keyAlias=admintest
-          storeFile=test-release.keystore
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=admin-release.jks
           EOF
+          echo "Signing key restored. SHA-1 of the key this build will use:"
+          keytool -list -v -keystore android/app/admin-release.jks \
+            -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" 2>/dev/null \
+            | grep -E "SHA1:" || true
+
+      # NEW (Sep 4 2026 — Nizam: "ovvoru pr merge pannunana app la athula
+      # Yenna merge panni new update pannirukomnu admin app open
+      # pannumbothe ... pop kaatanum ... apo than version ah correcta
+      # understand panni pr merge la main la conrrecta agirukkanu
+      # theriyum").
+      #
+      # Generated here and COMPILED INTO the apk as an asset, rather
+      # than fetched from the GitHub API at runtime. The "what's new"
+      # popup has to work on a phone with no signal and no GitHub token,
+      # and a changelog that needs the network to explain an
+      # offline-capable app is the wrong shape. It is also the honest
+      # source: these are the actual commit subjects that landed since
+      # the previously published build, not a hand-written list that can
+      # drift from what really shipped.
+      - name: Generate changelog for this build
+        run: |
+          mkdir -p assets/release_notes
+          PREV="$(git rev-list -n 1 latest-admin-test 2>/dev/null || true)"
+          {
+            echo "build=${{ github.run_number }}"
+            echo "sha=$(git rev-parse --short HEAD)"
+            echo "date=$(date -u +%Y-%m-%d)"
+            echo "---"
+            if [ -n "$PREV" ] && git cat-file -e "$PREV" 2>/dev/null; then
+              git log --no-merges --pretty=format:'%s' "$PREV..HEAD" | head -25
+            else
+              git log --no-merges --pretty=format:'%s' -10
+            fi
+          } > assets/release_notes/changelog.txt
+          echo "--- changelog.txt ---"
+          cat assets/release_notes/changelog.txt
 
       - name: Build admin flavor APK
         run: flutter build apk --release --flavor admin -t lib/main_admin.dart
 
-      - name: Rename with commit info
+      # NEW (Sep 4 2026 — Nizam: "ithukapram build pandra app la number
+      # version mention pannu ... number paathave easily understand panni
+      # correct app download panna easya irukum"). The old name was
+      # allin1-admin-<sha>.apk, and a page of eight identical-looking hex
+      # names with no order to them is genuinely unreadable — he could
+      # not tell which build was today's. Leading with a zero-padded,
+      # monotonically increasing build number makes the newest one
+      # obvious at a glance AND sorts correctly in any file list.
+      - name: Rename with version + build number
         id: apk
         run: |
           SRC="build/app/outputs/flutter-apk/app-admin-release.apk"
           SHORT_SHA="$(git rev-parse --short HEAD)"
-          DEST="build/app/outputs/flutter-apk/allin1-admin-${SHORT_SHA}.apk"
+          APP_VERSION="$(grep -m1 '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//' | tr -d '[:space:]')"
+          BUILD_NO="$(printf '%04d' '${{ github.run_number }}')"
+          DATE="$(date -u +%Y%m%d)"
+          DEST="build/app/outputs/flutter-apk/allin1-admin-b${BUILD_NO}-v${APP_VERSION}-${DATE}-${SHORT_SHA}.apk"
           cp "$SRC" "$DEST"
           echo "path=$DEST" >> "$GITHUB_OUTPUT"
           echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "build_no=$BUILD_NO" >> "$GITHUB_OUTPUT"
+          echo "app_version=$APP_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Built: $(basename "$DEST")"
 
       - name: Publish rolling GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: latest-admin-test
-          name: "Admin test build ${{ steps.apk.outputs.short_sha }}"
-          body: |
-            Automatically built from commit ${{ github.sha }}.
-            This tag always points at the newest admin build — install
-            over the previous one, no uninstall needed unless the
-            signing key changed.
+          # Leads with the build number so the release title itself says
+          # which asset is the current one — the release page lists
+          # assets in no useful order, and matching title to filename was
+          # the only way to tell.
+          name: "Build ${{ steps.apk.outputs.build_no }} · v${{ steps.apk.outputs.app_version }} · ${{ steps.apk.outputs.short_sha }}"
+          body_path: assets/release_notes/changelog.txt
           files: ${{ steps.apk.outputs.path }}
           prerelease: true
           # Overwrites the existing "latest-admin-test" release instead

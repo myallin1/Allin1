@@ -101,6 +101,55 @@ class AppUpdateChecker {
     }
   }
 
+  /// Downloads an APK from an EXPLICIT url and hands it to Android's
+  /// installer — the same path as [downloadAndInstall], but for a
+  /// specific build rather than "whatever is newest for this variant".
+  ///
+  /// NEW (Sep 4 2026 — Nizam: "admin app vittu veliya pogama admin app
+  /// laye embedded ah open aganum apo admin download panni angiruthu
+  /// update panniklam and again pannuna update la problema iruntha
+  /// again old version ku switch pannikuramari irukanum").
+  ///
+  /// The admin's App versions screen used to hand each build to the
+  /// browser, which meant leaving the app, finding the file, and
+  /// tapping through a download manager. This keeps all of it inside
+  /// the app. Android still shows its own install confirmation — that
+  /// is an OS security boundary and cannot be skipped by any app — but
+  /// nothing before it needs a browser.
+  ///
+  /// Works for rolling BACKWARD too: an older APK signed with the same
+  /// key installs over a newer one as an ordinary reinstall, so the
+  /// same method covers "update" and "go back".
+  Future<void> downloadAndInstallUrl({
+    required String apkUrl,
+    required String fileName,
+    void Function(double progress)? onProgress,
+  }) async {
+    if (_isDownloading) return;
+    _isDownloading = true;
+    try {
+      final dir = await getTemporaryDirectory();
+      final filePath = '${dir.path}/$fileName';
+
+      await _dio.download(
+        apkUrl,
+        filePath,
+        onReceiveProgress: (received, total) {
+          if (total > 0) onProgress?.call(received / total);
+        },
+        options: Options(
+          responseType: ResponseType.bytes,
+          followRedirects: true,
+          receiveTimeout: const Duration(minutes: 5),
+        ),
+      );
+
+      await OpenFilex.open(filePath);
+    } finally {
+      _isDownloading = false;
+    }
+  }
+
   List<int>? _parseVersion(String raw) {
     final cleaned = raw.trim().replaceFirst(RegExp('^[vV]'), '');
     if (cleaned.isEmpty) return null;

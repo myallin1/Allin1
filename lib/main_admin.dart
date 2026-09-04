@@ -22,6 +22,8 @@ import 'firebase_options.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 import 'screens/admin/admin_dialer_screen.dart';
 import 'screens/admin/admin_incoming_call_screen.dart';
+import 'screens/admin/admin_post_call_sheet.dart';
+import 'screens/admin/admin_whats_new_sheet.dart';
 import 'screens/admin/admin_in_call_screen.dart';
 import 'screens/admin/ads_management_screen.dart';
 import 'screens/admin/credentials_admin_screen.dart';
@@ -376,6 +378,30 @@ void main() {
           builder: (_) => AdminIncomingCallScreen(number: number),
         ));
       };
+      // NEW (Sep 3 2026 — Nizam: "call atten pannitu line cut anathum 3
+      // popup shortcuts....1.messege, 2.redial to same person,
+      // 3.whatsapp button"). Only fires when the admin app has a live
+      // navigator context (i.e. it is in the foreground) — see
+      // admin_post_call_sheet.dart's header for why this is not a
+      // system-wide overlay.
+      ChittiAccessibilityBridge.instance.onCallEndedWithNumber = (number) {
+        final ctx = navigatorKey.currentContext;
+        if (ctx == null) return;
+        showAdminPostCallSheet(ctx, number);
+      };
+      // NEW (Sep 4 2026 — Nizam: "admin app open pannumbothe antha app
+      // la Yenna feauture add pannirukonu admin ku pop kaatanum app main
+      // page open anathum"). Self-checking: shows nothing unless this
+      // build's changelog hasn't been acknowledged yet, so it is safe to
+      // fire on every start.
+      //
+      // Deferred to after the first frame — a modal sheet needs a
+      // mounted navigator, and this runs during startup wiring where
+      // there isn't one yet.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = navigatorKey.currentContext;
+        if (ctx != null) unawaited(maybeShowWhatsNew(ctx));
+      });
       if (!hasSeenSplashVideoEver) {
         await FirebaseMessaging.instance.requestPermission(
           alert: true,
