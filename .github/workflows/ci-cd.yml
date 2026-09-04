@@ -235,9 +235,6 @@ jobs:
           - platform: windows
             os: windows-latest
             target: exe
-          - platform: linux
-            os: ubuntu-latest
-            target: appimage
     
     steps:
       - name: Checkout code
@@ -274,9 +271,6 @@ jobs:
               ;;
             windows)
               flutter build windows --release
-              ;;
-            linux)
-              flutter build linux --release
               ;;
           esac
 

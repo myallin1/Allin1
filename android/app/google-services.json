@@ -15,6 +15,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "357526153693-399a57f0ikqf6pv614n6kvbbhp0kjp4f.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.njtech.admininallin1",
+            "certificate_hash": "ae43992557cdb097b9d1a9818098f43b471658de"
+          }
+        },
+        {
           "client_id": "357526153693-dq128d1rln2oll3nlt0t14s8a48sldpb.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
@@ -28,6 +36,14 @@
           "android_info": {
             "package_name": "com.njtech.admininallin1",
             "certificate_hash": "d52e6496c707ab671543bef27e3007bca879a667"
+          }
+        },
+        {
+          "client_id": "357526153693-rnblb8qc0pb5lju7f35ddkjsk9fck0qq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.njtech.admininallin1",
+            "certificate_hash": "3a0178d24a8b30afdb6ac7a689f00d14656c1809"
           }
         },
         {
@@ -59,6 +75,14 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "357526153693-8se8ke2j7kckkbe2oimvcakbu1e50065.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.njtech.allin1",
+            "certificate_hash": "3a0178d24a8b30afdb6ac7a689f00d14656c1809"
+          }
+        },
         {
           "client_id": "357526153693-946ci9ftc76nahg6f09kov4tt3dl49i6.apps.googleusercontent.com",
           "client_type": 1,
@@ -97,6 +121,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "357526153693-cm4tqtjv3aotfs4p0st0ushvt8hgkh8r.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.njtech.allin1.seller",
+            "certificate_hash": "3a0178d24a8b30afdb6ac7a689f00d14656c1809"
+          }
+        },
+        {
           "client_id": "357526153693-02b0behmsf3k720jujg3e8j82frj04q7.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -125,6 +157,14 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "357526153693-1klluv003l537g03gf4ijmdpeojk0ld2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.njtech.heroallin1",
+            "certificate_hash": "3a0178d24a8b30afdb6ac7a689f00d14656c1809"
+          }
+        },
         {
           "client_id": "357526153693-1vek5p1e97ditmcsih1gvg67m8spe0pd.apps.googleusercontent.com",
           "client_type": 1,
@@ -168,6 +208,14 @@
           "android_info": {
             "package_name": "com.njtech.myallin1",
             "certificate_hash": "d52e6496c707ab671543bef27e3007bca879a667"
+          }
+        },
+        {
+          "client_id": "357526153693-eff3j7bdf6nmq6gacp9fdqhef9vrrtif.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.njtech.myallin1",
+            "certificate_hash": "3a0178d24a8b30afdb6ac7a689f00d14656c1809"
           }
         },
         {
