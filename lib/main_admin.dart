@@ -376,6 +376,19 @@ void main() {
           builder: (_) => AdminIncomingCallScreen(number: number),
         ));
       };
+      // NEW (Sep 4 2026 — Nizam: "admin app open pannumbothe antha app
+      // la Yenna feauture add pannirukonu admin ku pop kaatanum app main
+      // page open anathum"). Self-checking: shows nothing unless this
+      // build's changelog hasn't been acknowledged yet, so it is safe to
+      // fire on every start.
+      //
+      // Deferred to after the first frame — a modal sheet needs a
+      // mounted navigator, and this runs during startup wiring where
+      // there isn't one yet.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = navigatorKey.currentContext;
+        if (ctx != null) unawaited(maybeShowWhatsNew(ctx));
+      });
       if (!hasSeenSplashVideoEver) {
         await FirebaseMessaging.instance.requestPermission(
           alert: true,
