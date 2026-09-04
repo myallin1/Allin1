@@ -38,6 +38,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'chitti_commitment_alarms.dart';
+
 enum CommitmentStatus { open, done, snoozed }
 
 /// Who put this on the list. Kept because "you told me to remind you"
@@ -239,15 +241,23 @@ class ChittiCommitmentService extends ChangeNotifier {
     );
     _items = [..._items, c];
     await _persist();
+    // Arm the background alarm as part of adding, not as a separate
+    // step a caller could forget. See ChittiCommitmentAlarms for why
+    // this is a local AlarmManager schedule and not a push.
+    await ChittiCommitmentAlarms.instance.schedule(c);
     return c;
   }
 
   Future<void> markDone(String id) async {
     await _update(id, (c) => c.copyWith(status: CommitmentStatus.done));
+    // A reminder for something already done is the fastest way to make
+    // someone mute the whole feature.
+    await ChittiCommitmentAlarms.instance.cancel(id);
   }
 
   Future<void> reopen(String id) async {
     await _update(id, (c) => c.copyWith(status: CommitmentStatus.open));
+    await _rearm(id);
   }
 
   /// Pushes a commitment out and RESETS its ask counter — snoozing is
@@ -262,12 +272,21 @@ class ChittiCommitmentService extends ChangeNotifier {
         timesAsked: 0,
       ),
     );
+    await _rearm(id);
   }
 
   Future<void> remove(String id) async {
     await load();
     _items = _items.where((c) => c.id != id).toList();
     await _persist();
+    await ChittiCommitmentAlarms.instance.cancel(id);
+  }
+
+  /// Re-points the alarm at whatever the commitment's due time is now.
+  Future<void> _rearm(String id) async {
+    final match = _items.where((c) => c.id == id);
+    if (match.isEmpty) return;
+    await ChittiCommitmentAlarms.instance.schedule(match.first);
   }
 
   Future<void> _update(
