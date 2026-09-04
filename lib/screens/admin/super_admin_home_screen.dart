@@ -26,6 +26,7 @@ import 'admin_cloudinary_dashboard_screen.dart';
 import 'admin_dashboard_screen.dart';
 import 'admin_chitti_lens_screen.dart';
 import 'admin_cm_presentation_screen.dart';
+import 'clay_gallery_screen.dart';
 import 'admin_dialer_screen.dart';
 import 'github_embedded_screen.dart';
 import 'chitti_conversations_screen.dart';
@@ -640,6 +641,22 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
               // NEW (Sep 4 2026): the CM/ministers briefing. Kept next
               // to Chitti Lens because they get used in the same room,
               // minutes apart.
+              // NEW (Sep 5 2026): the clay design system, visible.
+              // Switching theme here restyles the whole screen live,
+              // which is the only honest way to check that the icons
+              // actually follow the theme rather than just claiming to.
+              _ManageTile(
+                label: 'Clay icons',
+                subtitle: 'The 3D icon set — flip all 5 themes and watch it adapt',
+                iconSvg: FluentEmojiFlat.artist_palette,
+                color: _purple,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                      builder: (_) => const ClayGalleryScreen()),
+                ),
+              ),
+              const SizedBox(height: 10),
               _ManageTile(
                 label: 'CM Presentation',
                 subtitle: 'Chitti introduces the app, asks permission, then briefs',

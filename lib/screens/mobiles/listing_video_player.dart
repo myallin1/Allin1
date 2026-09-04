@@ -257,7 +257,7 @@ class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
               // rounded. Slightly different corners, a video that
               // actually appears.
               Container(
-                color: kPremiumWhite,
+                color: context.premium.card,
                 child: AspectRatio(
                   aspectRatio: 16 / 9,
                   child: Stack(
@@ -304,7 +304,7 @@ class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
                   bottom: Radius.circular(kRadiusLg),
                 ),
                 child: Container(
-                  color: kPremiumWhite,
+                  color: context.premium.card,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -320,7 +320,7 @@ class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
                                     widget.title,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: premiumTitle(size: 16),
+                                    style: premiumTitle(context, size: 16),
                                   ),
                                   if (widget.subtitle != null &&
                                       widget.subtitle!.trim().isNotEmpty) ...[
@@ -329,7 +329,7 @@ class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
                                       widget.subtitle!,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: premiumBody(size: 12),
+                                      style: premiumBody(context, size: 12),
                                     ),
                                   ],
                                 ],
@@ -353,11 +353,11 @@ class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
                               icon: Container(
                                 padding: const EdgeInsets.all(6),
                                 decoration: BoxDecoration(
-                                  color: kPremiumHairline,
+                                  color: context.premium.hairline,
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Icon(Icons.fullscreen_rounded,
-                                    size: 18, color: kPremiumInk),
+                                child: Icon(Icons.fullscreen_rounded,
+                                    size: 18, color: context.premium.ink),
                               ),
                             ),
                             const SizedBox(width: 4),
@@ -367,11 +367,11 @@ class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
                               icon: Container(
                                 padding: const EdgeInsets.all(6),
                                 decoration: BoxDecoration(
-                                  color: kPremiumHairline,
+                                  color: context.premium.hairline,
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Icon(Icons.close_rounded,
-                                    size: 18, color: kPremiumInk),
+                                child: Icon(Icons.close_rounded,
+                                    size: 18, color: context.premium.ink),
                               ),
                             ),
                           ],
@@ -405,13 +405,13 @@ class VideoThumbnail extends StatelessWidget {
       'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
       fit: fit,
       errorBuilder: (_, __, ___) => Container(
-        color: kPremiumHairline,
+        color: context.premium.hairline,
         alignment: Alignment.center,
-        child: const Icon(Icons.videocam_off_rounded,
-            color: kPremiumMuted, size: 30),
+        child: Icon(Icons.videocam_off_rounded,
+            color: context.premium.muted, size: 30),
       ),
       loadingBuilder: (context, child, progress) =>
-          progress == null ? child : Container(color: kPremiumHairline),
+          progress == null ? child : Container(color: context.premium.hairline),
     );
   }
 }
