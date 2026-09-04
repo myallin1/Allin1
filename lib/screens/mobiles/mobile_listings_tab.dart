@@ -585,9 +585,9 @@ class _MobileCard extends StatelessWidget {
                   // The podium plate.
                   Container(
                     decoration: BoxDecoration(
-                      color: kPremiumWhite,
+                      color: context.premium.card,
                       borderRadius: BorderRadius.circular(kRadiusMd),
-                      border: Border.all(color: kPremiumHairline),
+                      border: Border.all(color: context.premium.hairline),
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: MobileListingImage(listing: listing, cacheWidth: 300),
@@ -637,14 +637,14 @@ class _MobileCard extends StatelessWidget {
                   listing.displayName,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: premiumTitle(size: 13),
+                  style: premiumTitle(context, size: 13),
                 ),
                 const SizedBox(height: 7),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text('\u20B9${listing.price.toInt()}',
-                        style: premiumPrice(size: 16)),
+                        style: premiumPrice(context, size: 16)),
                     const SizedBox(width: 6),
                     if (listing.mrp != null && discount != null)
                       Expanded(
@@ -653,7 +653,7 @@ class _MobileCard extends StatelessWidget {
                           child: Text(
                             '\u20B9${listing.mrp!.toInt()}',
                             overflow: TextOverflow.ellipsis,
-                            style: premiumBody(size: 10.5).copyWith(
+                            style: premiumBody(context, size: 10.5).copyWith(
                               decoration: TextDecoration.lineThrough,
                             ),
                           ),
@@ -677,7 +677,7 @@ class _MobileCard extends StatelessWidget {
                           'EMI from ₹$emiPerMonth/mo',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: premiumBody(size: 10).copyWith(
+                          style: premiumBody(context, size: 10).copyWith(
                             color: kPremiumGreen,
                             fontWeight: FontWeight.w700,
                           ),
@@ -689,15 +689,15 @@ class _MobileCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    const Icon(Icons.storefront_rounded,
-                        color: kPremiumMuted, size: 11),
+                    Icon(Icons.storefront_rounded,
+                        color: context.premium.muted, size: 11),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
                         listing.sellerName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: premiumBody(size: 10),
+                        style: premiumBody(context, size: 10),
                       ),
                     ),
                   ],

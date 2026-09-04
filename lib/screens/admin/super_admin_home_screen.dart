@@ -28,6 +28,7 @@ import 'admin_chitti_lens_screen.dart';
 import 'admin_cm_presentation_screen.dart';
 import 'admin_dialer_screen.dart';
 import 'admin_my_day_screen.dart';
+import 'clay_gallery_screen.dart';
 import 'github_embedded_screen.dart';
 import 'chitti_conversations_screen.dart';
 import 'chitti_debug_logs_screen.dart';
@@ -634,6 +635,18 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute<void>(builder: (_) => const AdminMyDayScreen()),
+                ),
+              ),
+              const SizedBox(height: 10),
+              _ManageTile(
+                label: 'Clay icons gallery',
+                subtitle: 'All 3D clay icons in all 5 themes with live switcher',
+                iconSvg: FluentEmojiFlat.artist_palette,
+                color: _purple,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                      builder: (_) => const ClayGalleryScreen()),
                 ),
               ),
               const SizedBox(height: 10),
