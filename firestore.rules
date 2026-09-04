@@ -159,6 +159,16 @@ service cloud.firestore {
     }
 
     // ==============================================================
+    // ADMIN_CREDENTIALS / CREDENTIALS (Admin Secrets & Keys)
+    // ==============================================================
+    match /adminCredentials/{docId} {
+      allow read, write: if isAdminAny();
+    }
+    match /credentials/{docId} {
+      allow read, write: if isAdminAny();
+    }
+
+    // ==============================================================
     // AFFILIATE_CODES COLLECTION (Aug 12 2026 — Affiliate QR Generator)
     // ==============================================================
     // Admin creates/deletes codes (metadata: type/label/createdBy).

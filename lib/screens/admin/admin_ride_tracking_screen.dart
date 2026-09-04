@@ -169,6 +169,7 @@ class _AdminRideTrackingScreenState extends State<AdminRideTrackingScreen> {
             // ListView (not Center) so RefreshIndicator's pull gesture
             // still works on an empty result.
             return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               children: const [
                 SizedBox(height: 160),
                 Center(
@@ -181,6 +182,7 @@ class _AdminRideTrackingScreenState extends State<AdminRideTrackingScreen> {
             );
           }
           return ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(8),
             itemCount: docs.length,
             itemBuilder: (ctx, i) {

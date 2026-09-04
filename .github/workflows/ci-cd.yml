@@ -541,12 +541,7 @@ jobs:
           STORE_PW=$(printf '%s' "$KEYSTORE_PASSWORD" | tr -cd '[:print:]')
           KEY_PW=$(printf '%s' "$KEY_PASSWORD" | tr -cd '[:print:]')
           ALIAS=$(printf '%s' "$KEY_ALIAS" | tr -cd '[:print:]')
-          cat > android/key.properties <<EOF
-storePassword=$STORE_PW
-keyPassword=$KEY_PW
-keyAlias=$ALIAS
-storeFile=admin-release.jks
-EOF
+          printf "storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=admin-release.jks\n" "$STORE_PW" "$KEY_PW" "$ALIAS" > android/key.properties
           echo "Signing key restored. SHA-1 of the key this build will use:"
           keytool -list -v -keystore android/app/admin-release.jks \
             -storepass "$STORE_PW" -alias "$ALIAS" 2>/dev/null \

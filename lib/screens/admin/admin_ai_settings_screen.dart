@@ -43,6 +43,7 @@ const String _kGeminiKeyPrefsKey = 'personal_gemini_api_key';
 // DeepSeekApiService._savedApiKeyPrefsKey exactly; a mismatch here is
 // silent (the key saves, the agent just never sees it).
 const String _kDeepSeekKeyPrefsKey = 'personal_deepseek_api_key';
+const String _kAnthropicKeyPrefsKey = 'personal_anthropic_api_key';
 
 // NEW (Aug 12 2026 — Nizam: "api key podumbothu athuku keelaye model
 // select pannalam"): one model-selection dropdown per provider,
@@ -54,6 +55,7 @@ const String _kDeepSeekKeyPrefsKey = 'personal_deepseek_api_key';
 const String _kGroqModelPrefsKey = 'personal_groq_model';
 const String _kGeminiModelPrefsKey = 'personal_gemini_model';
 const String _kDeepSeekModelPrefsKey = 'personal_deepseek_model';
+const String _kAnthropicModelPrefsKey = 'personal_anthropic_model';
 
 // Hardcoded per the CTO's own approved answer ("Hardcoded known-models
 // list per provider") — avoids an extra network call just to populate
@@ -78,6 +80,11 @@ const List<String> _kDeepSeekModels = [
   'deepseek-v4-flash',
   'deepseek-v4-pro',
 ];
+const List<String> _kAnthropicModels = [
+  'claude-3-5-sonnet-20241022',
+  'claude-3-5-haiku-20241022',
+  'claude-3-7-sonnet-20250219',
+];
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF0D0D18);
@@ -101,6 +108,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
   final TextEditingController _groqCtrl = TextEditingController();
   final TextEditingController _geminiCtrl = TextEditingController();
   final TextEditingController _deepseekCtrl = TextEditingController();
+  final TextEditingController _anthropicCtrl = TextEditingController();
 
   bool _loading = true;
   bool _saving = false;
@@ -183,6 +191,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
   String _groqModel = _kGroqModels.first;
   String _geminiModel = _kGeminiModels.first;
   String _deepseekModel = _kDeepSeekModels.first;
+  String _anthropicModel = _kAnthropicModels.first;
 
   /// Which provider CHITTI uses (Aug 28 2026 — Nizam: "admin ketta atha
   /// chitti agent app kulla udane [use pannanum]").
@@ -268,11 +277,13 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
     _groqCtrl.text = prefs.getString(_kGroqKeyPrefsKey) ?? '';
     _geminiCtrl.text = prefs.getString(_kGeminiKeyPrefsKey) ?? '';
     _deepseekCtrl.text = prefs.getString(_kDeepSeekKeyPrefsKey) ?? '';
+    _anthropicCtrl.text = prefs.getString(_kAnthropicKeyPrefsKey) ?? '';
     _chittiModelId =
         prefs.getString(kChittiModelPrefsKey) ?? defaultChittiModel.id;
     final savedGroqModel = prefs.getString(_kGroqModelPrefsKey);
     final savedGeminiModel = prefs.getString(_kGeminiModelPrefsKey);
     final savedDeepSeekModel = prefs.getString(_kDeepSeekModelPrefsKey);
+    final savedAnthropicModel = prefs.getString(_kAnthropicModelPrefsKey);
     if (savedGroqModel != null && _kGroqModels.contains(savedGroqModel)) {
       _groqModel = savedGroqModel;
     }
@@ -281,6 +292,9 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
     }
     if (savedDeepSeekModel != null && _kDeepSeekModels.contains(savedDeepSeekModel)) {
       _deepseekModel = savedDeepSeekModel;
+    }
+    if (savedAnthropicModel != null && _kAnthropicModels.contains(savedAnthropicModel)) {
+      _anthropicModel = savedAnthropicModel;
     }
     // Admin's own language, same source LocalizationService itself
     // reads from - so the preview list matches whatever locale Chitti
@@ -320,6 +334,8 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
     _groqCtrl.dispose();
     _geminiCtrl.dispose();
     _deepseekCtrl.dispose();
+    _anthropicCtrl.dispose();
+    _voicePreviewTts.stop();
     super.dispose();
   }
 
@@ -330,6 +346,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
       final groq = _groqCtrl.text.trim();
       final gemini = _geminiCtrl.text.trim();
       final deepseek = _deepseekCtrl.text.trim();
+      final anthropic = _anthropicCtrl.text.trim();
       if (groq.isEmpty) {
         await prefs.remove(_kGroqKeyPrefsKey);
       } else {
@@ -346,12 +363,18 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
       } else {
         await prefs.setString(_kDeepSeekKeyPrefsKey, deepseek);
       }
+      if (anthropic.isEmpty) {
+        await prefs.remove(_kAnthropicKeyPrefsKey);
+      } else {
+        await prefs.setString(_kAnthropicKeyPrefsKey, anthropic);
+      }
       // Model choices always save, independent of whether a key is
       // present — picking a model ahead of pasting a key is fine, the
       // service just won't be called until a key exists.
       await prefs.setString(_kGroqModelPrefsKey, _groqModel);
       await prefs.setString(_kGeminiModelPrefsKey, _geminiModel);
       await prefs.setString(_kDeepSeekModelPrefsKey, _deepseekModel);
+      await prefs.setString(_kAnthropicModelPrefsKey, _anthropicModel);
       await prefs.setBool(_kCallAssistantEnabledKey, _callAssistantEnabled);
       await prefs.setBool(_kMorningBriefingEnabledKey, _morningBriefingEnabled);
       await prefs.setString(_kCallAnsweringModeKey, _callAnsweringMode);
@@ -1356,6 +1379,30 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                       options: _kDeepSeekModels,
                       accent: _purple,
                       onChanged: (v) => setState(() => _deepseekModel = v),
+                    ),
+                    const SizedBox(height: 18),
+                    Text('Claude (Anthropic) API Key — Mobile Autonomous Dev',
+                        style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13),),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _anthropicCtrl,
+                      obscureText: true,
+                      style: const TextStyle(color: _text),
+                      decoration: InputDecoration(
+                        hintText: 'Paste your Anthropic API key (sk-ant-...)',
+                        hintStyle: const TextStyle(color: _muted),
+                        prefixIcon: const Icon(Icons.psychology_rounded, color: Colors.deepOrangeAccent),
+                        filled: true,
+                        fillColor: _bg,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _modelDropdown(
+                      value: _anthropicModel,
+                      options: _kAnthropicModels,
+                      accent: Colors.deepOrangeAccent,
+                      onChanged: (v) => setState(() => _anthropicModel = v),
                     ),
                     const SizedBox(height: 22),
                     SizedBox(

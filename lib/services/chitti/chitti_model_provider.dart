@@ -136,6 +136,16 @@ const List<ChittiModel> kChittiModels = <ChittiModel>[
     prefsKeyName: 'personal_deepseek_api_key',
     modelPrefsKeyName: 'personal_deepseek_model',
   ),
+  ChittiModel(
+    id: 'anthropic',
+    label: 'Claude (Anthropic Code & Architect)',
+    endpoint: 'https://api.anthropic.com/v1/messages',
+    textModel: 'claude-3-5-sonnet-20241022',
+    visionModel: 'claude-3-5-sonnet-20241022',
+    envKeyName: 'ANTHROPIC_API_KEY',
+    prefsKeyName: 'personal_anthropic_api_key',
+    modelPrefsKeyName: 'personal_anthropic_model',
+  ),
 ];
 
 /// Where the admin's chosen model id is stored.

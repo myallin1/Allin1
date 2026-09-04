@@ -75,6 +75,12 @@ class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
   List<_QueuedQuestion> get _pending =>
       _queue.where((q) => !q.answered).toList();
 
+  @override
+  void dispose() {
+    ChittiAccessibilityBridge.instance.stopCallVoice();
+    super.dispose();
+  }
+
   Future<void> _speak(String text) async {
     if (_speaking) return;
     setState(() => _speaking = true);

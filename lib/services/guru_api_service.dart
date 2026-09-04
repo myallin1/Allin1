@@ -861,6 +861,7 @@ class GuruApiService {
         'groq' => _apiKey,
         'gemini' => _geminiKey,
         'deepseek' => _deepseekKey,
+        'anthropic' => _anthropicKey,
         _ => '',
       }
           .trim();
@@ -927,6 +928,10 @@ class GuruApiService {
   static const String _deepseekKey = String.fromEnvironment(
     'DEEPSEEK_API_KEY',
     defaultValue: 'DEEPSEEK_API_KEY_HERE',
+  );
+  static const String _anthropicKey = String.fromEnvironment(
+    'ANTHROPIC_API_KEY',
+    defaultValue: '',
   );
 
   void dispose() {
