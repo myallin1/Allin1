@@ -24,6 +24,8 @@ import '../../widgets/download_app_banner.dart';
 import 'admin_ai_settings_screen.dart';
 import 'admin_cloudinary_dashboard_screen.dart';
 import 'admin_dashboard_screen.dart';
+import 'admin_chitti_lens_screen.dart';
+import 'admin_cm_presentation_screen.dart';
 import 'admin_dialer_screen.dart';
 import 'chitti_conversations_screen.dart';
 import 'chitti_debug_logs_screen.dart';
@@ -588,6 +590,38 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute<void>(builder: (_) => const AdminDialerScreen()),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // NEW (Sep 4 2026 — Nizam: "chittiku camara on pannuna
+              // udanede athu net la google lens open aguramari namma
+              // app kulla vachcharlam"). Admin-only on purpose: it
+              // spends a billable Vision API call per capture and is
+              // aimed at the boss's own meetings, not customers.
+              _ManageTile(
+                label: 'Chitti Lens',
+                subtitle: 'Point the camera — Chitti looks it up and can greet them',
+                iconSvg: FluentEmojiFlat.camera,
+                color: _purple,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                      builder: (_) => const AdminChittiLensScreen()),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // NEW (Sep 4 2026): the CM/ministers briefing. Kept next
+              // to Chitti Lens because they get used in the same room,
+              // minutes apart.
+              _ManageTile(
+                label: 'CM Presentation',
+                subtitle: 'Chitti introduces the app, asks permission, then briefs',
+                iconSvg: FluentEmojiFlat.microphone,
+                color: _orange,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                      builder: (_) => const AdminCmPresentationScreen()),
                 ),
               ),
             ],
