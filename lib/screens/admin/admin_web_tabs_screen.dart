@@ -68,7 +68,14 @@ class _AdminWebTabsScreenState extends State<AdminWebTabsScreen>
   /// link, or him tapping the segment. Building it on first paint would
   /// create a second WebView (and its whole native process attachment)
   /// for a tab he may never open in this session.
-  bool _browserEverShown = false;
+  /// AUDIT FIX (Sep 5 2026): this was State-local and started false, so
+  /// openInAdminBrowser switching to the browser segment on a COLD START
+  /// — a github.com link tapped in Gmail — selected a segment whose
+  /// child had never been built, and showed a blank screen. The flag now
+  /// lives on the widget so a handoff that happens before this State
+  /// exists is still honoured.
+  bool get _browserEverShown =>
+      AdminWebBrowserScreen.wanted || _segment == 1;
 
   @override
   void initState() {
@@ -124,7 +131,7 @@ class _AdminWebTabsScreenState extends State<AdminWebTabsScreen>
     if (_segment == index) return;
     setState(() {
       AdminWebTabsScreen._segment = index;
-      if (index == 1) _browserEverShown = true;
+      if (index == 1) AdminWebBrowserScreen.wanted = true;
     });
   }
 
@@ -145,6 +152,12 @@ class _AdminWebTabsScreenState extends State<AdminWebTabsScreen>
                     child: GitHubEmbeddedScreen(
                       key: const ValueKey('github_tab'),
                       visible: widget.visible && _segment == 0,
+                      // AUDIT FIX: without this the GitHub screen built
+                      // its own Scaffold and AppBar INSIDE this one, so
+                      // the tab showed a second app bar under the
+                      // segment row — and a second PopScope competing
+                      // for the back press with the shell's.
+                      showAppBar: false,
                       // A link that leaves GitHub is loaded by the
                       // browser; without this it would load correctly
                       // on a segment he cannot see and look like a
@@ -227,5 +240,9 @@ class _AdminWebTabsScreenState extends State<AdminWebTabsScreen>
 /// tab rather than wherever the admin happened to be.
 Future<void> openInAdminBrowser(String url) async {
   AdminWebTabsScreen._segment = 1;
+  // Must be set before open(): on a cold start this runs before the tab
+  // has ever been built, and it is what tells the segment to build its
+  // child at all.
+  AdminWebBrowserScreen.wanted = true;
   await AdminWebBrowserScreen.open(url);
 }

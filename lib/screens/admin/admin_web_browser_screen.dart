@@ -108,21 +108,29 @@ class AdminWebBrowserScreen extends StatefulWidget {
   /// has no handle on this State, and the controller outlives any
   /// single instance anyway.
   static Future<void> open(String url) async {
-    _openRequests.add(url);
-    final c = _AdminWebBrowserScreenState._sharedController;
-    if (c != null) {
-      try {
-        await c.loadRequest(Uri.parse(url));
-      } catch (_) {
-        // A dead platform view is not a reason to lose the URL — the
-        // queued request below still picks it up on next build.
-      }
-    }
+    // AUDIT FIX (Sep 5 2026): the first version added the url to a queue
+    // AND loaded it immediately, then never removed it — so the next
+    // rebuild drained the same entry and navigated a second time, on top
+    // of wherever the admin had since browsed. One pending slot, cleared
+    // by whoever consumes it, is the whole fix.
+    _pendingUrl = url;
+    final live = _AdminWebBrowserScreenState._live;
+    if (live != null && live.mounted) await live._consumePending();
   }
 
-  /// Set by [open] before the browser has ever been built, so a link
-  /// handed over on a cold start is not dropped.
-  static final List<String> _openRequests = <String>[];
+  /// The one link waiting to be shown, if any.
+  ///
+  /// Survives the browser not existing yet: a github.com link tapped in
+  /// Gmail on a COLD START arrives long before this widget is built, and
+  /// dropping it would look exactly like the app ignoring the tap.
+  static String? _pendingUrl;
+
+  /// True once a link has been handed over or the segment tapped.
+  ///
+  /// AUDIT FIX: openInAdminBrowser used to switch to the browser segment
+  /// without this, and the segment only builds its child after a tap —
+  /// so a cold-start link landed on a blank screen.
+  static bool wanted = false;
 
   /// Steps the browser back if it has history — same contract as
   /// GitHubEmbeddedScreen.goBackIfPossible, for the parent's PopScope.
@@ -149,19 +157,49 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
   /// Survives this screen being popped or its tab being hidden. Dies
   /// with the process, which is what [_kLastUrl] is for.
   static WebViewController? _sharedController;
+
+  /// The mounted State, so a link handed over while the browser is
+  /// already on screen loads immediately instead of waiting for a
+  /// rebuild that may never come.
+  static _AdminWebBrowserScreenState? _live;
+
   static const String _kLastUrl = 'admin_browser_last_url';
 
   late final WebViewController _controller;
   final TextEditingController _urlField = TextEditingController();
 
+  /// AUDIT FIX (Sep 5 2026): _editingUrl was set on tap and cleared only
+  /// by submitting. Tap the address bar, change your mind, tap the page
+  /// — the flag stayed true and the bar never showed another URL again
+  /// for the life of the app. Focus is the signal, not the tap.
+  final FocusNode _urlFocus = FocusNode();
+
   bool _loading = true;
   bool _editingUrl = false;
+  bool _refreshing = false;
+
+  /// Where a drag started, and whether the page was scrolled to the top
+  /// when it did. Only an over-scroll from the very top means "refresh";
+  /// anywhere else it is ordinary page scrolling and must be left alone.
+  double? _pullStartY;
+  bool _pullFromTop = false;
   int _progress = 0;
   String _currentUrl = '';
 
   @override
   void initState() {
     super.initState();
+
+    _urlFocus.addListener(() {
+      if (_urlFocus.hasFocus) {
+        setState(() => _editingUrl = true);
+      } else {
+        setState(() {
+          _editingUrl = false;
+          _urlField.text = _pretty(_currentUrl);
+        });
+      }
+    });
 
     final existing = _sharedController;
     final isFresh = existing == null;
@@ -190,6 +228,7 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
             if (!mounted) return;
             setState(() {
               _loading = false;
+              _refreshing = false;
               _currentUrl = url;
               if (!_editingUrl) _urlField.text = _pretty(url);
             });
@@ -240,20 +279,60 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
       unawaited(_syncUrlFromController());
     }
 
-    _drainOpenRequests();
+    _live = this;
+    unawaited(_consumePending());
   }
 
   @override
   void didUpdateWidget(AdminWebBrowserScreen old) {
     super.didUpdateWidget(old);
-    if (widget.visible) _drainOpenRequests();
+    if (widget.visible) unawaited(_consumePending());
   }
 
-  void _drainOpenRequests() {
-    if (AdminWebBrowserScreen._openRequests.isEmpty) return;
-    final url = AdminWebBrowserScreen._openRequests.removeLast();
-    AdminWebBrowserScreen._openRequests.clear();
-    unawaited(_controller.loadRequest(Uri.parse(url)));
+  /// Loads the waiting link, if there is one, and clears it so it can
+  /// never be replayed by a later rebuild.
+  Future<void> _consumePending() async {
+    final url = AdminWebBrowserScreen._pendingUrl;
+    if (url == null) return;
+    AdminWebBrowserScreen._pendingUrl = null;
+    try {
+      await _controller.loadRequest(Uri.parse(url));
+    } catch (e) {
+      debugPrint('[AdminBrowser] could not open handed-off link: $e');
+    }
+  }
+
+  void _onPointerDown(PointerDownEvent e) {
+    _pullStartY = e.position.dy;
+    _pullFromTop = false;
+    // Asked once per gesture rather than on every move: getScrollPosition
+    // is a platform-channel round trip, and one per frame during a drag
+    // is exactly the kind of cost this screen is supposed to avoid.
+    unawaited(() async {
+      try {
+        final pos = await _controller.getScrollPosition();
+        if (mounted) _pullFromTop = pos.dy <= 1;
+      } catch (_) {
+        _pullFromTop = false;
+      }
+    }());
+  }
+
+  void _onPointerMove(PointerMoveEvent e) {
+    final start = _pullStartY;
+    if (start == null || !_pullFromTop || _refreshing) return;
+    if (e.position.dy - start < 110) return;
+    _pullStartY = null;
+    setState(() => _refreshing = true);
+    unawaited(
+      _controller.reload().whenComplete(() {
+        // onPageFinished clears the bar; this is the belt for a load
+        // that errors out and never finishes.
+        Future<void>.delayed(const Duration(seconds: 3), () {
+          if (mounted && _refreshing) setState(() => _refreshing = false);
+        });
+      }),
+    );
   }
 
   Future<void> _syncUrlFromController() async {
@@ -271,6 +350,10 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
   }
 
   Future<void> _restoreOrLoad() async {
+    // AUDIT FIX: this reads prefs, so it finishes AFTER a synchronous
+    // handoff load and used to overwrite it with the remembered page —
+    // the handed-off link flashed up and then vanished.
+    if (AdminWebBrowserScreen._pendingUrl != null) return;
     var target = widget.initialUrl;
     if (target == null || target.trim().isEmpty) {
       try {
@@ -325,8 +408,7 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
   }
 
   Future<void> _go(String raw) async {
-    setState(() => _editingUrl = false);
-    FocusScope.of(context).unfocus();
+    _urlFocus.unfocus();
     await _controller.loadRequest(_resolveInput(raw));
   }
 
@@ -344,6 +426,8 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
 
   @override
   void dispose() {
+    if (_live == this) _live = null;
+    _urlFocus.dispose();
     _urlField.dispose();
     // Deliberately NOT clearing _sharedController: the whole point is
     // that the page survives leaving the tab.
@@ -367,17 +451,41 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
           // means the page is still loaded and still logged in, and
           // costs nothing at all while another tab is on screen.
           child: widget.visible
-              ? RefreshIndicator(
-                  onRefresh: () async => _controller.reload(),
-                  // A WebView eats vertical drags, so the pull has to
-                  // come from a scrollable the indicator can see. This
-                  // one exists purely to host the gesture.
-                  child: Stack(
-                    children: [
-                      ListView(physics: const AlwaysScrollableScrollPhysics()),
-                      WebViewWidget(controller: _controller),
-                    ],
-                  ),
+              ? Stack(
+                  children: [
+                    // AUDIT FIX (Sep 5 2026): pull-to-refresh was wired
+                    // as a RefreshIndicator over a throwaway ListView
+                    // sitting BEHIND the WebView. A widget behind a
+                    // platform view never receives a single pointer, so
+                    // the gesture was dead on arrival and the feature
+                    // silently did nothing.
+                    //
+                    // A Listener is the right tool precisely because it
+                    // does NOT enter the gesture arena — it observes raw
+                    // pointers without competing, so the page still
+                    // scrolls, zooms and taps exactly as before while
+                    // this watches for an over-scroll at the top.
+                    Listener(
+                      onPointerDown: _onPointerDown,
+                      onPointerMove: _onPointerMove,
+                      onPointerUp: (_) => _pullStartY = null,
+                      onPointerCancel: (_) => _pullStartY = null,
+                      child: WebViewWidget(controller: _controller),
+                    ),
+                    if (_refreshing)
+                      const Positioned(
+                        top: 10,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2.2),
+                          ),
+                        ),
+                      ),
+                  ],
                 )
               : const ColoredBox(color: _bg),
         ),
@@ -449,7 +557,7 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
                   Expanded(
                     child: TextField(
                       controller: _urlField,
-                      onTap: () => setState(() => _editingUrl = true),
+                      focusNode: _urlFocus,
                       onSubmitted: _go,
                       textInputAction: TextInputAction.go,
                       keyboardType: TextInputType.url,
@@ -468,12 +576,14 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
               ),
             ),
           ),
+          // AUDIT FIX: this offered a "Stop" that called reload() on
+          // both branches — pressing stop RESTARTED the load. There is
+          // no stopLoading anywhere in webview_flutter 4.x, so the
+          // honest fix is to not pretend: one reload button, always.
           IconButton(
-            icon: Icon(_loading ? Icons.close_rounded : Icons.refresh_rounded,
-                color: _muted, size: 20),
-            tooltip: _loading ? 'Stop' : 'Reload',
-            onPressed: () =>
-                _loading ? _controller.reload() : _controller.reload(),
+            icon: const Icon(Icons.refresh_rounded, color: _muted, size: 20),
+            tooltip: 'Reload',
+            onPressed: () => unawaited(_controller.reload()),
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert_rounded, color: _muted, size: 20),

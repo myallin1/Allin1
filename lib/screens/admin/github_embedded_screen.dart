@@ -51,8 +51,14 @@ class GitHubEmbeddedScreen extends StatefulWidget {
     this.url = 'https://github.com/myallin1/Allin1/pulls',
     this.title = 'GitHub',
     this.visible = true,
+    this.showAppBar = true,
     this.onHandOffToBrowser,
   });
+
+  /// False when embedded as a segment of a screen that already has its
+  /// own chrome. Without this the screen builds a second Scaffold, a
+  /// second AppBar and a second PopScope inside the first.
+  final bool showAppBar;
 
   final String url;
   final String title;
@@ -274,6 +280,50 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final view = widget.visible
+        ? WebViewWidget(controller: _controller)
+        : const ColoredBox(color: _bg);
+
+    if (!widget.showAppBar) {
+      // Embedded: the parent owns the chrome and the back press. The
+      // AppBar's two actions still have to exist somewhere, so they move
+      // into a slim row — dropping them would have quietly removed
+      // reload and open-in-Chrome from the GitHub tab.
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.refresh_rounded,
+                      color: _text, size: 19),
+                  tooltip: 'Reload',
+                  onPressed: () => unawaited(_controller.reload()),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.open_in_browser_rounded,
+                      color: _text, size: 19),
+                  tooltip: 'Open in Chrome',
+                  onPressed: () async {
+                    final current = await _controller.currentUrl();
+                    if (current == null) return;
+                    await launchUrl(Uri.parse(current),
+                        mode: LaunchMode.externalApplication);
+                  },
+                ),
+              ],
+            ),
+          ),
+          if (_loading) const LinearProgressIndicator(minHeight: 2),
+          Expanded(child: view),
+        ],
+      );
+    }
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
