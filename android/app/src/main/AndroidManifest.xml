@@ -98,29 +98,6 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- NEW (Sep 5 2026 — Nizam: a GitHub password-reset link
-                 tapped in Gmail offered only Chrome and the system
-                 browser, because this app declared no https filter at
-                 all. With this it appears in that chooser and the reset
-                 finishes inside the admin app, in the same WebView that
-                 already holds the GitHub session.
-
-                 SCOPED TO github.com ON PURPOSE, and this is the whole
-                 design decision. A filter on https with no host would
-                 also work, and would put this app in the chooser for
-                 EVERY link he ever taps on his phone — a far worse
-                 problem than the one being fixed. Not autoVerify
-                 either: we do not own github.com, so App Links
-                 verification would fail and the filter would be
-                 ignored. A chooser entry is exactly what is wanted —
-                 it offers, it does not take over. -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="https" android:host="github.com"/>
-                <data android:scheme="https" android:host="*.github.com"/>
-            </intent-filter>
             <!-- Makes Allin1 appear in Android's share sheet for plain
                  text. A location shared from WhatsApp or Google Maps
                  arrives here as a text/plain message containing a maps
