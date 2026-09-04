@@ -35,10 +35,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
+
+import 'admin_web_browser_screen.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _text = Color(0xFFEEEEF5);
@@ -48,10 +50,24 @@ class GitHubEmbeddedScreen extends StatefulWidget {
     super.key,
     this.url = 'https://github.com/myallin1/Allin1/pulls',
     this.title = 'GitHub',
+    this.visible = true,
+    this.onHandOffToBrowser,
   });
 
   final String url;
   final String title;
+
+  /// False while another tab is on top. The controller — and so the
+  /// page, its session and its history — stays alive; only the platform
+  /// view is torn down and the page's timers paused. A mounted WebView
+  /// is composited every frame even when nothing can see it, which is
+  /// the single largest avoidable battery cost in a tabbed shell.
+  final bool visible;
+
+  /// Called when a link leaves GitHub and has been handed to the app's
+  /// browser tab, so the parent can switch to that tab. Without this
+  /// the page would load correctly somewhere he cannot see.
+  final VoidCallback? onHandOffToBrowser;
 
   /// Steps the shared WebView back one page if it has history.
   ///
@@ -170,13 +186,19 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
           onNavigationRequest: (request) {
             final host = Uri.tryParse(request.url)?.host ?? '';
             if (_isAllowedHost(host)) return NavigationDecision.navigate;
-            // A github.com login can hand off to a real IdP (Google/
-            // SSO) or a file download link — those are correctly a
-            // real browser/download manager's job, not this WebView's.
-            unawaited(
-              launchUrl(Uri.parse(request.url),
-                  mode: LaunchMode.externalApplication),
-            );
+            // CHANGED (Sep 5 2026 — Nizam: "password reset panna
+            // varumbothu password-ku vera browser open panna solluthu").
+            //
+            // This used to hand every off-GitHub host to an EXTERNAL
+            // browser. That was right when GitHub was the only web
+            // surface in the app -- an IdP redirect or a download
+            // genuinely belongs elsewhere -- but it meant the one flow
+            // that most needs to stay inside (a password reset, mid
+            // session) was guaranteed to leave. Now it moves to the
+            // app's own browser tab, which keeps him in the app and
+            // keeps the session he already has.
+            unawaited(AdminWebBrowserScreen.open(request.url));
+            widget.onHandOffToBrowser?.call();
             return NavigationDecision.prevent;
           },
         ),
@@ -293,7 +315,9 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
                 )
               : null,
         ),
-        body: WebViewWidget(controller: _controller),
+        body: widget.visible
+            ? WebViewWidget(controller: _controller)
+            : const ColoredBox(color: _bg),
       ),
     );
   }

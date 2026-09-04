@@ -27,7 +27,7 @@ import 'admin_dashboard_screen.dart';
 import 'admin_chitti_lens_screen.dart';
 import 'admin_cm_presentation_screen.dart';
 import 'admin_dialer_screen.dart';
-import 'github_embedded_screen.dart';
+import 'admin_web_tabs_screen.dart';
 import 'chitti_conversations_screen.dart';
 import 'chitti_debug_logs_screen.dart';
 import 'chitti_dev_monitor_screen.dart';
@@ -309,7 +309,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
     // throw the admin out of an issue thread to Overview on the first
     // back press, which is not what back means inside a browser.
     if (_tabIndex == 4) {
-      unawaited(GitHubEmbeddedScreen.goBackIfPossible().then((wentBack) {
+      unawaited(AdminWebTabsScreen.goBackIfPossible().then((wentBack) {
         if (!wentBack && mounted) _goToTab(0);
       }));
       return;
@@ -394,7 +394,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
             // Same lazy-mount-once-visited rule as every tab above: an
             // unvisited GitHub tab must not spin up a WebView (and a
             // network load) on every admin app open.
-            if (_visitedTabs.contains(4)) const GitHubEmbeddedScreen(key: ValueKey('github_tab')) else const SizedBox.shrink(),
+            if (_visitedTabs.contains(4)) AdminWebTabsScreen(key: const ValueKey('web_tab'), visible: _tabIndex == 4) else const SizedBox.shrink(),
           ],
         ),
       ),
