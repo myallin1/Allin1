@@ -81,9 +81,13 @@ const List<String> _kDeepSeekModels = [
   'deepseek-v4-pro',
 ];
 const List<String> _kAnthropicModels = [
+  'claude-sonnet-5',
+  'claude-opus-5',
+  'claude-fable-5-1',
+  'claude-haiku-4-5',
+  'claude-3-7-sonnet-20250219',
   'claude-3-5-sonnet-20241022',
   'claude-3-5-haiku-20241022',
-  'claude-3-7-sonnet-20250219',
 ];
 
 const Color _bg = Color(0xFF0A0A1A);
