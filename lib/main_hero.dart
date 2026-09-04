@@ -1091,7 +1091,7 @@ class _HeroSetupGateState extends State<_HeroSetupGate> {
                     }),
                   );
 
-                  final normalizedStatus = existingApprovalStatus!.toLowerCase();
+                  final normalizedStatus = existingApprovalStatus.toLowerCase();
                   if (normalizedStatus == 'approved') {
                     return _buildFadingChild(
                       'hero-dashboard',
