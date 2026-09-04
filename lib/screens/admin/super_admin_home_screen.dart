@@ -30,7 +30,6 @@ import 'admin_dialer_screen.dart';
 import 'admin_my_day_screen.dart';
 import 'admin_web_tabs_screen.dart';
 import 'clay_gallery_screen.dart';
-import 'github_embedded_screen.dart';
 import '../../services/admin_shell_nav.dart';
 import '../../services/admin_webview_power.dart';
 import 'chitti_conversations_screen.dart';
@@ -165,9 +164,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
     _sosAlertsStream.listen((s) => DbUsageTracker.instance
         .recordRead(s.docs.length, 'admin_home_sos_alerts'));
 
-    AdminShellNav.registerTabSwitcher((index) {
-      if (mounted) _goToTab(index);
-    });
+    AdminShellNav.register(_goToTab);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -180,7 +177,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
 
   @override
   void dispose() {
-    AdminShellNav.unregisterTabSwitcher();
+    AdminShellNav.unregister(_goToTab);
     _alertSub?.cancel();
     _alertPlayer.dispose();
     super.dispose();
