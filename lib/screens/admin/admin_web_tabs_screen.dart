@@ -26,6 +26,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../services/admin_shell_nav.dart';
 import '../../services/admin_webview_power.dart';
 import 'admin_web_browser_screen.dart';
 import 'github_embedded_screen.dart';
@@ -240,6 +241,12 @@ class _AdminWebTabsScreenState extends State<AdminWebTabsScreen>
 /// tab rather than wherever the admin happened to be.
 Future<void> openInAdminBrowser(String url) async {
   AdminWebTabsScreen._segment = 1;
+  // AUDIT FIX (second pass): switching the segment is not enough — the
+  // shell's bottom tab has to come forward too, or the link loads on a
+  // tab nobody is looking at. No-op when the shell is not up yet (cold
+  // start), which is already handled: the segment is a static, so the
+  // tab builds correctly whenever it is first shown.
+  AdminShellNav.openTab(AdminShellNav.webTabIndex);
   // Must be set before open(): on a cold start this runs before the tab
   // has ever been built, and it is what tells the segment to build its
   // child at all.

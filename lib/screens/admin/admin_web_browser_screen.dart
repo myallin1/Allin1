@@ -182,7 +182,16 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
   /// when it did. Only an over-scroll from the very top means "refresh";
   /// anywhere else it is ordinary page scrolling and must be left alone.
   double? _pullStartY;
-  bool _pullFromTop = false;
+
+  /// The finger that owns the current gesture, so a second one cannot
+  /// re-anchor it mid-drag.
+  int? _activePointer;
+
+  /// Latches once the threshold has been crossed, so the scroll-position
+  /// round trip happens at most once per gesture.
+  bool _pullChecked = false;
+
+  Timer? _refreshTimeout;
   int _progress = 0;
   String _currentUrl = '';
 
@@ -191,6 +200,10 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
     super.initState();
 
     _urlFocus.addListener(() {
+      // AUDIT FIX (second pass): disposing a FocusNode that still has
+      // focus notifies its listeners, so this fired during dispose and
+      // called setState on a dead State.
+      if (!mounted) return;
       if (_urlFocus.hasFocus) {
         setState(() => _editingUrl = true);
       } else {
@@ -229,6 +242,7 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
             setState(() {
               _loading = false;
               _refreshing = false;
+              _refreshTimeout?.cancel();
               _currentUrl = url;
               if (!_editingUrl) _urlField.text = _pretty(url);
             });
@@ -303,36 +317,59 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
   }
 
   void _onPointerDown(PointerDownEvent e) {
+    // AUDIT FIX (second pass): a second finger (pinch-zoom) used to
+    // overwrite the anchor, so zooming while moving down could fire a
+    // refresh. Only the first finger of a gesture anchors it.
+    if (_activePointer != null) return;
+    _activePointer = e.pointer;
     _pullStartY = e.position.dy;
-    _pullFromTop = false;
-    // Asked once per gesture rather than on every move: getScrollPosition
-    // is a platform-channel round trip, and one per frame during a drag
-    // is exactly the kind of cost this screen is supposed to avoid.
-    unawaited(() async {
-      try {
-        final pos = await _controller.getScrollPosition();
-        if (mounted) _pullFromTop = pos.dy <= 1;
-      } catch (_) {
-        _pullFromTop = false;
-      }
-    }());
+    _pullChecked = false;
+  }
+
+  void _endPull(PointerEvent e) {
+    if (_activePointer != e.pointer) return;
+    _activePointer = null;
+    _pullStartY = null;
   }
 
   void _onPointerMove(PointerMoveEvent e) {
+    if (_activePointer != e.pointer) return;
     final start = _pullStartY;
-    if (start == null || !_pullFromTop || _refreshing) return;
+    if (start == null || _refreshing || _pullChecked) return;
     if (e.position.dy - start < 110) return;
-    _pullStartY = null;
-    setState(() => _refreshing = true);
-    unawaited(
-      _controller.reload().whenComplete(() {
-        // onPageFinished clears the bar; this is the belt for a load
-        // that errors out and never finishes.
-        Future<void>.delayed(const Duration(seconds: 3), () {
-          if (mounted && _refreshing) setState(() => _refreshing = false);
-        });
-      }),
-    );
+
+    // AUDIT FIX (second pass): the "is the page at the top?" check used
+    // to be fired asynchronously on pointer-down and read here, so a
+    // quick flick crossed the threshold BEFORE the answer arrived and
+    // the refresh silently did not happen. Asking at the threshold
+    // instead means the answer is always ready when it is used — and it
+    // is still exactly one platform round trip per gesture, never one
+    // per frame, because _pullChecked latches it.
+    _pullChecked = true;
+    unawaited(_maybeRefresh());
+  }
+
+  Future<void> _maybeRefresh() async {
+    try {
+      final pos = await _controller.getScrollPosition();
+      // Anything but the very top is ordinary page scrolling and must
+      // be left alone.
+      if (pos.dy > 1 || !mounted || _refreshing) return;
+      setState(() => _refreshing = true);
+      _refreshTimeout?.cancel();
+      // A page that errors out never reaches onPageFinished, so the
+      // spinner needs its own way out. Generous on purpose: the first
+      // version cleared it after 3 seconds unconditionally, which meant
+      // the spinner vanished mid-load on any slow page and looked like
+      // the refresh had failed.
+      _refreshTimeout = Timer(const Duration(seconds: 20), () {
+        if (mounted && _refreshing) setState(() => _refreshing = false);
+      });
+      await _controller.reload();
+    } catch (e) {
+      if (mounted && _refreshing) setState(() => _refreshing = false);
+      debugPrint('[AdminBrowser] pull-to-refresh failed: $e');
+    }
   }
 
   Future<void> _syncUrlFromController() async {
@@ -426,6 +463,7 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
 
   @override
   void dispose() {
+    _refreshTimeout?.cancel();
     if (_live == this) _live = null;
     _urlFocus.dispose();
     _urlField.dispose();
@@ -468,8 +506,8 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
                     Listener(
                       onPointerDown: _onPointerDown,
                       onPointerMove: _onPointerMove,
-                      onPointerUp: (_) => _pullStartY = null,
-                      onPointerCancel: (_) => _pullStartY = null,
+                      onPointerUp: _endPull,
+                      onPointerCancel: _endPull,
                       child: WebViewWidget(controller: _controller),
                     ),
                     if (_refreshing)

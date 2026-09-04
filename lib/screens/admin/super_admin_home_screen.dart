@@ -27,6 +27,7 @@ import 'admin_dashboard_screen.dart';
 import 'admin_chitti_lens_screen.dart';
 import 'admin_cm_presentation_screen.dart';
 import 'admin_dialer_screen.dart';
+import '../../services/admin_shell_nav.dart';
 import 'admin_web_tabs_screen.dart';
 import 'chitti_conversations_screen.dart';
 import 'chitti_debug_logs_screen.dart';
@@ -124,6 +125,11 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
   @override
   void initState() {
     super.initState();
+    // AUDIT FIX (Sep 5 2026): an incoming github.com link switched the
+    // web tab's SEGMENT but nothing switched the BOTTOM tab, so the page
+    // loaded two tabs away from where the admin was looking — from his
+    // side, identical to the tap having done nothing.
+    AdminShellNav.register(_goToTab);
     // Sourced from the shared singleton (see service_requests_listener.dart)
     // instead of opening its own .snapshots() — AdminDashboardScreen and
     // AdminNewOrdersScreen (both pushed on top of this screen, which stays
@@ -171,6 +177,9 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
 
   @override
   void dispose() {
+    // Before anything else: a registered closure that outlives this
+    // State would setState on a dead widget.
+    AdminShellNav.unregister(_goToTab);
     _alertSub?.cancel();
     _alertPlayer.dispose();
     super.dispose();
@@ -266,11 +275,13 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
   final Set<int> _visitedTabs = {0};
 
   void _goToTab(int index) {
+    if (!mounted) return;
     setState(() {
       _tabIndex = index;
       _visitedTabs.add(index);
     });
   }
+
 
   // FIX (per Nizam's request): App Settings / Check for Updates / Logout
   // used to sit directly on the main Overview page, making it feel
