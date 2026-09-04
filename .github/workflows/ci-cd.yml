@@ -528,13 +528,19 @@ jobs:
             echo "Re-create it with:  base64 -w0 admin-release.jks"
             exit 1
           fi
-          # Same reason, for the text secrets: a password carrying an
-          # invisible trailing CR is simply the wrong password, and that
-          # would surface much later during signing with a far less
-          # obvious message than "base64: invalid input".
-          STORE_PW=$(printf '%s' "$KEYSTORE_PASSWORD" | tr -d '[:space:]')
-          KEY_PW=$(printf '%s' "$KEY_PASSWORD" | tr -d '[:space:]')
-          ALIAS=$(printf '%s' "$KEY_ALIAS" | tr -d '[:space:]')
+          # Same reason, for the text secrets -- and the first attempt at
+          # this was not enough. Stripping whitespace left a UTF-8 BOM in
+          # place, because a BOM is not whitespace: the build got as far
+          # as signing and failed with
+          #   Failed to read key ï»¿admin from store ...:
+          #   keystore password was incorrect
+          # -- the alias was BOM+admin, and the passwords carried the same
+          # invisible prefix. Keep only printable ASCII, which a password
+          # or an alias is by definition, and every invisible byte a shell
+          # or editor might have added disappears with it.
+          STORE_PW=$(printf '%s' "$KEYSTORE_PASSWORD" | tr -cd '[:print:]')
+          KEY_PW=$(printf '%s' "$KEY_PASSWORD" | tr -cd '[:print:]')
+          ALIAS=$(printf '%s' "$KEY_ALIAS" | tr -cd '[:print:]')
           cat > android/key.properties <<EOF
           storePassword=$STORE_PW
           keyPassword=$KEY_PW
