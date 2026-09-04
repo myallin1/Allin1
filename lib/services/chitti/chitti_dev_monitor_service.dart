@@ -78,6 +78,41 @@ class DevTaskIssue {
   final DateTime? updatedAt;
 }
 
+/// One installable APK sitting on the rolling admin-test release.
+///
+/// NEW (Sep 4 2026 — Nizam: "suppose lastversion problem iruntha admin
+/// previous versionuku poi switch panni pathukuramari set
+/// pannnamuidyuma?"). The publish job tags every build
+/// `latest-admin-test` and uploads `allin1-admin-<shortsha>.apk`, so
+/// the release ACCUMULATES one asset per build rather than replacing
+/// it — every previous version is already sitting there, and this type
+/// is what finally exposes them to the admin instead of throwing all
+/// but one away.
+@immutable
+class DevApkAsset {
+  const DevApkAsset({
+    required this.name,
+    required this.downloadUrl,
+    required this.sizeBytes,
+    required this.updatedAt,
+  });
+
+  final String name;
+  final String downloadUrl;
+  final int sizeBytes;
+  final DateTime? updatedAt;
+
+  /// `allin1-admin-448ec5e3.apk` -> `448ec5e3`. Empty when the file
+  /// doesn't follow the publish job's naming, which is fine — the UI
+  /// falls back to the full filename.
+  String get shortSha {
+    final m = RegExp(r'allin1-admin-([0-9a-f]+)\.apk').firstMatch(name);
+    return m?.group(1) ?? '';
+  }
+
+  String get sizeLabel => '${(sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+}
+
 /// The newest published build the admin can install.
 @immutable
 class DevRelease {
@@ -87,15 +122,27 @@ class DevRelease {
     required this.htmlUrl,
     required this.apkUrl,
     required this.publishedAt,
+    this.apkAssets = const [],
   });
 
   final String tag;
   final String name;
   final String htmlUrl;
 
-  /// Direct .apk asset link, when the release has one attached.
+  /// Direct .apk asset link for the NEWEST build on this release.
+  ///
+  /// FIX (Sep 4 2026 — Nizam: "new app build aiduchu but ... download
+  /// link varala"). This used to be whichever .apk the GitHub API
+  /// happened to list first, and since the release accumulates one
+  /// asset per build, that was a MONTHS-old file, not the build just
+  /// made. The admin downloaded, installed, and saw none of the new
+  /// work — which read as "the build didn't happen". Now explicitly
+  /// the most recently uploaded asset.
   final String? apkUrl;
   final DateTime? publishedAt;
+
+  /// Every APK on this release, newest first — see [DevApkAsset].
+  final List<DevApkAsset> apkAssets;
 }
 
 @immutable
@@ -225,21 +272,36 @@ class ChittiDevMonitorService {
       // not an error worth surfacing.
       if (releaseRes.statusCode == 200) {
         final m = jsonDecode(releaseRes.body) as Map<String, dynamic>;
-        String? apkUrl;
+        // See DevRelease.apkUrl: collect ALL apks and sort newest
+        // first, rather than taking whichever one the API listed first.
+        final apks = <DevApkAsset>[];
         for (final a in (m['assets'] as List<dynamic>? ?? [])) {
           final asset = a as Map<String, dynamic>;
           final name = (asset['name'] as String?) ?? '';
-          if (name.toLowerCase().endsWith('.apk')) {
-            apkUrl = asset['browser_download_url'] as String?;
-            break;
-          }
+          final url = asset['browser_download_url'] as String?;
+          if (url == null || !name.toLowerCase().endsWith('.apk')) continue;
+          apks.add(DevApkAsset(
+            name: name,
+            downloadUrl: url,
+            sizeBytes: (asset['size'] as num?)?.toInt() ?? 0,
+            updatedAt: DateTime.tryParse((asset['updated_at'] as String?) ?? ''),
+          ));
         }
+        apks.sort((a, b) {
+          final at = a.updatedAt;
+          final bt = b.updatedAt;
+          if (at == null && bt == null) return 0;
+          if (at == null) return 1;
+          if (bt == null) return -1;
+          return bt.compareTo(at);
+        });
         latest = DevRelease(
           tag: (m['tag_name'] as String?) ?? '',
           name: (m['name'] as String?) ?? (m['tag_name'] as String?) ?? 'Release',
           htmlUrl: (m['html_url'] as String?) ?? '',
-          apkUrl: apkUrl,
+          apkUrl: apks.isEmpty ? null : apks.first.downloadUrl,
           publishedAt: DateTime.tryParse((m['published_at'] as String?) ?? ''),
+          apkAssets: apks,
         );
       }
 
