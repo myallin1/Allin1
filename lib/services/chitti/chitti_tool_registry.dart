@@ -1200,6 +1200,44 @@ class ChittiToolRegistry {
     return out;
   }
 
+  /// Tool schemas formatted for Anthropic Messages API (Claude).
+  ///
+  /// Maps each tool's definition into Anthropic's expected shape:
+  /// `{"name": "...", "description": "...", "input_schema": {...}}`.
+  static List<Map<String, dynamic>> anthropicToolSchemasFor({
+    required String message,
+    String? variant,
+    bool hasAttachedImage = false,
+    Iterable<ChittiDomain> extraDomains = const <ChittiDomain>[],
+  }) {
+    final v = variant ?? currentAppVariant;
+    final domains = <ChittiDomain>{
+      ...routeDomains(message, variant: v),
+      ...extraDomains,
+      if (hasAttachedImage) ChittiDomain.support,
+    };
+
+    final sections = chittiSectionsFor(v);
+    final out = <Map<String, dynamic>>[];
+    for (final tool in kChittiTools) {
+      if (!tool.variants.contains(v)) continue;
+      if (!domains.contains(tool.domain)) continue;
+      if (tool.needsSectionEnum && sections.isEmpty) continue;
+      if (tool.name == 'analyze_screen_with_vision' && !hasAttachedImage) {
+        continue;
+      }
+
+      out.add(<String, dynamic>{
+        'name': tool.name,
+        'description': tool.description,
+        'input_schema': tool.needsSectionEnum
+            ? _sectionParameters(sections)
+            : tool.parameters,
+      });
+    }
+    return out;
+  }
+
   static Map<String, dynamic> _sectionParameters(List<ChittiSection> sections) {
     // The per-section descriptions are folded into ONE description
     // string rather than emitted as a JSON-schema `oneOf` — the enum

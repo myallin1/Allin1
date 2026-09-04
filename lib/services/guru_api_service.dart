@@ -1,15 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import 'analytics_service.dart';
 import '../config/app_knowledge_briefing.dart';
 import '../config/app_variant.dart';
+import 'analytics_service.dart';
 import 'chitti/chitti_model_provider.dart';
 import 'chitti/chitti_tool_registry.dart';
 import 'chitti/hero_memory_service.dart';
@@ -257,7 +256,6 @@ class GuruApiService {
   // (console.groq.com/docs/model/...) at the time this was written —
   // meta-llama/llama-4-maverick-17b-128e-instruct was deprecated
   // Feb 2026, so Scout is the one to use.
-  static const String _textModel = 'llama-3.3-70b-versatile';
   static const String _visionModel = 'meta-llama/llama-4-scout-17b-16e-instruct';
 
   final http.Client _client;
@@ -354,72 +352,102 @@ class GuruApiService {
       userContent = input;
     }
 
+    final isAnthropic = model.id == 'anthropic';
+    final isOAuth = apiKey.startsWith('ant-oauth') || apiKey.startsWith('sk-ant-s01') || !apiKey.startsWith('sk-ant-api');
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      if (isAnthropic) ...{
+        'anthropic-version': '2023-06-01',
+        if (isOAuth)
+          'Authorization': 'Bearer $apiKey'
+        else
+          'x-api-key': apiKey,
+      } else ...{
+        'Authorization': 'Bearer $apiKey',
+      },
+    };
+
+    final Map<String, dynamic> requestPayload;
+    if (isAnthropic) {
+      final anthropicMessages = <Map<String, dynamic>>[];
+      for (final entry in history) {
+        final role = entry['role'];
+        final c = entry['content']?.trim() ?? '';
+        if ((role == 'user' || role == 'assistant') && c.isNotEmpty) {
+          anthropicMessages.add({'role': role, 'content': c});
+        }
+      }
+      anthropicMessages.add({'role': 'user', 'content': userContent});
+
+      requestPayload = <String, dynamic>{
+        'model': textModelId,
+        'system': _buildSystemPrompt(languageLabel),
+        'messages': anthropicMessages,
+        'temperature': 0.55,
+        'max_tokens': 600,
+      };
+    } else {
+      requestPayload = <String, dynamic>{
+        'model': imageBytes != null ? model.visionModel : textModelId,
+        'messages': <Map<String, dynamic>>[
+          {
+            'role': 'system',
+            'content': _buildSystemPrompt(languageLabel),
+          },
+          ...history.where(
+            (entry) =>
+                (entry['role'] == 'user' || entry['role'] == 'assistant') &&
+                (entry['content']?.trim().isNotEmpty ?? false),
+          ),
+          {
+            'role': 'user',
+            'content': userContent,
+          },
+        ],
+        'temperature': 0.55,
+        'max_tokens': 450,
+      };
+    }
+
     try {
       final response = await _client
           .post(
             Uri.parse(model.endpoint),
-            headers: <String, String>{
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $apiKey',
-            },
-            body: jsonEncode(
-              <String, dynamic>{
-                'model': imageBytes != null
-                    ? model.visionModel
-                    : textModelId,
-                'messages': <Map<String, dynamic>>[
-                  {
-                    'role': 'system',
-                    'content': _buildSystemPrompt(languageLabel),
-                  },
-                  ...history.where(
-                    (entry) =>
-                        (entry['role'] == 'user' ||
-                            entry['role'] == 'assistant') &&
-                        (entry['content']?.trim().isNotEmpty ?? false),
-                  ),
-                  {
-                    'role': 'user',
-                    'content': userContent,
-                  },
-                ],
-                'temperature': 0.55,
-                'max_tokens': 450,
-              },
-            ),
+            headers: headers,
+            body: jsonEncode(requestPayload),
           )
           .timeout(_timeout);
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         final logLine =
-            'Guru Groq request failed: ${response.statusCode} ${response.body}';
+            'Guru AI request failed (${model.id}): ${response.statusCode} ${response.body}';
         debugPrint(logLine);
-        // FIX (Nizam's report — generic "network pause" message hides
-        // the real reason, e.g. 401 invalid key / 429 rate limit / 400
-        // bad request / model deprecated): debugPrint only reaches a
-        // developer's attached console. Log the real status+body to
-        // Crashlytics too (non-fatal) so Nizam can see the actual
-        // Groq failure reason remotely from a QA device via the
-        // Firebase Crashlytics dashboard, without me needing to be
-        // physically present with a debugger.
         unawaited(
           AnalyticsService.instance.recordError(
-            Exception('Guru Groq HTTP ${response.statusCode}'),
+            Exception('Guru AI HTTP ${response.statusCode}'),
             StackTrace.current,
             reason: logLine.length > 500 ? logLine.substring(0, 500) : logLine,
           ),
         );
-        // UPDATED (Aug 28 2026): the caller now tries
-        // ChittiLocalAnswerService before showing this, so a customer
-        // asking about the app still gets a real answer on a bad
-        // connection. This text is the genuine last resort, and says
-        // what still works rather than only what does not.
         return 'I could not reach the full AI just now. I can still open '
             'any section, check your balance and orders, and book — just '
             'tell me what you need.';
       }
 
       final body = jsonDecode(response.body) as Map<String, dynamic>;
+      if (isAnthropic) {
+        final contents = body['content'] as List<dynamic>? ?? const <dynamic>[];
+        final textBlocks = contents
+            .where((c) => (c as Map<String, dynamic>)['type'] == 'text')
+            .map((c) => (c as Map<String, dynamic>)['text']?.toString().trim() ?? '')
+            .where((t) => t.isNotEmpty)
+            .toList();
+        if (textBlocks.isEmpty) {
+          return 'Chitti AI did not receive a proper reply. Please ask once more.';
+        }
+        return textBlocks.join('\n');
+      }
+
       final choices = body['choices'] as List<dynamic>? ?? const <dynamic>[];
       if (choices.isEmpty) {
         return 'Chitti AI did not receive a proper reply. Please ask once more.';
@@ -536,156 +564,123 @@ class GuruApiService {
             'details rather than asking again.'
         : '';
 
+    final isAnthropic = model.id == 'anthropic';
+    final isOAuth = apiKey.startsWith('ant-oauth') || apiKey.startsWith('sk-ant-s01') || !apiKey.startsWith('sk-ant-api');
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      if (isAnthropic) ...{
+        'anthropic-version': '2023-06-01',
+        if (isOAuth)
+          'Authorization': 'Bearer $apiKey'
+        else
+          'x-api-key': apiKey,
+      } else ...{
+        'Authorization': 'Bearer $apiKey',
+      },
+    };
+
+    final Map<String, dynamic> requestPayload;
+    if (isAnthropic) {
+      requestPayload = <String, dynamic>{
+        'model': textModelId,
+        'system': 'You are an ACTING agent inside this app, not a help desk. Your job is to DO things for the user by calling the tools you have been given — not to describe how to do them. Never explain steps a tool can take instead. Keep every text reply under 2 short sentences.\n\n$_serviceNamingNote$_nonCustomerToolGuard$screenContextLine$recentOrderLine',
+        'messages': [
+          {'role': 'user', 'content': userContent},
+        ],
+        'tools': ChittiToolRegistry.anthropicToolSchemasFor(
+          message: input,
+          hasAttachedImage: hasAttachedImage,
+        ),
+        'temperature': 0,
+        'max_tokens': 300,
+      };
+    } else {
+      requestPayload = <String, dynamic>{
+        'model': textModelId,
+        'messages': <Map<String, String>>[
+          {
+            'role': 'system',
+            'content':
+                'You are an ACTING agent inside this app, not a help '
+                'desk. Your job is to DO things for the user by '
+                'calling the tools you have been given — not to '
+                'describe how to do them. Never explain steps a tool '
+                'can take instead. Never output long paragraphs. Keep '
+                'every text reply under 2 short sentences.\n\n'
+                'Read each tool description and call the one that '
+                'matches what the user actually wants. If several could '
+                'fit, prefer the one that DOES the thing over the one '
+                'that only opens a screen. If a tool you would need is '
+                'not in your list, say in one line that it has to be '
+                'done from that screen — never pretend you did it.\n\n'
+                'Never invent a destination, item, quantity, section or '
+                'name the user did not say. If a required value is '
+                'missing, or the request is genuinely ambiguous, ask '
+                'exactly ONE short question naming at most 3 concrete '
+                'options and call no tool. As soon as they answer, call '
+                'the matching tool immediately — do not re-explain, do '
+                'not confirm twice, do not summarise what you are about '
+                'to do.\n\n'
+                'Only for pure greetings or small talk with no '
+                'actionable intent should you skip tools entirely, and '
+                'even then reply in ONE short line.\n\n'
+                'Your one-line replies should sound like Chitti — a '
+                'confident robot with a bit of cheek ("Done, boss." / '
+                '"Opening it now — 2 seconds."). Keep it playful for '
+                'ordinary actions and completely straight for money, '
+                'cancellations and emergencies.'
+                '\n\n$_serviceNamingNote'
+                '$_nonCustomerToolGuard$screenContextLine$recentOrderLine',
+          },
+          {'role': 'user', 'content': userContent},
+        ],
+        'tools': ChittiToolRegistry.toolSchemasFor(
+          message: input,
+          hasAttachedImage: hasAttachedImage,
+        ),
+        'tool_choice': 'auto',
+        'temperature': 0,
+        'max_tokens': 200,
+      };
+    }
+
     try {
       final response = await _client
           .post(
             Uri.parse(model.endpoint),
-            headers: <String, String>{
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $apiKey',
-            },
-            body: jsonEncode(
-              <String, dynamic>{
-                'model': textModelId,
-                'messages': <Map<String, String>>[
-                  {
-                    'role': 'system',
-                    'content':
-                        // FIX (Aug 11 2026 — Nizam: "AI sariya automatic
-                        // order set pannama namaku instructions kuduthutruku,
-                        // athum athigama explain panni ... api key limit
-                        // theenthurum ... function calling than athigama
-                        // pannanum, question mattum ketutu next customer
-                        // soldra action-a athuve pannanum"):
-                        //
-                        // ROOT CAUSE of "it explains instead of doing": the
-                        // instructions below were written defensively — they
-                        // told the model to call a tool ONLY under narrow
-                        // conditions and, whenever anything was even slightly
-                        // ambiguous, to "let it fall through to the normal
-                        // reply". A normal reply is free-form prose, so the
-                        // model defaulted to long explanations. That is both
-                        // the wrong UX (the user wants the ACTION performed)
-                        // and the expensive one, because prose burns far more
-                        // output tokens than a compact tool call — which is
-                        // exactly why the API quota was draining.
-                        //
-                        // The rule below inverts that default: ACT first, and
-                        // when something genuinely is missing, ask ONE short
-                        // question rather than explaining. Kept deliberately
-                        // strict about never inventing values — guessing a
-                        // destination or an item is worse than asking.
-                        // REWRITTEN (Aug 27 2026 — Nizam: "a to z namma
-                        // app la yenna sonnalum avan panna therila").
-                        //
-                        // The previous version of this block spelled out,
-                        // tool by tool, when to call each of the nine tools —
-                        // roughly 500 tokens of instructions that DUPLICATED
-                        // what each tool's own `description` already said, and
-                        // that silently went stale the moment a tool was added
-                        // or removed. It even opened with "You have nine tools
-                        // available", which is now false on every request: the
-                        // tool list is assembled per-message by
-                        // ChittiToolRegistry.toolSchemasFor() from the app
-                        // variant and the routed domain, so its size varies.
-                        //
-                        // The rule below keeps the part that actually changed
-                        // behaviour — ACT rather than explain, never invent an
-                        // argument, ask ONE short question when something is
-                        // genuinely missing — and delegates per-tool guidance
-                        // to the descriptions in the registry, which are the
-                        // only copy that cannot drift. That is both correct and
-                        // cheaper, which matters directly for the API quota.
-                        'You are an ACTING agent inside this app, not a help '
-                        'desk. Your job is to DO things for the user by '
-                        'calling the tools you have been given — not to '
-                        'describe how to do them. Never explain steps a tool '
-                        'can take instead. Never output long paragraphs. Keep '
-                        'every text reply under 2 short sentences.\n\n'
-                        'Read each tool description and call the one that '
-                        'matches what the user actually wants. If several could '
-                        'fit, prefer the one that DOES the thing over the one '
-                        'that only opens a screen. If a tool you would need is '
-                        'not in your list, say in one line that it has to be '
-                        'done from that screen — never pretend you did it.\n\n'
-                        'Never invent a destination, item, quantity, section or '
-                        'name the user did not say. If a required value is '
-                        'missing, or the request is genuinely ambiguous, ask '
-                        'exactly ONE short question naming at most 3 concrete '
-                        'options and call no tool. As soon as they answer, call '
-                        'the matching tool immediately — do not re-explain, do '
-                        'not confirm twice, do not summarise what you are about '
-                        'to do.\n\n'
-                        'Only for pure greetings or small talk with no '
-                        'actionable intent should you skip tools entirely, and '
-                        'even then reply in ONE short line.\n\n'
-                        // NEW (Aug 28 2026): the one-liners this prompt
-                        // produces ("Opening Bike Taxi for you now!") are
-                        // the lines customers see MOST — every action goes
-                        // through here. Without this they stayed flatly
-                        // neutral while the conversational path had the
-                        // character, which read as two different assistants.
-                        // One sentence only: this prompt is deliberately
-                        // lean, and character is cheap when it is this short.
-                        'Your one-line replies should sound like Chitti — a '
-                        'confident robot with a bit of cheek ("Done, boss." / '
-                        '"Opening it now — 2 seconds."). Keep it playful for '
-                        'ordinary actions and completely straight for money, '
-                        'cancellations and emergencies.'
-                        // SAFETY GUARD (Aug 19 2026 — AI setup audit).
-                        // create_service_request PLACES A REAL ORDER that a
-                        // Hero is dispatched to fulfil. This agent block was
-                        // written for the customer app, but the same
-                        // GuruApiService now backs the Hero and Seller apps
-                        // through GlobalGuruFab — so without this, a hero
-                        // saying "I need 1kg onions" while working, or a
-                        // seller describing a customer's order out loud,
-                        // could have dispatched a real errand and put a
-                        // real charge on the wrong account.
-                        //
-                        // Appended rather than branching the whole agent
-                        // prompt: one targeted sentence, no change to the
-                        // customer path that is already live and working.
-                        // NEW (Aug 25 2026 — Priority 3): reuses the
-                        // exact same const _buildSystemPrompt() already
-                        // uses, not a copy — one definition, no risk of
-                        // the two prompts drifting out of sync on the
-                        // one fact that matters most for tool-call
-                        // correctness.
-                        '\n\n$_serviceNamingNote'
-                        '$_nonCustomerToolGuard$screenContextLine$recentOrderLine',
-                  },
-                  {'role': 'user', 'content': userContent},
-                ],
-                // REPLACED (Aug 27 2026): ~280 lines of inline tool
-                // schemas used to live here. They are now in
-                // chitti_tool_registry.dart, which BOTH executors also
-                // read for their allow-list — the old duplication is
-                // exactly why the overlay bubble silently dropped
-                // create_service_request while the chat screen ran it.
-                //
-                // The list returned is filtered by app variant AND by
-                // the locally-routed domain, so a typical request now
-                // carries FEWER tool tokens than the old flat nine even
-                // though ~30 tools exist.
-                'tools': ChittiToolRegistry.toolSchemasFor(
-                  message: input,
-                  hasAttachedImage: hasAttachedImage,
-                ),
-                'tool_choice': 'auto',
-                'temperature': 0,
-                'max_tokens': 200,
-              },
-            ),
+            headers: headers,
+            body: jsonEncode(requestPayload),
           )
           .timeout(_timeout);
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        debugPrint('Guru agent-action extraction failed: ${response.statusCode} ${response.body}');
+        debugPrint('Guru agent-action extraction failed (${model.id}): ${response.statusCode} ${response.body}');
         return null;
       }
 
       final body = jsonDecode(response.body) as Map<String, dynamic>;
+      if (isAnthropic) {
+        final contents = body['content'] as List<dynamic>? ?? const <dynamic>[];
+        final toolUseBlock = contents.firstWhere(
+          (c) => (c as Map<String, dynamic>)['type'] == 'tool_use',
+          orElse: () => null,
+        ) as Map<String, dynamic>?;
+        if (toolUseBlock == null) return null;
+        final functionName = toolUseBlock['name'] as String?;
+        final inputArgs = (toolUseBlock['input'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+        if (functionName == null || !ChittiToolRegistry.isKnownAction(functionName)) {
+          return null;
+        }
+        if (!ChittiToolRegistry.isAllowedFor(functionName)) {
+          debugPrint(
+            '[Chitti] Blocked "$functionName" from "$currentAppVariant" app '
+            '— not available to this variant.',
+          );
+          return null;
+        }
+        return {'action': functionName, ...inputArgs};
+      }
+
       final choices = body['choices'] as List<dynamic>? ?? const <dynamic>[];
       if (choices.isEmpty) return null;
 
@@ -825,14 +820,6 @@ class GuruApiService {
       debugPrint('[GuruApiService] extractGroceryItemFromImage error: $error');
       return null;
     }
-  }
-
-  Future<String> _resolveApiKey() async {
-    if (_apiKey.trim().isNotEmpty && _apiKey != 'GROQ_API_KEY_HERE') {
-      return _apiKey.trim();
-    }
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_savedApiKeyPrefsKey)?.trim() ?? '';
   }
 
   // ── MULTI-MODEL (Aug 28 2026 — Nizam: "groq, gemini, deepseek all

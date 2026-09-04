@@ -2,7 +2,11 @@
 
 All notable changes to the Allin1 Super App are recorded here.
 
-## \[Unreleased]
+## [Unreleased]
+
+### Added
+
+- feature — Native Claude (Anthropic) Autonomous Agent Integration: Enabled Claude 3.5 Sonnet / Opus / Haiku via OAuth token (`CLAUDE_CODE_OAUTH_TOKEN` / `claude setup-token`) and API keys in `GuruApiService` and `ChittiToolRegistry`. Injects full `AppKnowledgeBriefing` (56 screens, 121 services, Firestore collections, RTDB nodes, business rules) and Claude-native `input_schema` tools for full mobile autonomous administration without needing a laptop.
 
 ### Fixed
 
