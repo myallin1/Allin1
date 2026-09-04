@@ -1,0 +1,156 @@
+name: Gemini Coder
+
+# NEW (Sep 4 2026 — Nizam: "gemini api vachu namma chitti-tu full coding
+# and app develop knowledge varavaikanum ... nan sonna udane panna kudiya
+# power", and the constraint that matters most: "already namma gemini
+# groq free quota nala oru section oda full codes um gemini groq ku
+# anuppama grep command use panni particular problem mattum mention panna
+# sollalam").
+#
+# WHY THIS EXISTS ALONGSIDE claude.yml
+#   claude.yml is the intended coder and uses the Claude Pro token, which
+#   costs nothing extra. It has never once completed a real run: every
+#   invocation dies immediately with is_error:true, zero cost, zero
+#   turns, and no error text -- the signature of anthropics/
+#   claude-code-action issue #1720, still open upstream. Nothing on this
+#   repo's side is wrong; token, permissions and model were each ruled
+#   out by live tests. This workflow is the second engine so the loop
+#   ("Nizam speaks -> issue -> code -> PR -> build -> phone") can close
+#   without waiting on someone else's bug fix.
+#
+# WHY IT IS NOT gemini-dispatch.yml
+#   That file exists and has never run: it triggers on '@gemini-cli',
+#   which nobody has ever typed, and it targets the dev-nijam branch. It
+#   also runs `flutter analyze` and `flutter test` across the WHOLE tree
+#   AFTER opening the PR -- which gates nothing, and on this repo fails
+#   on unrelated in-progress files anyway (see ci-cd.yml's own comments
+#   about exactly that). Left untouched rather than rewritten, so a
+#   workflow that might still be wanted for something isn't quietly
+#   repurposed.
+#
+# THE QUOTA RULE IS THE DESIGN, NOT A DETAIL
+#   Gemini's free tier is small. Handing a model a 27,000-file repo and
+#   hoping it reads only what matters burns the day's quota on one
+#   request and returns a worse answer, because the real fix drowns in
+#   context. So the prompt below forces search-first: grep to locate,
+#   read only what matched, touch as few files as possible. That is also
+#   simply how a careful engineer works on an unfamiliar codebase.
+on:
+  issues:
+    types: [opened, labeled]
+  issue_comment:
+    types: [created]
+
+jobs:
+  gemini-coder:
+    # '@gemini' anywhere in the issue body/title or a comment. Kept
+    # distinct from '@claude' on purpose: when claude.yml starts working
+    # again, both engines can coexist and be aimed deliberately rather
+    # than racing each other onto the same issue.
+    if: |
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@gemini') || contains(github.event.issue.title, '@gemini'))) ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@gemini'))
+    runs-on: ubuntu-latest
+    env:
+      # Gemini CLI refuses to act in a headless/CI directory unless told
+      # it is trusted -- confirmed by a live run of the audit workflow,
+      # which exited silently with "Gemini CLI is not running in a
+      # trusted directory".
+      GEMINI_CLI_TRUST_WORKSPACE: 'true'
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Run Gemini as the coder
+        uses: google-github-actions/run-gemini-cli@v0.1.18
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          gemini_model: 'gemini-2.5-flash'
+          settings: |
+            {"tools": {"sandbox": false}, "trustedFolders": ["*"]}
+          prompt: |
+            You are a careful Flutter engineer working on the Allin1
+            super app (NJ Tech, Erode). Read GEMINI.md and AGENTS.md
+            first and follow every rule there.
+
+            THE REQUEST:
+            ${{ github.event.issue.body }}
+            ${{ github.event.comment.body }}
+
+            HOW TO WORK — THIS PART IS NOT OPTIONAL
+            This repo has over 27,000 files. You must NOT read broadly.
+            Work search-first, exactly as an engineer would on an
+            unfamiliar codebase:
+              1. Use grep/glob to LOCATE the relevant code. Search for
+                 the specific symbol, string, screen name or error text
+                 the request mentions.
+              2. Read ONLY the files that matched, and only the regions
+                 around the matches.
+              3. Do not open a file "to understand the project". The two
+                 markdown files above are the project context.
+              4. Aim to touch 1-3 files. If your change needs more than
+                 5, stop and say so in the PR body instead of pushing a
+                 sprawling diff.
+
+            WHAT TO CHANGE
+            Make the SMALLEST change that genuinely fixes or implements
+            what was asked. Match the surrounding code's style and
+            comment density. Explain WHY in a comment where the reason
+            is not obvious from the code.
+
+            HARD RULES — never break these
+              - Never touch payments, wallets, PhonePe, authentication,
+                KYC, or firestore.rules.
+              - Never change or remove existing working behaviour that
+                the request did not ask about.
+              - Never invent a feature, screen or API that you have not
+                verified exists by grepping for it.
+              - If the request is ambiguous or you are unsure it is
+                safe, open the PR as a DRAFT and say what you were
+                unsure about.
+
+            FINISH BY
+            Creating a branch named gemini/issue-<number>-<short-slug>,
+            committing with a clear message, and opening a pull request
+            TARGETING main. In the PR body: what you changed, which
+            files you grepped to find it, and anything you deliberately
+            did not do.
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.2'
+          channel: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      # Analyzes ONLY what Gemini actually changed.
+      #
+      # gemini-dispatch.yml runs `flutter analyze` over the whole tree,
+      # which on this repo reports pre-existing issues in unrelated
+      # in-progress files -- ci-cd.yml had to mark its own analyze step
+      # continue-on-error for exactly that reason. A whole-tree result
+      # tells you nothing about whether THIS change is sound. Scoping it
+      # to the changed files makes the answer meaningful, and it stays
+      # non-blocking because the PR is already open by this point: this
+      # is a report for the human reviewing it, not a gate.
+      - name: Analyze only the changed files
+        continue-on-error: true
+        run: |
+          CHANGED="$(git diff --name-only origin/main...HEAD -- '*.dart' | tr '\n' ' ')"
+          if [ -z "$CHANGED" ]; then
+            echo "No Dart files changed — nothing to analyze."
+            exit 0
+          fi
+          echo "Analyzing: $CHANGED"
+          flutter analyze $CHANGED
