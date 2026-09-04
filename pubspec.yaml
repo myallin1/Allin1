@@ -255,6 +255,9 @@ flutter:
     - assets/videos/
     - assets/sounds/
     - assets/gifs/
+    # Written by CI (see "Generate changelog for this build"). Kept in
+    # the bundle so the "what's new" popup works with no network.
+    - assets/release_notes/
     - assets/images/food_slides/
     # Taxi mega-card photo slider (Aug 19 2026). Flutter does not
     # recurse, so this folder was invisible to the bundle even though
