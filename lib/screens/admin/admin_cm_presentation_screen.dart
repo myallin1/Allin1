@@ -43,12 +43,37 @@ class AdminCmPresentationScreen extends StatefulWidget {
       _AdminCmPresentationScreenState();
 }
 
+/// One thing the CM asked while Chitti was mid-sentence.
+///
+/// NEW (Sep 4 2026 — Nizam: "cm pesapesa vera question kettalum athayum
+/// note panni vachutu queue pottu vachukkanum, current responsd solli
+/// mudichathum que la irukura topic solli ithu paththi ketrukinga so
+/// melaum ithai patri theriyanumanu question kekanum").
+///
+/// The behaviour this buys is the point: most assistants either talk
+/// over an interruption or lose it. Holding the question, finishing the
+/// current thought, and THEN coming back with "you also asked about X —
+/// shall I go into that, sir?" is what a good chief-of-staff does.
+class _QueuedQuestion {
+  _QueuedQuestion(this.text) : askedAt = DateTime.now();
+  final String text;
+  final DateTime askedAt;
+  bool answered = false;
+}
+
 class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
   /// -1 = nothing said yet. 0 = intro done, waiting on the CM's answer.
   /// 1..n = that many brief sections delivered.
   int _stage = -1;
   bool _speaking = false;
   bool _declined = false;
+
+  /// Captured mid-flow, oldest first. Never answered automatically —
+  /// Chitti OFFERS, the CM decides, Nizam taps.
+  final List<_QueuedQuestion> _queue = [];
+
+  List<_QueuedQuestion> get _pending =>
+      _queue.where((q) => !q.answered).toList();
 
   Future<void> _speak(String text) async {
     if (_speaking) return;
@@ -83,7 +108,89 @@ class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
   void _reset() => setState(() {
         _stage = -1;
         _declined = false;
+        _queue.clear();
       });
+
+  /// Capture an interruption. One text field, no categories, no
+  /// tagging — this is typed one-handed while a Chief Minister is
+  /// mid-sentence, so anything beyond "type it and go" would simply
+  /// not get used.
+  Future<void> _captureQuestion() async {
+    final controller = TextEditingController();
+    final text = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: _card,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            18, 18, 18, MediaQuery.of(sheetContext).viewInsets.bottom + 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('What did he ask?',
+                style: GoogleFonts.outfit(
+                    color: _text, fontSize: 16, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text('A few words is enough — Chitti will bring it back up.',
+                style: GoogleFonts.outfit(color: _muted, fontSize: 11.5)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              textCapitalization: TextCapitalization.sentences,
+              style: GoogleFonts.outfit(color: _text, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'e.g. how is data kept safe',
+                hintStyle: GoogleFonts.outfit(color: _muted, fontSize: 13),
+                filled: true,
+                fillColor: _bg,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none),
+              ),
+              onSubmitted: (v) => Navigator.of(sheetContext).pop(v),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () =>
+                    Navigator.of(sheetContext).pop(controller.text),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _purple,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: const Text('Add to queue'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (text != null && text.trim().isNotEmpty && mounted) {
+      setState(() => _queue.add(_QueuedQuestion(text.trim())));
+    }
+  }
+
+  /// Chitti acknowledges the held question and asks whether to go into
+  /// it. It does NOT answer here — the CM might say no, or might have
+  /// moved on, and answering something nobody wants any more is worse
+  /// than not remembering it at all.
+  Future<void> _offerQueued(_QueuedQuestion q) async {
+    final line = widget.languageCode == 'ta'
+        ? 'சார், நீங்க "${q.text}" பத்தி கேட்டீங்க. அதைப் பத்தி இன்னும் '
+            'விவரமா சொல்லட்டுமா சார்?'
+        : 'Sir, you asked about "${q.text}". Would you like me to go into '
+            'that, sir?';
+    await _speak(line);
+  }
+
+  void _markAnswered(_QueuedQuestion q) => setState(() => q.answered = true);
 
   @override
   Widget build(BuildContext context) {
@@ -106,11 +213,27 @@ class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
             ),
         ],
       ),
+      // Always reachable, at every stage — an interruption doesn't wait
+      // for a convenient moment, so neither can the button that catches
+      // it.
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _captureQuestion,
+        backgroundColor: _purple,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add_comment_rounded, size: 19),
+        label: Text('He asked something',
+            style: GoogleFonts.outfit(
+                fontSize: 12.5, fontWeight: FontWeight.w600)),
+      ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
         children: [
           _hint(),
           const SizedBox(height: 14),
+          if (_pending.isNotEmpty) ...[
+            _queueCard(),
+            const SizedBox(height: 14),
+          ],
           if (_stage < 0) _startCard() else if (_declined) _closedCard(),
           if (_stage == 0 && !_declined) _permissionCard(),
           if (_stage > 0 && !_declined && !done) _continueCard(),
@@ -121,6 +244,79 @@ class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
       ),
     );
   }
+
+  /// Sits ABOVE the presentation controls once anything is queued —
+  /// the held question is now the most important thing on the screen,
+  /// because forgetting it in front of the CM is the failure this
+  /// whole feature exists to prevent.
+  Widget _queueCard() => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _purple.withValues(alpha: 0.5)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('He asked — waiting (${_pending.length})',
+                style: GoogleFonts.outfit(
+                    color: _purple, fontSize: 13, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 3),
+            Text('Finish the section you are on, then tap Ask.',
+                style: GoogleFonts.outfit(color: _muted, fontSize: 11.5)),
+            const SizedBox(height: 10),
+            for (final q in _pending) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(
+                  color: _bg,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(q.text,
+                        style: GoogleFonts.outfit(
+                            color: _text,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 9),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed:
+                                _speaking ? null : () => _offerQueued(q),
+                            icon: const Icon(Icons.volume_up_rounded, size: 15),
+                            label: const Text('Ask about it'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _green,
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(vertical: 9),
+                              textStyle: GoogleFonts.outfit(
+                                  fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 7),
+                        TextButton(
+                          onPressed: () => _markAnswered(q),
+                          style: TextButton.styleFrom(foregroundColor: _muted),
+                          child: Text('Done',
+                              style: GoogleFonts.outfit(fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
 
   Widget _hint() => Container(
         padding: const EdgeInsets.all(13),
