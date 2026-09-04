@@ -44,6 +44,11 @@
          flavors. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <!-- NEW (Sep 4 2026): without this, EVERY scheduled local alarm is
+         silently dropped when the phone reboots — the daily greeting and
+         the My Day task reminders both. It pairs with the boot receiver
+         registered below; the permission alone does nothing. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <!-- NOT vestigial: required by AppUpdateChecker/update_service.dart's
@@ -121,6 +126,20 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- NEW (Sep 4 2026): flutter_local_notifications re-arms its
+             pending alarms from this receiver after a reboot. It is not
+             registered automatically — without it the phone comes back up
+             with every reminder gone and nothing to indicate it. -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

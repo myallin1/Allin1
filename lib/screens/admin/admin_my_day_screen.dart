@@ -27,6 +27,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../services/chitti/chitti_commitment_alarms.dart';
 import '../../services/chitti/chitti_commitment_service.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
@@ -276,6 +277,10 @@ class _AdminMyDayScreenState extends State<AdminMyDayScreen> {
         ),
       );
 
+  /// Asked once per app run. The OS only shows its prompt once anyway;
+  /// this just avoids a pointless await on every subsequent add.
+  static bool _askedForAlarms = false;
+
   Future<void> _addSheet() async {
     final controller = TextEditingController();
     // Default to this evening rather than "now": almost everything he
@@ -336,6 +341,19 @@ class _AdminMyDayScreenState extends State<AdminMyDayScreen> {
                   onPressed: () async {
                     final text = controller.text.trim();
                     if (text.isEmpty) return;
+                    // NEW (Sep 4 2026): ask for notification permission
+                    // HERE, at the first task he adds, and not at app
+                    // startup. At startup the prompt arrives with no
+                    // explanation attached and the fastest reply is
+                    // "deny" — which on Android 13+ is permanent and
+                    // silently kills every reminder afterwards. At this
+                    // moment he has just typed a thing he wants to be
+                    // reminded about, so the prompt explains itself.
+                    if (!_askedForAlarms) {
+                      _askedForAlarms = true;
+                      await ChittiCommitmentAlarms.instance
+                          .requestPermission();
+                    }
                     await _service.add(what: text, dueAt: due);
                     if (sheetContext.mounted) {
                       Navigator.of(sheetContext).pop();

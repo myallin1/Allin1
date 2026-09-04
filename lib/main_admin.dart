@@ -39,6 +39,7 @@ import 'services/db_usage_tracker.dart';
 import 'services/localization_service.dart';
 import 'services/migration_gate_service.dart';
 import 'services/chitti/chitti_accessibility_bridge.dart';
+import 'services/chitti/chitti_commitment_alarms.dart';
 import 'services/chitti/chitti_followup_service.dart';
 import 'services/session_service.dart';
 import 'services/theme_service.dart';
@@ -415,6 +416,19 @@ void main() {
       Future<void>.delayed(const Duration(seconds: 4), () {
         unawaited(ChittiFollowUpService.instance.maybeAskOne());
       });
+      // NEW (Sep 4 2026 — Nizam: "I need Chitti to proactively ring an
+      // alarm ... even if the Admin app is completely closed, killed, or
+      // running in the background").
+      //
+      // Android drops every pending alarm on reboot, and can drop them
+      // again when an app is force-stopped or its process is killed for
+      // memory. The manifest's boot receiver restores what the plugin
+      // still has on disk; this re-arms from OUR OWN store, which is the
+      // only copy that is definitely still correct. Idempotent — ids are
+      // derived from the commitment id, so it replaces rather than
+      // stacks — and cheap enough to just run on every start rather than
+      // trying to detect when it is needed.
+      unawaited(ChittiCommitmentAlarms.instance.rescheduleAll());
       if (!hasSeenSplashVideoEver) {
         await FirebaseMessaging.instance.requestPermission(
           alert: true,
