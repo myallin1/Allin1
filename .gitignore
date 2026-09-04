@@ -90,3 +90,15 @@ firebase.exe
 # scratch artifacts for human review, not project source
 plans/*.diff
 plans/*.new
+
+# Android signing keys. NEVER commit these.
+# The release key lives in the ANDROID_KEYSTORE_BASE64 GitHub secret
+# and is written to android/app/ only inside CI. A copy sitting in the
+# working tree (admin-release.jks was created at the repo root on
+# Sep 4 2026) is one `git add -A` away from being in the history
+# forever, and a leaked signing key cannot be rotated without breaking
+# every already-installed app's update path.
+*.jks
+*.keystore
+*.p12
+key.properties
