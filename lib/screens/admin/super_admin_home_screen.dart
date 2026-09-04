@@ -27,6 +27,7 @@ import 'admin_dashboard_screen.dart';
 import 'admin_chitti_lens_screen.dart';
 import 'admin_cm_presentation_screen.dart';
 import 'admin_dialer_screen.dart';
+import 'github_embedded_screen.dart';
 import 'chitti_conversations_screen.dart';
 import 'chitti_debug_logs_screen.dart';
 import 'chitti_dev_monitor_screen.dart';
@@ -303,6 +304,16 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
       Navigator.of(context).pop();
       return;
     }
+    // NEW (Sep 4 2026): on the GitHub tab, back walks GitHub's own
+    // history first. Falling straight through to the tab reset would
+    // throw the admin out of an issue thread to Overview on the first
+    // back press, which is not what back means inside a browser.
+    if (_tabIndex == 4) {
+      unawaited(GitHubEmbeddedScreen.goBackIfPossible().then((wentBack) {
+        if (!wentBack && mounted) _goToTab(0);
+      }));
+      return;
+    }
     if (_tabIndex != 0) {
       _goToTab(0);
       return;
@@ -368,6 +379,22 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
             // in AI Settings keep working, so nothing that already
             // depended on them can break.
             _buildDevelopmentTab(context),
+            // NEW (Sep 4 2026 — Nizam: "namma main page bottom la athu
+            // oru button ah irukanum apo than admin app kulla yenga
+            // poitu vanthalum ... same screen la irukum, app close
+            // pannitu vanthalum").
+            //
+            // As a TAB rather than a pushed screen, the WebView stays
+            // mounted in this IndexedStack while he moves between tabs,
+            // so switching away and back reloads nothing.
+            // GitHubEmbeddedScreen's own static controller covers
+            // leaving the screen entirely, and it now restores the last
+            // page after the process is killed.
+            //
+            // Same lazy-mount-once-visited rule as every tab above: an
+            // unvisited GitHub tab must not spin up a WebView (and a
+            // network load) on every admin app open.
+            if (_visitedTabs.contains(4)) const GitHubEmbeddedScreen(key: ValueKey('github_tab')) else const SizedBox.shrink(),
           ],
         ),
       ),
@@ -668,6 +695,11 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
       // _buildDevelopmentTab. No badge stream: nothing here is a queue
       // waiting on the admin, so a dot would be noise.
       (icon: '', label: 'Dev', isServicesAggregate: false, materialIcon: Icons.terminal_rounded),
+      // NEW (Sep 4 2026): GitHub, one tap from anywhere. No badge —
+      // PR/issue counts live inside the page itself, and a dot that
+      // needed an API poll to stay honest would cost a request on
+      // every app open for something he is about to look at anyway.
+      (icon: '', label: 'GitHub', isServicesAggregate: false, materialIcon: Icons.hub_rounded),
     ];
     return DecoratedBox(
       decoration: BoxDecoration(
