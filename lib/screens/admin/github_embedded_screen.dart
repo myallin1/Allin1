@@ -37,6 +37,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
@@ -51,6 +52,31 @@ class GitHubEmbeddedScreen extends StatefulWidget {
 
   final String url;
   final String title;
+
+  /// Steps the shared WebView back one page if it has history.
+  ///
+  /// NEW (Sep 4 2026): needed once this screen became a bottom-nav TAB.
+  /// SuperAdminHomeScreen wraps everything in PopScope(canPop: false)
+  /// and sends any back press to "return to the Overview tab" -- which
+  /// is right for every other tab, and wrong here: while browsing an
+  /// issue thread, back should walk GitHub's own history first, exactly
+  /// as it does when this screen is pushed. Static because the parent
+  /// has no handle on this State, and the controller it acts on already
+  /// outlives any single instance anyway.
+  static Future<bool> goBackIfPossible() async {
+    final c = _GitHubEmbeddedScreenState._sharedController;
+    if (c == null) return false;
+    try {
+      if (await c.canGoBack()) {
+        await c.goBack();
+        return true;
+      }
+    } catch (_) {
+      // A dead/disposed platform view should fall through to the
+      // parent's tab handling, not throw during a back press.
+    }
+    return false;
+  }
 
   @override
   State<GitHubEmbeddedScreen> createState() => _GitHubEmbeddedScreenState();
@@ -94,6 +120,17 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
   // ones inherit whatever page is already open.
   static WebViewController? _sharedController;
 
+  /// The page the admin was last on, remembered across app RESTARTS.
+  ///
+  /// NEW (Sep 4 2026 — Nizam: "app close pannitu vanthalum" same screen).
+  /// _sharedController already survives leaving this screen, but it dies
+  /// with the process — Android kills the app and the WebView goes with
+  /// it. Persisting just the URL is the honest version of "same place":
+  /// scroll position and a half-typed comment genuinely cannot survive a
+  /// process death, but landing back on the same issue instead of the PR
+  /// list is most of the value and costs one string.
+  static const String _kLastUrl = 'github_embedded_last_url';
+
   late final WebViewController _controller;
   bool _loading = true;
 
@@ -123,8 +160,12 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
           onPageStarted: (_) {
             if (mounted) setState(() => _loading = true);
           },
-          onPageFinished: (_) {
+          onPageFinished: (url) {
             if (mounted) setState(() => _loading = false);
+            // Written on every page settle, not on dispose: Android can
+            // kill the process without ever calling dispose(), which is
+            // exactly the case this is for.
+            unawaited(_rememberUrl(url));
           },
           onNavigationRequest: (request) {
             final host = Uri.tryParse(request.url)?.host ?? '';
@@ -133,7 +174,8 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
             // SSO) or a file download link — those are correctly a
             // real browser/download manager's job, not this WebView's.
             unawaited(
-              launchUrl(Uri.parse(request.url), mode: LaunchMode.externalApplication),
+              launchUrl(Uri.parse(request.url),
+                  mode: LaunchMode.externalApplication),
             );
             return NavigationDecision.prevent;
           },
@@ -142,7 +184,11 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
 
     if (isFresh) {
       _sharedController = _controller;
-      unawaited(_controller.loadRequest(Uri.parse(widget.url)));
+      // widget.url is the fallback, not the default: on a cold start we
+      // would rather land the admin back where he was than on the PR
+      // list he has already seen. An explicitly-passed url (a deep link
+      // to one issue) still wins -- see _restoreOrLoad.
+      unawaited(_restoreOrLoad());
 
       // Same reasoning as DmartEmbeddedView: GitHub's login can redirect
       // across its own subdomains (github.com -> githubusercontent.com
@@ -162,6 +208,37 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
       // don't leave the spinner up waiting for an onPageFinished that
       // will never fire.
       _loading = false;
+    }
+  }
+
+  /// Loads the page the admin was last on, falling back to
+  /// [GitHubEmbeddedScreen.url].
+  ///
+  /// A caller that passes a non-default url means "open THIS", which is
+  /// a deliberate deep link and beats the remembered page.
+  Future<void> _restoreOrLoad() async {
+    var target = widget.url;
+    const fallback = 'https://github.com/myallin1/Allin1/pulls';
+    if (widget.url == fallback) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final saved = prefs.getString(_kLastUrl);
+        if (saved != null && saved.trim().isNotEmpty) target = saved;
+      } catch (_) {
+        // A prefs failure just means "start at the default" -- never a
+        // reason to leave the screen blank.
+      }
+    }
+    await _controller.loadRequest(Uri.parse(target));
+  }
+
+  Future<void> _rememberUrl(String url) async {
+    if (!_isAllowedHost(Uri.tryParse(url)?.host ?? '')) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kLastUrl, url);
+    } catch (_) {
+      // Losing the bookmark is not worth surfacing to the admin.
     }
   }
 
@@ -190,7 +267,8 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
           iconTheme: const IconThemeData(color: _text),
           title: Text(
             widget.title,
-            style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 16),
+            style: GoogleFonts.outfit(
+                color: _text, fontWeight: FontWeight.w700, fontSize: 16),
           ),
           actions: [
             IconButton(
@@ -203,7 +281,8 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
               onPressed: () async {
                 final current = await _controller.currentUrl();
                 if (current == null) return;
-                await launchUrl(Uri.parse(current), mode: LaunchMode.externalApplication);
+                await launchUrl(Uri.parse(current),
+                    mode: LaunchMode.externalApplication);
               },
             ),
           ],
