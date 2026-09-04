@@ -102,12 +102,24 @@ class DevApkAsset {
   final int sizeBytes;
   final DateTime? updatedAt;
 
-  /// `allin1-admin-448ec5e3.apk` -> `448ec5e3`. Empty when the file
-  /// doesn't follow the publish job's naming, which is fine — the UI
-  /// falls back to the full filename.
+  /// A human-readable label for this build.
+  ///
+  /// Handles both naming schemes the publish job has used:
+  ///   allin1-admin-448ec5e3.apk                          -> `448ec5e3`
+  ///   allin1-admin-b0044-v1.0.9+279-20260904-3649788f.apk -> `Build 0044 · v1.0.9+279`
+  ///
+  /// The second form exists because a page of eight identical-looking
+  /// hex names was genuinely unreadable — see the "Rename with version
+  /// + build number" step in ci-cd.yml. Old assets keep working, so
+  /// rolling back to a pre-rename build still shows something useful.
   String get shortSha {
-    final m = RegExp(r'allin1-admin-([0-9a-f]+)\.apk').firstMatch(name);
-    return m?.group(1) ?? '';
+    final versioned =
+        RegExp(r'allin1-admin-b(\d+)-v([^-]+)-').firstMatch(name);
+    if (versioned != null) {
+      return 'Build ${versioned.group(1)} · v${versioned.group(2)}';
+    }
+    final legacy = RegExp(r'allin1-admin-([0-9a-f]+)\.apk').firstMatch(name);
+    return legacy?.group(1) ?? '';
   }
 
   String get sizeLabel => '${(sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB';

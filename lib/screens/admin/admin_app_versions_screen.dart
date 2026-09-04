@@ -24,7 +24,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/app_changelog_service.dart';
 import '../../services/chitti/chitti_dev_monitor_service.dart';
+import 'admin_whats_new_sheet.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _card = Color(0xFF16162A);
@@ -44,11 +46,13 @@ class AdminAppVersionsScreen extends StatefulWidget {
 
 class _AdminAppVersionsScreenState extends State<AdminAppVersionsScreen> {
   String? _installedVersion;
+  AppChangelog? _changelog;
 
   @override
   void initState() {
     super.initState();
     _loadInstalled();
+    _loadChangelog();
   }
 
   Future<void> _loadInstalled() async {
@@ -59,6 +63,12 @@ class _AdminAppVersionsScreenState extends State<AdminAppVersionsScreen> {
     } catch (_) {
       // Version banner is a nice-to-have; the list is the point.
     }
+  }
+
+  Future<void> _loadChangelog() async {
+    final log = await AppChangelogService.load();
+    if (!mounted) return;
+    setState(() => _changelog = log);
   }
 
   Future<void> _install(DevApkAsset asset) async {
@@ -128,6 +138,16 @@ class _AdminAppVersionsScreenState extends State<AdminAppVersionsScreen> {
               ],
             ),
           ),
+          // NEW (Sep 4 2026 — Nizam: "setting la version ku keela
+          // yennena feautures add pannirukomnu list kaatanum"). The
+          // startup popup is dismissible, and a record you can only see
+          // once is not a record — this is the permanent copy, sitting
+          // directly under the version it describes.
+          if (_changelog != null && !_changelog!.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: AdminWhatsNewSheet(log: _changelog!, embedded: true),
+            ),
           Expanded(
             child: assets.isEmpty
                 ? Center(
