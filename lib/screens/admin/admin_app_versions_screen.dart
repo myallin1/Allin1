@@ -22,7 +22,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../../services/app_update_checker.dart';
 
 import '../../services/app_changelog_service.dart';
 import '../../services/chitti/chitti_dev_monitor_service.dart';
@@ -48,6 +48,11 @@ class _AdminAppVersionsScreenState extends State<AdminAppVersionsScreen> {
   String? _installedVersion;
   AppChangelog? _changelog;
 
+  /// Which asset is downloading, and how far along. Only one at a
+  /// time — AppUpdateChecker guards that internally too.
+  String? _downloadingName;
+  double _progress = 0;
+
   @override
   void initState() {
     super.initState();
@@ -71,25 +76,42 @@ class _AdminAppVersionsScreenState extends State<AdminAppVersionsScreen> {
     setState(() => _changelog = log);
   }
 
+  /// Downloads INSIDE the app and hands the file straight to Android's
+  /// installer.
+  ///
+  /// CHANGED (Sep 4 2026 — Nizam: "admin app vittu veliya pogama admin
+  /// app laye embedded ah open aganum"). This used to launchUrl() the
+  /// asset, which threw him out to a browser and a download manager.
+  /// Reuses AppUpdateChecker, which the hero and customer apps have
+  /// been using for exactly this since August — no second "how do we
+  /// install an update" implementation.
+  ///
+  /// Android's own install confirmation still appears. That is an OS
+  /// security boundary, not something an app is allowed to skip.
   Future<void> _install(DevApkAsset asset) async {
+    if (_downloadingName != null) return;
     final messenger = ScaffoldMessenger.maybeOf(context);
+    setState(() {
+      _downloadingName = asset.name;
+      _progress = 0;
+    });
     try {
-      // Hands off to the browser/download manager, which then hands the
-      // .apk to Android's package installer — the same path the Dev
-      // tab's existing "Download APK & Test" button uses. Deliberately
-      // not an in-app installer: that needs REQUEST_INSTALL_PACKAGES
-      // plumbing this screen doesn't otherwise justify.
-      final ok = await launchUrl(
-        Uri.parse(asset.downloadUrl),
-        mode: LaunchMode.externalApplication,
+      await AppUpdateChecker().downloadAndInstallUrl(
+        apkUrl: asset.downloadUrl,
+        fileName: asset.name,
+        onProgress: (p) {
+          if (mounted) setState(() => _progress = p);
+        },
       );
-      if (!ok) {
-        messenger?.showSnackBar(
-          const SnackBar(content: Text('Could not start the download.')),
-        );
-      }
     } catch (e) {
       messenger?.showSnackBar(SnackBar(content: Text('Download failed: $e')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _downloadingName = null;
+          _progress = 0;
+        });
+      }
     }
   }
 
@@ -181,7 +203,9 @@ class _AdminAppVersionsScreenState extends State<AdminAppVersionsScreen> {
                                   Row(
                                     children: [
                                       Text(
-                                        a.shortSha.isEmpty ? a.name : a.shortSha,
+                                        a.shortSha.isEmpty
+                                            ? a.name
+                                            : a.shortSha,
                                         style: GoogleFonts.outfit(
                                             color: _text,
                                             fontSize: 15,
@@ -216,23 +240,53 @@ class _AdminAppVersionsScreenState extends State<AdminAppVersionsScreen> {
                                 ],
                               ),
                             ),
-                            TextButton.icon(
-                              onPressed: () => _install(a),
-                              icon: Icon(
-                                isNewest
-                                    ? Icons.download_rounded
-                                    : Icons.history_rounded,
-                                color: isNewest ? _green : _purple,
-                                size: 18,
+                            if (_downloadingName == a.name)
+                              // Progress replaces the button rather than
+                              // sitting next to it — a disabled button
+                              // beside a spinner reads as "stuck", and the
+                              // percentage is the only thing worth looking
+                              // at while a 118 MB file comes down.
+                              SizedBox(
+                                width: 74,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    LinearProgressIndicator(
+                                      value: _progress == 0 ? null : _progress,
+                                      minHeight: 4,
+                                      backgroundColor: _bg,
+                                      valueColor:
+                                          const AlwaysStoppedAnimation(_green),
+                                    ),
+                                    const SizedBox(height: 5),
+                                    Text(
+                                      '${(_progress * 100).toStringAsFixed(0)}%',
+                                      style: GoogleFonts.outfit(
+                                          color: _muted, fontSize: 11),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              TextButton.icon(
+                                onPressed: _downloadingName == null
+                                    ? () => _install(a)
+                                    : null,
+                                icon: Icon(
+                                  isNewest
+                                      ? Icons.download_rounded
+                                      : Icons.history_rounded,
+                                  color: isNewest ? _green : _purple,
+                                  size: 18,
+                                ),
+                                label: Text(
+                                  isNewest ? 'Install' : 'Roll back',
+                                  style: GoogleFonts.outfit(
+                                      color: isNewest ? _green : _purple,
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600),
+                                ),
                               ),
-                              label: Text(
-                                isNewest ? 'Install' : 'Roll back',
-                                style: GoogleFonts.outfit(
-                                    color: isNewest ? _green : _purple,
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w600),
-                              ),
-                            ),
                           ],
                         ),
                       );
