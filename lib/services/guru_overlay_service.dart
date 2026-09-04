@@ -84,6 +84,9 @@ import 'chitti/chitti_local_intent_engine.dart';
 import 'chitti/chitti_screen_tracker.dart';
 import 'chitti/chitti_voice_service.dart';
 import 'chitti/chitti_tool_registry.dart';
+import 'chitti/chitti_model_provider.dart';
+import '../screens/chitti_call_screen.dart';
+import '../widgets/chitti_model_picker_sheet.dart';
 
 /// The floating panel's fixed size. Named because the positioning
 /// clamp has to agree with the actual box — they were two independent
@@ -1683,17 +1686,56 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
 
   int _sizeStage = 1; // 0 = compact, 1 = standard, 2 = expanded
 
-  double get _panelWidth => switch (_sizeStage) {
+  // NEW (Sep 5 2026 — Nizam: "chat box bottom corner la pidichu iluttha
+  // venungra size ku adjust pandrathayum optionala vaikanum"). The
+  // 3-stage cycle button stays the primary, one-tap way to resize — this
+  // is deliberately ADDITIONAL, not a replacement: null means "use
+  // whatever the stage button picked", so a customer who never touches
+  // the corner handle sees no change at all in how sizing behaves. Set
+  // only by an actual corner drag, and cleared the moment the stage
+  // button is tapped again, so the two controls never fight over which
+  // one is "right" after the other was used.
+  double? _customWidth;
+  double? _customHeight;
+
+  double get _panelWidth =>
+      _customWidth ??
+      switch (_sizeStage) {
         0 => 300.0,
         2 => 360.0,
         _ => 330.0,
       };
 
-  double get _panelHeight => switch (_sizeStage) {
+  double get _panelHeight =>
+      _customHeight ??
+      switch (_sizeStage) {
         0 => 350.0,
         2 => 560.0,
         _ => 440.0,
       };
+
+  /// Bounds for a manual drag. The floor keeps the header's own row of
+  /// six icon buttons from overlapping itself; the ceiling is applied
+  /// against the actual screen size at drag time (see _onResizeDrag), not
+  /// a fixed number, so the panel can never be dragged off a small phone
+  /// screen.
+  static const double _minPanelWidth = 280.0;
+  static const double _minPanelHeight = 320.0;
+
+  /// True only for the duration of an active corner drag. Suppresses the
+  /// panel's normal resize animation so a drag frame lands exactly under
+  /// the finger — an eased transition fighting a continuous gesture is
+  /// what makes a drag-to-resize handle feel laggy.
+  bool _resizingByDrag = false;
+
+  void _onResizeDrag(Offset delta, Size screenSize) {
+    setState(() {
+      _customWidth = (_panelWidth + delta.dx)
+          .clamp(_minPanelWidth, screenSize.width - 24);
+      _customHeight = (_panelHeight + delta.dy)
+          .clamp(_minPanelHeight, screenSize.height - 120);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1752,36 +1794,60 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
             },
             child: Material(
               color: Colors.transparent,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeOutCubic,
-                width: _panelWidth,
-                height: _panelHeight,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: const Color(0x33FF4FA3)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.14),
-                      blurRadius: 30,
-                      offset: const Offset(0, 14),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  AnimatedContainer(
+                    // A drag frame must land exactly where the finger is,
+                    // with no easing lag behind it — only the 3-stage
+                    // button's own jump needs (and gets) an animated
+                    // transition, via _resizingByDrag below.
+                    duration: _resizingByDrag
+                        ? Duration.zero
+                        : const Duration(milliseconds: 250),
+                    curve: Curves.easeOutCubic,
+                    width: _panelWidth,
+                    height: _panelHeight,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: const Color(0x33FF4FA3)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.14),
+                          blurRadius: 30,
+                          offset: const Offset(0, 14),
+                        ),
+                        BoxShadow(
+                          color:
+                              const Color(0xFFFF4FA3).withValues(alpha: 0.18),
+                          blurRadius: 34,
+                          spreadRadius: -10,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
                     ),
-                    BoxShadow(
-                      color: const Color(0xFFFF4FA3).withValues(alpha: 0.18),
-                      blurRadius: 34,
-                      spreadRadius: -10,
-                      offset: const Offset(0, 10),
+                    child: Column(
+                      children: [
+                        _buildHeader(service),
+                        Expanded(child: _buildMessages(service)),
+                        _buildInput(service),
+                      ],
                     ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    _buildHeader(service),
-                    Expanded(child: _buildMessages(service)),
-                    _buildInput(service),
-                  ],
-                ),
+                  ),
+                  Positioned(
+                    right: -6,
+                    bottom: -6,
+                    child: _ResizeHandle(
+                      onDragStart: () =>
+                          setState(() => _resizingByDrag = true),
+                      onDragUpdate: (delta) =>
+                          _onResizeDrag(delta, MediaQuery.sizeOf(context)),
+                      onDragEnd: () =>
+                          setState(() => _resizingByDrag = false),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1846,6 +1912,26 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
             ],
           ),
           const Spacer(),
+          // NEW (Sep 5 2026). Exactly one of these two ever shows, so
+          // this never makes an already six-icon-wide header any more
+          // crowded than it already was for a given app:
+          //   - admin gets the model picker, matching the existing rule
+          //     in chitti_model_provider.dart that only the admin build
+          //     may choose a different backend at all.
+          //   - customer/hero get the call button — the in-app voice
+          //     call replacing a cellular call to support, which never
+          //     had a "which AI model" concept to begin with.
+          if (currentAppVariant == 'admin')
+            _ModelChipButton(onChanged: () => setState(() {}))
+          else if (currentAppVariant == 'customer' ||
+              currentAppVariant == 'hero')
+            IconButton(
+              icon: const Icon(Icons.call_rounded, color: Colors.white, size: 16),
+              tooltip: 'Call Chitti',
+              onPressed: () => unawaited(openChittiCallScreen(context)),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+            ),
           IconButton(
             icon: Icon(
               _sizeStage == 0
@@ -1860,6 +1946,11 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
             onPressed: () {
               setState(() {
                 _sizeStage = (_sizeStage + 1) % 3;
+                // A fresh preset should win outright — otherwise tapping
+                // this after a manual drag would visibly do nothing,
+                // which is a worse experience than either control alone.
+                _customWidth = null;
+                _customHeight = null;
               });
             },
             padding: EdgeInsets.zero,
@@ -2194,6 +2285,151 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
     if (text.trim().isEmpty) return;
     _controller.clear();
     unawaited(service.sendMessage(text));
+  }
+}
+
+/// A small pill in the overlay header showing which model Chitti is
+/// currently using, and opening the full picker on tap.
+///
+/// Its own tiny StatefulWidget (rather than reading state the parent
+/// panel already tracks) because the chosen model lives in
+/// SharedPreferences, not in GuruOverlayService's ChangeNotifier state —
+/// nothing in the existing service would tell this chip to rebuild when
+/// the admin picks a different one, so it re-reads its own label after
+/// the picker sheet closes instead.
+class _ModelChipButton extends StatefulWidget {
+  const _ModelChipButton({required this.onChanged});
+
+  /// Called after the admin actually picks a (possibly different)
+  /// model, so the parent panel can rebuild anything else that cares —
+  /// today nothing does, but a silent no-op parent callback is cheaper
+  /// insurance than finding out later something needed it.
+  final VoidCallback onChanged;
+
+  @override
+  State<_ModelChipButton> createState() => _ModelChipButtonState();
+}
+
+class _ModelChipButtonState extends State<_ModelChipButton> {
+  String? _modelId;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final id = await getChittiModelId();
+    if (mounted) setState(() => _modelId = id);
+  }
+
+  /// The label's first word ("Groq", "Gemini", "DeepSeek", "Claude") —
+  /// the parenthetical qualifier ("fastest", "best reasoning") is meant
+  /// for the full picker sheet, not a header chip with room for one
+  /// short word.
+  String get _shortLabel {
+    final model = chittiModelById(_modelId);
+    return model.label.split(' ').first;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 2),
+      child: Material(
+        color: Colors.white.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () async {
+            final picked = await showChittiModelPickerSheet(
+              context,
+              currentModelId: _modelId,
+            );
+            if (picked != null && mounted) {
+              setState(() => _modelId = picked.id);
+              widget.onChanged();
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _shortLabel,
+                  style: GoogleFonts.outfit(
+                    color: Colors.white,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                const Icon(
+                  Icons.expand_more_rounded,
+                  color: Colors.white,
+                  size: 13,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The bottom-right drag handle that resizes the panel freehand.
+///
+/// A small diagonal-lines glyph in its own translucent circle, offset
+/// half outside the panel's own rounded corner (see its Positioned in
+/// the caller) so it reads as a handle attached to the edge rather than
+/// content clipped by the panel's own border radius.
+class _ResizeHandle extends StatelessWidget {
+  const _ResizeHandle({
+    required this.onDragStart,
+    required this.onDragUpdate,
+    required this.onDragEnd,
+  });
+
+  final VoidCallback onDragStart;
+  final ValueChanged<Offset> onDragUpdate;
+  final VoidCallback onDragEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onPanStart: (_) => onDragStart(),
+      onPanUpdate: (details) => onDragUpdate(details.delta),
+      onPanEnd: (_) => onDragEnd(),
+      onPanCancel: onDragEnd,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.resizeUpLeftDownRight,
+        child: Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFF4FA3),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.open_in_full_rounded,
+            color: Colors.white,
+            size: 14,
+          ),
+        ),
+      ),
+    );
   }
 }
 

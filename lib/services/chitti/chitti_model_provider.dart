@@ -29,6 +29,7 @@
 library;
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// One LLM backend.
 @immutable
@@ -150,6 +151,28 @@ const List<ChittiModel> kChittiModels = <ChittiModel>[
 
 /// Where the admin's chosen model id is stored.
 const String kChittiModelPrefsKey = 'chitti_model_id';
+
+/// Persists the admin's model choice.
+///
+/// Written by the new in-chat picker (chitti_model_picker_sheet.dart).
+/// admin_ai_settings_screen.dart keeps writing this same key directly
+/// as part of its own batched settings save — same key, same effect,
+/// left untouched rather than risking that save's existing grouping.
+/// Nothing needs to be notified after either write: guru_api_service.
+/// dart's _resolveBackend reads this key fresh on every request rather
+/// than caching it, specifically so a change here reaches the very next
+/// message with no extra plumbing.
+Future<void> setChittiModelId(String id) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString(kChittiModelPrefsKey, id);
+}
+
+/// The admin's currently chosen model id, or null if none has been
+/// picked yet (callers fall back to [defaultChittiModel] in that case).
+Future<String?> getChittiModelId() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getString(kChittiModelPrefsKey);
+}
 
 /// Looks up a model by id, or the default when the id is unknown.
 ChittiModel chittiModelById(String? id) => kChittiModels.firstWhere(

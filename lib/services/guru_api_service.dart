@@ -873,6 +873,24 @@ class GuruApiService {
     bool needsVision = false,
   }) => _resolveBackend(needsVision: needsVision);
 
+  /// NEW (Sep 5 2026 — Nizam: "admin yentha api potrukkaro antha modela
+  /// chitti oda chat screen la model maathuramari option kudukanum").
+  ///
+  /// Every model that actually has a usable key right now, in the same
+  /// order as [kChittiModels] (Groq, Gemini, DeepSeek, Anthropic) — the
+  /// in-chat picker's list. Deliberately NOT "every model that exists":
+  /// offering one with no key would let the admin pick it, send a
+  /// message, and land right back on "I could not reach the full AI",
+  /// which is the exact confusion this picker exists to end.
+  ///
+  /// Reuses _allKeys() rather than a second read of prefs/dart-define,
+  /// so this can never disagree with what a real request would actually
+  /// use.
+  Future<List<ChittiModel>> availableModels() async {
+    final keys = await _allKeys();
+    return kChittiModels.where((m) => (keys[m.id] ?? '').isNotEmpty).toList();
+  }
+
   /// The model id the admin picked for this provider in
   /// admin_ai_settings_screen.dart, or the built-in default.
   ///
