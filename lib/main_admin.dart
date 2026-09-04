@@ -39,6 +39,7 @@ import 'services/db_usage_tracker.dart';
 import 'services/localization_service.dart';
 import 'services/migration_gate_service.dart';
 import 'services/chitti/chitti_accessibility_bridge.dart';
+import 'services/chitti/chitti_followup_service.dart';
 import 'services/session_service.dart';
 import 'services/theme_service.dart';
 import 'widgets/branded_loading_screen.dart';
@@ -401,6 +402,18 @@ void main() {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final ctx = navigatorKey.currentContext;
         if (ctx != null) unawaited(maybeShowWhatsNew(ctx));
+      });
+      // NEW (Sep 4 2026 — Nizam: "itha mudichutingla boss athu
+      // mudichutingla boss nu kekekanum enkita"). Fires on app open,
+      // which is the one moment he is definitely looking at the phone
+      // and not mid-call or mid-conversation.
+      //
+      // Self-silencing by design: it asks about at most ONE overdue
+      // commitment, and only if ChittiNudgeService's shared budget (6
+      // proactive messages a day, 3 minutes apart, global mute) allows
+      // it. Most opens will say nothing at all, which is the point.
+      Future<void>.delayed(const Duration(seconds: 4), () {
+        unawaited(ChittiFollowUpService.instance.maybeAskOne());
       });
       if (!hasSeenSplashVideoEver) {
         await FirebaseMessaging.instance.requestPermission(
