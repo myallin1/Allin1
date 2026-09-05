@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:erode_superapp/services/offline_sos_mesh_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('SosBeaconPayload', () {
@@ -25,7 +25,7 @@ void main() {
       expect(parsed.batteryLevel, 85);
       expect(parsed.rssi, -65);
       expect(parsed.estimatedDistanceMeters, isNotNull);
-      expect(parsed.estimatedDistanceMeters!, greaterThan(0));
+      expect(parsed.estimatedDistanceMeters, greaterThan(0));
     });
 
     test('returns null on invalid beacon string', () {

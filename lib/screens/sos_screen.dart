@@ -168,7 +168,7 @@ class _SosScreenState extends State<SosScreen> {
   Future<void> _toggleSiren() async {
     setState(() => _isSirenActive = !_isSirenActive);
     if (_isSirenActive) {
-      FlutterRingtonePlayer().playAlarm(looping: true, asAlarm: true);
+      FlutterRingtonePlayer().playAlarm();
     } else {
       FlutterRingtonePlayer().stop();
     }

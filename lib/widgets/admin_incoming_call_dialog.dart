@@ -20,9 +20,9 @@ import '../services/chitti/chitti_live_call_service.dart';
 
 class AdminIncomingCallDialog extends StatefulWidget {
   const AdminIncomingCallDialog({
-    super.key,
     required this.callState,
     required this.adminId,
+    super.key,
   });
 
   final ChittiLiveCallState callState;

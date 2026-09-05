@@ -78,8 +78,8 @@ class SosBeaconPayload {
   /// Path loss formula: Distance = 10 ^ ((Measured Power - RSSI) / (10 * N))
   /// Measured Power @ 1m ~ -59 dBm, Path Loss Exponent N ~ 2.4
   static double estimateDistance(int rssi) {
-    if (rssi == 0) return -1.0;
-    const double txPower = -59.0;
+    if (rssi == 0) return -1;
+    const double txPower = -59;
     const double n = 2.4;
     final ratio = (txPower - rssi) / (10 * n);
     final distance = math.pow(10.0, ratio).toDouble();
@@ -106,8 +106,7 @@ class OfflineSosMeshService {
   bool _isBroadcasting = false;
   bool get isBroadcasting => _isBroadcasting;
 
-  bool _isScanning = false;
-  bool get isScanning => _isScanning;
+  bool isScanning = false;
 
   SosBeaconPayload? _activeBeacon;
   SosBeaconPayload? get activeBeacon => _activeBeacon;

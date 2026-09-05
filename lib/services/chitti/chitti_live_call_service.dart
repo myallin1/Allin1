@@ -44,7 +44,7 @@ class ChittiLiveCallState {
   final List<String> liveTranscript;
   final String? lastSpokenText;
 
-  static ChittiLiveCallState fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  factory ChittiLiveCallState.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? <String, dynamic>{};
     final rawTs = data['createdAt'];
     DateTime dt = DateTime.now();
@@ -118,7 +118,7 @@ class ChittiLiveCallService {
         .where('status', isEqualTo: 'ringing')
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) => ChittiLiveCallState.fromDoc(doc)).toList();
+      return snapshot.docs.map(ChittiLiveCallState.fromDoc).toList();
     });
   }
 
