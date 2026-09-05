@@ -68,10 +68,31 @@ class _AdminInCallScreenState extends State<AdminInCallScreen> {
   Future<void> _refresh() async {
     final info = await ChittiAccessibilityBridge.instance.getActiveCallInfo();
     if (!mounted) return;
-    if (info == null) {
+    // AUDIT FIX (Sep 2026 — Nizam: "call cut anathukapramum athe screen
+    // katitu apdiye nikkuthu ... auto close agala").
+    //
+    // ROOT CAUSE: PhoneCallService.activeCallInfo() (native side) maps
+    // Call.STATE_DISCONNECTED to the string "ended" -- a non-null
+    // result. This screen only ever treated a null info map (meaning
+    // Telecom's onCallRemoved had already fired and cleared
+    // activeTelecomCall) as "the call is over". Android does not clear
+    // a Call from Telecom the instant it disconnects -- there is a real
+    // window, sometimes brief and sometimes not on slower networks or
+    // certain OEM Telecom stacks, where the call sits at
+    // STATE_DISCONNECTED before onCallRemoved actually fires. During
+    // that whole window this screen kept polling a non-null "ended"
+    // state, never matched it to anything, and just sat there --
+    // exactly the "stays open no matter who ended the call" symptom,
+    // and exactly why it was intermittent rather than constant.
+    //
+    // "ended" is now treated identically to a null info map: the call
+    // is over the moment Telecom SAYS it is disconnected, not only once
+    // the framework has finished tearing the Call object down.
+    final state = info?['state'] as String?;
+    if (info == null || state == 'ended') {
       // The call ended (by either side). Close the screen rather than
       // leaving a dead in-call UI on top of the app.
-      setState(() => _callGone = true);
+      if (!_callGone) setState(() => _callGone = true);
       _poll?.cancel();
       await Future<void>.delayed(const Duration(milliseconds: 900));
       if (mounted) Navigator.of(context).maybePop();
@@ -79,7 +100,7 @@ class _AdminInCallScreenState extends State<AdminInCallScreen> {
     }
     setState(() {
       _number = (info['number'] as String?)?.trim() ?? '';
-      _state = (info['state'] as String?) ?? 'active';
+      _state = state ?? 'active';
       _speakerOn = info['speakerOn'] == true;
       _recording = info['recording'] == true;
       _connectedAt = (info['connectedAt'] as num?)?.toInt();

@@ -101,6 +101,43 @@ class GitHubEmbeddedScreen extends StatefulWidget {
     return false;
   }
 
+  // AUDIT FIX (Sep 2026 — Nizam: "dev la github issue list la irunthu
+  // link tap pannuna admin app github blank aguthu ... app close
+  // pannitu ila back poitu vantha than open aguthu").
+  //
+  // ROOT CAUSE: chitti_dev_monitor_screen.dart's issue tiles used to
+  // Navigator.push a SECOND GitHubEmbeddedScreen instance. That new
+  // instance reuses the same static _sharedController (correct, for
+  // session/cookies) -- but the ORIGINAL instance living inside
+  // AdminWebTabsScreen's Offstage subtree was never disposed, so the
+  // exact same native WebView ends up requested by TWO WebViewWidget
+  // platform-view slots at once (one Offstage, one freshly pushed).
+  // Android's WebView cannot be attached to two embedding surfaces
+  // simultaneously -- the newly pushed one renders blank until
+  // something forces a full surface teardown/rebuild, which is exactly
+  // what backgrounding and foregrounding the whole app does by
+  // accident. It also silently never navigated to the tapped issue's
+  // URL at all when _sharedController already existed (the common
+  // case): the isFresh branch that calls loadRequest was the ONLY path
+  // that ever loaded a url, and it is skipped whenever the WebView was
+  // already created by an earlier tab visit.
+  //
+  // FIX: never push a second instance. Route the tapped issue's URL to
+  // the ONE living instance and bring the Web tab to the front instead
+  // -- the exact pattern AdminWebBrowserScreen.open() already proved
+  // for the browser segment (see its own header for the reasoning this
+  // mirrors, including the audit fixes already applied there).
+  static Future<void> open(String url) async {
+    _pendingUrl = url;
+    final live = _GitHubEmbeddedScreenState._live;
+    if (live != null && live.mounted) await live._consumePending();
+  }
+
+  /// The one link waiting to be shown, if any. Survives this screen not
+  /// being built yet -- a cold start reaching straight for an issue url
+  /// would otherwise drop it silently.
+  static String? _pendingUrl;
+
   @override
   State<GitHubEmbeddedScreen> createState() => _GitHubEmbeddedScreenState();
 }
@@ -153,6 +190,11 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
   /// process death, but landing back on the same issue instead of the PR
   /// list is most of the value and costs one string.
   static const String _kLastUrl = 'github_embedded_last_url';
+
+  /// The mounted State, so a link handed over via [GitHubEmbeddedScreen.
+  /// open] while this screen is already on screen loads immediately
+  /// instead of waiting for a rebuild that may never come.
+  static _GitHubEmbeddedScreenState? _live;
 
   late final WebViewController _controller;
   bool _loading = true;
@@ -254,6 +296,33 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
       // don't leave the spinner up waiting for an onPageFinished that
       // will never fire.
       _loading = false;
+      // AUDIT FIX (Sep 2026): this branch used to stop here, silently
+      // ignoring widget.url entirely -- an issue tile's explicit deep
+      // link was dropped on the floor the moment the shared WebView had
+      // already been created by an earlier tab visit, which is the
+      // common case for an admin who uses the app daily. Same "is this
+      // a deliberate deep link" check _restoreOrLoad already uses.
+      const fallback = 'https://github.com/myallin1/Allin1/pulls';
+      if (widget.url != fallback) {
+        unawaited(_controller.loadRequest(Uri.parse(widget.url)));
+      }
+    }
+
+    _live = this;
+    unawaited(_consumePending());
+  }
+
+  /// Loads the waiting link, if there is one, and clears it so it can
+  /// never be replayed by a later rebuild — same contract as
+  /// AdminWebBrowserScreen._consumePending.
+  Future<void> _consumePending() async {
+    final url = GitHubEmbeddedScreen._pendingUrl;
+    if (url == null) return;
+    GitHubEmbeddedScreen._pendingUrl = null;
+    try {
+      await _controller.loadRequest(Uri.parse(url));
+    } catch (e) {
+      debugPrint('[GitHubEmbedded] could not open handed-off link: $e');
     }
   }
 
@@ -294,6 +363,18 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
       return false;
     }
     return true;
+  }
+
+  @override
+  void didUpdateWidget(GitHubEmbeddedScreen old) {
+    super.didUpdateWidget(old);
+    unawaited(_consumePending());
+  }
+
+  @override
+  void dispose() {
+    if (_live == this) _live = null;
+    super.dispose();
   }
 
   @override

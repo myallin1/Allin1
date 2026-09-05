@@ -253,3 +253,15 @@ Future<void> openInAdminBrowser(String url) async {
   AdminWebBrowserScreen.wanted = true;
   await AdminWebBrowserScreen.open(url);
 }
+
+/// Opens a GitHub URL in the admin's own GitHub segment from anywhere —
+/// specifically the Dev Monitor issue list, which used to push a SECOND
+/// GitHubEmbeddedScreen instance instead of this. See
+/// GitHubEmbeddedScreen.open's own header for why that was broken (two
+/// WebViewWidgets bound to the one shared native WebView at once) and
+/// why routing through the existing tab instead is the fix.
+Future<void> openGitHubIssueInAdminTab(String url) async {
+  AdminWebTabsScreen._segment = 0;
+  AdminShellNav.openTab(AdminShellNav.webTabIndex);
+  await GitHubEmbeddedScreen.open(url);
+}
