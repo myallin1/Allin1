@@ -1697,6 +1697,45 @@ service cloud.firestore {
       allow write: if isAdminAny();
     }
 
+    // ==============================================================
+    // active_calls — Live In-App Customer ↔ Admin Calling Sessions
+    // ==============================================================
+    match /active_calls/{callId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth();
+      allow delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // call_service_requests — Customer Call Intent & Voice Request Log
+    // ==============================================================
+    match /call_service_requests/{requestId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update: if isAdminAny();
+      allow delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // sos_alerts — Emergency 24/7 Safety Dispatch & Mesh Relays
+    // ==============================================================
+    match /sos_alerts/{alertId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth();
+      allow delete: if isAdminAny();
+    }
+
+    // ==============================================================
+    // sos_kyc_requests — Customer SOS Verification & Approvals
+    // ==============================================================
+    match /sos_kyc_requests/{userId} {
+      allow read: if isAuth() && (request.auth.uid == userId || isAdminAny());
+      allow create, update: if isAuth() && (request.auth.uid == userId || isAdminAny());
+      allow delete: if isAdminAny();
+    }
+
 
 
     // ==============================================================
