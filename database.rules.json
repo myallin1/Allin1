@@ -95,6 +95,15 @@
         ".read": "auth != null",
         ".write": "auth != null"
       }
+    },
+    "active_calls": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["status"],
+      "$callId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
     }
   }
 }
