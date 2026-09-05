@@ -223,6 +223,7 @@ Map<String, String> chittiRequestHeaders({
   return <String, String>{
     'Content-Type': 'application/json',
     'anthropic-version': '2023-06-01',
+    'anthropic-dangerous-direct-browser-access': 'true',
     if (isOAuth) 'Authorization': 'Bearer $token' else 'x-api-key': token,
   };
 }
