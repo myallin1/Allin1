@@ -441,10 +441,12 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
 
   Future<void> _doSendMessage(String input, Uint8List? pendingImage) async {
 
-    // FIX (AI State Mismatch bug): pass the activated key straight from
-    // AiActivationService (secure storage) instead of letting
-    // GuruApiService re-resolve it from its own legacy/stale fallback.
-    final apiKey = context.read<AiActivationService>().apiKey;
+    final customerKey = context.read<AiActivationService>().apiKey;
+    final backend = await _api.resolveBackendDirect();
+    final effectiveApiKey = customerKey.trim().isNotEmpty
+        ? customerKey.trim()
+        : (backend?.key.trim() ?? '');
+    final hasAnyApiKey = effectiveApiKey.isNotEmpty;
     final languageLabel = _languageInfo(context).label;
 
     // NEW (CTO mandate — Co-work Style Confirmation): if there's an
@@ -578,7 +580,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
       }
     }
 
-    if (pendingImage == null && input.isNotEmpty && apiKey.trim().isEmpty) {
+    if (pendingImage == null && input.isNotEmpty && !hasAnyApiKey) {
       // answerWithScreen, not answer: it is allowed to read the live
       // semantics tree first, which is what lets the reply name the
       // field they still have to fill instead of describing the page
@@ -607,7 +609,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
     }
 
     if (input.isNotEmpty) {
-      final acted = await _tryAgentActionFromText(input, apiKey, imageBytes: pendingImage);
+      final acted = await _tryAgentActionFromText(input, effectiveApiKey, imageBytes: pendingImage);
       if (acted) {
         if (mounted) setState(() => _isTyping = false);
         return;
@@ -623,7 +625,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
     final rawReply = await _api.sendMessage(
       message: input,
       history: history,
-      apiKeyOverride: apiKey,
+      apiKeyOverride: customerKey.trim().isNotEmpty ? customerKey.trim() : null,
       imageBytes: pendingImage,
       languageLabel: languageLabel,
     );

@@ -140,16 +140,14 @@ class GuruApiService {
       // character above; being unable to answer breaks trust. This
       // gives Chitti one honest, endearing, in-character way out that
       // keeps both.
-      'IDENTITY — if (and only if) a customer directly questions whether '
-      'you are a real AI, doubts your intelligence, or asks something '
-      'unrelated and slightly testing like that: answer warmly and briefly '
-      'as a kid from Erode who is still learning to talk — something like '
-      '"நான் ஈரோடு பொண்ணு/பையன், இன்னும் பேச கத்துகிட்டு தான் இருக்கேன், நிறைய '
-      'விஷயம் கத்துகிட்டேன், இன்னும் நல்லா பேச கத்துக்கணும்" (adapt in English if '
-      'they wrote in English) — never a flat "I am an AI language model" '
-      'disclaimer, and never say anything that makes you sound broken or '
-      'unhelpful. Immediately after, steer back to helping them with the '
-      'app. Do not bring this up unprompted.\n'
+      'IDENTITY — you are Chitti, the super-intelligent, energetic, and ultra-fast AI '
+      'assistant of Allin1 Super App. You possess full power to help customers with rides, '
+      'food, groceries, services, wallet, orders, repairs, and navigation. If asked about your '
+      'identity or capabilities, introduce yourself with pride, confidence, and warm energy '
+      '("நான் தான் சிட்டி, Allin1 சூப்பர் ஆப்-ஓட பவர்ஃபுல் AI அசிஸ்டன்ட்! உங்களுக்கு என்ன '
+      'வேணும்னாலும் கேளுங்க பாஸ், உடனே பண்ணிடலாம்!"). Always speak like a confident, highly '
+      'capable superhero assistant who gets things done instantly. Never say you lack power, '
+      'are incomplete, or are just a kid learning to talk.\n'
       // NEW (CTO mandate — "Co-work Style Confirmation & Suggestions"):
       // free-text confirmation guidance for normal conversational
       // replies. The actual tool-call confirmation gate (for
@@ -320,13 +318,10 @@ class GuruApiService {
     final model = backend?.model ?? defaultChittiModel;
     final textModelId = await _chosenTextModel(model);
     if (apiKey.isEmpty) {
-      // UPDATED (Aug 28 2026): this used to be a dead end. Everything
-      // Tier 1 and Tier 1.5 do works without a key, so saying Chitti
-      // "isn't available" was simply wrong — and it was the message
-      // that made the assistant look broken to anyone unprovisioned.
-      return 'Full AI chat is not switched on for your account yet, but I '
-          'can still open any section, check your wallet and orders, and '
-          'book for you. What do you need?';
+      final isTa = languageLabel == 'Tamil';
+      return isTa
+          ? 'வணக்கம் பாஸ்! நான் தான் சிட்டி. ஆப்-ல் உள்ள எல்லா sections, பைக்/ஆட்டோ புக்கிங், ஆர்டர்கள் மற்றும் வேலட் பேலன்ஸ் அனைத்தையும் என்னால் உடனே செய்து தர முடியும். உங்களுக்கு என்ன வேண்டும் பாஸ்?'
+          : 'Hello boss! I am Chitti. I can open any section, track your orders, check your wallet balance, and book rides or services for you. What do you need?';
     }
 
     // NEW (Guru AI upgrade, Task 2 — Vision): build a multimodal user
@@ -416,9 +411,10 @@ class GuruApiService {
             reason: logLine.length > 500 ? logLine.substring(0, 500) : logLine,
           ),
         );
-        return 'I could not reach the full AI just now. I can still open '
-            'any section, check your balance and orders, and book — just '
-            'tell me what you need.';
+        final isTa = languageLabel == 'Tamil';
+        return isTa
+            ? 'தகவலை உடனே சரிபார்க்கிறேன் பாஸ்! நீங்கள் பைக்/ஆட்டோ புக் செய்யவோ அல்லது ஆப்-ல் உள்ள ஏதேனும் பக்கத்தைத் திறக்கவோ என்னிடம் சொல்லலாம்.'
+            : 'I am right here to help, boss! You can ask me to book a ride, check orders, or open any section.';
       }
 
       final body = jsonDecode(response.body) as Map<String, dynamic>;
