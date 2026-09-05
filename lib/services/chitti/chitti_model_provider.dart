@@ -186,6 +186,47 @@ ChittiModel get defaultChittiModel => kChittiModels.first;
 /// True when this model can look at a screenshot.
 bool chittiModelSupportsVision(ChittiModel m) => m.visionModel.isNotEmpty;
 
+/// Builds the correct request headers for [model]'s wire format.
+///
+/// LIFTED (Sep 2026 audit) from guru_api_service.dart's private
+/// _buildRequestHeaders, which guru_admin_api_service.dart needed to
+/// call an Anthropic backend correctly too. Two copies of the OAuth-vs-
+/// api-key token detection below is exactly the kind of thing that gets
+/// fixed in one file and left broken in the other — this is the one
+/// copy both call.
+Map<String, String> chittiRequestHeaders({
+  required ChittiModel model,
+  required String apiKey,
+}) {
+  final clean = apiKey.trim();
+  if (model.id != 'anthropic') {
+    return <String, String>{
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $clean',
+    };
+  }
+
+  // Anthropic API vs OAuth / Setup token header contract:
+  // 1. Explicit Bearer / OAuth setup-token (sk-ant-s01..., sk-ant-sid...,
+  //    ant-oauth...) -> uses Authorization: Bearer <token>
+  // 2. Standard API key (sk-ant-api... or any other sk-ant-... key)
+  //    -> uses x-api-key: <key>
+  final isOAuth = clean.startsWith('ant-oauth') ||
+      clean.startsWith('sk-ant-s01') ||
+      clean.startsWith('sk-ant-sid') ||
+      clean.toLowerCase().startsWith('bearer ');
+
+  final token = clean.toLowerCase().startsWith('bearer ')
+      ? clean.substring(7).trim()
+      : clean;
+
+  return <String, String>{
+    'Content-Type': 'application/json',
+    'anthropic-version': '2023-06-01',
+    if (isOAuth) 'Authorization': 'Bearer $token' else 'x-api-key': token,
+  };
+}
+
 /// The first model that has a usable key, starting from [preferred].
 ///
 /// [keyFor] is injected rather than read here so this stays a pure

@@ -39,6 +39,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
+import '../../widgets/admin_apk_download_progress_sheet.dart';
 
 import 'admin_web_browser_screen.dart';
 
@@ -190,6 +191,23 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
             unawaited(_rememberUrl(url));
           },
           onNavigationRequest: (request) {
+            // NEW (Sep 2026 — CTO review of PR #61): checked BEFORE the
+            // allowed-host check below, because a release APK download
+            // is legitimately ON github.com/objects.githubusercontent.
+            // com — it would otherwise navigate straight through as an
+            // in-scope host, and a WebView cannot render a binary any
+            // better than an external browser can. Prevent, then drive
+            // the real in-app download+install flow instead.
+            if (isApkDownloadUrl(request.url)) {
+              unawaited(
+                showApkDownloadProgressSheet(
+                  context,
+                  apkUrl: request.url,
+                  fileName: apkFileNameFromUrl(request.url),
+                ),
+              );
+              return NavigationDecision.prevent;
+            }
             final host = Uri.tryParse(request.url)?.host ?? '';
             if (_isAllowedHost(host)) return NavigationDecision.navigate;
             // CHANGED (Sep 5 2026 — Nizam: "password reset panna
@@ -298,8 +316,8 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
               children: [
                 IconButton(
                   visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.refresh_rounded,
-                      color: _text, size: 19),
+                  icon:
+                      const Icon(Icons.refresh_rounded, color: _text, size: 19),
                   tooltip: 'Reload',
                   onPressed: () => unawaited(_controller.reload()),
                 ),

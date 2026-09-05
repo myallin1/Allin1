@@ -29,6 +29,8 @@
 // key-resolution logic guru_api_service.dart's real requests use, so
 // this list can never promise a model that the next message can't
 // actually reach.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -279,6 +281,117 @@ class _EmptyState extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A small pill showing which model Chitti is currently using, and
+/// opening the full picker on tap.
+///
+/// PROMOTED TO PUBLIC (Sep 2026 — CTO review of PR #61): the overlay
+/// header (guru_overlay_service.dart) had its own private copy of this;
+/// GuruChatScreen's AppBar needed the identical behaviour, so this is
+/// now the one copy both call, parameterised for the two very different
+/// backgrounds it sits on (the overlay's pink gradient header vs the
+/// chat screen's plain themed AppBar).
+///
+/// Its own tiny StatefulWidget (rather than reading state the parent
+/// screen already tracks) because the chosen model lives in
+/// SharedPreferences, not in any ChangeNotifier either caller already
+/// has — nothing would tell this chip to rebuild when the admin picks a
+/// different one, so it re-reads its own label after the picker sheet
+/// closes instead.
+class ChittiModelChip extends StatefulWidget {
+  const ChittiModelChip({
+    super.key,
+    required this.onChanged,
+    this.foregroundColor = Colors.white,
+    this.backgroundColor = const Color(0x29FFFFFF),
+  });
+
+  /// Called after the admin actually picks a (possibly different)
+  /// model, so the parent can rebuild anything else that cares — a
+  /// silent no-op parent callback is cheaper insurance than finding out
+  /// later something needed it.
+  final VoidCallback onChanged;
+
+  /// Text/icon colour. Defaults to the overlay header's white-on-pink
+  /// look; GuruChatScreen's AppBar passes its own themed ink colour so
+  /// the chip reads correctly against a plain (often light) background.
+  final Color foregroundColor;
+
+  /// Pill fill. Defaults to a translucent white, which only reads
+  /// correctly on a dark/coloured header — callers on a light
+  /// background should pass a themed subtle fill instead.
+  final Color backgroundColor;
+
+  @override
+  State<ChittiModelChip> createState() => _ChittiModelChipState();
+}
+
+class _ChittiModelChipState extends State<ChittiModelChip> {
+  String? _modelId;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final id = await getChittiModelId();
+    if (mounted) setState(() => _modelId = id);
+  }
+
+  /// The label's first word ("Groq", "Gemini", "DeepSeek", "Claude") —
+  /// the parenthetical qualifier ("fastest", "best reasoning") is meant
+  /// for the full picker sheet, not a header chip with room for one
+  /// short word.
+  String get _shortLabel {
+    final model = chittiModelById(_modelId);
+    return model.label.split(' ').first;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: widget.backgroundColor,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () async {
+          final picked = await showChittiModelPickerSheet(
+            context,
+            currentModelId: _modelId,
+          );
+          if (picked != null && mounted) {
+            setState(() => _modelId = picked.id);
+            widget.onChanged();
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _shortLabel,
+                style: GoogleFonts.outfit(
+                  color: widget.foregroundColor,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 2),
+              Icon(
+                Icons.expand_more_rounded,
+                color: widget.foregroundColor,
+                size: 13,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -70,7 +70,9 @@ import '../services/grocery_ai_notes_service.dart';
 import '../services/guru_api_service.dart';
 import '../services/guru_suggestion_parser.dart';
 import '../services/localization_service.dart';
+import '../config/app_variant.dart';
 import '../widgets/chitti_history_sheet.dart';
+import '../widgets/chitti_model_picker_sheet.dart';
 import '../widgets/chitti_typewriter_text.dart';
 import '../widgets/ai_loading_dialog.dart';
 // NEW (CTO mandate — AI Autonomous App Updating): reuses the exact same
@@ -1903,6 +1905,22 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
               ],
             ),
           ),
+          // NEW (Sep 2026 — CTO architectural review of PR #61): the
+          // in-chat model picker existed only in the floating overlay
+          // header; the CTO asked for the same chip here too, in the
+          // main full-screen chat's own AppBar. Admin-only, matching
+          // chitti_model_provider.dart's existing rule that only admin
+          // may choose a backend at all — a customer opening this exact
+          // same screen sees nothing extra.
+          if (currentAppVariant == 'admin')
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: ChittiModelChip(
+                foregroundColor: ink,
+                backgroundColor: context.colors.subtleFill,
+                onChanged: () => setState(() {}),
+              ),
+            ),
           // NEW (CTO mandate — Text-to-Speech): lets the customer turn
           // off auto-speak without losing anything else — chat still
           // works exactly the same, Guru just stays silent.

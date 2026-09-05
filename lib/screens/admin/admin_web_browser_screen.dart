@@ -70,6 +70,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
+import '../../widgets/admin_apk_download_progress_sheet.dart';
 
 const Color _bg = Color(0xFF0E0E1A);
 const Color _surface = Color(0xFF1A1A2E);
@@ -252,6 +253,22 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
             unawaited(_rememberUrl(url));
           },
           onNavigationRequest: (request) {
+            // NEW (Sep 2026 — CTO review of PR #61): a .apk link used to
+            // navigate the WebView itself to a raw binary it cannot
+            // render — in practice the tap either did nothing or handed
+            // off to an external browser. Intercepted the same way any
+            // non-http(s) scheme already is below — prevent, then drive
+            // the real in-app download+install flow.
+            if (isApkDownloadUrl(request.url)) {
+              unawaited(
+                showApkDownloadProgressSheet(
+                  context,
+                  apkUrl: request.url,
+                  fileName: apkFileNameFromUrl(request.url),
+                ),
+              );
+              return NavigationDecision.prevent;
+            }
             final scheme = Uri.tryParse(request.url)?.scheme ?? '';
             // A real browser handles http(s). Anything else — tel:,
             // mailto:, upi:, intent: — belongs to the app that owns it,
@@ -437,8 +454,8 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
     if (input.startsWith('http://') || input.startsWith('https://')) {
       return Uri.parse(input);
     }
-    final looksLikeHost =
-        !input.contains(' ') && RegExp(r'^[\w.-]+\.\w{2,}(/.*)?$').hasMatch(input);
+    final looksLikeHost = !input.contains(' ') &&
+        RegExp(r'^[\w.-]+\.\w{2,}(/.*)?$').hasMatch(input);
     if (looksLikeHost) return Uri.parse('https://$input');
     return Uri.parse(
         'https://www.google.com/search?q=${Uri.encodeQueryComponent(input)}');
@@ -645,7 +662,8 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
             itemBuilder: (_) => [
               _menuItem('forward', Icons.arrow_forward_rounded, 'Forward'),
               _menuItem('home', Icons.home_rounded, 'Home'),
-              _menuItem('external', Icons.open_in_new_rounded, 'Open in Chrome'),
+              _menuItem(
+                  'external', Icons.open_in_new_rounded, 'Open in Chrome'),
             ],
           ),
         ],

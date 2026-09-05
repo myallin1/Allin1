@@ -353,10 +353,7 @@ class GuruApiService {
     }
 
     final isAnthropic = model.id == 'anthropic';
-    final headers = _buildRequestHeaders(
-      isAnthropic: isAnthropic,
-      apiKey: apiKey,
-    );
+    final headers = chittiRequestHeaders(model: model, apiKey: apiKey);
 
     final Map<String, dynamic> requestPayload;
     if (isAnthropic) {
@@ -555,10 +552,7 @@ class GuruApiService {
         : '';
 
     final isAnthropic = model.id == 'anthropic';
-    final headers = _buildRequestHeaders(
-      isAnthropic: isAnthropic,
-      apiKey: apiKey,
-    );
+    final headers = chittiRequestHeaders(model: model, apiKey: apiKey);
 
     final Map<String, dynamic> requestPayload;
     if (isAnthropic) {
@@ -918,38 +912,10 @@ class GuruApiService {
     'ANTHROPIC_API_KEY',
     defaultValue: '',
   );
-  static Map<String, String> _buildRequestHeaders({
-    required bool isAnthropic,
-    required String apiKey,
-  }) {
-    final clean = apiKey.trim();
-    if (!isAnthropic) {
-      return <String, String>{
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $clean',
-      };
-    }
-
-    // Anthropic API vs OAuth / Setup token header contract:
-    // 1. Explicit Bearer / OAuth setup-token (sk-ant-s01..., sk-ant-sid..., ant-oauth...)
-    //    -> uses Authorization: Bearer <token>
-    // 2. Standard API key (sk-ant-api... or any sk-ant-... key)
-    //    -> uses x-api-key: <key>
-    final isOAuth = clean.startsWith('ant-oauth') ||
-        clean.startsWith('sk-ant-s01') ||
-        clean.startsWith('sk-ant-sid') ||
-        clean.toLowerCase().startsWith('bearer ');
-
-    final token = clean.toLowerCase().startsWith('bearer ')
-        ? clean.substring(7).trim()
-        : clean;
-
-    return <String, String>{
-      'Content-Type': 'application/json',
-      'anthropic-version': '2023-06-01',
-      if (isOAuth) 'Authorization': 'Bearer $token' else 'x-api-key': token,
-    };
-  }
+  // AUDIT (Sep 2026): moved to chitti_model_provider.dart as
+  // chittiRequestHeaders() so guru_admin_api_service.dart's multi-
+  // model fix calls the exact same OAuth-vs-api-key detection
+  // instead of a second, driftable copy.
 
   void dispose() {
     _client.close();

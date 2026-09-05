@@ -102,6 +102,26 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
           style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 16),
         ),
         actions: [
+          // NEW (Sep 2026 — CTO review of PR #61): "App Versions &
+          // Rollback" used to appear only conditionally, buried inside
+          // the release card, when that release happened to carry more
+          // than one .apk asset — no route existed on a fresh release
+          // (one asset) or before the card had finished loading. Always
+          // visible here instead — disabled only for the brief window
+          // before the first release has loaded, not hidden.
+          IconButton(
+            icon: const Icon(Icons.history_rounded, color: _text),
+            tooltip: 'App Versions & Rollback',
+            onPressed: snap?.latestRelease == null
+                ? null
+                : () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => AdminAppVersionsScreen(
+                          release: snap!.latestRelease!,
+                        ),
+                      ),
+                    ),
+          ),
           IconButton(
             icon: const Icon(Icons.open_in_new_rounded, color: _text),
             tooltip: 'Open GitHub in-app',

@@ -84,7 +84,6 @@ import 'chitti/chitti_local_intent_engine.dart';
 import 'chitti/chitti_screen_tracker.dart';
 import 'chitti/chitti_voice_service.dart';
 import 'chitti/chitti_tool_registry.dart';
-import 'chitti/chitti_model_provider.dart';
 import '../screens/chitti_call_screen.dart';
 import '../widgets/chitti_model_picker_sheet.dart';
 
@@ -1922,7 +1921,7 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
           //     call replacing a cellular call to support, which never
           //     had a "which AI model" concept to begin with.
           if (currentAppVariant == 'admin')
-            _ModelChipButton(onChanged: () => setState(() {}))
+            ChittiModelChip(onChanged: () => setState(() {}))
           else if (currentAppVariant == 'customer' ||
               currentAppVariant == 'hero')
             IconButton(
@@ -2288,97 +2287,7 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
   }
 }
 
-/// A small pill in the overlay header showing which model Chitti is
-/// currently using, and opening the full picker on tap.
-///
-/// Its own tiny StatefulWidget (rather than reading state the parent
-/// panel already tracks) because the chosen model lives in
-/// SharedPreferences, not in GuruOverlayService's ChangeNotifier state —
-/// nothing in the existing service would tell this chip to rebuild when
-/// the admin picks a different one, so it re-reads its own label after
-/// the picker sheet closes instead.
-class _ModelChipButton extends StatefulWidget {
-  const _ModelChipButton({required this.onChanged});
 
-  /// Called after the admin actually picks a (possibly different)
-  /// model, so the parent panel can rebuild anything else that cares —
-  /// today nothing does, but a silent no-op parent callback is cheaper
-  /// insurance than finding out later something needed it.
-  final VoidCallback onChanged;
-
-  @override
-  State<_ModelChipButton> createState() => _ModelChipButtonState();
-}
-
-class _ModelChipButtonState extends State<_ModelChipButton> {
-  String? _modelId;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_load());
-  }
-
-  Future<void> _load() async {
-    final id = await getChittiModelId();
-    if (mounted) setState(() => _modelId = id);
-  }
-
-  /// The label's first word ("Groq", "Gemini", "DeepSeek", "Claude") —
-  /// the parenthetical qualifier ("fastest", "best reasoning") is meant
-  /// for the full picker sheet, not a header chip with room for one
-  /// short word.
-  String get _shortLabel {
-    final model = chittiModelById(_modelId);
-    return model.label.split(' ').first;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 2),
-      child: Material(
-        color: Colors.white.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: () async {
-            final picked = await showChittiModelPickerSheet(
-              context,
-              currentModelId: _modelId,
-            );
-            if (picked != null && mounted) {
-              setState(() => _modelId = picked.id);
-              widget.onChanged();
-            }
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _shortLabel,
-                  style: GoogleFonts.outfit(
-                    color: Colors.white,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(width: 2),
-                const Icon(
-                  Icons.expand_more_rounded,
-                  color: Colors.white,
-                  size: 13,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 /// The bottom-right drag handle that resizes the panel freehand.
 ///

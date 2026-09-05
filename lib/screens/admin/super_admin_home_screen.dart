@@ -19,9 +19,11 @@ import '../../services/sos_dispatch_service.dart';
 import '../../services/web_version_checker.dart';
 import '../../services/chitti_overlay_service.dart';
 import '../../services/guru_overlay_service.dart';
+import '../../services/chitti/chitti_dev_monitor_service.dart';
 import '../../services/map_simulation_service.dart';
 import '../../widgets/download_app_banner.dart';
 import 'admin_ai_settings_screen.dart';
+import 'admin_app_versions_screen.dart';
 import 'admin_cloudinary_dashboard_screen.dart';
 import 'admin_dashboard_screen.dart';
 import 'admin_chitti_lens_screen.dart';
@@ -1417,6 +1419,40 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
               onTap: () {
                 Navigator.pop(context);
                 unawaited(_runAdminManualUpdateCheck(context));
+              },
+            ),
+            // NEW (Sep 2026 — CTO review of PR #61): sits right next to
+            // "Check for Updates" — the two are the same activity ("is
+            // my build current, and can I get back to a working one").
+            // Fetches the latest release on tap rather than requiring
+            // this screen to keep one loaded at all times, matching how
+            // ChittiDevMonitorScreen's own equivalent button already
+            // works.
+            ListTile(
+              leading: const Icon(Icons.history_rounded, color: _purple),
+              title: const Text('App Versions & Rollback',
+                  style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Switch to an older build if the latest has a problem',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11)),
+              onTap: () async {
+                Navigator.pop(context);
+                final messenger = ScaffoldMessenger.of(context);
+                final snap = await ChittiDevMonitorService.fetch();
+                final release = snap.latestRelease;
+                if (release == null) {
+                  messenger.showSnackBar(
+                    const SnackBar(
+                        content: Text('No published release found yet.')),
+                  );
+                  return;
+                }
+                if (!context.mounted) return;
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => AdminAppVersionsScreen(release: release),
+                  ),
+                );
               },
             ),
             StreamBuilder<DocumentSnapshot>(
