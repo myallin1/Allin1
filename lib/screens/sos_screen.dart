@@ -3,13 +3,15 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/auth_service.dart';
-import 'sos_kyc_verification_screen.dart';
 import '../services/firestore_usage_tracking.dart';
+import '../services/offline_sos_mesh_service.dart';
+import 'sos_kyc_verification_screen.dart';
 
 class SosScreen extends StatefulWidget {
   const SosScreen({super.key});
@@ -125,10 +127,22 @@ class _SosScreenState extends State<SosScreen> {
         'timestamp': FieldValue.serverTimestamp(),
       });
 
+      // Broadcast via 300m Offline SOS Mesh (Zero network beacon)
+      unawaited(
+        OfflineSosMeshService.instance.startBroadcasting(
+          userId: user.uid,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          batteryLevel: 100,
+          userName: user.displayName ?? 'Customer',
+          userPhone: resolvedUserPhone,
+        ),
+      );
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('SOS sent to nearby Heroes and NJ Tech Call Center.'),
+          content: Text('SOS sent to nearby Heroes and NJ Tech Call Center. 300m Offline Beacon Active.'),
           backgroundColor: _darkRed,
           behavior: SnackBarBehavior.floating,
         ),
@@ -149,6 +163,30 @@ class _SosScreenState extends State<SosScreen> {
     }
   }
 
+  bool _isSirenActive = false;
+
+  Future<void> _toggleSiren() async {
+    setState(() => _isSirenActive = !_isSirenActive);
+    if (_isSirenActive) {
+      FlutterRingtonePlayer().playAlarm(looping: true, asAlarm: true);
+    } else {
+      FlutterRingtonePlayer().stop();
+    }
+  }
+
+  Future<void> _callEmergency112() async {
+    final uri = Uri.parse('tel:112');
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to open dialer for Emergency 112.'),
+          backgroundColor: _darkRed,
+        ),
+      );
+    }
+  }
+
   Future<void> _callPolice() async {
     final uri = Uri.parse('tel:100');
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
@@ -160,6 +198,14 @@ class _SosScreenState extends State<SosScreen> {
         ),
       );
     }
+  }
+
+  @override
+  void dispose() {
+    if (_isSirenActive) {
+      FlutterRingtonePlayer().stop();
+    }
+    super.dispose();
   }
 
   @override
@@ -181,11 +227,75 @@ class _SosScreenState extends State<SosScreen> {
             const SizedBox(height: 28),
             _buildSosGateOrCard(),
             const SizedBox(height: 22),
+            _buildOfflineEmergencyToolkit(),
+            const SizedBox(height: 18),
             _buildPoliceButton(),
             const SizedBox(height: 18),
             _buildSafetyNotes(),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildOfflineEmergencyToolkit() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF131422),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.offline_bolt_rounded, color: Colors.amber, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Offline Emergency Arsenal (டவர் இல்லாத இடத்திலும்)',
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _callEmergency112,
+                  icon: const Icon(Icons.emergency_rounded, color: Colors.redAccent, size: 18),
+                  label: const Text('112 Help'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.redAccent),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _toggleSiren,
+                  icon: Icon(_isSirenActive ? Icons.volume_off_rounded : Icons.campaign_rounded, size: 18),
+                  label: Text(_isSirenActive ? 'Stop Siren' : 'Loud Siren'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _isSirenActive ? Colors.red : Colors.orangeAccent.shade700,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

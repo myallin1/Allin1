@@ -57,6 +57,8 @@ import 'payments_received_screen.dart';
 import 'usage_fee_ledger_screen.dart';
 import 'erode_offers_management_screen.dart';
 import 'admin_home_banner_screen.dart';
+import '../../services/chitti/chitti_live_call_service.dart';
+import '../../widgets/admin_incoming_call_dialog.dart';
 import '../../services/firestore_usage_tracking.dart';
 
 class SuperAdminHomeScreen extends StatefulWidget {
@@ -167,6 +169,29 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
     _sosAlertsStream.listen((s) => DbUsageTracker.instance
         .recordRead(s.docs.length, 'admin_home_sos_alerts'));
 
+    // Live in-app Customer calling listener
+    _liveIncomingCallsSub = ChittiLiveCallService.instance
+        .watchIncomingRingingCalls()
+        .listen((calls) {
+      if (!mounted || calls.isEmpty) return;
+      final activeRinging = calls.first;
+      if (_currentlyShowingIncomingCallId == activeRinging.callId) return;
+      _currentlyShowingIncomingCallId = activeRinging.callId;
+
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AdminIncomingCallDialog(
+          callState: activeRinging,
+          adminId: FirebaseAuth.instance.currentUser?.uid ?? 'admin',
+        ),
+      ).then((_) {
+        if (mounted) {
+          setState(() => _currentlyShowingIncomingCallId = null);
+        }
+      });
+    });
+
     AdminShellNav.register(_goToTab);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -178,10 +203,14 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
     });
   }
 
+  StreamSubscription<List<ChittiLiveCallState>>? _liveIncomingCallsSub;
+  String? _currentlyShowingIncomingCallId;
+
   @override
   void dispose() {
     AdminShellNav.unregister(_goToTab);
     _alertSub?.cancel();
+    _liveIncomingCallsSub?.cancel();
     _alertPlayer.dispose();
     super.dispose();
   }

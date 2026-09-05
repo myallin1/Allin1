@@ -57,6 +57,7 @@
 // under.
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -64,6 +65,7 @@ import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../services/chitti/chitti_call_service_log.dart';
+import '../services/chitti/chitti_live_call_service.dart';
 import '../services/chitti/chitti_conversation_controller.dart';
 import '../services/chitti/chitti_voice_service.dart';
 import '../services/guru_api_service.dart';
@@ -140,6 +142,10 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
   Timer? _elapsedTimer;
   Duration _elapsed = Duration.zero;
   DateTime? _connectedAt;
+
+  String? _activeCallSessionId;
+  StreamSubscription<ChittiLiveCallState?>? _liveCallSub;
+  bool _isHumanAdminConnected = false;
 
   late final AnimationController _pulse;
 
@@ -232,6 +238,29 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
       setState(() => _elapsed = DateTime.now().difference(_connectedAt!));
     });
 
+    final user = FirebaseAuth.instance.currentUser;
+    try {
+      _activeCallSessionId = await ChittiLiveCallService.instance.startOutgoingCall(
+        callerId: user?.uid ?? 'guest',
+        callerName: user?.displayName ?? 'Customer',
+        callerPhone: user?.phoneNumber ?? '',
+      );
+      _liveCallSub = ChittiLiveCallService.instance.watchCall(_activeCallSessionId!).listen((callState) {
+        if (!mounted) return;
+        if (callState == null || callState.status == 'ended') {
+          _endCall(ChittiCallOutcome.endedByUser);
+        } else if (callState.status == 'connected' && callState.handlingMode == 'human' && !_isHumanAdminConnected) {
+          setState(() => _isHumanAdminConnected = true);
+          final takeOverLine = _languageCode == 'ta'
+              ? 'நம்ம NJ Tech நிஜாம் சார் லைன்ல வந்துட்டாரு, பேசுங்க!'
+              : 'Our boss Nizam is now on the line, please speak with him!';
+          _speak(takeOverLine);
+        }
+      });
+    } catch (e) {
+      debugPrint('[ChittiCall] could not start live session: $e');
+    }
+
     final greeting = _languageCode == 'ta'
         ? 'வணக்கம் பாஸ், சொல்லுங்க, நான் கேட்டுக்கிட்டு இருக்கேன்.'
         : "Hi, I'm listening — go ahead.";
@@ -314,6 +343,9 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
 
     setState(() => _phase = _CallPhase.thinking);
     _history.add({'role': 'user', 'content': heard});
+    if (_activeCallSessionId != null) {
+      unawaited(ChittiLiveCallService.instance.appendTranscript(_activeCallSessionId!, 'Customer: $heard'));
+    }
 
     // NEW (Sep 2026 — Nizam: "customer oru intent or avanga requirement
     // ah chitti kitta sonnangana apo chitti antha call ah namma
@@ -354,6 +386,9 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
           : "Sorry, I didn't catch that — could you say it again?";
     }
     _history.add({'role': 'assistant', 'content': reply});
+    if (_activeCallSessionId != null) {
+      unawaited(ChittiLiveCallService.instance.appendTranscript(_activeCallSessionId!, 'Chitti: $reply'));
+    }
     // A call is a live conversation, not a transcript Chitti has to
     // re-read in full on every turn — keep the last few exchanges only.
     if (_history.length > 12) {
@@ -432,6 +467,10 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
     unawaited(_speech.stop());
     unawaited(_tts.stop());
     _elapsedTimer?.cancel();
+    _liveCallSub?.cancel();
+    if (_activeCallSessionId != null) {
+      unawaited(ChittiLiveCallService.instance.endCall(_activeCallSessionId!));
+    }
     final connectedAt = _connectedAt;
     if (connectedAt != null) {
       unawaited(
@@ -449,6 +488,7 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
   void dispose() {
     _disposed = true;
     _elapsedTimer?.cancel();
+    _liveCallSub?.cancel();
     _pulse.dispose();
     unawaited(_speech.stop());
     unawaited(_tts.stop());
@@ -504,7 +544,7 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
               ),
               const SizedBox(height: 22),
               Text(
-                'Chitti',
+                _isHumanAdminConnected ? 'Nizam (NJ Tech Admin)' : 'Chitti',
                 style: GoogleFonts.outfit(
                   color: Colors.white,
                   fontSize: 22,
@@ -513,9 +553,11 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
               ),
               const SizedBox(height: 6),
               Text(
-                _statusText,
+                _isHumanAdminConnected
+                    ? (_languageCode == 'ta' ? 'நிஜாம் சாருடன் லைவில் உள்ளீர்கள்' : 'Live with Admin')
+                    : _statusText,
                 style: GoogleFonts.outfit(
-                  color: Colors.white.withValues(alpha: 0.65),
+                  color: _isHumanAdminConnected ? const Color(0xFF4ADE80) : Colors.white.withValues(alpha: 0.65),
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
