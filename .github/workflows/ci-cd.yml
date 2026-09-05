@@ -256,6 +256,9 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Create placeholder .env for asset bundling
+        run: touch .env
+
       - name: Build for ${{ matrix.platform }}
         run: |
           case ${{ matrix.platform }} in
