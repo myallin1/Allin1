@@ -31,6 +31,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../services/chitti/chitti_accessibility_bridge.dart';
+import '../../services/chitti/chitti_call_screening_service.dart';
 import 'chitti_debug_logs_screen.dart';
 import 'chitti_dev_monitor_screen.dart';
 import '../../services/chitti/chitti_summarizer.dart';
@@ -181,6 +182,11 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
   static const String _kCallAudioRouteKey = 'kChittiCallAudioRoute';
   String _callAudioRoute = 'speaker';
 
+  /// What the LAST real call actually used, per
+  /// ChittiCallScreeningService — null until at least one call has
+  /// happened since this was added.
+  String? _lastCallRouteDiagnostics;
+
   // NEW (Sep 1 2026 — mic-isolation lever). MediaRecorder with
   // AudioSource.MIC holds the microphone exclusively on many devices,
   // which makes it a suspect in "the caller hears nothing" alongside
@@ -318,6 +324,16 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
       _callAnsweringMode = prefs.getString(_kCallAnsweringModeKey) ?? 'quick_record';
       _callAudioRoute = prefs.getString(_kCallAudioRouteKey) ?? 'speaker';
       _callRecordingEnabled = prefs.getBool(_kCallRecordingEnabledKey) ?? true;
+      // AUDIT FIX (Sep 2026 — Nizam: "speaker/headphone/BT option set
+      // pannitu confirmation illa"). Whatever the LAST real call
+      // actually used, written by ChittiCallScreeningService right
+      // after it asked the native side to apply a route — reloaded here
+      // so re-opening this screen (e.g. after a test call) shows what
+      // really happened without hunting through the separate debug
+      // logs screen.
+      _lastCallRouteDiagnostics = prefs.getString(
+        ChittiCallScreeningService.kLastCallRouteDiagnosticsPrefsKey,
+      );
     });
 
     final statuses = await ChittiAccessibilityBridge.instance.checkCallPermissions();
@@ -769,6 +785,66 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
           subtitle: 'Routes to a plugged-in wired headset — for the '
               'audio-out-to-mic-in loopback cable idea.',
           onTap: () => _setCallAudioRoute('wired'),
+        ),
+        const SizedBox(height: 10),
+        // AUDIT FIX (Sep 2026 — Nizam: "option set pannitu athu properly
+        // set aachunu confirmation illa"). Picking a route above only
+        // ever saved a preference — nothing here said whether the LAST
+        // real call actually got that route, or silently fell back to
+        // the speaker because the requested headset/BT device wasn't
+        // connected at call time (which the native side has always
+        // detected, just never shown anywhere). Reads straight from
+        // what ChittiCallScreeningService persisted after the last
+        // screened call.
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: _card,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _border),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                _lastCallRouteDiagnostics == null
+                    ? Icons.info_outline_rounded
+                    : (_lastCallRouteDiagnostics!.contains('not available')
+                        ? Icons.warning_amber_rounded
+                        : Icons.check_circle_outline_rounded),
+                size: 16,
+                color: _lastCallRouteDiagnostics == null
+                    ? _muted
+                    : (_lastCallRouteDiagnostics!.contains('not available')
+                        ? Colors.amber
+                        : Colors.greenAccent),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _lastCallRouteDiagnostics ??
+                      'No screened call yet since this was added — this '
+                          'fills in the moment Chitti answers one.',
+                  style: GoogleFonts.outfit(color: _muted, fontSize: 11.5, height: 1.35),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded, size: 16, color: _muted),
+                tooltip: 'Refresh',
+                visualDensity: VisualDensity.compact,
+                onPressed: () async {
+                  final prefs = await SharedPreferences.getInstance();
+                  if (!mounted) return;
+                  setState(() {
+                    _lastCallRouteDiagnostics = prefs.getString(
+                      ChittiCallScreeningService.kLastCallRouteDiagnosticsPrefsKey,
+                    );
+                  });
+                },
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 12),
         // NEW (Sep 1 2026 — mic-isolation lever, see the key constant's
