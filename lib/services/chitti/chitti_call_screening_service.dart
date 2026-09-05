@@ -330,10 +330,35 @@ class ChittiCallScreeningService {
     return markers.any(lower.contains);
   }
 
+  /// Where the audio-route diagnostic from the most recent real call
+  /// gets persisted, for admin_ai_settings_screen.dart to read straight
+  /// back — see the fix note below for why this exists.
+  static const String kLastCallRouteDiagnosticsPrefsKey =
+      'kChittiLastCallRouteDiagnostics';
+
   Future<void> _speak(String text) async {
     try {
       final speakerDiag = await ChittiAccessibilityBridge.instance.enableSpeakerphone();
       await _log('[ChittiCallScreeningService] SPEAKER ROUTE: $speakerDiag');
+      // AUDIT FIX (Sep 2026 — Nizam: "speaker/headphone/BT option set
+      // pannitu athu properly set aachunu confirmation illa"). The
+      // native side (PhoneCallService.enableSpeakerphone) has always
+      // computed exactly this -- which route it actually used, and
+      // whether that matched what the admin picked (falling back to
+      // speaker and saying so when the requested headset/BT device
+      // wasn't actually connected at call time) -- but it only ever
+      // reached this debug log, which nothing in Admin AI Settings ever
+      // reads. Persisting it to prefs too is what lets the SAME screen
+      // the admin picked the route in show what actually happened on
+      // the last real call, instead of the admin having to know a
+      // separate debug-logs screen exists.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(kLastCallRouteDiagnosticsPrefsKey, speakerDiag);
+      } catch (_) {
+        // Losing this is not worth surfacing — the debug log line above
+        // already has it.
+      }
 
       // NEW (Sep 1 2026 — CTO/Gemini diagnosis, confirmed logically
       // sound): switched from flutter_tts to a native TTS instance
