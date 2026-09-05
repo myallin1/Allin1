@@ -16,6 +16,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/chitti/chitti_live_call_service.dart';
 
 class AdminIncomingCallDialog extends StatefulWidget {
@@ -74,6 +75,10 @@ class _AdminIncomingCallDialogState extends State<AdminIncomingCallDialog>
 
   Future<void> _answerHuman() async {
     await ChittiLiveCallService.instance.answerCallHuman(_state.callId, adminId: widget.adminId);
+    if (_state.callerPhone.isNotEmpty) {
+      final uri = Uri.parse('tel:${_state.callerPhone}');
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   Future<void> _answerChitti() async {
@@ -82,6 +87,10 @@ class _AdminIncomingCallDialogState extends State<AdminIncomingCallDialog>
 
   Future<void> _takeOver() async {
     await ChittiLiveCallService.instance.takeOverCall(_state.callId, adminId: widget.adminId);
+    if (_state.callerPhone.isNotEmpty) {
+      final uri = Uri.parse('tel:${_state.callerPhone}');
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   Future<void> _reject() async {

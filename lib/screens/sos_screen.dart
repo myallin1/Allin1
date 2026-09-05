@@ -142,7 +142,7 @@ class _SosScreenState extends State<SosScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('SOS sent to nearby Heroes and NJ Tech Call Center. 300m Offline Beacon Active.'),
+          content: Text('SOS Alert sent to nearby Heroes and NJ Tech 24/7 Safety Grid.'),
           backgroundColor: _darkRed,
           behavior: SnackBarBehavior.floating,
         ),

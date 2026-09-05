@@ -1702,8 +1702,8 @@ service cloud.firestore {
     // ==============================================================
     match /active_calls/{callId} {
       allow read: if isAuth();
-      allow create: if isAuth();
-      allow update: if isAuth();
+      allow create: if isAuth() && request.resource.data.callerId == request.auth.uid;
+      allow update: if isAuth() && (resource.data.callerId == request.auth.uid || isAdminAny());
       allow delete: if isAdminAny();
     }
 
@@ -1714,16 +1714,6 @@ service cloud.firestore {
       allow read: if isAuth();
       allow create: if isAuth();
       allow update: if isAdminAny();
-      allow delete: if isAdminAny();
-    }
-
-    // ==============================================================
-    // sos_alerts — Emergency 24/7 Safety Dispatch & Mesh Relays
-    // ==============================================================
-    match /sos_alerts/{alertId} {
-      allow read: if isAuth();
-      allow create: if isAuth();
-      allow update: if isAuth();
       allow delete: if isAdminAny();
     }
 
