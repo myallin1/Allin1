@@ -93,7 +93,7 @@ class _NativeUpdateButtonState extends State<NativeUpdateButton> {
     });
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await AppUpdateChecker().downloadAndInstall(
+      final downloaded = await AppUpdateChecker().downloadAndInstall(
         appVariant: widget.appVariant,
         onProgress: (p) {
           // Progress is shown because these APKs are tens of megabytes
@@ -104,13 +104,26 @@ class _NativeUpdateButtonState extends State<NativeUpdateButton> {
           if (mounted) setState(() => _progress = p);
         },
       );
-      // Reaching here means the APK is downloaded and Android's
-      // installer has been handed the file. The install itself is now
-      // the user's to confirm, so we stop claiming ownership of it.
-      if (mounted) {
+      if (!mounted) return;
+      if (downloaded) {
+        // The APK is on the phone and Android's installer has been
+        // handed the file. The install itself is now the user's to
+        // confirm, so we stop claiming ownership of it.
         messenger.showSnackBar(
           const SnackBar(
             content: Text('Tap Install on the next screen to finish updating'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        // AUDIT FIX (Sep 5 2026 — Play Store eligibility): a
+        // Play-installed user was just sent to the Play Store listing
+        // instead of getting a raw APK. "Tap Install on the next
+        // screen" would be flatly wrong here — there is no next screen
+        // in THIS app, they are looking at a different app entirely.
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Opening Play Store — tap Update there'),
             behavior: SnackBarBehavior.floating,
           ),
         );
