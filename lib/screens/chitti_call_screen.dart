@@ -84,6 +84,13 @@ enum ChittiCallOutcome {
   /// The mic or TTS engine could not be reached at all — reported
   /// rather than left as a silent, permanently "Connecting..." screen.
   failedToStart,
+
+  /// Admin tapped "Talk Live" / "Take Over" in admin_incoming_call_
+  /// dialog.dart and the call moved onto a real phone line. Chitti's
+  /// side must go fully silent and close, not "end the call" the way
+  /// the other outcomes do — the conversation is still live, just no
+  /// longer Chitti's to run.
+  handedOffToAdmin,
 }
 
 /// Opens the call screen and returns how it ended.
@@ -251,10 +258,7 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
           _endCall(ChittiCallOutcome.endedByUser);
         } else if (callState.status == 'connected' && callState.handlingMode == 'human' && !_isHumanAdminConnected) {
           setState(() => _isHumanAdminConnected = true);
-          final takeOverLine = _languageCode == 'ta'
-              ? 'நம்ம NJ Tech நிஜாம் சார் லைன்ல வந்துட்டாரு, பேசுங்க!'
-              : 'Our boss Nizam is now on the line, please speak with him!';
-          _speak(takeOverLine);
+          unawaited(_handleAdminTakeover());
         }
       });
     } catch (e) {
@@ -456,6 +460,63 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
     } else if (_conversation.isActive && !_conversation.isSpeaking) {
       unawaited(_listen());
     }
+  }
+
+  /// Admin took the call onto a real phone line (see
+  /// admin_incoming_call_dialog.dart's Talk Live / Take Over — both
+  /// launch a real `tel:` call to the customer's number the instant
+  /// they're tapped). From this exact moment Chitti must never speak or
+  /// listen again: the mic and speaker need to be free for that
+  /// incoming phone call, and this screen continuing its own STT/TTS
+  /// loop would literally talk over Nizam.
+  ///
+  /// Deliberately does NOT reuse _speak()/_endCall():
+  /// - _speak() ends by calling _conversation.afterSpeaking(), which
+  ///   would schedule another _listen() — exactly the "Chitti keeps
+  ///   talking after handoff" bug this exists to fix.
+  /// - _endCall() calls ChittiLiveCallService.instance.endCall(), which
+  ///   would mark the Firestore session 'ended' — wrong here, since the
+  ///   conversation is still live, just no longer Chitti's; admin ends
+  ///   it from their own side when the real phone call finishes.
+  Future<void> _handleAdminTakeover() async {
+    if (_disposed || _ended) return;
+    // Stop listening FIRST, before the announcement even starts — the
+    // mic must not stay open capturing audio during Nizam's real call.
+    _conversation.stop();
+    unawaited(_speech.stop());
+    _elapsedTimer?.cancel();
+
+    final takeOverLine = _languageCode == 'ta'
+        ? 'நம்ம NJ Tech நிஜாம் சார் லைன்ல வந்துட்டாரு, பேசுங்க!'
+        : 'Our boss Nizam is now on the line, please speak with him!';
+    try {
+      await _tts.stop();
+      await _tts.awaitSpeakCompletion(true);
+      try {
+        await _tts.speak(takeOverLine).timeout(const Duration(seconds: 10));
+      } on TimeoutException {
+        debugPrint('[ChittiCall] takeover announcement timed out — continuing.');
+      }
+    } catch (e) {
+      debugPrint('[ChittiCall] takeover announcement failed: $e');
+    } finally {
+      await _tts.stop();
+    }
+
+    if (_disposed || _ended) return;
+    _ended = true;
+    _liveCallSub?.cancel();
+    final connectedAt = _connectedAt;
+    if (connectedAt != null) {
+      unawaited(
+        ChittiCallServiceLog.logCall(
+          intents: _capturedIntents,
+          callStartedAt: connectedAt,
+          callEndedAt: DateTime.now(),
+        ),
+      );
+    }
+    if (mounted) Navigator.of(context).pop(ChittiCallOutcome.handedOffToAdmin);
   }
 
   bool _ended = false;
