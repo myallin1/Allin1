@@ -63,6 +63,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
+import '../services/chitti/chitti_call_service_log.dart';
 import '../services/chitti/chitti_conversation_controller.dart';
 import '../services/chitti/chitti_voice_service.dart';
 import '../services/guru_api_service.dart';
@@ -129,6 +130,12 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
   /// shape guru_chat_screen.dart builds, kept short because a call is a
   /// live conversation, not a document Chitti needs to re-read in full.
   final List<Map<String, String>> _history = [];
+
+  /// Every tool call Chitti made during this call, in order. Handed to
+  /// ChittiCallServiceLog when the call ends — see that file's header
+  /// for why this is a pass-through of what extractAgentAction already
+  /// decided, not a second classification pass.
+  final List<ChittiCallIntent> _capturedIntents = [];
 
   Timer? _elapsedTimer;
   Duration _elapsed = Duration.zero;
@@ -308,6 +315,31 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
     setState(() => _phase = _CallPhase.thinking);
     _history.add({'role': 'user', 'content': heard});
 
+    // NEW (Sep 2026 — Nizam: "customer oru intent or avanga requirement
+    // ah chitti kitta sonnangana apo chitti antha call ah namma
+    // customer app pesi mudichathum namma admin app ku varanum").
+    //
+    // The SAME extraction the full chat screen uses to actually act on
+    // a request — not a second opinion about what the customer meant.
+    // Fire-and-forget on purpose: a slow or failed tool-call check must
+    // never delay the spoken reply the customer is waiting for, and a
+    // customer who only wanted to chat should never notice this ran at
+    // all. Collected here; _endCall decides whether any of it is worth
+    // writing down.
+    unawaited(
+      GuruApiService().extractAgentAction(message: heard).then((action) {
+        if (action == null) return;
+        final actionType = action['action'] as String?;
+        if (actionType == null) return;
+        final detail = Map<String, dynamic>.from(action)..remove('action');
+        _capturedIntents.add(
+          ChittiCallIntent(actionType: actionType, detail: detail),
+        );
+      }).catchError((Object e) {
+        debugPrint('[ChittiCall] extractAgentAction failed: $e');
+      }),
+    );
+
     String reply;
     try {
       reply = await GuruApiService().sendMessage(
@@ -391,12 +423,25 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
     }
   }
 
+  bool _ended = false;
+
   void _endCall(ChittiCallOutcome outcome) {
-    if (_disposed) return;
+    if (_disposed || _ended) return;
+    _ended = true;
     _conversation.stop();
     unawaited(_speech.stop());
     unawaited(_tts.stop());
     _elapsedTimer?.cancel();
+    final connectedAt = _connectedAt;
+    if (connectedAt != null) {
+      unawaited(
+        ChittiCallServiceLog.logCall(
+          intents: _capturedIntents,
+          callStartedAt: connectedAt,
+          callEndedAt: DateTime.now(),
+        ),
+      );
+    }
     if (mounted) Navigator.of(context).pop(outcome);
   }
 

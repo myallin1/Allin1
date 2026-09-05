@@ -24,6 +24,7 @@ import '../../services/map_simulation_service.dart';
 import '../../widgets/download_app_banner.dart';
 import 'admin_ai_settings_screen.dart';
 import 'admin_app_versions_screen.dart';
+import 'admin_call_services_screen.dart';
 import 'admin_cloudinary_dashboard_screen.dart';
 import 'admin_dashboard_screen.dart';
 import 'admin_chitti_lens_screen.dart';
@@ -501,6 +502,15 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                   context,
                   MaterialPageRoute<void>(
                     builder: (_) => const AdminFoodOrdersScreen(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              _CallServicesTile(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AdminCallServicesScreen(),
                   ),
                 ),
               ),
@@ -1715,6 +1725,58 @@ class _SosKycTile extends StatelessWidget {
               subtitle: 'One-time customer SOS KYC verification',
               iconSvg: FluentEmojiFlat.police_car_light,
               color: const Color(0xFFFF1744),
+              onTap: onTap,
+            ),
+            if (count > 0)
+              Positioned(
+                top: -6,
+                right: -6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF1744),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: const Color(0xFF0A0A12), width: 2),
+                  ),
+                  constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+                  child: Text(
+                    count > 9 ? '9+' : '$count',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// NEW (Sep 2026 — Nizam: "customer oru intent chitti kitta sonnangana
+// ... admin app ku varanum services option kulla call services nu").
+// Same badge-tile shape as _SosKycTile above — its own stream, since
+// this counts status=='new' in a different collection entirely and
+// _AdminReviewBadgeWrapper's hardcoded 'admin_review' filter does not
+// apply here.
+class _CallServicesTile extends StatelessWidget {
+  final VoidCallback onTap;
+  const _CallServicesTile({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: AdminCallServicesScreen.newStream(),
+      builder: (context, snapshot) {
+        final count = snapshot.data?.docs.length ?? 0;
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            _ManageTile(
+              label: 'Call Services',
+              subtitle: 'What customers asked Chitti for during a call',
+              iconSvg: FluentEmojiFlat.telephone_receiver,
+              color: const Color(0xFF6C63FF),
               onTap: onTap,
             ),
             if (count > 0)
