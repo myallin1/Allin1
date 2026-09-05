@@ -609,7 +609,11 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
     }
 
     if (input.isNotEmpty) {
-      final acted = await _tryAgentActionFromText(input, effectiveApiKey, imageBytes: pendingImage);
+      final acted = await _tryAgentActionFromText(
+        input,
+        customerKey.trim(),
+        imageBytes: pendingImage,
+      );
       if (acted) {
         if (mounted) setState(() => _isTyping = false);
         return;
@@ -1578,7 +1582,7 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
     try {
       args = await _api.extractAgentAction(
         message: input,
-        apiKeyOverride: apiKey,
+        apiKeyOverride: apiKey.trim().isNotEmpty ? apiKey.trim() : null,
         hasAttachedImage: imageBytes != null,
       );
     } catch (e) {
