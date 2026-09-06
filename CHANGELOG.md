@@ -2,6 +2,13 @@
 
 All notable changes to the Allin1 Super App are recorded here.
 
+## [Build 0135] - 2026-09-06
+
+### Fixed
+- patch — Chitti Post-Call Speech Teardown: Eliminated autonomous speech after phone calls by adding strict `_isScreening` guards inside `_speak()` (choke-point), after `_api.sendMessage` in `_handleCallerMessage()`, and inside `_speakCouldNotHearAndClose()`.
+- patch — Post-Call Proactive Speech Cooldown: Added `isCallActiveOrRecent(60s)` guard to `ChittiFollowUpService.maybeAskOne()` to silence follow-up questions for 60 seconds following call termination.
+- patch — Universal Call Teardown Cooldown: Both native `'ended'` telephony broadcasts and internal `stopScreening()` terminations trigger `recordCallEnded()`, ensuring zero gap in post-call cooldown.
+
 ## [Build 0133] - 2026-09-06
 
 ### Added

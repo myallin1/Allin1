@@ -59,6 +59,12 @@ class ChittiFollowUpService {
     if (_running) return null;
     _running = true;
     try {
+      // POST-CALL COOLDOWN: If a phone call is active or just ended
+      // within the last 60 seconds, do not speak follow-up reminders.
+      if (ChittiAccessibilityBridge.instance.isCallActiveOrRecent()) {
+        return null;
+      }
+
       // Cheapest check first: is there anything to say? Asking the nudge
       // gate before knowing that would burn a slot from the daily
       // budget on a question that was never going to be asked -- tryFire

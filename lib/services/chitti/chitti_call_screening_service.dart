@@ -331,8 +331,10 @@ class ChittiCallScreeningService {
   }
 
   Future<void> _speak(String text) async {
+    if (!_isScreening || _pausedForManualRecording) return;
     try {
       final speakerDiag = await ChittiAccessibilityBridge.instance.enableSpeakerphone();
+      if (!_isScreening) return;
       await _log('[ChittiCallScreeningService] SPEAKER ROUTE: $speakerDiag');
 
       // NEW (Sep 1 2026 — CTO/Gemini diagnosis, confirmed logically
@@ -368,6 +370,7 @@ class ChittiCallScreeningService {
       // re-opens while the tail of Chitti's own TTS is still decaying on
       // the call stream, and that tail comes back as "caller speech" —
       // the self-echo Nizam heard on speaker mode.
+      if (!_isScreening) return;
       await Future.delayed(_postSpeakSettle);
     } catch (e) {
       await _log('[ChittiCallScreeningService] speak failed: $e');
@@ -432,7 +435,7 @@ class ChittiCallScreeningService {
   /// been running the whole time, so even a call Chitti could not hear
   /// leaves Nizam an audio file and a caller number to follow up on.
   Future<void> _speakCouldNotHearAndClose() async {
-    if (_closingSpoken) return;
+    if (!_isScreening || _closingSpoken) return;
     _closingSpoken = true;
     try {
       await _speech.stop();
@@ -450,6 +453,7 @@ class ChittiCallScreeningService {
   }
 
   Future<void> _handleCallerMessage(String message) async {
+    if (!_isScreening) return;
     try {
       await _speech.stop();
     } catch (_) {}
@@ -481,6 +485,7 @@ class ChittiCallScreeningService {
           "and ask if they want to leave a message or book an appointment.";
 
       var reply = await _api.sendMessage(message: prompt);
+      if (!_isScreening) return;
       // FIX (Sep 1 2026 — found in the call logs, not guessed): this
       // guard used to match four hardcoded fragments ('not switched
       // on', 'could not reach', 'Full AI', empty). The real message the
@@ -503,6 +508,7 @@ class ChittiCallScreeningService {
       _conversation.add('Assistant: $reply');
       await _speak(reply);
     } catch (e) {
+      if (!_isScreening) return;
       final fallbackReply = _languageCode == 'ta'
           ? "சரிங்க பாஸ், உங்க செய்தியை நான் சேவ் பண்ணிக்கிறேன். பாஸ் உங்ககிட்ட பேசுவார்."
           : "Alright, I'll save your message. Nizam will get back to you.";
@@ -651,6 +657,7 @@ class ChittiCallScreeningService {
 
   void stopScreening({String? recordingPath}) {
     _isScreening = false;
+    ChittiAccessibilityBridge.instance.recordCallEnded();
     _screeningTimeoutTimer?.cancel();
     _screeningTimeoutTimer = null;
     _errorRetryCount = 0;

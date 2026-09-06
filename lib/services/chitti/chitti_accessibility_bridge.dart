@@ -49,6 +49,26 @@ class ChittiAccessibilityBridge {
   /// having to find the number again in Recents.
   void Function(String number)? onCallEndedWithNumber;
 
+  DateTime? _lastCallEndedAt;
+  DateTime? get lastCallEndedAt => _lastCallEndedAt;
+
+  /// Records that a call just ended, resetting the cooldown window.
+  void recordCallEnded() {
+    _lastCallEndedAt = DateTime.now();
+  }
+
+  /// True if a phone call is currently active or ended within [window].
+  /// Used by proactive speech services (e.g. [ChittiFollowUpService])
+  /// to avoid talking right after the user hangs up a call.
+  bool isCallActiveOrRecent([Duration window = const Duration(seconds: 60)]) {
+    if (ChittiCallScreeningService.instance.isScreening) return true;
+    final lastEnd = _lastCallEndedAt;
+    if (lastEnd != null && DateTime.now().difference(lastEnd) < window) {
+      return true;
+    }
+    return false;
+  }
+
   void initialize() {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'onVoiceCommand') {
@@ -90,6 +110,7 @@ class ChittiAccessibilityBridge {
         if (event == 'connected') {
           await ChittiCallScreeningService.instance.startScreening(number ?? '');
         } else if (event == 'ended') {
+          _lastCallEndedAt = DateTime.now();
           ChittiCallScreeningService.instance.stopScreening(recordingPath: recordingPath);
           final endedNumber = (number ?? '').trim();
           if (endedNumber.isNotEmpty) {
