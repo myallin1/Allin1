@@ -152,12 +152,15 @@ class ChittiLiveCallService {
     });
   }
 
-  /// Listens for incoming ringing calls (Used in Admin App)
+  /// Listens for active incoming calls (ringing or being handled by Chitti, used in Admin App)
   Stream<List<ChittiLiveCallState>> watchIncomingRingingCalls() {
-    return _calls.orderByChild('status').equalTo('ringing').onValue.map((event) {
+    return _calls.onValue.map((event) {
       final snap = event.snapshot;
       if (!snap.exists) return <ChittiLiveCallState>[];
-      return snap.children.map(ChittiLiveCallState.fromSnapshot).toList();
+      return snap.children
+          .map(ChittiLiveCallState.fromSnapshot)
+          .where((s) => s.status == 'ringing' || s.status == 'chitti_handling')
+          .toList();
     });
   }
 
@@ -209,6 +212,14 @@ class ChittiLiveCallService {
   }
 
   /// Ends an active call
+  ///
+  /// This only WRITES a status — it does not delete the node. That
+  /// distinction matters: this is the signal the OTHER party's
+  /// `watchCall` listener reacts to (e.g. admin rejecting a call is the
+  /// only way the customer's own screen finds out and runs its own
+  /// logCall + cleanupCall, since only the customer's device holds the
+  /// transcript/intents to log). Deleting here would remove the node
+  /// before whichever side still needs to read it has had the chance.
   Future<void> endCall(String callId) async {
     try {
       await _calls.child(callId).update({
@@ -223,6 +234,40 @@ class ChittiLiveCallService {
       debugPrint('[ChittiLiveCall] Call ended: $callId');
     } catch (e) {
       debugPrint('[ChittiLiveCall] Error ending call: $e');
+    }
+  }
+
+  /// Marks that Chitti itself has started actively handling the call —
+  /// called the moment the customer's own voice engine is confirmed
+  /// ready, BEFORE the greeting is spoken. Purely informational RTDB
+  /// status for anything watching the live call; a distinct path from
+  /// answerCallChitti(), which is an ADMIN action with an adminId —
+  /// this one has no admin behind it at all.
+  Future<void> markChittiAutoAnswered(String callId) async {
+    try {
+      await _calls.child(callId).update({
+        'status': 'chitti_handling',
+        'handlingMode': 'chitti',
+        'answeredAt': ServerValue.timestamp,
+      });
+    } catch (e) {
+      debugPrint('[ChittiLiveCall] Error marking Chitti auto-answered: $e');
+    }
+  }
+
+  /// Permanently deletes the ephemeral signaling node. Call ONLY after
+  /// the permanent record (ChittiCallServiceLog.logCall) has already
+  /// completed — this is the actual RTDB storage reclaim; endCall()
+  /// above only ever writes a status, it never removes anything.
+  Future<void> cleanupCall(String callId) async {
+    try {
+      await _calls.child(callId).remove();
+      if (_currentCallId == callId) {
+        _currentCallId = null;
+      }
+      debugPrint('[ChittiLiveCall] Cleaned up call node: $callId');
+    } catch (e) {
+      debugPrint('[ChittiLiveCall] Error cleaning up call node: $e');
     }
   }
 }

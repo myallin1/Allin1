@@ -2,11 +2,18 @@
 
 All notable changes to the Allin1 Super App are recorded here.
 
-## [Unreleased]
+## [Build 0133] - 2026-09-06
 
 ### Added
+- feature — Live In-App Voice Calling & Chitti AI Receptionist: Customer $\leftrightarrow$ Admin real-time audio session streaming live speech-to-text transcripts over Firebase Realtime Database (`active_calls/{callId}`) with instant admin takeover to direct VoLTE cellular phone call (`tel:<phone>`).
+- feature — Admin Lock-Screen Loud Incoming Call Alerts: High-decibel `ride_alert.mp3` alarm stream notification (`AdminAlertNotificationService`) with heads-up display, full-screen intent on lock screen, and auto-dismiss on call pickup/hangup.
+- feature — Persist-Then-Wipe Call Lifecycle: Every call (transcripts, duration, intents, outcome, and SLA breach tracking) is 100% committed to Firestore `call_service_requests` before wiping the ephemeral RTDB node, ensuring 0 KB persistent RTDB storage footprint.
 
-- feature — Native Claude (Anthropic) Autonomous Agent Integration: Enabled Claude 3.5 Sonnet / Opus / Haiku via OAuth token (`CLAUDE_CODE_OAUTH_TOKEN` / `claude setup-token`) and API keys in `GuruApiService` and `ChittiToolRegistry`. Injects full `AppKnowledgeBriefing` (56 screens, 121 services, Firestore collections, RTDB nodes, business rules) and Claude-native `input_schema` tools for full mobile autonomous administration without needing a laptop.
+### Fixed
+- patch — Resolved incoming call dialog `calls.first` starvation bug in `super_admin_home_screen.dart` with dismissed-set-aware queue iteration.
+- patch — Telephony handoff race: customer app immediately halts STT and TTS before handing over to cellular voice, eliminating audio collision.
+- patch — Redundant notification tray alert auto-dismissed immediately on `AdminIncomingCallDialog` mount.
+
 
 ### Fixed
 

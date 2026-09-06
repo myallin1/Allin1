@@ -173,20 +173,35 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
     _liveIncomingCallsSub = ChittiLiveCallService.instance
         .watchIncomingRingingCalls()
         .listen((calls) {
-      if (!mounted || calls.isEmpty) return;
-      final activeRinging = calls.first;
-      if (_currentlyShowingIncomingCallId == activeRinging.callId) return;
-      _currentlyShowingIncomingCallId = activeRinging.callId;
+      if (!mounted) return;
+      final activeCallIds = calls.map((c) => c.callId).toSet();
+      _dismissedIncomingCallIds.removeWhere((id) => !activeCallIds.contains(id));
+
+      if (calls.isEmpty || _currentlyShowingIncomingCallId != null) return;
+
+      ChittiLiveCallState? nextCall;
+      for (final call in calls) {
+        if ((call.status == 'ringing' || call.status == 'chitti_handling') &&
+            !_dismissedIncomingCallIds.contains(call.callId)) {
+          nextCall = call;
+          break;
+        }
+      }
+
+      if (nextCall == null) return;
+      final callToPresent = nextCall;
+      _currentlyShowingIncomingCallId = callToPresent.callId;
 
       showDialog<void>(
         context: context,
         barrierDismissible: false,
         builder: (_) => AdminIncomingCallDialog(
-          callState: activeRinging,
+          callState: callToPresent,
           adminId: FirebaseAuth.instance.currentUser?.uid ?? 'admin',
         ),
       ).then((_) {
         if (mounted) {
+          _dismissedIncomingCallIds.add(callToPresent.callId);
           setState(() => _currentlyShowingIncomingCallId = null);
         }
       });
@@ -205,6 +220,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
 
   StreamSubscription<List<ChittiLiveCallState>>? _liveIncomingCallsSub;
   String? _currentlyShowingIncomingCallId;
+  final Set<String> _dismissedIncomingCallIds = {};
 
   @override
   void dispose() {

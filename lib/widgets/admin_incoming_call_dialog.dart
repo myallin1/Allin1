@@ -17,6 +17,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../services/admin_alert_notification_service.dart';
 import '../services/chitti/chitti_live_call_service.dart';
 
 class AdminIncomingCallDialog extends StatefulWidget {
@@ -34,7 +35,7 @@ class AdminIncomingCallDialog extends StatefulWidget {
 }
 
 class _AdminIncomingCallDialogState extends State<AdminIncomingCallDialog>
-    with SingleTickerProviderStateMixin {
+  with SingleTickerProviderStateMixin {
   static const Color _bg = Color(0xFF0D0E15);
   static const Color _card = Color(0xFF181924);
   static const Color _green = Color(0xFF22C55E);
@@ -56,6 +57,11 @@ class _AdminIncomingCallDialogState extends State<AdminIncomingCallDialog>
       duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
 
+    // Auto-cancel notification tray alert since admin is viewing the live dialog
+    unawaited(
+      AdminAlertNotificationService.cancelAlert('call_${widget.callState.callId}'),
+    );
+
     _sub = ChittiLiveCallService.instance.watchCall(widget.callState.callId).listen((updated) {
       if (!mounted) return;
       if (updated == null || updated.status == 'ended') {
@@ -76,6 +82,7 @@ class _AdminIncomingCallDialogState extends State<AdminIncomingCallDialog>
   Future<void> _answerHuman() async {
     await ChittiLiveCallService.instance.answerCallHuman(_state.callId, adminId: widget.adminId);
     if (_state.callerPhone.isNotEmpty) {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
       final uri = Uri.parse('tel:${_state.callerPhone}');
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
@@ -88,6 +95,7 @@ class _AdminIncomingCallDialogState extends State<AdminIncomingCallDialog>
   Future<void> _takeOver() async {
     await ChittiLiveCallService.instance.takeOverCall(_state.callId, adminId: widget.adminId);
     if (_state.callerPhone.isNotEmpty) {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
       final uri = Uri.parse('tel:${_state.callerPhone}');
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }

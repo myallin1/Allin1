@@ -693,10 +693,26 @@ history means a backup that grows forever inside the CUSTOMER's own
 make Chitti remember the oldest conversation and forget what was said a
 minute ago.
 
-## 13. Closeout & Verification Protocol
+## 14. Live In-App Calling & Persist-Then-Wipe Contracts (Sep 2026)
+
+- **Ephemeral Calling Node in RTDB (`active_calls/{callId}`)**:
+  - Live session signaling, caller info, and real-time STT transcripts stream over Firebase Realtime Database (`active_calls`).
+  - Active call streams (`watchIncomingRingingCalls()`) must filter for `status == 'ringing' || status == 'chitti_handling'` to catch calls transitioning to automated AI answering.
+- **Persist-Then-Wipe Storage Discipline**:
+  - Every call's permanent record (`fullTranscript`, `durationSeconds`, `intents`, `outcome`, `adminJoined`, `adminSlaBreached`) MUST be written to Firestore `call_service_requests` FIRST (`await ChittiCallServiceLog.logCall(...)`).
+  - The ephemeral RTDB node is deleted immediately afterwards (`await ChittiLiveCallService.instance.cleanupCall(...)`), maintaining RTDB storage at strictly 0 KB.
+- **Admin Lock-Screen & Loud Alerts**:
+  - `AdminAlertNotificationService` uses `ride_alert.mp3` through the ALARM audio stream (`AudioAttributesUsage.alarm`) with `fullScreenIntent: true` and `timeoutAfter: 45000`.
+  - Notification tray alert must be auto-cancelled immediately upon opening `AdminIncomingCallDialog` or call termination.
+- **Telephony Handoff Protocol**:
+  - Admin Takeover (`_takeOver()`) executes a 300ms propagation delay before launching `launchUrl('tel:<customerPhone>')`.
+  - Customer app (`_handleAdminTakeover()`) immediately halts STT and TTS (`_speech.stop()`, `_tts.stop()`, `_conversation.stop()`) and pops the screen with a silent toast, cleanly freeing microphone and speaker hardware before the cellular call connects.
+
+## 15. Closeout & Verification Protocol
 
 1. Run `flutter analyze` and ensure ZERO errors.
 2. Run `graphify update .` to keep the AST graph current (as per Section 4).
 3. Remove stale or contradictory text from documentation.
 4. Ensure branch naming, versioning, and CHANGELOG updates are complete if applicable.
+
 

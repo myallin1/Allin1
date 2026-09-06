@@ -70,13 +70,69 @@ class AdminAlertNotificationService {
       sound: RawResourceAndroidNotificationSound('ride_alert'),
       audioAttributesUsage: AudioAttributesUsage.alarm,
       enableLights: true,
-      playSound: true,
     );
     final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     await androidPlugin?.createNotificationChannel(channel);
     await androidPlugin?.requestNotificationsPermission();
     _initialized = true;
+  }
+
+  /// Cancels an alert notification by its payload ID
+  static Future<void> cancelAlert(String payloadId) async {
+    if (kIsWeb) return;
+    try {
+      await _plugin.cancel(id: payloadId.hashCode & 0x7fffffff);
+    } catch (e) {
+      debugPrint('[AdminAlertNotificationService] cancel failed: $e');
+    }
+  }
+
+  /// Shows a loud incoming customer call alert on the lock screen
+  static Future<void> showIncomingCallAlert({
+    required String callId,
+    required String callerName,
+    required String callerPhone,
+  }) async {
+    if (kIsWeb) return;
+    try {
+      await _plugin.show(
+        id: ('call_$callId').hashCode & 0x7fffffff,
+        title: '📞 Incoming Customer Call: $callerName',
+        body: callerPhone.isNotEmpty
+            ? '$callerPhone • Tap to view live transcript & attend'
+            : 'Tap to view live transcript & attend',
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            alertChannelId,
+            'Admin Alerts',
+            channelDescription:
+                'New ride, service request, and live call alerts for the Admin app.',
+            importance: Importance.max,
+            priority: Priority.max,
+            sound: RawResourceAndroidNotificationSound('ride_alert'),
+            audioAttributesUsage: AudioAttributesUsage.alarm,
+            fullScreenIntent: true,
+            timeoutAfter: 45000,
+            category: AndroidNotificationCategory.call,
+            actions: [
+              AndroidNotificationAction(
+                'view_call',
+                'VIEW CALL',
+                showsUserInterface: true,
+                contextual: true,
+              ),
+            ],
+          ),
+        ),
+        payload: jsonEncode(<String, String>{
+          'type': 'admin_incoming_call',
+          'callId': callId,
+        }),
+      );
+    } catch (e) {
+      debugPrint('[AdminAlertNotificationService] show incoming call alert failed: $e');
+    }
   }
 
   /// Shows a local notification. `type` drives where a tap navigates —
@@ -104,7 +160,6 @@ class AdminAlertNotificationService {
             priority: Priority.max,
             sound: RawResourceAndroidNotificationSound('ride_alert'),
             audioAttributesUsage: AudioAttributesUsage.alarm,
-            fullScreenIntent: false,
           ),
         ),
         payload: jsonEncode(<String, String>{'type': type}),
@@ -124,6 +179,13 @@ class AdminAlertNotificationService {
       final type = data['type'] as String? ?? '';
       final navigator = navigatorKey.currentState;
       if (navigator == null) return;
+
+      if (type == 'admin_incoming_call') {
+        // Return straight to home where SuperAdminHomeScreen's live
+        // call listener already presents the AdminIncomingCallDialog.
+        navigator.popUntil((route) => route.isFirst);
+        return;
+      }
 
       // FIX (Aug 12 2026 — ROOT CAUSE of "the Taxi page hangs, and back
       // doesn't go where it should"): this used to push() blindly on

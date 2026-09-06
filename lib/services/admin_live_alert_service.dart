@@ -20,8 +20,9 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
-import 'admin_alert_notification_service.dart';
 import './firestore_usage_tracking.dart';
+import 'admin_alert_notification_service.dart';
+import 'chitti/chitti_live_call_service.dart';
 
 class AdminLiveAlertService {
   AdminLiveAlertService._();
@@ -29,6 +30,7 @@ class AdminLiveAlertService {
 
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _ridesSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _requestsSub;
+  StreamSubscription<List<ChittiLiveCallState>>? _callsSub;
 
   // FIX (Aug 11 2026 — Nizam's "Admin Completion Notifications" request):
   // this listener used to filter to `DocumentChangeType.added` ONLY, so
@@ -44,6 +46,7 @@ class AdminLiveAlertService {
   final Set<String> _alertedRideCompletions = {};
   final Set<String> _alertedRequestCompletions = {};
   final Set<String> _alertedRequestPingings = {};
+  final Set<String> _alertedCallIds = {};
 
   void start() {
     stop(); // idempotent — clears any previous session's listeners first.
@@ -51,110 +54,168 @@ class AdminLiveAlertService {
     _alertedRideCompletions.clear();
     _alertedRequestCompletions.clear();
     _alertedRequestPingings.clear();
+    _alertedCallIds.clear();
+
+    // Listen for live in-app customer calls (RTDB ephemeral node)
+    _callsSub = ChittiLiveCallService.instance
+        .watchIncomingRingingCalls()
+        .listen(
+      (calls) {
+        final activeCallIds = calls.map((c) => c.callId).toSet();
+        // Auto-cancel notifications for calls that have ended or been cleaned up
+        final endedCalls = <String>[];
+        for (final id in _alertedCallIds) {
+          if (!activeCallIds.contains(id)) {
+            unawaited(AdminAlertNotificationService.cancelAlert('call_$id'));
+            endedCalls.add(id);
+          }
+        }
+        _alertedCallIds.removeAll(endedCalls);
+
+        for (final call in calls) {
+          if (call.status == 'ringing' || call.status == 'chitti_handling') {
+            if (_alertedCallIds.add(call.callId)) {
+              unawaited(
+                AdminAlertNotificationService.showIncomingCallAlert(
+                  callId: call.callId,
+                  callerName:
+                      call.callerName.isEmpty ? 'Customer' : call.callerName,
+                  callerPhone: call.callerPhone,
+                ),
+              );
+            }
+          }
+        }
+      },
+      onError: (Object e) {
+        debugPrint('[AdminLiveAlertService] active_calls listener error: $e');
+      },
+    );
 
     _ridesSub = FirebaseFirestore.instance
         .collection('rides')
         .where('createdAt', isGreaterThan: since)
         .trackedSnapshots()
-        .listen((snap) {
-      for (final change in snap.docChanges) {
-        final data = change.doc.data();
-        if (data == null) continue;
+        .listen(
+      (snap) {
+        for (final change in snap.docChanges) {
+          final data = change.doc.data();
+          if (data == null) continue;
 
-        if (change.type == DocumentChangeType.added) {
-          final pickup = (data['pickupAddress'] as String?) ??
-              (data['pickup'] as String?) ??
-              'Pickup location';
-          final drop = (data['dropAddress'] as String?) ??
-              (data['drop'] as String?) ??
-              'Drop location';
-          final vehicleType = (data['vehicleType'] as String?) ?? 'ride';
-          unawaited(AdminAlertNotificationService.showForegroundAlert(
-            title: '🚕 New $vehicleType booking',
-            body: '$pickup → $drop',
-            payloadId: 'ride_${change.doc.id}',
-            type: 'admin_new_ride',
-          ));
-        } else if (change.type == DocumentChangeType.modified) {
-          final status = data['status'] as String?;
-          if (status == 'completed' &&
-              _alertedRideCompletions.add(change.doc.id)) {
-            final fare = (data['finalFare'] ??
-                    data['actualFare'] ??
-                    data['estimatedFare'] ??
-                    data['fare']) as num?;
-            final heroName = (data['acceptedHeroName'] as String?) ??
-                (data['heroName'] as String?) ??
-                'Hero';
-            unawaited(AdminAlertNotificationService.showForegroundAlert(
-              title: '✅ Ride completed',
-              body: fare != null
-                  ? '$heroName • ₹${fare.toStringAsFixed(0)}'
-                  : heroName,
-              payloadId: 'ride_completed_${change.doc.id}',
-              type: 'admin_ride_completed',
-            ));
+          if (change.type == DocumentChangeType.added) {
+            final pickup = (data['pickupAddress'] as String?) ??
+                (data['pickup'] as String?) ??
+                'Pickup location';
+            final drop = (data['dropAddress'] as String?) ??
+                (data['drop'] as String?) ??
+                'Drop location';
+            final vehicleType = (data['vehicleType'] as String?) ?? 'ride';
+            unawaited(
+              AdminAlertNotificationService.showForegroundAlert(
+                title: '🚕 New $vehicleType booking',
+                body: '$pickup → $drop',
+                payloadId: 'ride_${change.doc.id}',
+              ),
+            );
+          } else if (change.type == DocumentChangeType.modified) {
+            final status = data['status'] as String?;
+            if (status == 'completed' &&
+                _alertedRideCompletions.add(change.doc.id)) {
+              final fare = (data['finalFare'] ??
+                  data['actualFare'] ??
+                  data['estimatedFare'] ??
+                  data['fare']) as num?;
+              final heroName = (data['acceptedHeroName'] as String?) ??
+                  (data['heroName'] as String?) ??
+                  'Hero';
+              unawaited(
+                AdminAlertNotificationService.showForegroundAlert(
+                  title: '✅ Ride completed',
+                  body: fare != null
+                      ? '$heroName • ₹${fare.toStringAsFixed(0)}'
+                      : heroName,
+                  payloadId: 'ride_completed_${change.doc.id}',
+                  type: 'admin_ride_completed',
+                ),
+              );
+            }
           }
         }
-      }
-    }, onError: (Object e) {
-      debugPrint('[AdminLiveAlertService] rides listener error: $e');
-    });
+      },
+      onError: (Object e) {
+        debugPrint('[AdminLiveAlertService] rides listener error: $e');
+      },
+    );
 
     _requestsSub = FirebaseFirestore.instance
         .collection('service_requests')
         .where('createdAt', isGreaterThan: since)
         .trackedSnapshots()
-        .listen((snap) {
-      for (final change in snap.docChanges) {
-        final data = change.doc.data();
-        if (data == null) continue;
+        .listen(
+      (snap) {
+        for (final change in snap.docChanges) {
+          final data = change.doc.data();
+          if (data == null) continue;
 
-        if (change.type == DocumentChangeType.added) {
-          final requestType = (data['requestType'] as String?) ?? 'service request';
-          final customerName = (data['customerName'] as String?) ?? 'A customer';
-          unawaited(AdminAlertNotificationService.showForegroundAlert(
-            title: '🛎️ New ${requestType.replaceAll('_', ' ')}',
-            body: customerName,
-            payloadId: 'request_${change.doc.id}',
-            type: 'admin_new_service_request',
-          ));
-        } else if (change.type == DocumentChangeType.modified) {
-          final status = data['status'] as String?;
-          if (status == 'pinging' &&
-              _alertedRequestPingings.add(change.doc.id)) {
+          if (change.type == DocumentChangeType.added) {
             final requestType =
                 (data['requestType'] as String?) ?? 'service request';
-            final customerName = (data['customerName'] as String?) ?? 'A customer';
-            unawaited(AdminAlertNotificationService.showForegroundAlert(
-              title: '🚚 Partner Requested!',
-              body: '$customerName\'s ${requestType.replaceAll('_', ' ')} is ready.',
-              payloadId: 'request_${change.doc.id}',
-              type: 'admin_delivery_requested',
-            ));
-          } else if (status == 'completed' &&
-              _alertedRequestCompletions.add(change.doc.id)) {
-            final requestType =
-                (data['requestType'] as String?) ?? 'service request';
-            final amount =
-                (data['finalAmount'] ?? data['estimatedFare']) as num?;
-            final heroName = (data['assignedHeroName'] as String?) ??
-                (data['acceptedHeroName'] as String?) ??
-                'Hero';
-            unawaited(AdminAlertNotificationService.showForegroundAlert(
-              title: '✅ ${requestType.replaceAll('_', ' ')} completed',
-              body: amount != null
-                  ? '$heroName • ₹${amount.toStringAsFixed(0)}'
-                  : heroName,
-              payloadId: 'request_completed_${change.doc.id}',
-              type: 'admin_service_request_completed',
-            ));
+            final customerName =
+                (data['customerName'] as String?) ?? 'A customer';
+            unawaited(
+              AdminAlertNotificationService.showForegroundAlert(
+                title: '🛎️ New ${requestType.replaceAll('_', ' ')}',
+                body: customerName,
+                payloadId: 'request_${change.doc.id}',
+                type: 'admin_new_service_request',
+              ),
+            );
+          } else if (change.type == DocumentChangeType.modified) {
+            final status = data['status'] as String?;
+            if (status == 'pinging' &&
+                _alertedRequestPingings.add(change.doc.id)) {
+              final requestType =
+                  (data['requestType'] as String?) ?? 'service request';
+              final customerName =
+                  (data['customerName'] as String?) ?? 'A customer';
+              unawaited(
+                AdminAlertNotificationService.showForegroundAlert(
+                  title: '🚚 Partner Requested!',
+                  body:
+                      "$customerName's ${requestType.replaceAll('_', ' ')} is ready.",
+                  payloadId: 'request_${change.doc.id}',
+                  type: 'admin_delivery_requested',
+                ),
+              );
+            } else if (status == 'completed' &&
+                _alertedRequestCompletions.add(change.doc.id)) {
+              final requestType =
+                  (data['requestType'] as String?) ?? 'service request';
+              final amount =
+                  (data['finalAmount'] ?? data['estimatedFare']) as num?;
+              final heroName = (data['assignedHeroName'] as String?) ??
+                  (data['acceptedHeroName'] as String?) ??
+                  'Hero';
+              unawaited(
+                AdminAlertNotificationService.showForegroundAlert(
+                  title: '✅ ${requestType.replaceAll('_', ' ')} completed',
+                  body: amount != null
+                      ? '$heroName • ₹${amount.toStringAsFixed(0)}'
+                      : heroName,
+                  payloadId: 'request_completed_${change.doc.id}',
+                  type: 'admin_service_request_completed',
+                ),
+              );
+            }
           }
         }
-      }
-    }, onError: (Object e) {
-      debugPrint('[AdminLiveAlertService] service_requests listener error: $e');
-    });
+      },
+      onError: (Object e) {
+        debugPrint(
+          '[AdminLiveAlertService] service_requests listener error: $e',
+        );
+      },
+    );
   }
 
   void stop() {
@@ -162,8 +223,11 @@ class AdminLiveAlertService {
     _ridesSub = null;
     _requestsSub?.cancel();
     _requestsSub = null;
+    _callsSub?.cancel();
+    _callsSub = null;
     _alertedRideCompletions.clear();
     _alertedRequestCompletions.clear();
     _alertedRequestPingings.clear();
+    _alertedCallIds.clear();
   }
 }

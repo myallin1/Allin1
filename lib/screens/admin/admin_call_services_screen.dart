@@ -36,13 +36,23 @@ class AdminCallServicesScreen extends StatelessWidget {
 
   static const String collection = 'call_service_requests';
 
-  /// The stream super_admin_home_screen.dart's badge tile watches —
-  /// exposed here so both the badge count and this full list read the
-  /// exact same query and can never disagree about what "new" means.
+  /// The stream super_admin_home_screen.dart's badge tile watches.
+  ///
+  /// CHANGED (Sep 2026 — Nizam's "only grab my attention when action
+  /// is required" decision): every call gets a document now (see
+  /// ChittiCallServiceLog.logCall's header — permanent record, history/
+  /// analytics), including pure small talk with nothing for admin to
+  /// do. Without the `hasIntents` filter, the badge would fire on every
+  /// single call ever made, not just ones needing a response — this
+  /// screen's own full list below deliberately does NOT apply this
+  /// filter (it queries the raw collection directly, unfiltered by
+  /// status/intents) since browsing call history/analytics is exactly
+  /// the case that SHOULD show every call, intents or not.
   static Stream<QuerySnapshot<Map<String, dynamic>>> newStream() =>
       FirebaseFirestore.instance
           .collection(collection)
           .where('status', isEqualTo: 'new')
+          .where('hasIntents', isEqualTo: true)
           .snapshots();
 
   @override
@@ -114,6 +124,13 @@ class _CallCard extends StatelessWidget {
     final intents = (data['intents'] as List<dynamic>? ?? const [])
         .cast<Map<String, dynamic>>();
     final endedAt = (data['callEndedAt'] as Timestamp?)?.toDate();
+    // NEW (Sep 2026 — Nizam's admin-only SLA visibility request, after
+    // dropping the customer-facing 45s timeout entirely): true only
+    // when a call ran past ChittiCallServiceLog.adminSlaSeconds and no
+    // admin ever joined it — computed once at logCall time, not a live
+    // signal, so this is purely "you might want to review this one,"
+    // never something the customer's own call was ever affected by.
+    final slaBreached = data['adminSlaBreached'] == true;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -144,6 +161,23 @@ class _CallCard extends StatelessWidget {
                 _StatusChip(status: status),
               ],
             ),
+            if (slaBreached) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, size: 13, color: _amber),
+                  const SizedBox(width: 4),
+                  Text(
+                    'No admin joined this call',
+                    style: GoogleFonts.outfit(
+                      color: _amber,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ],
             if (endedAt != null) ...[
               const SizedBox(height: 2),
               Text(_ago(endedAt),

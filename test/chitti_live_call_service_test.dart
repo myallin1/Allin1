@@ -1,3 +1,4 @@
+import 'package:erode_superapp/services/chitti/chitti_call_service_log.dart';
 import 'package:erode_superapp/services/chitti/chitti_live_call_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -64,6 +65,64 @@ void main() {
       final empty = ChittiLiveCallState.fromRtdbData('call_empty', <Object?, Object?>{});
       expect(empty.callerName, 'Customer');
       expect(empty.liveTranscript, isEmpty);
+    });
+  });
+
+  // WHY THESE DON'T ASSERT A DOCUMENT/NODE WAS ACTUALLY WRITTEN
+  // Neither cloud_firestore nor firebase_database has a fake/mock
+  // package in this project's dev_dependencies (confirmed before
+  // writing these), and this suite runs with no Firebase app
+  // initialized — a real write is not observable here. What IS real
+  // and worth locking down: logCall/cleanupCall/markChittiAutoAnswered
+  // all deliberately never throw to their caller (a failed permanent-
+  // record write must not crash a call that already ended cleanly for
+  // the customer) — that contract is exactly what would silently break
+  // if someone later removed one of the try/catch blocks these methods
+  // wrap themselves in.
+  group('ChittiCallServiceLog.logCall (contract: never throws)', () {
+    test('completes with the new required fields and no intents', () async {
+      await expectLater(
+        ChittiCallServiceLog.logCall(
+          intents: const [],
+          callStartedAt: DateTime.now(),
+          callEndedAt: DateTime.now(),
+          outcome: 'endedByUser',
+          adminJoined: false,
+        ),
+        completes,
+      );
+    });
+
+    test('completes with intents, a full transcript, and an admin-joined outcome', () async {
+      await expectLater(
+        ChittiCallServiceLog.logCall(
+          intents: const [
+            ChittiCallIntent(actionType: 'book_ride', detail: {'to': 'Erode Bus Stand'}),
+          ],
+          callStartedAt: DateTime.now().subtract(const Duration(seconds: 12)),
+          callEndedAt: DateTime.now(),
+          outcome: 'handedOffToAdmin',
+          adminJoined: true,
+          fullTranscript: const ['Chitti: வணக்கம் பாஸ்'],
+        ),
+        completes,
+      );
+    });
+  });
+
+  group('ChittiLiveCallService RTDB lifecycle methods (contract: never throw)', () {
+    test('cleanupCall completes without throwing', () async {
+      await expectLater(
+        ChittiLiveCallService.instance.cleanupCall('call_test_cleanup'),
+        completes,
+      );
+    });
+
+    test('markChittiAutoAnswered completes without throwing', () async {
+      await expectLater(
+        ChittiLiveCallService.instance.markChittiAutoAnswered('call_test_auto'),
+        completes,
+      );
     });
   });
 }

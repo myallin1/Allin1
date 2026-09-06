@@ -146,6 +146,12 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
   /// decided, not a second classification pass.
   final List<ChittiCallIntent> _capturedIntents = [];
 
+  /// The same strings pushed to RTDB via appendTranscript(), kept
+  /// locally too so ChittiCallServiceLog.logCall() can write the
+  /// permanent Firestore transcript straight from here — no need to
+  /// read it back from RTDB right before deleting that very node.
+  final List<String> _fullTranscript = [];
+
   Timer? _elapsedTimer;
   Duration _elapsed = Duration.zero;
   DateTime? _connectedAt;
@@ -252,6 +258,13 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
         callerName: user?.displayName ?? 'Customer',
         callerPhone: user?.phoneNumber ?? '',
       );
+      // Records that Chitti itself is actively handling the call —
+      // purely informational for admin (whether a human ever also
+      // joined is tracked separately via _isHumanAdminConnected and
+      // logged at call-end). No customer-facing timer is tied to this
+      // anymore — see ChittiCallServiceLog.adminSlaBreached for why
+      // that moved to a post-hoc, admin-only computation instead.
+      unawaited(ChittiLiveCallService.instance.markChittiAutoAnswered(_activeCallSessionId!));
       _liveCallSub = ChittiLiveCallService.instance.watchCall(_activeCallSessionId!).listen((callState) {
         if (!mounted) return;
         if (callState == null || callState.status == 'ended') {
@@ -347,6 +360,7 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
 
     setState(() => _phase = _CallPhase.thinking);
     _history.add({'role': 'user', 'content': heard});
+    _fullTranscript.add('Customer: $heard');
     if (_activeCallSessionId != null) {
       unawaited(ChittiLiveCallService.instance.appendTranscript(_activeCallSessionId!, 'Customer: $heard'));
     }
@@ -390,6 +404,7 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
           : "Sorry, I didn't catch that — could you say it again?";
     }
     _history.add({'role': 'assistant', 'content': reply});
+    _fullTranscript.add('Chitti: $reply');
     if (_activeCallSessionId != null) {
       unawaited(ChittiLiveCallService.instance.appendTranscript(_activeCallSessionId!, 'Chitti: $reply'));
     }
@@ -480,42 +495,27 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
   ///   it from their own side when the real phone call finishes.
   Future<void> _handleAdminTakeover() async {
     if (_disposed || _ended) return;
-    // Stop listening FIRST, before the announcement even starts — the
-    // mic must not stay open capturing audio during Nizam's real call.
+    _ended = true;
+    // Stop listening and speaking immediately so the phone's microphone
+    // and audio hardware are 100% free before the cellular call connects.
     _conversation.stop();
     unawaited(_speech.stop());
+    unawaited(_tts.stop());
     _elapsedTimer?.cancel();
-
-    final takeOverLine = _languageCode == 'ta'
-        ? 'நம்ம NJ Tech நிஜாம் சார் லைன்ல வந்துட்டாரு, பேசுங்க!'
-        : 'Our boss Nizam is now on the line, please speak with him!';
-    try {
-      await _tts.stop();
-      await _tts.awaitSpeakCompletion(true);
-      try {
-        await _tts.speak(takeOverLine).timeout(const Duration(seconds: 10));
-      } on TimeoutException {
-        debugPrint('[ChittiCall] takeover announcement timed out — continuing.');
-      }
-    } catch (e) {
-      debugPrint('[ChittiCall] takeover announcement failed: $e');
-    } finally {
-      await _tts.stop();
-    }
-
-    if (_disposed || _ended) return;
-    _ended = true;
     _liveCallSub?.cancel();
-    final connectedAt = _connectedAt;
-    if (connectedAt != null) {
-      unawaited(
-        ChittiCallServiceLog.logCall(
-          intents: _capturedIntents,
-          callStartedAt: connectedAt,
-          callEndedAt: DateTime.now(),
+
+    if (mounted) {
+      final msg = _languageCode == 'ta'
+          ? 'நிஜாம் சார் நேரடி அழைப்பில் இணைகிறார்...'
+          : 'Connecting to Nizam on phone call...';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
         ),
       );
     }
+
+    unawaited(_logCallAndCleanup(ChittiCallOutcome.handedOffToAdmin));
     if (mounted) Navigator.of(context).pop(ChittiCallOutcome.handedOffToAdmin);
   }
 
@@ -529,20 +529,43 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
     unawaited(_tts.stop());
     _elapsedTimer?.cancel();
     _liveCallSub?.cancel();
-    if (_activeCallSessionId != null) {
-      unawaited(ChittiLiveCallService.instance.endCall(_activeCallSessionId!));
-    }
+    unawaited(_logCallAndCleanup(outcome));
+    if (mounted) Navigator.of(context).pop(outcome);
+  }
+
+  /// Writes the PERMANENT Firestore record first, then deletes the
+  /// ephemeral RTDB node — never the other way around, per Nizam's
+  /// "100% reliably recorded before any temporary data is deleted"
+  /// requirement. Sequenced with a plain `await` inside one async
+  /// function (not two separate unawaited calls) specifically so a
+  /// slow/failed logCall can never race a cleanupCall that runs first.
+  ///
+  /// Passes `adminJoined: _isHumanAdminConnected` so
+  /// ChittiCallServiceLog can compute the admin-only SLA flag (a call
+  /// that ran long and no human ever joined) — purely for admin's own
+  /// after-the-fact visibility, per Nizam's decision to drop the
+  /// customer-facing 45s timeout entirely rather than ever interrupt a
+  /// call Chitti is successfully handling alone.
+  Future<void> _logCallAndCleanup(ChittiCallOutcome outcome) async {
+    final sessionId = _activeCallSessionId;
     final connectedAt = _connectedAt;
     if (connectedAt != null) {
-      unawaited(
-        ChittiCallServiceLog.logCall(
+      try {
+        await ChittiCallServiceLog.logCall(
           intents: _capturedIntents,
           callStartedAt: connectedAt,
           callEndedAt: DateTime.now(),
-        ),
-      );
+          outcome: outcome.name,
+          adminJoined: _isHumanAdminConnected,
+          fullTranscript: List<String>.from(_fullTranscript),
+        );
+      } catch (e) {
+        debugPrint('[ChittiCall] logCall failed: $e');
+      }
     }
-    if (mounted) Navigator.of(context).pop(outcome);
+    if (sessionId != null) {
+      await ChittiLiveCallService.instance.cleanupCall(sessionId);
+    }
   }
 
   @override

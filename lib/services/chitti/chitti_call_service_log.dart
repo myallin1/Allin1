@@ -15,10 +15,19 @@
 // screen uses to actually DO things (book a ride, place an order, open
 // a section). This file does not add a second opinion about what the
 // customer meant; it only collects whatever that call already decided
-// during the conversation and, if the list is non-empty when the call
-// ends, hands it to admin. A call that was pure small talk produces no
-// tool calls and therefore writes nothing here — there is no separate
-// "was this worth telling admin about" judgment call to get wrong.
+// during the conversation and hands it to admin, empty or not.
+//
+// UPDATED (Sep 2026 — Nizam's "100% reliably recorded" requirement):
+// this used to skip writing anything when a call produced zero
+// intents, on the reasoning that pure small talk wasn't worth an admin
+// queue row. That's no longer true now that this collection is the
+// PERMANENT record for a call whose live RTDB session gets deleted
+// right after — see ChittiLiveCallService.cleanupCall — so a call with
+// no intents still needs a durable row, or its transcript/duration/
+// outcome would vanish the moment the ephemeral node is wiped. Every
+// call now writes a document; the admin queue's "no requests yet"
+// empty-state and per-row rendering already handle an empty
+// `intents` list without any UI change needed.
 //
 // Per Nizam's explicit choice: every tool call is logged, not a
 // filtered subset — "show me my wallet" ends up in the queue exactly
@@ -60,27 +69,79 @@ class ChittiCallServiceLog {
 
   static const String _collection = 'call_service_requests';
 
-  /// Writes one call's worth of intents as a single document.
+  /// The admin-visibility SLA window in seconds (Sep 2026 — Nizam's
+  /// product decision after the original customer-facing 45s timeout
+  /// was found to be architecturally wrong: Chitti auto-handling a call
+  /// end-to-end with no admin ever joining is the NORMAL, successful
+  /// case here, not a failure — so nothing on the customer's side may
+  /// ever time out or drop the call over this. This constant exists
+  /// purely for admin's own after-the-fact visibility: "did a human
+  /// ever join a call that ran long enough to plausibly have needed
+  /// one," computed once, here, at logging time — no live timer, no
+  /// RTDB write, nothing the customer's call flow can be affected by.
+  static const int adminSlaSeconds = 45;
+
+  /// Writes one call's full record as a single document — every call,
+  /// not just ones that produced a tool call.
+  ///
+  /// CHANGED (Sep 2026 — Nizam's explicit requirement: "Every call's
+  /// details and customer intents MUST be 100% reliably recorded
+  /// before any temporary data is deleted"). This used to return early
+  /// on an empty [intents] list, on the reasoning that a pure-chat call
+  /// had nothing for admin to act on. That's still true for the admin
+  /// queue's badge count, but this collection is now the PERMANENT
+  /// record of a call whose RTDB signaling node gets deleted right
+  /// after this write (see ChittiLiveCallService.cleanupCall) — a call
+  /// with no intents still needs a durable row, or that call's
+  /// transcript/outcome/duration is gone forever the moment RTDB wipes
+  /// it. admin_call_services_screen.dart already renders an empty
+  /// `intents` list fine (no crash, just no intent lines shown), so
+  /// this is safe for that screen as-is.
+  ///
+  /// Field names `customerId`/`customerName`/`customerPhone` are kept
+  /// (not renamed to callerId/callerName/callerPhone) deliberately —
+  /// admin_call_services_screen.dart already reads these exact keys;
+  /// renaming them here would silently break that screen's display for
+  /// every call logged from now on.
   ///
   /// Never throws to the caller — a failed write must not affect the
   /// call itself having already ended cleanly for the customer.
-  /// Silently does nothing when [intents] is empty; that is the normal
-  /// case (most calls are just conversation) and not an error.
   static Future<void> logCall({
     required List<ChittiCallIntent> intents,
     required DateTime callStartedAt,
     required DateTime callEndedAt,
+    required String outcome,
+    required bool adminJoined,
+    List<String> fullTranscript = const [],
   }) async {
-    if (intents.isEmpty) return;
     try {
       final user = FirebaseAuth.instance.currentUser;
+      final durationSeconds = callEndedAt.difference(callStartedAt).inSeconds;
+      // SLA breach = a call that ran long enough to plausibly have
+      // needed a human (> adminSlaSeconds) and no admin ever actually
+      // joined it — NOT "admin didn't answer instantly" (Chitti always
+      // does, by design) and NOT evaluated on short calls that were
+      // never at risk of needing a human in the first place.
+      final adminSlaBreached = !adminJoined && durationSeconds > adminSlaSeconds;
       await FirebaseFirestore.instance.collection(_collection).add({
         'customerId': user?.uid,
         'customerName': user?.displayName,
         'customerPhone': user?.phoneNumber,
         'callStartedAt': Timestamp.fromDate(callStartedAt),
         'callEndedAt': Timestamp.fromDate(callEndedAt),
+        'durationSeconds': durationSeconds,
         'intents': intents.map((i) => i.toJson()).toList(),
+        // Redundant with `intents.isNotEmpty` but kept as its own field
+        // so the admin badge query (AdminCallServicesScreen.newStream)
+        // can filter on it directly — Firestore can't query "array is
+        // non-empty" cleanly, and this collection deliberately still
+        // writes a document for every call (history/analytics) even
+        // though the badge should only fire for actionable ones.
+        'hasIntents': intents.isNotEmpty,
+        'fullTranscript': fullTranscript,
+        'outcome': outcome,
+        'adminJoined': adminJoined,
+        'adminSlaBreached': adminSlaBreached,
         'status': 'new',
         'createdAt': FieldValue.serverTimestamp(),
       });
