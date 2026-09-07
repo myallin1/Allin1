@@ -67,6 +67,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../services/chitti/chitti_call_service_log.dart';
 import '../services/chitti/chitti_conversation_controller.dart';
 import '../services/chitti/chitti_live_call_service.dart';
+import '../services/chitti/chitti_local_answer_service.dart';
 import '../services/chitti/chitti_voice_service.dart';
 import '../services/guru_api_service.dart';
 import '../services/localization_service.dart';
@@ -193,7 +194,35 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
     }
   }
 
-  String get _sttLocale => _languageCode == 'ta' ? 'ta_IN' : 'en_US';
+  // FIX (Sep 2026 — "English um some time thappa purinjukutu type
+  // pannuthu"): this used to hardcode 'ta_IN'/'en_US' — a guessed
+  // string that can silently fail to match what a given phone actually
+  // registers for Tamil (casing/format varies by OEM), and always
+  // English recognition failing to handle the customer's own English/
+  // Tanglish words with the Tamil-only model. guru_chat_screen.dart's
+  // voice loop already solved this via ChittiVoiceService
+  // .speechLocaleFor() — checks the phone's REAL available locales, and
+  // for Tanglish deliberately prefers Indian English over Tamil-only
+  // (Indian English recognises code-switched "book pannu" style speech
+  // far better). This screen never got that fix; _resolveSttLocale()
+  // below ports it over, resolved once in _connect() and cached here.
+  String? _resolvedSttLocale;
+  String get _sttLocale =>
+      _resolvedSttLocale ?? (_languageCode == 'ta' ? 'ta-IN' : 'en-US');
+
+  Future<void> _resolveSttLocale() async {
+    try {
+      final locales = await _speech.locales();
+      _resolvedSttLocale = ChittiVoiceService.speechLocaleFor(
+        _languageCode,
+        locales.map((l) => l.localeId).toList(growable: false),
+      );
+    } catch (e) {
+      debugPrint('[ChittiCall] Could not resolve speech locale: $e');
+      _resolvedSttLocale =
+          ChittiVoiceService.speechLocaleFor(_languageCode, const <String>[]);
+    }
+  }
 
   /// Both plugin calls below sit on top of real OS permission prompts
   /// and hardware. Neither has ever been observed to hang in this app's
@@ -223,6 +252,7 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
             },
           )
           .timeout(ChittiCallScreen.initTimeout, onTimeout: () => false);
+      if (_speechReady) await _resolveSttLocale();
     } catch (e) {
       debugPrint('[ChittiCall] speech init failed: $e');
       _speechReady = false;
@@ -363,6 +393,57 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
     _fullTranscript.add('Customer: $heard');
     if (_activeCallSessionId != null) {
       unawaited(ChittiLiveCallService.instance.appendTranscript(_activeCallSessionId!, 'Customer: $heard'));
+    }
+
+    // FIX (Sep 7 2026 — voice-call audit, "not like Gemini voice mode /
+    // offline knowledge not proper" report): every OTHER Chitti entry
+    // point — guru_chat_screen.dart, guru_overlay_service.dart (including
+    // its own voice mode) — checks ChittiLocalAnswerService (the
+    // instant, zero-network "what is this section/tool/screen" layer)
+    // before ever reaching the model. This call screen skipped it
+    // entirely and went straight to a full GuruApiService().sendMessage()
+    // network round trip for EVERY single utterance — including simple
+    // app questions the local layer already answers for free elsewhere.
+    // That is a real, measurable chunk of the latency that makes this
+    // feel slower/less responsive than a native voice model: a
+    // cascaded STT-then-network-then-TTS pipeline pays for a round trip
+    // it did not need to.
+    //
+    // Deliberately NOT wiring in ChittiLocalIntentEngine (the ACTION
+    // layer) here too — that layer can navigate screens and execute
+    // side effects (book a ride, add to cart), none of which has a
+    // sensible outcome on an audio-only, full-screen call with no UI to
+    // show a result on. Only the read-only, informational answer layer
+    // belongs here.
+    //
+    // Unconditional (not gated behind "no API key", unlike the other
+    // two callers) — the whole point in THIS screen is shaving latency
+    // off a live conversation, not just covering for a missing key.
+    final localAnswer = await ChittiLocalAnswerService.answerWithScreen(
+      heard,
+      languageCode: _languageCode,
+    );
+    if (localAnswer != null) {
+      _fullTranscript.add('Chitti: ${localAnswer.text}');
+      if (_activeCallSessionId != null) {
+        unawaited(ChittiLiveCallService.instance
+            .appendTranscript(_activeCallSessionId!, 'Chitti: ${localAnswer.text}'));
+      }
+      _history.add({'role': 'assistant', 'content': localAnswer.text});
+      // Same turn-bookkeeping the network path below always does before
+      // speaking — an informational answer is still a real turn as far
+      // as the conversation controller's own state is concerned.
+      final localStep = _conversation.onUserSaid(
+        heard,
+        resolvedAnIntent: false,
+        awaitingReply: false,
+      );
+      if (localStep == ChittiConversationStep.stop) {
+        _endCall(ChittiCallOutcome.endedBySpeech);
+        return;
+      }
+      await _speak(localAnswer.text);
+      return;
     }
 
     // NEW (Sep 2026 — Nizam: "customer oru intent or avanga requirement

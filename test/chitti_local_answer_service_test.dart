@@ -120,4 +120,46 @@ void main() {
       expect(ChittiLocalAnswerService.answer(''), isNull);
     });
   });
+
+  group('support, payments, refunds/cancellation, troubleshooting', () {
+    test('a refund question routes to support, never states a figure', () {
+      final a = ChittiLocalAnswerService.answer('how much refund will I get');
+      expect(a, isNotNull);
+      // The whole point: no invented policy number, just the real
+      // contact channel — see the service's own header comment on why.
+      expect(a!.text, contains('918681869091'));
+      expect(a.text.toLowerCase(), isNot(contains('%')));
+    });
+
+    test('cancellation fee question also routes to support', () {
+      final a = ChittiLocalAnswerService.answer('is there a cancellation fee');
+      expect(a, isNotNull);
+      expect(a!.text, contains('918681869091'));
+    });
+
+    test('payment methods answers with what is actually integrated', () {
+      final a = ChittiLocalAnswerService.answer('what payment methods do you accept');
+      expect(a, isNotNull);
+      expect(a!.text.toLowerCase(), contains('upi'));
+      expect(a.text.toLowerCase(), contains('wallet'));
+    });
+
+    test('asking for a real person gives the real contact number', () {
+      final a = ChittiLocalAnswerService.answer('I want to talk to a real person');
+      expect(a, isNotNull);
+      expect(a!.text, contains('918681869091'));
+    });
+
+    test('app trouble gets safe generic troubleshooting, not a guess', () {
+      final a = ChittiLocalAnswerService.answer('the app is not loading');
+      expect(a, isNotNull);
+      expect(a!.text.toLowerCase(), contains('internet'));
+    });
+
+    test('Tamil refund question also routes to support', () {
+      final a = ChittiLocalAnswerService.answer('ரிபண்ட் எப்போ வரும்', languageCode: 'ta');
+      expect(a, isNotNull);
+      expect(a!.text, contains('918681869091'));
+    });
+  });
 }

@@ -187,6 +187,14 @@ class ChittiVoiceService {
   static ChittiVoiceTone get tone => _tone;
   static String? get pinnedVoiceName => _pinnedVoiceName;
 
+  /// Guarantees [pinnedVoiceName] reflects the saved preference before a
+  /// caller reads it directly, for a code path that never goes through
+  /// [apply] itself — the native call-screening voice engine
+  /// (ChittiCallVoice.kt) is exactly that: it never calls flutter_tts,
+  /// so nothing else would trigger this load before a real incoming
+  /// call needs the pinned name on a cold app start.
+  static Future<void> ensurePreferencesLoaded() => _ensureLoaded();
+
   /// Reads the saved preferences once per app run.
   ///
   /// Cheap enough to call before every utterance, but the `_loaded`

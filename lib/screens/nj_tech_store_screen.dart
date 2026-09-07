@@ -31,22 +31,22 @@ import 'service_request_tracking_screen.dart';
 import '../services/firestore_usage_tracking.dart';
 
 // ── Brand Colors (matches dashboard theme) ───────────────────────
-const Color _kPink     = Color(0xFFFF4FA3);
+const Color _kPink = Color(0xFFFF4FA3);
 const Color _kPinkDark = Color(0xFFBE2A7A);
-const Color _kNJDark   = Color(0xFF130B28);
-const Color _kNJDark2  = Color(0xFF2A1060);
-const Color _kBg       = Color(0xFFFFFFFF);
-const Color _kSurface  = Color(0xFFF8F8FF);
-const Color _kText     = Color(0xFF1A1A2E);
-const Color _kMuted    = Color(0xFF9999BB);
-const Color _kBorder   = Color(0xFFEEEEF5);
-const Color _kGold     = Color(0xFFFFBB00);
-const Color _kGreen    = Color(0xFF00C853);
-const Color _kRed      = Color(0xFFFF5252);
-const Color _kBlue     = Color(0xFF1565C0);
-const Color _kTeal     = Color(0xFF00BFA5);
-const Color _kPurple   = Color(0xFF7B6FE0);
-const Color _kOrange   = Color(0xFFFF6B35);
+const Color _kNJDark = Color(0xFF130B28);
+const Color _kNJDark2 = Color(0xFF2A1060);
+const Color _kBg = Color(0xFFFFFFFF);
+const Color _kSurface = Color(0xFFF8F8FF);
+const Color _kText = Color(0xFF1A1A2E);
+const Color _kMuted = Color(0xFF9999BB);
+const Color _kBorder = Color(0xFFEEEEF5);
+const Color _kGold = Color(0xFFFFBB00);
+const Color _kGreen = Color(0xFF00C853);
+const Color _kRed = Color(0xFFFF5252);
+const Color _kBlue = Color(0xFF1565C0);
+const Color _kTeal = Color(0xFF00BFA5);
+const Color _kPurple = Color(0xFF7B6FE0);
+const Color _kOrange = Color(0xFFFF6B35);
 
 // NJ Tech contact number (used for the direct "Call Now" actions —
 // the enquiry form itself now goes through the Broadcast Order System
@@ -105,28 +105,61 @@ const Map<String, int> _kElectronicsPinkSlot = {
 // today) since a real photo needs no bespoke asset production. Same
 // CachedCloudImage disk-cache mechanism as dashboard_screen.dart.
 const Map<String, String> _kElectronicsPhotoUrl = {
-  'mobile': 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=200&q=80',
-  'laptop': 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=200&q=80',
-  'pc': 'https://images.unsplash.com/photo-1587831990711-23ca6441447b?w=200&q=80',
-  'cctv': 'https://images.unsplash.com/photo-1557324232-b8917d3c3dcb?w=200&q=80',
-  'hometheatre': 'https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?w=200&q=80',
-  'tv': 'https://images.unsplash.com/photo-1593784991095-a205069470b6?w=200&q=80',
-  'gadgets': 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=200&q=80',
-  'ac_service': 'https://images.unsplash.com/photo-1631545805339-4dc94c8c8b83?w=200&q=80',
-  'fridge_service': 'https://images.unsplash.com/photo-1571175443880-49e1d25b2bc5?w=200&q=80',
+  'mobile':
+      'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=200&q=80',
+  'laptop':
+      'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=200&q=80',
+  'pc':
+      'https://images.unsplash.com/photo-1587831990711-23ca6441447b?w=200&q=80',
+  'cctv':
+      'https://images.unsplash.com/photo-1557324232-b8917d3c3dcb?w=200&q=80',
+  'hometheatre':
+      'https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?w=200&q=80',
+  'tv':
+      'https://images.unsplash.com/photo-1593784991095-a205069470b6?w=200&q=80',
+  'gadgets':
+      'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=200&q=80',
+  // FIX: old ID 404'd (dead link); swapped for the electrician category's
+  // already-verified "technician at work with tools" photo — closest
+  // confirmed-working match to an AC service technician on hand.
+  'ac_service':
+      'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=200&q=80',
+  'fridge_service':
+      'https://images.unsplash.com/photo-1571175443880-49e1d25b2bc5?w=200&q=80',
 };
 
-Widget _themedCategoryIcon(BuildContext context, _ServiceCategory cat, double size, Widget fallback) {
+Widget _themedCategoryIcon(
+    BuildContext context, _ServiceCategory cat, double size, Widget fallback) {
   final iconTheme = context.watch<ThemeService>().iconThemeKey;
   final photoUrl = _kElectronicsPhotoUrl[cat.id];
   if (iconTheme == 'photo_realistic' && photoUrl != null) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(size * 0.22),
-      child: CachedCloudImage(
-        photoUrl,
-        width: size, height: size, fit: BoxFit.cover,
-        cacheWidth: (size * 4).round(),
-        errorWidget: fallback,
+    // CHANGED (Nizam: "photo theme ah innum vera level la set pannlam")
+    // — premium shadow+ring treatment matching dashboard_screen.dart's
+    // mega-card photo tiles, for one consistent elevated-photo look
+    // across the whole app.
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(size * 0.24),
+        border: Border.all(color: Colors.white, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 6,
+              offset: const Offset(0, 3)),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(size * 0.22),
+        child: CachedCloudImage(
+          photoUrl,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          cacheWidth: (size * 4).round(),
+          errorWidget: fallback,
+        ),
       ),
     );
   }
@@ -135,7 +168,9 @@ Widget _themedCategoryIcon(BuildContext context, _ServiceCategory cat, double si
   if (!isPink) return fallback;
   return Image.asset(
     'assets/images/pink_icons/electronics_${pinkSlot}_a.webp',
-    width: size, height: size, fit: BoxFit.contain,
+    width: size,
+    height: size,
+    fit: BoxFit.contain,
     errorBuilder: (_, __, ___) => fallback,
   );
 }
@@ -278,9 +313,10 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
         border: const Border(top: BorderSide(color: _kBorder)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 16,
-              offset: const Offset(0, -4),),
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
         ],
       ),
       child: SafeArea(
@@ -294,16 +330,22 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
                 onTap: () => setState(() => _tabIndex = i),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(icon, color: active ? _kPink : _kMuted, size: 24),
-                    const SizedBox(height: 3),
-                    Text(label,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, color: active ? _kPink : _kMuted, size: 24),
+                      const SizedBox(height: 3),
+                      Text(
+                        label,
                         style: TextStyle(
-                            fontSize: 9.5,
-                            color: active ? _kPink : _kMuted,
-                            fontWeight:
-                                active ? FontWeight.w700 : FontWeight.w400,),),
-                  ],),
+                          fontSize: 9.5,
+                          color: active ? _kPink : _kMuted,
+                          fontWeight:
+                              active ? FontWeight.w700 : FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -381,11 +423,14 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
             sliver: SliverToBoxAdapter(
-              child: Text('Service Status',
-                  style: GoogleFonts.outfit(
-                      color: _kText,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,),),
+              child: Text(
+                'Service Status',
+                style: GoogleFonts.outfit(
+                  color: _kText,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ),
           ),
           SliverPadding(
@@ -404,8 +449,11 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
       pinned: true,
       backgroundColor: _kNJDark,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new_rounded,
-            color: Colors.white, size: 20,),
+        icon: const Icon(
+          Icons.arrow_back_ios_new_rounded,
+          color: Colors.white,
+          size: 20,
+        ),
         onPressed: () => Navigator.pop(context),
       ),
       flexibleSpace: FlexibleSpaceBar(
@@ -424,57 +472,83 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Row(children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3,),
-                      decoration: BoxDecoration(
-                        color: _kPink.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                            color: _kPink.withValues(alpha: 0.5),),
-                      ),
-                      child: Text('NJ TECH',
-                          style: GoogleFonts.outfit(
-                              color: _kPink,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 1.2,),),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3,),
-                      decoration: BoxDecoration(
-                        color: _kGreen.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Container(
-                          width: 5, height: 5,
-                          decoration: const BoxDecoration(
-                              color: _kGreen, shape: BoxShape.circle,),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
                         ),
-                        const SizedBox(width: 4),
-                        Text('Open Now',
-                            style: GoogleFonts.outfit(
+                        decoration: BoxDecoration(
+                          color: _kPink.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: _kPink.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        child: Text(
+                          'NJ TECH',
+                          style: GoogleFonts.outfit(
+                            color: _kPink,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _kGreen.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 5,
+                              height: 5,
+                              decoration: const BoxDecoration(
+                                color: _kGreen,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Open Now',
+                              style: GoogleFonts.outfit(
                                 color: _kGreen,
                                 fontSize: 9,
-                                fontWeight: FontWeight.w700,),),
-                      ],),
-                    ),
-                  ],),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 8),
-                  Text('All In One\nElectronic Services',
-                      style: GoogleFonts.outfit(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          height: 1.2,),),
+                  Text(
+                    'All In One\nElectronic Services',
+                    style: GoogleFonts.outfit(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      height: 1.2,
+                    ),
+                  ),
                   const SizedBox(height: 4),
-                  Text('Erode · Sales · Service · Installation',
-                      style: GoogleFonts.outfit(
-                          color: Colors.white54, fontSize: 11,),),
+                  Text(
+                    'Erode · Sales · Service · Installation',
+                    style: GoogleFonts.outfit(
+                      color: Colors.white54,
+                      fontSize: 11,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -502,9 +576,14 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('My Enquiries',
-            style: GoogleFonts.outfit(
-                color: _kText, fontSize: 16, fontWeight: FontWeight.w800,),),
+        Text(
+          'My Enquiries',
+          style: GoogleFonts.outfit(
+            color: _kText,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         const SizedBox(height: 12),
         _EnquiriesList(customerId: user.uid),
       ],
@@ -527,29 +606,47 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _kPink.withValues(alpha: 0.15)),
       ),
-      child: Row(children: [
-        Container(
-          width: 48, height: 48,
-          decoration: BoxDecoration(
-            color: _kPink.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(14),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: _kPink.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(
+              Icons.electric_bolt_rounded,
+              color: _kPink,
+              size: 26,
+            ),
           ),
-          child: const Icon(Icons.electric_bolt_rounded,
-              color: _kPink, size: 26,),
-        ),
-        const SizedBox(width: 14),
-        Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Free Diagnosis for First Visit!',
-              style: GoogleFonts.outfit(
-                  color: _kText, fontSize: 13,
-                  fontWeight: FontWeight.w800,),),
-          const SizedBox(height: 2),
-          Text('Tap any category to book or send an enquiry',
-              style: GoogleFonts.outfit(
-                  color: _kMuted, fontSize: 11,),),
-        ],),),
-      ],),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Free Diagnosis for First Visit!',
+                  style: GoogleFonts.outfit(
+                    color: _kText,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Tap any category to book or send an enquiry',
+                  style: GoogleFonts.outfit(
+                    color: _kMuted,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -568,30 +665,48 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _kBorder),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Why NJ Tech?',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Why NJ Tech?',
             style: GoogleFonts.outfit(
-                fontSize: 15, fontWeight: FontWeight.w800, color: _kText,),),
-        const SizedBox(height: 12),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 4,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-          children: points.map((p) => Row(children: [
-            Icon(p.$1, color: p.$2, size: 18),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(p.$3,
-                  style: GoogleFonts.outfit(
-                      fontSize: 11, fontWeight: FontWeight.w600,
-                      color: _kText,),),
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: _kText,
             ),
-          ],),).toList(),
-        ),
-      ],),
+          ),
+          const SizedBox(height: 12),
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            childAspectRatio: 4,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            children: points
+                .map(
+                  (p) => Row(
+                    children: [
+                      Icon(p.$1, color: p.$2, size: 18),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          p.$3,
+                          style: GoogleFonts.outfit(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: _kText,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -612,34 +727,54 @@ class _NJTechStoreScreenState extends State<NJTechStoreScreen> {
           ),
           borderRadius: BorderRadius.circular(16),
         ),
-        child: Row(children: [
-          Container(
-            width: 48, height: 48,
-            decoration: BoxDecoration(
-              color: _kPink.withValues(alpha: 0.2),
-              shape: BoxShape.circle,
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: _kPink.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.phone_rounded, color: _kPink, size: 24),
             ),
-            child: const Icon(Icons.phone_rounded, color: _kPink, size: 24),
-          ),
-          const SizedBox(width: 14),
-          Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Call Us Directly',
-                style: GoogleFonts.outfit(
-                    color: Colors.white, fontSize: 14,
-                    fontWeight: FontWeight.w800,),),
-            Text('+91 95978 79191 · Mon–Sat 9am–8pm',
-                style: GoogleFonts.outfit(
-                    color: Colors.white54, fontSize: 10,),),
-          ],),),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: _kPink, borderRadius: BorderRadius.circular(12),),
-            child: const Icon(Icons.arrow_forward_rounded,
-                color: Colors.white, size: 18,),
-          ),
-        ],),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Call Us Directly',
+                    style: GoogleFonts.outfit(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    '+91 95978 79191 · Mon–Sat 9am–8pm',
+                    style: GoogleFonts.outfit(
+                      color: Colors.white54,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: _kPink,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.arrow_forward_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -683,8 +818,9 @@ class _CategoryTileState extends State<_CategoryTile>
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-        vsync: this, duration: const Duration(seconds: 3),)
-      ..repeat();
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..repeat();
     _ctrl.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
         setState(() => _iconIndex = (_iconIndex + 1) % 3);
@@ -701,9 +837,12 @@ class _CategoryTileState extends State<_CategoryTile>
 
   IconData get _currentIcon {
     switch (_iconIndex) {
-      case 0: return widget.category.icon;
-      case 1: return widget.category.icon2;
-      default: return widget.category.icon3;
+      case 0:
+        return widget.category.icon;
+      case 1:
+        return widget.category.icon2;
+      default:
+        return widget.category.icon3;
     }
   }
 
@@ -717,72 +856,98 @@ class _CategoryTileState extends State<_CategoryTile>
           color: cat.color.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: cat.color.withValues(alpha: 0.15)),
-          boxShadow: [BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8, offset: const Offset(0, 3),
-          ),],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         padding: const EdgeInsets.only(top: 10, left: 6, right: 6, bottom: 6),
-        child: Stack(children: [
-          Column(children: [
-            // Title
-            Text(
-              cat.title,
-              maxLines: 1,
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.outfit(
-                fontSize: 11, fontWeight: FontWeight.w800,
-                color: _kText, letterSpacing: -0.2,
-              ),
-            ),
-            const SizedBox(height: 8),
-            // Animated Icon
-            Expanded(
-              child: Center(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [BoxShadow(
-                      color: cat.color.withValues(alpha: 0.3),
-                      blurRadius: 12, spreadRadius: 2,
-                    ),],
-                  ),
-                  padding: const EdgeInsets.all(12),
-                  // FIX (Nizam's "modernize icons" request): categories
-                  // with a confirmed FluentEmojiFlat match (the colorful
-                  // icon family the rest of the app's main UI already
-                  // uses) show that single static icon instead of the
-                  // old monochrome 3-icon cycling animation. Categories
-                  // without one keep the original animation unchanged.
-                  child: _themedCategoryIcon(context, cat, 32, cat.emoji != null
-                      ? SvgPicture.string(cat.emoji!, width: 32, height: 32)
-                      : AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 500),
-                          transitionBuilder: (child, anim) => ScaleTransition(
-                            scale: CurvedAnimation(
-                                parent: anim, curve: Curves.elasticOut,),
-                            child: FadeTransition(opacity: anim, child: child),
-                          ),
-                          child: Icon(
-                            _currentIcon,
-                            key: ValueKey<int>(_iconIndex),
-                            size: 32, color: cat.color,
-                          ),
-                        ),
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                // Title
+                Text(
+                  cat.title,
+                  maxLines: 1,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: _kText,
+                    letterSpacing: -0.2,
                   ),
                 ),
+                const SizedBox(height: 8),
+                // Animated Icon
+                Expanded(
+                  child: Center(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: cat.color.withValues(alpha: 0.3),
+                            blurRadius: 12,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.all(12),
+                      // FIX (Nizam's "modernize icons" request): categories
+                      // with a confirmed FluentEmojiFlat match (the colorful
+                      // icon family the rest of the app's main UI already
+                      // uses) show that single static icon instead of the
+                      // old monochrome 3-icon cycling animation. Categories
+                      // without one keep the original animation unchanged.
+                      child: _themedCategoryIcon(
+                        context,
+                        cat,
+                        32,
+                        cat.emoji != null
+                            ? SvgPicture.string(cat.emoji!,
+                                width: 32, height: 32)
+                            : AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 500),
+                                transitionBuilder: (child, anim) =>
+                                    ScaleTransition(
+                                  scale: CurvedAnimation(
+                                    parent: anim,
+                                    curve: Curves.elasticOut,
+                                  ),
+                                  child: FadeTransition(
+                                      opacity: anim, child: child),
+                                ),
+                                child: Icon(
+                                  _currentIcon,
+                                  key: ValueKey<int>(_iconIndex),
+                                  size: 32,
+                                  color: cat.color,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            // Tap hint arrow
+            Positioned(
+              bottom: 0,
+              right: 0,
+              child: Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 10,
+                color: cat.color.withValues(alpha: 0.5),
               ),
             ),
-          ],),
-          // Tap hint arrow
-          Positioned(
-            bottom: 0, right: 0,
-            child: Icon(Icons.arrow_forward_ios_rounded,
-                size: 10, color: cat.color.withValues(alpha: 0.5),),
-          ),
-        ],),
+          ],
+        ),
       ),
     );
   }
@@ -806,16 +971,16 @@ class _CategoryModal extends StatefulWidget {
 }
 
 class _CategoryModalState extends State<_CategoryModal> {
-  final _nameCtrl    = TextEditingController();
-  final _phoneCtrl   = TextEditingController();
-  final _issueCtrl   = TextEditingController();
-  final _formKey     = GlobalKey<FormState>();
+  final _nameCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _issueCtrl = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
   // NEW (per Nizam's request): pickup/inspection location, same
   // Use-My-Location + Select-on-Map pattern as every other order form.
   final _addressCtrl = TextEditingController();
   double? _addressLat;
   double? _addressLng;
-  bool _sending      = false;
+  bool _sending = false;
 
   @override
   void dispose() {
@@ -871,13 +1036,14 @@ class _CategoryModalState extends State<_CategoryModal> {
 
     setState(() => _sending = true);
 
-    final name  = _nameCtrl.text.trim();
+    final name = _nameCtrl.text.trim();
     final phone = _phoneCtrl.text.trim();
     final issue = _issueCtrl.text.trim();
 
     try {
-      final resolvedCustomerPhone =
-          phone.isNotEmpty ? phone : await AuthService().resolveCustomerPhone(user);
+      final resolvedCustomerPhone = phone.isNotEmpty
+          ? phone
+          : await AuthService().resolveCustomerPhone(user);
       final requestId = await ServiceRequestService().createServiceRequest(
         requestType: 'electronics_service',
         customerId: user.uid,
@@ -935,14 +1101,19 @@ class _CategoryModalState extends State<_CategoryModal> {
 
     return Container(
       margin: EdgeInsets.only(
-          left: 12, right: 12, top: 60, bottom: bottom + 12,),
+        left: 12,
+        right: 12,
+        top: 60,
+        bottom: bottom + 12,
+      ),
       decoration: BoxDecoration(
         color: _kBg,
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 40, offset: const Offset(0, -8),
+            blurRadius: 40,
+            offset: const Offset(0, -8),
           ),
         ],
       ),
@@ -950,320 +1121,425 @@ class _CategoryModalState extends State<_CategoryModal> {
         borderRadius: BorderRadius.circular(28),
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-
-            // ── Modal Header ────────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [_kNJDark, cat.color.withValues(alpha: 0.8)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── Modal Header ────────────────────────────────────
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [_kNJDark, cat.color.withValues(alpha: 0.8)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Drag handle
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white30,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: _themedCategoryIcon(
+                              context,
+                              cat,
+                              28,
+                              cat.emoji != null
+                                  ? SvgPicture.string(cat.emoji!,
+                                      width: 28, height: 28)
+                                  : Icon(cat.icon,
+                                      color: Colors.white, size: 28)),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                cat.title,
+                                style: GoogleFonts.outfit(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              Text(
+                                cat.subtitle,
+                                style: GoogleFonts.outfit(
+                                  color: Colors.white70,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close_rounded,
+                              color: Colors.white70,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start, children: [
-                // Drag handle
-                Center(
-                  child: Container(
-                    width: 40, height: 4,
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.white30,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                Row(children: [
-                  Container(
-                    width: 52, height: 52,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: _themedCategoryIcon(context, cat, 28, cat.emoji != null
-                        ? SvgPicture.string(cat.emoji!, width: 28, height: 28)
-                        : Icon(cat.icon, color: Colors.white, size: 28)),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(cat.title,
-                        style: GoogleFonts.outfit(
-                            color: Colors.white, fontSize: 20,
-                            fontWeight: FontWeight.w900,),),
-                    Text(cat.subtitle,
-                        style: GoogleFonts.outfit(
-                            color: Colors.white70, fontSize: 11,),),
-                  ],),),
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      width: 32, height: 32,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.close_rounded,
-                          color: Colors.white70, size: 18,),
-                    ),
-                  ),
-                ],),
-              ],),
-            ),
 
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(children: [
-
-                // ── Call Button ──────────────────────────────────
-                GestureDetector(
-                  onTap: _callNow,
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                          colors: [_kGreen, Color(0xFF009624)],),
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: [BoxShadow(
-                        color: _kGreen.withValues(alpha: 0.35),
-                        blurRadius: 14, offset: const Offset(0, 5),
-                      ),],
-                    ),
-                    child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                      const Icon(Icons.phone_rounded,
-                          color: Colors.white, size: 20,),
-                      const SizedBox(width: 10),
-                      Text('Call for Enquiry / Booking',
-                          style: GoogleFonts.outfit(
-                              color: Colors.white, fontSize: 14,
-                              fontWeight: FontWeight.w800,),),
-                    ],),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // ── Divider ──────────────────────────────────────
-                Row(children: [
-                  const Expanded(child: Divider(color: _kBorder)),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('or send an enquiry',
-                        style: GoogleFonts.outfit(
-                            color: _kMuted, fontSize: 11,),),
-                  ),
-                  const Expanded(child: Divider(color: _kBorder)),
-                ],),
-
-                const SizedBox(height: 16),
-
-                // ── Enquiry Form ─────────────────────────────────
-                Form(
-                  key: _formKey,
-                  child: Column(children: [
-
-                    // Service (auto-filled display)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12,),
-                      decoration: BoxDecoration(
-                        color: cat.color.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: cat.color.withValues(alpha: 0.25),),
-                      ),
-                      child: Row(children: [
-                        _themedCategoryIcon(context, cat, 18, cat.emoji != null
-                            ? SvgPicture.string(cat.emoji!, width: 18, height: 18)
-                            : Icon(cat.icon, color: cat.color, size: 18)),
-                        const SizedBox(width: 8),
-                        Text('Service: ${cat.title}',
-                            style: GoogleFonts.outfit(
-                                color: cat.color, fontSize: 13,
-                                fontWeight: FontWeight.w700,),),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2,),
-                          decoration: BoxDecoration(
-                            color: cat.color.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text('Auto',
-                              style: GoogleFonts.outfit(
-                                  color: cat.color, fontSize: 8,
-                                  fontWeight: FontWeight.w800,),),
-                        ),
-                      ],),
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // Name field
-                    _FormField(
-                      controller: _nameCtrl,
-                      hint: 'Your Name',
-                      icon: Icons.person_outline_rounded,
-                      validator: (v) => (v?.trim().isEmpty ?? true)
-                          ? 'Please enter your name' : null,
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // Phone field
-                    _FormField(
-                      controller: _phoneCtrl,
-                      hint: 'Phone Number',
-                      icon: Icons.phone_outlined,
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(10),
-                      ],
-                      validator: (v) {
-                        final val = v?.trim() ?? '';
-                        if (val.isEmpty) return 'Please enter phone number';
-                        if (val.length < 10) return 'Enter valid 10-digit number';
-                        return null;
-                      },
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // Issue field
-                    TextFormField(
-                      controller: _issueCtrl,
-                      maxLines: 3,
-                      style: GoogleFonts.outfit(
-                          color: _kText, fontSize: 14,),
-                      decoration: InputDecoration(
-                        hintText: 'Describe your issue or service needed...',
-                        hintStyle: GoogleFonts.outfit(
-                            color: _kMuted, fontSize: 13,),
-                        prefixIcon: const Padding(
-                          padding: EdgeInsets.only(bottom: 40),
-                          child: Icon(Icons.edit_note_rounded,
-                              color: _kMuted, size: 20,),
-                        ),
-                        filled: true,
-                        fillColor: _kSurface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                              color: cat.color.withValues(alpha: 0.5),),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 14,),
-                      ),
-                      validator: (v) => (v?.trim().isEmpty ?? true)
-                          ? 'Please describe your issue' : null,
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // Pickup/inspection address — NEW (per Nizam's
-                    // request): this form previously collected zero
-                    // location data, so a hero assigned to pick up the
-                    // device or inspect it on-site had nowhere to
-                    // navigate to. Optional (not validated) since some
-                    // enquiries are drop-off-at-shop only.
-                    TextFormField(
-                      controller: _addressCtrl,
-                      maxLines: 2,
-                      style: GoogleFonts.outfit(color: _kText, fontSize: 14),
-                      decoration: InputDecoration(
-                        hintText: 'Pickup / inspection address (optional)',
-                        hintStyle: GoogleFonts.outfit(color: _kMuted, fontSize: 13),
-                        filled: true,
-                        fillColor: _kSurface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    LocationCaptureField(
-                      addressController: _addressCtrl,
-                      pickerTitle: 'Pickup / inspection location',
-                      accentColor: cat.color,
-                      onLocationPicked: (lat, lng) {
-                        setState(() {
-                          _addressLat = lat;
-                          _addressLng = lng;
-                        });
-                      },
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Submit Button — creates a trackable service request
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    // ── Call Button ──────────────────────────────────
                     GestureDetector(
-                      onTap: _sending ? null : _submitRequest,
+                      onTap: _callNow,
                       child: Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(vertical: 15),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: _sending
-                                ? [_kMuted, _kMuted]
-                                : [_kPink, _kPinkDark],
+                          gradient: const LinearGradient(
+                            colors: [_kGreen, Color(0xFF009624)],
                           ),
                           borderRadius: BorderRadius.circular(14),
-                          boxShadow: _sending ? [] : [
+                          boxShadow: [
                             BoxShadow(
-                              color: _kPink.withValues(alpha: 0.4),
+                              color: _kGreen.withValues(alpha: 0.35),
                               blurRadius: 14,
                               offset: const Offset(0, 5),
                             ),
                           ],
                         ),
                         child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                          if (_sending)
-                            const SizedBox(
-                              width: 20, height: 20,
-                              child: CircularProgressIndicator(
-                                  color: Colors.white, strokeWidth: 2,),
-                            )
-                          else ...[
-                            const Icon(Icons.send_rounded,
-                                color: Colors.white, size: 20,),
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.phone_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                             const SizedBox(width: 10),
-                            Text('Send Enquiry',
-                                style: GoogleFonts.outfit(
-                                    color: Colors.white, fontSize: 14,
-                                    fontWeight: FontWeight.w800,),),
+                            Text(
+                              'Call for Enquiry / Booking',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ],
-                        ],),
+                        ),
                       ),
                     ),
 
-                    const SizedBox(height: 8),
-                    Text(
-                      "Track your request's progress right after submitting",
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.outfit(
-                          color: _kMuted, fontSize: 10,),
+                    const SizedBox(height: 16),
+
+                    // ── Divider ──────────────────────────────────────
+                    Row(
+                      children: [
+                        const Expanded(child: Divider(color: _kBorder)),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text(
+                            'or send an enquiry',
+                            style: GoogleFonts.outfit(
+                              color: _kMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                        const Expanded(child: Divider(color: _kBorder)),
+                      ],
                     ),
-                  ],),
+
+                    const SizedBox(height: 16),
+
+                    // ── Enquiry Form ─────────────────────────────────
+                    Form(
+                      key: _formKey,
+                      child: Column(
+                        children: [
+                          // Service (auto-filled display)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: cat.color.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: cat.color.withValues(alpha: 0.25),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                _themedCategoryIcon(
+                                    context,
+                                    cat,
+                                    18,
+                                    cat.emoji != null
+                                        ? SvgPicture.string(cat.emoji!,
+                                            width: 18, height: 18)
+                                        : Icon(cat.icon,
+                                            color: cat.color, size: 18)),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Service: ${cat.title}',
+                                  style: GoogleFonts.outfit(
+                                    color: cat.color,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: cat.color.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    'Auto',
+                                    style: GoogleFonts.outfit(
+                                      color: cat.color,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // Name field
+                          _FormField(
+                            controller: _nameCtrl,
+                            hint: 'Your Name',
+                            icon: Icons.person_outline_rounded,
+                            validator: (v) => (v?.trim().isEmpty ?? true)
+                                ? 'Please enter your name'
+                                : null,
+                          ),
+
+                          const SizedBox(height: 10),
+
+                          // Phone field
+                          _FormField(
+                            controller: _phoneCtrl,
+                            hint: 'Phone Number',
+                            icon: Icons.phone_outlined,
+                            keyboardType: TextInputType.phone,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(10),
+                            ],
+                            validator: (v) {
+                              final val = v?.trim() ?? '';
+                              if (val.isEmpty)
+                                return 'Please enter phone number';
+                              if (val.length < 10)
+                                return 'Enter valid 10-digit number';
+                              return null;
+                            },
+                          ),
+
+                          const SizedBox(height: 10),
+
+                          // Issue field
+                          TextFormField(
+                            controller: _issueCtrl,
+                            maxLines: 3,
+                            style: GoogleFonts.outfit(
+                              color: _kText,
+                              fontSize: 14,
+                            ),
+                            decoration: InputDecoration(
+                              hintText:
+                                  'Describe your issue or service needed...',
+                              hintStyle: GoogleFonts.outfit(
+                                color: _kMuted,
+                                fontSize: 13,
+                              ),
+                              prefixIcon: const Padding(
+                                padding: EdgeInsets.only(bottom: 40),
+                                child: Icon(
+                                  Icons.edit_note_rounded,
+                                  color: _kMuted,
+                                  size: 20,
+                                ),
+                              ),
+                              filled: true,
+                              fillColor: _kSurface,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: cat.color.withValues(alpha: 0.5),
+                                ),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 14,
+                              ),
+                            ),
+                            validator: (v) => (v?.trim().isEmpty ?? true)
+                                ? 'Please describe your issue'
+                                : null,
+                          ),
+
+                          const SizedBox(height: 10),
+
+                          // Pickup/inspection address — NEW (per Nizam's
+                          // request): this form previously collected zero
+                          // location data, so a hero assigned to pick up the
+                          // device or inspect it on-site had nowhere to
+                          // navigate to. Optional (not validated) since some
+                          // enquiries are drop-off-at-shop only.
+                          TextFormField(
+                            controller: _addressCtrl,
+                            maxLines: 2,
+                            style:
+                                GoogleFonts.outfit(color: _kText, fontSize: 14),
+                            decoration: InputDecoration(
+                              hintText:
+                                  'Pickup / inspection address (optional)',
+                              hintStyle: GoogleFonts.outfit(
+                                  color: _kMuted, fontSize: 13),
+                              filled: true,
+                              fillColor: _kSurface,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 14),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          LocationCaptureField(
+                            addressController: _addressCtrl,
+                            pickerTitle: 'Pickup / inspection location',
+                            accentColor: cat.color,
+                            onLocationPicked: (lat, lng) {
+                              setState(() {
+                                _addressLat = lat;
+                                _addressLng = lng;
+                              });
+                            },
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Submit Button — creates a trackable service request
+                          GestureDetector(
+                            onTap: _sending ? null : _submitRequest,
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 15),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: _sending
+                                      ? [_kMuted, _kMuted]
+                                      : [_kPink, _kPinkDark],
+                                ),
+                                borderRadius: BorderRadius.circular(14),
+                                boxShadow: _sending
+                                    ? []
+                                    : [
+                                        BoxShadow(
+                                          color: _kPink.withValues(alpha: 0.4),
+                                          blurRadius: 14,
+                                          offset: const Offset(0, 5),
+                                        ),
+                                      ],
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (_sending)
+                                    const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  else ...[
+                                    const Icon(
+                                      Icons.send_rounded,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      'Send Enquiry',
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 8),
+                          Text(
+                            "Track your request's progress right after submitting",
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.outfit(
+                              color: _kMuted,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],),
-            ),
-          ],),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1316,7 +1592,9 @@ class _FormField extends StatelessWidget {
           borderSide: const BorderSide(color: _kRed),
         ),
         contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14, vertical: 14,),
+          horizontal: 14,
+          vertical: 14,
+        ),
       ),
       validator: validator,
     );
@@ -1325,12 +1603,16 @@ class _FormField extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<TextEditingController>('controller', controller));
+    properties.add(
+        DiagnosticsProperty<TextEditingController>('controller', controller));
     properties.add(StringProperty('hint', hint));
     properties.add(DiagnosticsProperty<IconData>('icon', icon));
-    properties.add(DiagnosticsProperty<TextInputType?>('keyboardType', keyboardType));
-    properties.add(IterableProperty<TextInputFormatter>('inputFormatters', inputFormatters));
-    properties.add(ObjectFlagProperty<String? Function(String?)?>.has('validator', validator));
+    properties
+        .add(DiagnosticsProperty<TextInputType?>('keyboardType', keyboardType));
+    properties.add(IterableProperty<TextInputFormatter>(
+        'inputFormatters', inputFormatters));
+    properties.add(ObjectFlagProperty<String? Function(String?)?>.has(
+        'validator', validator));
   }
 }
 
@@ -1362,7 +1644,8 @@ class _EnquiriesListState extends State<_EnquiriesList> {
   // completed (in the Hive cache) skip straight to the cached render
   // path below and never get a live listener attached; requests NOT
   // yet completed get one via _LiveEnquiryCard.
-  late Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _discoverFuture;
+  late Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+      _discoverFuture;
 
   @override
   void initState() {
@@ -1389,12 +1672,15 @@ class _EnquiriesListState extends State<_EnquiriesList> {
           return const Padding(
             padding: EdgeInsets.symmetric(vertical: 20),
             child: Center(
-                child: CircularProgressIndicator(color: _kPink, strokeWidth: 2),),
+              child: CircularProgressIndicator(color: _kPink, strokeWidth: 2),
+            ),
           );
         }
         if (snapshot.hasError) {
-          return const Text('Could not load your enquiries.',
-              style: TextStyle(color: _kMuted, fontSize: 12),);
+          return const Text(
+            'Could not load your enquiries.',
+            style: TextStyle(color: _kMuted, fontSize: 12),
+          );
         }
         final docs = snapshot.data ?? [];
         if (docs.isEmpty) {
@@ -1436,7 +1722,9 @@ class _EnquiryCardRouter extends StatefulWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<QueryDocumentSnapshot<Map<String, dynamic>>>('doc', doc));
+    properties.add(
+        DiagnosticsProperty<QueryDocumentSnapshot<Map<String, dynamic>>>(
+            'doc', doc));
   }
 }
 
@@ -1473,8 +1761,10 @@ class _EnquiryCardRouterState extends State<_EnquiryCardRouter> {
           // yet on this device (e.g. completed on another device, or
           // the cache write below hasn't finished) — cache it now so
           // future opens skip Firestore entirely for this request.
-          unawaited(ServiceRequestCacheService()
-              .cacheCompletedRequest(widget.doc.id, _withMillis(initialData)),);
+          unawaited(
+            ServiceRequestCacheService()
+                .cacheCompletedRequest(widget.doc.id, _withMillis(initialData)),
+          );
           return _EnquiryCardView(
             requestId: widget.doc.id,
             data: initialData,
@@ -1482,7 +1772,8 @@ class _EnquiryCardRouterState extends State<_EnquiryCardRouter> {
           );
         }
         // Still in progress — live listener, since status can change.
-        return _LiveEnquiryCard(requestId: widget.doc.id, initialData: initialData);
+        return _LiveEnquiryCard(
+            requestId: widget.doc.id, initialData: initialData);
       },
     );
   }
@@ -1505,7 +1796,8 @@ class _LiveEnquiryCard extends StatefulWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(StringProperty('requestId', requestId));
-    properties.add(DiagnosticsProperty<Map<String, dynamic>>('initialData', initialData));
+    properties.add(
+        DiagnosticsProperty<Map<String, dynamic>>('initialData', initialData));
   }
 }
 
@@ -1528,8 +1820,10 @@ class _LiveEnquiryCardState extends State<_LiveEnquiryCard> {
           // Fires exactly once, right as this device first observes
           // completion — the same moment triggers both the UI update
           // (this StreamBuilder rebuild) and the local Hive write.
-          unawaited(ServiceRequestCacheService()
-              .cacheCompletedRequest(widget.requestId, _withMillis(data)),);
+          unawaited(
+            ServiceRequestCacheService()
+                .cacheCompletedRequest(widget.requestId, _withMillis(data)),
+          );
         }
 
         return _EnquiryCardView(
@@ -1556,13 +1850,14 @@ class _EnquiryCardView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final details = (data['details'] as Map)
-        .map((k, v) => MapEntry(k.toString(), v));
+    final details =
+        (data['details'] as Map).map((k, v) => MapEntry(k.toString(), v));
     final categoryLabel = (details['categoryLabel'] as String?)?.trim();
     final issue = (details['issue'] as String?)?.trim();
     final status = (data['status'] as String?) ?? 'pending';
     final statusColor = serviceRequestStatusColor(status);
-    final statusLabel = serviceRequestStatusLabel('electronics_service', status);
+    final statusLabel =
+        serviceRequestStatusLabel('electronics_service', status);
 
     final isStillSearching = status == 'pending' || status == 'admin_review';
 
@@ -1607,7 +1902,10 @@ class _EnquiryCardView extends StatelessWidget {
                         ? categoryLabel
                         : 'Electronics enquiry',
                     style: GoogleFonts.outfit(
-                        color: _kText, fontSize: 14, fontWeight: FontWeight.w700,),
+                      color: _kText,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1633,7 +1931,10 @@ class _EnquiryCardView extends StatelessWidget {
               child: Text(
                 statusLabel,
                 style: TextStyle(
-                    color: statusColor, fontSize: 11, fontWeight: FontWeight.w700,),
+                  color: statusColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ],

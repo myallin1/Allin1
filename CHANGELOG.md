@@ -2,6 +2,16 @@
 
 All notable changes to the Allin1 Super App are recorded here.
 
+## [Build 0136] - 2026-09-07
+
+### Fixed
+- patch — Chitti Voice Locale Fix: `chitti_call_screen.dart`'s speech-recognition locale is now resolved from the device's real registered locales via `ChittiVoiceService.speechLocaleFor()` instead of a hardcoded `ta_IN`/`en_US` guess — fixes English/Tanglish words being mis-transcribed on the in-app voice call.
+- patch — Silent Self-Verification: Chitti's system prompt now instructs it to call `google_search` silently to verify an uncertain word/name before answering, rather than asking the customer to repeat themselves first.
+- patch — Offline FAQ Coverage Expansion: `ChittiLocalAnswerService` now answers refund/cancellation (routes to real support contact, never invents a policy figure), payment methods, customer support contact, and app troubleshooting questions with no API key required.
+- patch — Customer-Facing No-Key Fallback Fix: `guru_api_service.dart`'s `sendMessage()` now consults `ChittiLocalAnswerService` before falling back to the generic greeting when no AI key is configured, instead of repeating the same canned line regardless of what was asked.
+- patch — Pinned Voice Reaches Real Phone Calls: the male-voice preference pinned in AI Settings now also applies to `ChittiCallVoice.kt`'s native call-screening TTS engine (previously a completely separate voice pipeline that never saw it), via a `voiceName` parameter threaded through the platform channel.
+- patch — New `check_pr_status` Chitti tool: admin can ask Chitti to verify a GitHub PR's status (merged/ready/conflicts/blocked) by voice or chat, reusing the existing authenticated GitHub API wiring; resolves offline for the common "check the latest PR" phrasing.
+
 ## [Build 0135] - 2026-09-06
 
 ### Fixed

@@ -515,6 +515,15 @@ class MainActivity : FlutterActivity() {
                 "speakOnCallStream" -> {
                     val text = call.argument<String>("text") ?: ""
                     val locale = call.argument<String>("locale") ?: "en-US"
+                    // NEW (Sep 2026 — voice pinning reaches the real
+                    // call-screening greeting too): reflected via the
+                    // 5-arg @JvmOverloads signature ChittiCallVoice.kt
+                    // now exposes. null is a valid, common value (no
+                    // voice pinned), so this stays an explicit String?
+                    // reflection call rather than falling back to the
+                    // old 4-arg method, which no longer needs to exist
+                    // as a separate lookup path.
+                    val voiceName = call.argument<String>("voiceName")
                     try {
                         val clazz = Class.forName("com.njtech.allin1.ChittiCallVoice")
                         val method = clazz.getMethod(
@@ -523,13 +532,14 @@ class MainActivity : FlutterActivity() {
                             String::class.java,
                             String::class.java,
                             Function1::class.java,
+                            String::class.java,
                         )
                         val onEvent: (String) -> Unit = { event ->
                             runOnUiThread {
                                 channel.invokeMethod("onCallVoiceEvent", mapOf("event" to event))
                             }
                         }
-                        method.invoke(null, this, text, locale, onEvent)
+                        method.invoke(null, this, text, locale, onEvent, voiceName)
                         result.success(true)
                     } catch (e: Exception) {
                         result.error("CALL_VOICE_FAILED", e.message, null)

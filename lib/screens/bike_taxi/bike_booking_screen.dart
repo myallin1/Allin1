@@ -193,7 +193,6 @@ const List<Map<String, dynamic>> _defaultSearchLocations =
   },
 ];
 
-
 class BikeBookingScreen extends StatefulWidget {
   const BikeBookingScreen({
     super.key,
@@ -219,7 +218,8 @@ class BikeBookingScreen extends StatefulWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(StringProperty('initialCategory', initialCategory));
-    properties.add(DiagnosticsProperty<Map<String, dynamic>?>('initialDropLocation', initialDropLocation));
+    properties.add(DiagnosticsProperty<Map<String, dynamic>?>(
+        'initialDropLocation', initialDropLocation));
   }
 }
 
@@ -318,7 +318,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     // Awareness). Chitti reads this via ChittiMemoryService's system
     // prompt injection so a vague command like "book it for me" while
     // sitting here resolves to a ride, not food or groceries.
-    ChittiMemoryService.instance.setCurrentScreen('Bike Taxi booking (Taxi Dashboard)');
+    ChittiMemoryService.instance
+        .setCurrentScreen('Bike Taxi booking (Taxi Dashboard)');
     _mapService.initialize();
     // (didChangeDependencies below subscribes to chittiRouteObserver for
     // the didPopNext() re-registration — see its doc comment.)
@@ -381,7 +382,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   // chitti_screen_tag.dart's header for the full explanation.
   @override
   void didPopNext() {
-    ChittiMemoryService.instance.setCurrentScreen('Bike Taxi booking (Taxi Dashboard)');
+    ChittiMemoryService.instance
+        .setCurrentScreen('Bike Taxi booking (Taxi Dashboard)');
   }
 
   @override
@@ -473,7 +475,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   bool _isRestorableCustomerRide(
-      Map<String, dynamic> data, String customerUid,) {
+    Map<String, dynamic> data,
+    String customerUid,
+  ) {
     final customerId = (data['customerId'] as String?)?.trim();
     if (customerId != customerUid) {
       return false;
@@ -581,11 +585,13 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       }).toList();
 
       for (final doc in expiredSearchDocs) {
-        unawaited(doc.reference.update({
-          'status': 'cancelled',
-          'cancelledBy': 'system',
-          'cancelledAt': FieldValue.serverTimestamp(),
-        }),);
+        unawaited(
+          doc.reference.update({
+            'status': 'cancelled',
+            'cancelledBy': 'system',
+            'cancelledAt': FieldValue.serverTimestamp(),
+          }),
+        );
       }
       if (!mounted) {
         return;
@@ -680,155 +686,155 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
 
     setState(() => _isContinuingRide = true);
     try {
-    try {
-      final rideSnap = await FirebaseFirestore.instance
-          .collection('rides')
-          .doc(rideDocId)
-          .get();
-      if (!mounted) {
-        return;
-      }
-      final data = rideSnap.data();
-      if (!rideSnap.exists ||
-          data == null ||
-          (data['customerId'] as String?)?.trim() != user.uid) {
-        setState(() {
-          _pendingActiveRide = null;
-          _pendingActiveRideDocId = null;
-          _pendingActiveRideStatus = null;
-          _pendingActiveRidePaymentStatus = null;
-          _pendingActiveRideAmount = null;
-        });
-        return;
-      }
-      status = (data['status'] as String? ?? '').trim();
-      paymentStatus = (data['paymentStatus'] as String? ?? '').trim();
-      final createdAt = data['createdAt'];
-      if (status == 'searching' &&
-          createdAt is Timestamp &&
-          DateTime.now().difference(createdAt.toDate()).inSeconds > 90) {
-        await rideSnap.reference.update({
-          'status': 'cancelled',
-          'cancelledBy': 'system',
-          'cancelledAt': FieldValue.serverTimestamp(),
-        });
+      try {
+        final rideSnap = await FirebaseFirestore.instance
+            .collection('rides')
+            .doc(rideDocId)
+            .get();
         if (!mounted) {
           return;
         }
-        setState(() {
-          _pendingActiveRide = null;
-          _pendingActiveRideDocId = null;
-          _pendingActiveRideStatus = null;
-          _pendingActiveRidePaymentStatus = null;
-          _pendingActiveRideAmount = null;
-        });
-        return;
+        final data = rideSnap.data();
+        if (!rideSnap.exists ||
+            data == null ||
+            (data['customerId'] as String?)?.trim() != user.uid) {
+          setState(() {
+            _pendingActiveRide = null;
+            _pendingActiveRideDocId = null;
+            _pendingActiveRideStatus = null;
+            _pendingActiveRidePaymentStatus = null;
+            _pendingActiveRideAmount = null;
+          });
+          return;
+        }
+        status = (data['status'] as String? ?? '').trim();
+        paymentStatus = (data['paymentStatus'] as String? ?? '').trim();
+        final createdAt = data['createdAt'];
+        if (status == 'searching' &&
+            createdAt is Timestamp &&
+            DateTime.now().difference(createdAt.toDate()).inSeconds > 90) {
+          await rideSnap.reference.update({
+            'status': 'cancelled',
+            'cancelledBy': 'system',
+            'cancelledAt': FieldValue.serverTimestamp(),
+          });
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _pendingActiveRide = null;
+            _pendingActiveRideDocId = null;
+            _pendingActiveRideStatus = null;
+            _pendingActiveRidePaymentStatus = null;
+            _pendingActiveRideAmount = null;
+          });
+          return;
+        }
+        amount = (data['finalFare'] as num?)?.toDouble() ??
+            (data['actualFare'] as num?)?.toDouble() ??
+            (data['amountPaid'] as num?)?.toDouble() ??
+            (data['lockedFare'] as num?)?.toDouble() ??
+            (data['estimatedFare'] as num?)?.toDouble() ??
+            (data['fare'] as num?)?.toDouble() ??
+            amount;
+        if (status == 'completed' ||
+            status == 'rated' ||
+            status.startsWith('cancelled')) {
+          setState(() {
+            _pendingActiveRide = null;
+            _pendingActiveRideDocId = null;
+            _pendingActiveRideStatus = null;
+            _pendingActiveRidePaymentStatus = null;
+            _pendingActiveRideAmount = null;
+          });
+          return;
+        }
+      } catch (e) {
+        debugPrint('[BikeBookingScreen] Active ride refresh failed: $e');
       }
-      amount = (data['finalFare'] as num?)?.toDouble() ??
-          (data['actualFare'] as num?)?.toDouble() ??
-          (data['amountPaid'] as num?)?.toDouble() ??
-          (data['lockedFare'] as num?)?.toDouble() ??
-          (data['estimatedFare'] as num?)?.toDouble() ??
-          (data['fare'] as num?)?.toDouble() ??
-          amount;
-      if (status == 'completed' ||
-          status == 'rated' ||
-          status.startsWith('cancelled')) {
-        setState(() {
-          _pendingActiveRide = null;
-          _pendingActiveRideDocId = null;
-          _pendingActiveRideStatus = null;
-          _pendingActiveRidePaymentStatus = null;
-          _pendingActiveRideAmount = null;
-        });
-        return;
-      }
-    } catch (e) {
-      debugPrint('[BikeBookingScreen] Active ride refresh failed: $e');
-    }
 
-    if (_shouldResumePaymentFlow(status, paymentStatus)) {
-      // Resolve the fare with full visibility into which source actually
-      // provided it — the old chain silently fell through to 0.0 when
-      // amount/estimatedFare/fare were all null, which UPI apps reject
-      // as an invalid amount (matches the "UPI opens but payment can't
-      // complete" report). Scoped to this resume-after-restart path only
-      // — the normal post-ride-completion path in ride_tracking_screen.dart
-      // is untouched.
-      double resolvedAmount;
-      String amountSource;
-      if (amount != null) {
-        resolvedAmount = amount;
-        amountSource = 'amount (pending-ride cache)';
-      } else if (ride.estimatedFare != null) {
-        resolvedAmount = ride.estimatedFare!.toDouble();
-        amountSource = 'ride.estimatedFare';
-      } else if (ride.fare != null) {
-        resolvedAmount = ride.fare!.toDouble();
-        amountSource = 'ride.fare';
-      } else {
-        resolvedAmount = 0.0;
-        amountSource = '0.0 fallback (amount/estimatedFare/fare all null)';
-      }
-      debugPrint(
-        '[BikeBookingScreen] Resume-payment fare resolved via $amountSource '
-        '= $resolvedAmount (rideDocId=$rideDocId)',
-      );
-
-      if (resolvedAmount <= 0) {
+      if (_shouldResumePaymentFlow(status, paymentStatus)) {
+        // Resolve the fare with full visibility into which source actually
+        // provided it — the old chain silently fell through to 0.0 when
+        // amount/estimatedFare/fare were all null, which UPI apps reject
+        // as an invalid amount (matches the "UPI opens but payment can't
+        // complete" report). Scoped to this resume-after-restart path only
+        // — the normal post-ride-completion path in ride_tracking_screen.dart
+        // is untouched.
+        double resolvedAmount;
+        String amountSource;
+        if (amount != null) {
+          resolvedAmount = amount;
+          amountSource = 'amount (pending-ride cache)';
+        } else if (ride.estimatedFare != null) {
+          resolvedAmount = ride.estimatedFare!.toDouble();
+          amountSource = 'ride.estimatedFare';
+        } else if (ride.fare != null) {
+          resolvedAmount = ride.fare!.toDouble();
+          amountSource = 'ride.fare';
+        } else {
+          resolvedAmount = 0.0;
+          amountSource = '0.0 fallback (amount/estimatedFare/fare all null)';
+        }
         debugPrint(
-          '[BikeBookingScreen] ⚠️ Resume-payment amount is <= 0 — blocking '
-          'navigation to PaymentScreen to avoid sending an invalid UPI '
-          'request (rideDocId=$rideDocId).',
+          '[BikeBookingScreen] Resume-payment fare resolved via $amountSource '
+          '= $resolvedAmount (rideDocId=$rideDocId)',
+        );
+
+        if (resolvedAmount <= 0) {
+          debugPrint(
+            '[BikeBookingScreen] ⚠️ Resume-payment amount is <= 0 — blocking '
+            'navigation to PaymentScreen to avoid sending an invalid UPI '
+            'request (rideDocId=$rideDocId).',
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Unable to determine ride fare — please contact support',
+                ),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => PaymentScreen(
+              amount: resolvedAmount,
+              note: 'Bike Taxi Ride',
+              rideDocId: rideDocId,
+            ),
+          ),
         );
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Unable to determine ride fare — please contact support',
-              ),
-              backgroundColor: Colors.red,
-            ),
-          );
+          await _restoreActiveRideIfNeeded(force: true);
         }
+        return;
+      }
+
+      if (status == 'searching') {
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => RideSearchScreen(
+              ride: ride,
+              existingRideDocId: rideDocId,
+            ),
+          ),
+        );
         return;
       }
 
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => PaymentScreen(
-            amount: resolvedAmount,
-            note: 'Bike Taxi Ride',
+          builder: (_) => RideTrackingScreen(
+            ride: ride,
             rideDocId: rideDocId,
           ),
         ),
       );
-      if (mounted) {
-        await _restoreActiveRideIfNeeded(force: true);
-      }
-      return;
-    }
-
-    if (status == 'searching') {
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => RideSearchScreen(
-            ride: ride,
-            existingRideDocId: rideDocId,
-          ),
-        ),
-      );
-      return;
-    }
-
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => RideTrackingScreen(
-          ride: ride,
-          rideDocId: rideDocId,
-        ),
-      ),
-    );
     } finally {
       if (mounted) {
         setState(() => _isContinuingRide = false);
@@ -966,7 +972,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
 
   void _onSimulationChanged() {
     if (!mounted) return;
-    _dummyHeroMarkersNotifier.value = MapSimulationService.instance.simulatedMarkers;
+    _dummyHeroMarkersNotifier.value =
+        MapSimulationService.instance.simulatedMarkers;
   }
 
   @override
@@ -975,7 +982,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
     // pushed on top of this one, which tags itself on its own
     // initState) — best-effort, matches ChittiScreenTag's own note.
     chittiRouteObserver.unsubscribe(this);
-    if (ChittiMemoryService.instance.currentScreen == 'Bike Taxi booking (Taxi Dashboard)') {
+    if (ChittiMemoryService.instance.currentScreen ==
+        'Bike Taxi booking (Taxi Dashboard)') {
       ChittiMemoryService.instance.setCurrentScreen(null);
     }
     MapSimulationService.instance.removeListener(_onSimulationChanged);
@@ -1064,10 +1072,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   void _attachNearbyCaptainsListener() {
-    _nearbyCaptainsSub = FirebaseDatabase.instance
-        .ref('online_heroes')
-        .onValue
-        .listen(
+    _nearbyCaptainsSub =
+        FirebaseDatabase.instance.ref('online_heroes').onValue.listen(
       (event) {
         final raw = event.snapshot.value as Map<dynamic, dynamic>?;
         final heroes = <Map<String, dynamic>>[];
@@ -1340,11 +1346,13 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       );
       // Silent background refresh for a more precise fix; UI already shows
       // the cached location so this doesn't block anything.
-      unawaited(_locationService.getCurrentLocation().then((pos) {
-        if (pos != null && mounted) {
-          _updateUserLocation(LatLng(pos.latitude, pos.longitude));
-        }
-      }),);
+      unawaited(
+        _locationService.getCurrentLocation().then((pos) {
+          if (pos != null && mounted) {
+            _updateUserLocation(LatLng(pos.latitude, pos.longitude));
+          }
+        }),
+      );
       return;
     }
 
@@ -1392,9 +1400,10 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       // to the customer instead of leaving them stuck on a spinner.
       if (pos == null && kIsWeb) {
         debugPrint(
-            '[bike_booking] getCurrentLocation() returned null on first try '
-            '(lastLocationError: ${_locationService.lastLocationError}). '
-            'Retrying once after a short delay (web/laptop fallback)...',);
+          '[bike_booking] getCurrentLocation() returned null on first try '
+          '(lastLocationError: ${_locationService.lastLocationError}). '
+          'Retrying once after a short delay (web/laptop fallback)...',
+        );
         if (mounted) {
           setState(() {
             _startupStatus = 'Still locating you... retrying GPS fix.';
@@ -1404,8 +1413,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         pos = await _locationService.getCurrentLocation();
         if (pos == null) {
           debugPrint(
-              '[bike_booking] retry also returned null '
-              '(lastLocationError: ${_locationService.lastLocationError}).',);
+            '[bike_booking] retry also returned null '
+            '(lastLocationError: ${_locationService.lastLocationError}).',
+          );
         }
       }
 
@@ -1423,8 +1433,10 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
           });
         }
       } else {
-        _updateUserLocation(LatLng(pos.latitude, pos.longitude),
-            animateMap: true,);
+        _updateUserLocation(
+          LatLng(pos.latitude, pos.longitude),
+          animateMap: true,
+        );
         if (mounted) {
           setState(() {
             _isInitializingLocation = false;
@@ -1470,8 +1482,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
 
   String get _selectedVehicleTypeKey => _selectedCategory;
 
-  String? _assetForVehicleType(String vehicleType) =>
-      rideAssetFor(vehicleType);
+  String? _assetForVehicleType(String vehicleType) => rideAssetFor(vehicleType);
 
   IconData _fallbackIconForVehicleType(String vehicleType) =>
       rideFallbackIcon(vehicleType);
@@ -1510,8 +1521,6 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   Future<void> _hydrateDummyTrafficRoutes() async {
     // Deprecated: using pre-recorded multi-point loops now
   }
-
-
 
   void _refreshHeroMarkers() {
     if (!mounted) {
@@ -1614,11 +1623,13 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
 
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(message),
-      backgroundColor: Colors.redAccent,
-      behavior: SnackBarBehavior.floating,
-    ),);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   // ── Search ────────────────────────────────────────────────────
@@ -1784,7 +1795,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       );
     }
     _moveMainMap(selectedPoint, 15.5);
-    
+
     if (_isFocusingDrop) {
       _closeSearch();
       if (_pickupLocation != null && _dropLocation != null) {
@@ -2141,12 +2152,14 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       // persisted, so every downstream screen (tracking, hero pings, admin)
       // only ever saw the truncated label instead of the actual address the
       // customer confirmed. Falls back to 'name' if 'full' is ever missing.
-      final pickupAddress = ((_pickupLocation!['full'] as String?)?.trim().isNotEmpty ?? false)
-          ? (_pickupLocation!['full'] as String).trim()
-          : (_pickupLocation!['name'] as String? ?? '').trim();
-      final dropAddress = ((_dropLocation!['full'] as String?)?.trim().isNotEmpty ?? false)
-          ? (_dropLocation!['full'] as String).trim()
-          : (_dropLocation!['name'] as String? ?? '').trim();
+      final pickupAddress =
+          ((_pickupLocation!['full'] as String?)?.trim().isNotEmpty ?? false)
+              ? (_pickupLocation!['full'] as String).trim()
+              : (_pickupLocation!['name'] as String? ?? '').trim();
+      final dropAddress =
+          ((_dropLocation!['full'] as String?)?.trim().isNotEmpty ?? false)
+              ? (_dropLocation!['full'] as String).trim()
+              : (_dropLocation!['name'] as String? ?? '').trim();
 
       // ── Optimistic UI: Prepare the model and state before network call ──
       final rideModel = RideModel(
@@ -2175,7 +2188,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       // so tracking can never delay or block a real booking, and every
       // failure is swallowed inside the service itself.
       unawaited(UsageTrackingService.instance.trackVehicleBooked(vehicleType));
-      unawaited(UsageTrackingService.instance.trackPlaceSearched(pickupAddress));
+      unawaited(
+          UsageTrackingService.instance.trackPlaceSearched(pickupAddress));
       unawaited(UsageTrackingService.instance.trackPlaceSearched(dropAddress));
       unawaited(UsageTrackingService.instance.trackServiceUsed('taxi'));
 
@@ -2184,7 +2198,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         _isSearching = true;
       });
 
-       // ── Background Write: Start Firebase task without awaiting blocking ──
+      // ── Background Write: Start Firebase task without awaiting blocking ──
       debugPrint('🔥 [RIDE CREATION] About to create Firestore document...');
       // FIX (Sep 6 2026 audit — "stuck on Finding a Hero forever" if
       // this background write fails): the write below is deliberately
@@ -2204,105 +2218,107 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       // the screen the customer is looking at actually agree with each
       // other.
       var navigatedToRideSearch = false;
-       rideRef.set({
-         'rideId': rideRef.id,
-         'userId': user.uid,
-         'customerId': user.uid,
-         'customerPhone': customerPhone,
-         'pickupAddress': pickupAddress,
-         'dropAddress': dropAddress,
-         'pickupLatitude': _pickupLocation!['lat'],
-         'pickupLongitude': _pickupLocation!['lng'],
-         'dropLatitude': _dropLocation!['lat'],
-         'dropLongitude': _dropLocation!['lng'],
-         'fare': fare,
-         'estimatedFare': fare,
-         'distanceKm': normalizedDist,
-         'distance_km': normalizedDist,
-         'etaMinutes': _eta,
-         'vehicleType': vehicleType,
-         'category': _normalizeCategoryKey(vehicleType),
-         'vehicle_category': _normalizeCategoryKey(vehicleType),
-         'status': 'searching',
-         'paymentStatus': 'pending',
-         'city': rideCity,
-         'createdAt': FieldValue.serverTimestamp(),
-         'heroId': null,
-         'captainId': null,
-         'heroName': null,
-         'heroPhone': null,
-         'heroVehicleNumber': null,
-         'heroModel': null,
-         'heroRating': null,
-         'heroEta': null,
-         // ── Bike fare-rates fields (bike only) ──────────────────
-         // baseFare/baseDistance are the FareRates constants at the
-         // moment of booking — these don't change over the trip.
-         // routeDistanceKm is the road-route distance already computed
-         // for this estimate (falls back to haversine only if routing
-         // failed — see the _distance getter). hero_ride_screen.dart's
-         // _completeTrip() reads all three: baseFare/baseDistance
-         // directly, and routeDistanceKm as the distance floor so GPS
-         // undercounting during the ride can't produce a bill lower
-         // than what this same estimate was based on. Per-km rate is
-         // deliberately NOT written here — it's resolved at completion
-         // time, not booking time, since a ride can cross the
-         // day/night boundary.
-         if (vehicleType == 'bike') 'baseFare': FareRates.bikeBaseFare,
-         if (vehicleType == 'bike')
-           'baseDistance': FareRates.bikeBaseDistanceKm,
-         if (vehicleType == 'bike') 'routeDistanceKm': normalizedDist,
-         // ── Non-bike fare fields (auto/cab/parcel/mini_truck/lorry/
-         // emergency_manpower) — CONFIRMED BUG FIX ────────────────
-         // Previously these fields were never written for non-bike
-         // categories at all, so hero_ride_screen.dart's else-branch
-         // always fell back to its hardcoded defaults (baseFare 25.0,
-         // farePerKm 6.0 — bike's rate, not this category's real rate)
-         // and had no distance floor, so GPS-undercounted trips could
-         // settle at a flat ₹25 regardless of vehicle type or true
-         // distance. Fixed by writing each category's REAL rate here
-         // (same lookup table used for the customer's own estimate:
-         // RideModel.defaultFares) plus routeDistanceKm, giving every
-         // non-bike category the same distance-floor protection bike
-         // already has.
-         if (vehicleType != 'bike')
-           'baseFare': (RideModel.defaultFares[vehicleType] ??
-                   RideModel.defaultFares['bike']!)['baseFare'],
-         if (vehicleType != 'bike')
-           'farePerKm': (RideModel.defaultFares[vehicleType] ??
-                   RideModel.defaultFares['bike']!)['perKm'],
-         if (vehicleType != 'bike') 'routeDistanceKm': normalizedDist,
-         // ── Parcel recipient details (parcel only) ───────────────
-         // Collected via _ParcelRecipientSheet before this write.
-         // Surfaced to the hero on hero_ride_screen.dart.
-         if (vehicleType == 'parcel' && recipientName != null)
-           'recipientName': recipientName,
-         if (vehicleType == 'parcel' && recipientPhone != null)
-           'recipientPhone': recipientPhone,
-       }).then((_) {
-         debugPrint('🔥 [RIDE CREATION] Firestore document created successfully! Doc ID: ${rideRef.id}');
-       }).catchError((e) {
-         debugPrint('[BikeBookingScreen] Background ride creation failed: $e');
-         if (mounted) {
-           if (navigatedToRideSearch && Navigator.of(context).canPop()) {
-             Navigator.of(context).pop();
-           }
-           showServerBusyDialog(context);
-         }
-       });
+      rideRef.set({
+        'rideId': rideRef.id,
+        'userId': user.uid,
+        'customerId': user.uid,
+        'customerPhone': customerPhone,
+        'pickupAddress': pickupAddress,
+        'dropAddress': dropAddress,
+        'pickupLatitude': _pickupLocation!['lat'],
+        'pickupLongitude': _pickupLocation!['lng'],
+        'dropLatitude': _dropLocation!['lat'],
+        'dropLongitude': _dropLocation!['lng'],
+        'fare': fare,
+        'estimatedFare': fare,
+        'distanceKm': normalizedDist,
+        'distance_km': normalizedDist,
+        'etaMinutes': _eta,
+        'vehicleType': vehicleType,
+        'category': _normalizeCategoryKey(vehicleType),
+        'vehicle_category': _normalizeCategoryKey(vehicleType),
+        'status': 'searching',
+        'paymentStatus': 'pending',
+        'city': rideCity,
+        'createdAt': FieldValue.serverTimestamp(),
+        'heroId': null,
+        'captainId': null,
+        'heroName': null,
+        'heroPhone': null,
+        'heroVehicleNumber': null,
+        'heroModel': null,
+        'heroRating': null,
+        'heroEta': null,
+        // ── Bike fare-rates fields (bike only) ──────────────────
+        // baseFare/baseDistance are the FareRates constants at the
+        // moment of booking — these don't change over the trip.
+        // routeDistanceKm is the road-route distance already computed
+        // for this estimate (falls back to haversine only if routing
+        // failed — see the _distance getter). hero_ride_screen.dart's
+        // _completeTrip() reads all three: baseFare/baseDistance
+        // directly, and routeDistanceKm as the distance floor so GPS
+        // undercounting during the ride can't produce a bill lower
+        // than what this same estimate was based on. Per-km rate is
+        // deliberately NOT written here — it's resolved at completion
+        // time, not booking time, since a ride can cross the
+        // day/night boundary.
+        if (vehicleType == 'bike') 'baseFare': FareRates.bikeBaseFare,
+        if (vehicleType == 'bike') 'baseDistance': FareRates.bikeBaseDistanceKm,
+        if (vehicleType == 'bike') 'routeDistanceKm': normalizedDist,
+        // ── Non-bike fare fields (auto/cab/parcel/mini_truck/lorry/
+        // emergency_manpower) — CONFIRMED BUG FIX ────────────────
+        // Previously these fields were never written for non-bike
+        // categories at all, so hero_ride_screen.dart's else-branch
+        // always fell back to its hardcoded defaults (baseFare 25.0,
+        // farePerKm 6.0 — bike's rate, not this category's real rate)
+        // and had no distance floor, so GPS-undercounted trips could
+        // settle at a flat ₹25 regardless of vehicle type or true
+        // distance. Fixed by writing each category's REAL rate here
+        // (same lookup table used for the customer's own estimate:
+        // RideModel.defaultFares) plus routeDistanceKm, giving every
+        // non-bike category the same distance-floor protection bike
+        // already has.
+        if (vehicleType != 'bike')
+          'baseFare': (RideModel.defaultFares[vehicleType] ??
+              RideModel.defaultFares['bike']!)['baseFare'],
+        if (vehicleType != 'bike')
+          'farePerKm': (RideModel.defaultFares[vehicleType] ??
+              RideModel.defaultFares['bike']!)['perKm'],
+        if (vehicleType != 'bike') 'routeDistanceKm': normalizedDist,
+        // ── Parcel recipient details (parcel only) ───────────────
+        // Collected via _ParcelRecipientSheet before this write.
+        // Surfaced to the hero on hero_ride_screen.dart.
+        if (vehicleType == 'parcel' && recipientName != null)
+          'recipientName': recipientName,
+        if (vehicleType == 'parcel' && recipientPhone != null)
+          'recipientPhone': recipientPhone,
+      }).then((_) {
+        debugPrint(
+            '🔥 [RIDE CREATION] Firestore document created successfully! Doc ID: ${rideRef.id}');
+      }).catchError((e) {
+        debugPrint('[BikeBookingScreen] Background ride creation failed: $e');
+        if (mounted) {
+          if (navigatedToRideSearch && Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+          showServerBusyDialog(context);
+        }
+      });
 
       if (!mounted) return;
 
       // ── Instant Navigation: User sees the search screen immediately ──
       navigatedToRideSearch = true;
-      unawaited(Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => RideSearchScreen(
-            ride: rideModel,
-            existingRideDocId: rideRef.id,
+      unawaited(
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => RideSearchScreen(
+              ride: rideModel,
+              existingRideDocId: rideRef.id,
+            ),
           ),
         ),
-      ),);
+      );
     } catch (e) {
       debugPrint('🔥 [RIDE CREATION ERROR] Crashed with: $e');
       if (mounted) {
@@ -2314,36 +2330,42 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   List<MapMarker> get _mapMarkers {
     final markers = <MapMarker>[];
     if (_myPositionLatLng != null) {
-      markers.add(MapMarker(
-        point: _myPositionLatLng!,
-        icon: Icons.navigation_rounded,
-        color: Colors.lightBlueAccent,
-        label: 'You',
-        size: 42,
-      ),);
+      markers.add(
+        MapMarker(
+          point: _myPositionLatLng!,
+          icon: Icons.navigation_rounded,
+          color: Colors.lightBlueAccent,
+          label: 'You',
+          size: 42,
+        ),
+      );
     }
     if (_pickupLocation != null) {
-      markers.add(MapMarker(
-        point: LatLng(
-          (_pickupLocation!['lat'] as num).toDouble(),
-          (_pickupLocation!['lng'] as num).toDouble(),
+      markers.add(
+        MapMarker(
+          point: LatLng(
+            (_pickupLocation!['lat'] as num).toDouble(),
+            (_pickupLocation!['lng'] as num).toDouble(),
+          ),
+          icon: Icons.my_location_rounded,
+          color: _accentOrange,
+          label: 'Pickup',
+          size: 40,
         ),
-        icon: Icons.my_location_rounded,
-        color: _accentOrange,
-        label: 'Pickup',
-        size: 40,
-      ),);
+      );
     }
     if (_dropLocation != null) {
-      markers.add(MapMarker(
-        point: LatLng(
-          (_dropLocation!['lat'] as num).toDouble(),
-          (_dropLocation!['lng'] as num).toDouble(),
+      markers.add(
+        MapMarker(
+          point: LatLng(
+            (_dropLocation!['lat'] as num).toDouble(),
+            (_dropLocation!['lng'] as num).toDouble(),
+          ),
+          color: _successGreen,
+          label: 'Drop',
+          size: 44,
         ),
-        color: _successGreen,
-        label: 'Drop',
-        size: 44,
-      ),);
+      );
     }
     markers.addAll(_nearbyCaptainMarkersNotifier.value);
     markers.addAll(_dummyHeroMarkersNotifier.value);
@@ -2388,8 +2410,11 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.location_off_rounded,
-              color: Colors.redAccent, size: 48,),
+          const Icon(
+            Icons.location_off_rounded,
+            color: Colors.redAccent,
+            size: 48,
+          ),
           const SizedBox(height: 12),
           Text(
             'Enable location services to detect your live pickup.',
@@ -2478,24 +2503,28 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                         Expanded(
                           child: _glassPanel(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 10,),
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
                             child: Row(
                               children: [
                                 Container(
                                   width: 8,
                                   height: 8,
                                   decoration: const BoxDecoration(
-                                      color: _successGreen,
-                                      shape: BoxShape.circle,),
+                                    color: _successGreen,
+                                    shape: BoxShape.circle,
+                                  ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     'Erode Taxi',
                                     style: GoogleFonts.outfit(
-                                        color: _textPrimary,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w700,),
+                                      color: _textPrimary,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                 ),
                                 Text(
@@ -2503,9 +2532,10 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                                       ? 'Locating…'
                                       : 'Live',
                                   style: GoogleFonts.outfit(
-                                      color: _textSecondary,
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w600,),
+                                    color: _textSecondary,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ],
                             ),
@@ -2541,8 +2571,13 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                         onPressed: _openManualPickupPicker,
                         backgroundColor: Colors.white,
                         elevation: 0,
-                        icon: const Icon(Icons.location_on_rounded, color: _accentOrange, size: 20),
-                        label: Text('Set Pin manually', style: GoogleFonts.outfit(color: _accentOrange, fontWeight: FontWeight.w600, fontSize: 13)),
+                        icon: const Icon(Icons.location_on_rounded,
+                            color: _accentOrange, size: 20),
+                        label: Text('Set Pin manually',
+                            style: GoogleFonts.outfit(
+                                color: _accentOrange,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13)),
                       ),
                     ),
                   ),
@@ -2742,8 +2777,10 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   // ── Reusable glass widgets ────────────────────────────────────
-  Widget _glassCircleButton(
-      {required IconData icon, required VoidCallback onTap,}) {
+  Widget _glassCircleButton({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),
       child: BackdropFilter(
@@ -2830,28 +2867,36 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                 const SizedBox(height: 2),
               if (_pickupLocation != null && _dropLocation != null) ...[
                 const SizedBox(height: 8),
-                Row(children: [
-                  Expanded(
+                Row(
+                  children: [
+                    Expanded(
                       child: _metricTile(
-                          title: '${_distance.toStringAsFixed(1)} km',
-                          subtitle: localization.t('distance_label'),
-                          icon: Icons.route_rounded,),),
-                  const SizedBox(width: 8),
-                  Expanded(
+                        title: '${_distance.toStringAsFixed(1)} km',
+                        subtitle: localization.t('distance_label'),
+                        icon: Icons.route_rounded,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
                       child: _metricTile(
-                          title: '$_eta mins',
-                          subtitle: localization.t('eta_label'),
-                          icon: Icons.access_time_rounded,),),
-                  const SizedBox(width: 8),
-                  Expanded(
+                        title: '$_eta mins',
+                        subtitle: localization.t('eta_label'),
+                        icon: Icons.access_time_rounded,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
                       child: _metricTile(
-                          title: _estimatedFare != null
-                              ? '₹${_estimatedFare!.toStringAsFixed(0)}'
-                              : '—',
-                          subtitle: 'Est. Fare',
-                          icon: Icons.currency_rupee_rounded,
-                          highlight: true,),),
-                ],),
+                        title: _estimatedFare != null
+                            ? '₹${_estimatedFare!.toStringAsFixed(0)}'
+                            : '—',
+                        subtitle: 'Est. Fare',
+                        icon: Icons.currency_rupee_rounded,
+                        highlight: true,
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
@@ -2862,12 +2907,17 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       elevation: 0,
                     ),
-                    child: Text(localization.t('choose_vehicle_label'),
-                        style: GoogleFonts.outfit(
-                            fontSize: 17, fontWeight: FontWeight.w700,),),
+                    child: Text(
+                      localization.t('choose_vehicle_label'),
+                      style: GoogleFonts.outfit(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -2949,40 +2999,69 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                     // parcel=4, mini_truck/lorry=5. emergency_manpower
                     // has no pink asset yet.
                     const pinkSlots = {
-                      'bike': 1, 'auto': 2, 'cab': 3, 'parcel': 4,
-                      'mini_truck': 5, 'lorry': 5,
+                      'bike': 1,
+                      'auto': 2,
+                      'cab': 3,
+                      'parcel': 4,
+                      'mini_truck': 5,
+                      'lorry': 5,
                     };
                     // Photo Realistic theme — covers 'emergency_manpower'
                     // too, which has no pink asset yet, since a photo
                     // needs no bespoke asset production.
                     const photoUrls = {
-                      'bike': 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=200&q=80',
-                      'auto': 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=200&q=80',
-                      'cab': 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=200&q=80',
-                      'parcel': 'https://images.unsplash.com/photo-1595246140625-573b715d11dc?w=200&q=80',
-                      'mini_truck': 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=200&q=80',
-                      'lorry': 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=200&q=80',
-                      'emergency_manpower': 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=200&q=80',
+                      'bike':
+                          'https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=200&q=80',
+                      'auto':
+                          'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=200&q=80',
+                      'cab':
+                          'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=200&q=80',
+                      'parcel':
+                          'https://images.unsplash.com/photo-1595246140625-573b715d11dc?w=200&q=80',
+                      'mini_truck':
+                          'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=200&q=80',
+                      'lorry':
+                          'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=200&q=80',
+                      'emergency_manpower':
+                          'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=200&q=80',
                     };
-                    final iconTheme = context.watch<ThemeService>().iconThemeKey;
+                    final iconTheme =
+                        context.watch<ThemeService>().iconThemeKey;
                     final photoUrl = photoUrls[categoryKey];
                     if (iconTheme == 'photo_realistic' && photoUrl != null) {
-                      return ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: CachedCloudImage(
-                          photoUrl,
-                          fit: BoxFit.cover,
-                          cacheWidth: 136,
-                          errorWidget: Image.asset(
-                            assetPath,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => Icon(fallbackIcon, color: _accentOrange, size: 30),
+                      // CHANGED (Nizam: "photo theme ah innum vera level la
+                      // set pannlam") — same shadow+ring elevated-tile
+                      // treatment used app-wide now.
+                      return Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white, width: 1.5),
+                          boxShadow: [
+                            BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.18),
+                                blurRadius: 5,
+                                offset: const Offset(0, 2)),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8.5),
+                          child: CachedCloudImage(
+                            photoUrl,
+                            fit: BoxFit.cover,
+                            cacheWidth: 136,
+                            errorWidget: Image.asset(
+                              assetPath,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => Icon(fallbackIcon,
+                                  color: _accentOrange, size: 30),
+                            ),
                           ),
                         ),
                       );
                     }
                     final pinkSlot = pinkSlots[categoryKey];
-                    final isPink = pinkSlot != null && iconTheme == 'pink_white_3d';
+                    final isPink =
+                        pinkSlot != null && iconTheme == 'pink_white_3d';
                     if (isPink) {
                       return Image.asset(
                         'assets/images/pink_icons/taxi_${pinkSlot}_a.webp',
@@ -2990,7 +3069,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                         errorBuilder: (_, __, ___) => Image.asset(
                           assetPath,
                           fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => Icon(fallbackIcon, color: _accentOrange, size: 30),
+                          errorBuilder: (_, __, ___) => Icon(fallbackIcon,
+                              color: _accentOrange, size: 30),
                         ),
                       );
                     }
@@ -3894,8 +3974,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
               ],
               Expanded(
                 child: ElevatedButton(
-                  onPressed:
-                      _isContinuingRide ? null : _continueActiveRide,
+                  onPressed: _isContinuingRide ? null : _continueActiveRide,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: _accentOrange,
@@ -3967,7 +4046,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
             ),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: GoogleFonts.outfit(color: _textSecondary, fontSize: 12.5),
+              hintStyle:
+                  GoogleFonts.outfit(color: _textSecondary, fontSize: 12.5),
               border: InputBorder.none,
               contentPadding: EdgeInsets.zero,
               isDense: true,
@@ -4107,7 +4187,8 @@ class _ParcelRecipientSheetState extends State<_ParcelRecipientSheet> {
               ),
               validator: (value) {
                 final input = (value ?? '').trim();
-                if (input.length != 10 || !RegExp(r'^[0-9]{10}$').hasMatch(input)) {
+                if (input.length != 10 ||
+                    !RegExp(r'^[0-9]{10}$').hasMatch(input)) {
                   return 'Enter a valid 10-digit number';
                 }
                 return null;

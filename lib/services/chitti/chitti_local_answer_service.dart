@@ -39,6 +39,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../config/app_variant.dart';
+import '../../widgets/server_busy_dialog.dart' show kCallCenterNumberIntl;
 import '../chitti_memory_service.dart';
 import 'chitti_chat_intents.dart';
 import 'chitti_enquiry_service.dart';
@@ -100,6 +101,12 @@ class ChittiLocalAnswerService {
         // broader capability regex those two phrasings also match.
         _aboutIdentity(q, ta) ??
         _aboutChitti(q, v, ta) ??
+        // NEW (Sep 2026 — "Chitti-ஓட உலகம் Allin1 மட்டும்" expansion):
+        // checked before _howDoI/_aboutSection since a support/payment
+        // question ("refund evlo naal") shares words like "how"/"evlo"
+        // with those but is not a navigation request — it needs its own
+        // answer, not "open X section".
+        _aboutSupportAndPayments(q, ta) ??
         _howDoI(q, v, ta) ??
         _aboutSection(q, v, ta);
   }
@@ -286,6 +293,87 @@ class ChittiLocalAnswerService {
               'My orders',
             ],
     );
+  }
+
+  // ── support, payments, refunds/cancellation, troubleshooting ──────
+  //
+  // NEW (Sep 2026 — "Chitti-ஓட உலகம் Allin1 மட்டும், அதுக்குள்ள max
+  // perform பண்ணனும்" — Nizam's explicit ask to widen offline coverage
+  // beyond just navigation/capability questions into the kind of FAQ a
+  // real customer actually asks).
+  //
+  // DELIBERATELY DOES NOT STATE A REFUND/CANCELLATION POLICY NUMBER
+  // (a window in days, a percentage, a fee). No such figure exists
+  // anywhere in this codebase as a canonical fact — inventing one here
+  // would be exactly the "confidently wrong answer about the
+  // customer's own app" this whole file's header warns against, and
+  // for money it is worse than usual. Routes to the real call center
+  // number instead, which IS a verified fact (kCallCenterNumberIntl,
+  // already used by settings_screen.dart).
+
+  static final RegExp _refundOrCancelPolicyAsk = RegExp(
+    r'\brefund\b|cancellation (policy|charge|fee)|cancel.*(fee|charge)|'
+    r'(ரிபண்ட்|கேன்சல்.*சார்ஜ்|கேன்சல் பண்ணா.*பணம்)',
+  );
+
+  static final RegExp _paymentMethodsAsk = RegExp(
+    r'\b(payment (method|option)s?|how (do|can) i pay|pay by|upi|'
+    r'accept (cash|card|upi))\b|'
+    r'(எப்படி பணம் கட்டுறது|பேமெண்ட் மெத்தட்|காஷ் வாங்குவீங்களா)',
+  );
+
+  static final RegExp _contactSupportAsk = RegExp(
+    r'\b(customer care|support number|helpline|contact (you|support|nj tech)|'
+    r'call center|talk to (a )?human|real person|complaint)\b|'
+    r'(கஸ்டமர் கேர்|சப்போர்ட் நம்பர்|யாரையாவது பேச முடியுமா|காம்ப்ளைன்ட்)',
+  );
+
+  static final RegExp _appTroubleAsk = RegExp(
+    r'\b(app (not working|hanging|crashed|stuck|frozen)|not (loading|opening)|'
+    r'blank screen|keeps loading)\b|'
+    r'(ஆப் ஓபன் ஆகல|ஹேங் ஆகிடுச்சு|லோட் ஆகல)',
+  );
+
+  static ChittiLocalAnswer? _aboutSupportAndPayments(String q, bool ta) {
+    if (_refundOrCancelPolicyAsk.hasMatch(q)) {
+      return ChittiLocalAnswer(
+        ta
+            ? 'ரிபண்ட்/கேன்சலேஷன் சரியான விவரத்த எக்ஸாக்ட்டா சொல்ல எனக்கு தெரியாது பாஸ் — தப்பா சொல்றதுக்கு பதிலா, நேரடியா நம்ம சப்போர்ட் டீம்-கிட்ட கேளுங்க: WhatsApp $kCallCenterNumberIntl. அவங்க உங்க ஆர்டர் பாத்து சரியா சொல்லுவாங்க.'
+            : "I don't have the exact refund/cancellation figures memorized, boss, and I'd rather send you to someone who does than guess. WhatsApp our support on $kCallCenterNumberIntl — they'll check your specific order and give you the real answer.",
+        suggestions: ta
+            ? const <String>['என் ஆர்டர் ஸ்டேட்டஸ்', 'ஆர்டர் கேன்சல் பண்ணு']
+            : const <String>['My order status', 'Cancel my order'],
+      );
+    }
+    if (_paymentMethodsAsk.hasMatch(q)) {
+      return ChittiLocalAnswer(
+        ta
+            ? 'UPI (PhonePe மூலம்) மற்றும் உங்க Allin1 வாலெட் பேலன்ஸ் — இரண்டையும் நாங்க ஆக்செப்ட் பண்ணுவோம் பாஸ்.'
+            : 'We accept UPI (through PhonePe) and your Allin1 wallet balance, boss — pick whichever at checkout.',
+        suggestions: ta
+            ? const <String>['என் வாலெட் பேலன்ஸ்', 'வாலெட் ரீசார்ஜ் பண்ணு']
+            : const <String>['My wallet balance', 'Recharge my wallet'],
+      );
+    }
+    if (_contactSupportAsk.hasMatch(q)) {
+      return ChittiLocalAnswer(
+        ta
+            ? 'நேரடியா ஆளுங்ககிட்ட பேச வேணும்னா, WhatsApp பண்ணுங்க பாஸ்: $kCallCenterNumberIntl. நான் இங்கயே இருக்கேன், ஆனா அவங்க தான் உங்க ஆர்டர்-ஐ direct-ஆ பாத்துக்குவாங்க.'
+            : "For a real person, WhatsApp $kCallCenterNumberIntl, boss — I'm right here for the app itself, but they can look at your specific order directly.",
+        suggestions: const <String>['My order status', 'What can you do?'],
+      );
+    }
+    if (_appTroubleAsk.hasMatch(q)) {
+      return ChittiLocalAnswer(
+        ta
+            ? 'ஒரு வேளை ஆப் சரியா வேலை செய்யலைனா — முதல்ல இண்டர்நெட் சரியா இருக்கான்னு பாருங்க, அப்பறம் ஆப்-ஐ ஒரு தடவை மூடி திறங்க. இன்னும் பிரச்சனையா இருந்தா, "Bug ரிப்போர்ட் பண்ணு"ன்னு சொல்லுங்க, நான் நேரடியா அணுப்பி வைக்கிறேன்.'
+            : "If the app's acting up — first check your internet, then close and reopen the app. Still stuck? Just say \"report a bug\" and I'll send it straight through for you.",
+        suggestions: ta
+            ? const <String>['Bug ரிப்போர்ட் பண்ணு', 'ஆப் அப்டேட் இருக்கா பாரு']
+            : const <String>['Report a bug', 'Check for app update'],
+      );
+    }
+    return null;
   }
 
   // ── "how do I X?" / "where is X?" ────────────────────────────────

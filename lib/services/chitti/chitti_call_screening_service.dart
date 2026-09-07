@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'chitti_accessibility_bridge.dart';
 import 'chitti_summarizer.dart';
+import 'chitti_voice_service.dart';
 import '../guru_admin_api_service.dart';
 
 class ChittiCallScreeningService {
@@ -354,8 +355,13 @@ class ChittiCallScreeningService {
         }
       };
 
+      await ChittiVoiceService.ensurePreferencesLoaded();
       await _log('[ChittiCallScreeningService] Calling speakOnCallStream() now, locale=$_locale, textLen=${text.length}');
-      final accepted = await ChittiAccessibilityBridge.instance.speakOnCallStream(text, _locale);
+      final accepted = await ChittiAccessibilityBridge.instance.speakOnCallStream(
+        text,
+        _locale,
+        voiceName: ChittiVoiceService.pinnedVoiceName,
+      );
       await _log('[ChittiCallScreeningService] speakOnCallStream() accepted: $accepted');
 
       if (accepted) {

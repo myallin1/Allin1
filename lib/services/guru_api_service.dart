@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_knowledge_briefing.dart';
 import '../config/app_variant.dart';
 import 'analytics_service.dart';
+import 'chitti/chitti_local_answer_service.dart';
 import 'chitti/chitti_model_provider.dart';
 import 'chitti/chitti_tool_registry.dart';
 import 'chitti/hero_memory_service.dart';
@@ -178,6 +179,23 @@ class GuruApiService {
       'format below) covering the most likely options, and wait for the '
       'customer to pick one instead of calling a tool with a guessed '
       'value.\n'
+      // NEW (Sep 2026 — Nizam: "customer soldratha maathi purinjukutta
+      // poi netla vs panni compare pannitu again vanthu customer ku
+      // sollanum"): a DIFFERENT case from (B) above — not "which of a
+      // few known options", but "I am not sure I heard/understood a
+      // specific word correctly" (a brand, a model name, an unfamiliar
+      // term — most likely from voice input). For THIS case, do not
+      // ask the customer to repeat themselves first — silently call
+      // google_search to check what was heard actually makes sense,
+      // THEN reply with the verified answer. Only fall back to asking
+      // them to repeat/clarify if the search itself doesn't resolve it.
+      'If you are not sure you correctly heard or understood a specific '
+      'word (a brand name, a model, an unfamiliar term — this happens '
+      'most with voice input), do not ask the customer to repeat it. '
+      'Silently call google_search first to check what you think you '
+      'heard actually makes sense, then answer with what you confirmed. '
+      'Only ask the customer to repeat/clarify if the search does not '
+      'resolve it either.\n'
       // NEW (CTO mandate — Tamil Language Quality Fix): the earlier
       // prompt only said "Reply in ... Tamil" with no register guidance,
       // so the model defaulted to stiff, literal-translation Tamil.
@@ -319,6 +337,22 @@ class GuruApiService {
     final textModelId = await _chosenTextModel(model);
     if (apiKey.isEmpty) {
       final isTa = languageLabel == 'Tamil';
+      // FIX (Sep 2026 — "chitti offline knowledge proper ah ila"):
+      // this used to return the SAME hardcoded greeting for absolutely
+      // everything a no-key customer said — the local-intent engine
+      // upstream only catches a narrow set of fixed phrases (open X,
+      // book Y), so anything outside that (a real question, in voice
+      // mode especially) landed here and got ignored in favor of a
+      // canned "Hello boss, I am Chitti" no matter what was actually
+      // asked. ChittiLocalAnswerService's FAQ set was built customer-
+      // facing (see its own header) but was, until now, only ever
+      // wired into the ADMIN co-pilot's equivalent fallback — this is
+      // the missing customer-side half of that same fix.
+      final local = ChittiLocalAnswerService.answer(
+        input,
+        languageCode: isTa ? 'ta' : 'en',
+      );
+      if (local != null) return local.text;
       return isTa
           ? 'வணக்கம் பாஸ்! நான் தான் சிட்டி. ஆப்-ல் உள்ள எல்லா sections, பைக்/ஆட்டோ புக்கிங், ஆர்டர்கள் மற்றும் வேலட் பேலன்ஸ் அனைத்தையும் என்னால் உடனே செய்து தர முடியும். உங்களுக்கு என்ன வேண்டும் பாஸ்?'
           : 'Hello boss! I am Chitti. I can open any section, track your orders, check your wallet balance, and book rides or services for you. What do you need?';

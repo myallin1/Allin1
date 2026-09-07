@@ -73,19 +73,23 @@ class VehicleSelectionBottomSheet extends StatefulWidget {
   });
 
   @override
-  State<VehicleSelectionBottomSheet> createState() => _VehicleSelectionBottomSheetState();
+  State<VehicleSelectionBottomSheet> createState() =>
+      _VehicleSelectionBottomSheetState();
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(DoubleProperty('distanceKm', distanceKm));
     properties.add(DiagnosticsProperty<Map<String, dynamic>?>('fares', fares));
-    properties.add(ObjectFlagProperty<void Function(String vehicleType, double estimatedFare)>.has('onConfirm', onConfirm));
+    properties.add(ObjectFlagProperty<
+            void Function(String vehicleType, double estimatedFare)>.has(
+        'onConfirm', onConfirm));
     properties.add(StringProperty('initialVehicleType', initialVehicleType));
   }
 }
 
-class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomSheet>
+class _VehicleSelectionBottomSheetState
+    extends State<VehicleSelectionBottomSheet>
     with SingleTickerProviderStateMixin {
   late String _selectedVehicle;
   late AnimationController _animationController;
@@ -170,7 +174,8 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
           // in one static view — every size/spacing below was shrunk to
           // make that fit without scrolling for a typical ride catalog.
           child: Padding(
-            padding: const EdgeInsets.only(top: 8, bottom: 16, left: 18, right: 18),
+            padding:
+                const EdgeInsets.only(top: 8, bottom: 16, left: 18, right: 18),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -200,7 +205,7 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                           style: GoogleFonts.outfit(
                             fontSize: 17,
                             fontWeight: FontWeight.w800,
-                          color: _brandText,
+                            color: _brandText,
                             letterSpacing: -0.6,
                           ),
                         ),
@@ -238,7 +243,8 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                     padding: EdgeInsets.zero,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: kRideCatalog.length,
-                    itemBuilder: (context, index) => _buildVehicleCard(kRideCatalog[index]),
+                    itemBuilder: (context, index) =>
+                        _buildVehicleCard(kRideCatalog[index]),
                   ),
                 ),
 
@@ -264,7 +270,8 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                   ),
                   child: ElevatedButton(
                     onPressed: () {
-                      debugPrint('🔥 [BUTTON CLICKED] Confirm Booking button was tapped!');
+                      debugPrint(
+                          '🔥 [BUTTON CLICKED] Confirm Booking button was tapped!');
                       final fare =
                           _resolveFare(_selectedVehicle, widget.distanceKm);
                       widget.onConfirm(_selectedVehicle, fare);
@@ -343,10 +350,13 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                       colors: [bgColor, bgColor.withValues(alpha: 0.05)],
                     )
                   : null,
-              color: isSelected ? bgColor.withValues(alpha: 0.16) : Colors.white,
+              color:
+                  isSelected ? bgColor.withValues(alpha: 0.16) : Colors.white,
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                color: isSelected ? accentColor.withValues(alpha: 0.6) : _brandBorder,
+                color: isSelected
+                    ? accentColor.withValues(alpha: 0.6)
+                    : _brandBorder,
                 width: isSelected ? 2 : 1,
               ),
               boxShadow: isSelected
@@ -373,8 +383,12 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                   height: 40,
                   decoration: BoxDecoration(
                     gradient: isSelected
-                        ? LinearGradient(colors: [accentColor, accentColor.withValues(alpha: 0.8)])
-                        : const LinearGradient(colors: [Color(0xFFFFEEF7), Colors.white]),
+                        ? LinearGradient(colors: [
+                            accentColor,
+                            accentColor.withValues(alpha: 0.8)
+                          ])
+                        : const LinearGradient(
+                            colors: [Color(0xFFFFEEF7), Colors.white]),
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(
@@ -388,26 +402,51 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                   ),
                   child: Center(
                     child: Builder(builder: (context) {
-                      final iconTheme = context.watch<ThemeService>().iconThemeKey;
+                      final iconTheme =
+                          context.watch<ThemeService>().iconThemeKey;
                       final photoUrl = _taxiPhotoUrl(type);
                       if (iconTheme == 'photo_realistic' && photoUrl != null) {
-                        return ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: CachedCloudImage(
-                            photoUrl,
-                            width: 28, height: 28, fit: BoxFit.cover,
-                            cacheWidth: 112,
-                            errorWidget: Text(icon, style: const TextStyle(fontSize: 20)),
+                        // CHANGED (Nizam: "photo theme ah innum vera level
+                        // la set pannlam") — same shadow+ring elevated-tile
+                        // treatment used app-wide now.
+                        return Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(9),
+                            border: Border.all(color: Colors.white, width: 1.2),
+                            boxShadow: [
+                              BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.18),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2)),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(7.8),
+                            child: CachedCloudImage(
+                              photoUrl,
+                              width: 28,
+                              height: 28,
+                              fit: BoxFit.cover,
+                              cacheWidth: 112,
+                              errorWidget: Text(icon,
+                                  style: const TextStyle(fontSize: 20)),
+                            ),
                           ),
                         );
                       }
                       final pinkSlot = _taxiPinkSlot(type);
-                      final isPink = pinkSlot != null && iconTheme == 'pink_white_3d';
+                      final isPink =
+                          pinkSlot != null && iconTheme == 'pink_white_3d';
                       if (isPink) {
                         return Image.asset(
                           'assets/images/pink_icons/taxi_${pinkSlot}_a.webp',
-                          width: 28, height: 28, fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => Text(icon, style: const TextStyle(fontSize: 20)),
+                          width: 28,
+                          height: 28,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) =>
+                              Text(icon, style: const TextStyle(fontSize: 20)),
                         );
                       }
                       return Text(icon, style: const TextStyle(fontSize: 20));
@@ -437,11 +476,18 @@ class _VehicleSelectionBottomSheetState extends State<VehicleSelectionBottomShee
                           ),
                           // Enhanced Price Display
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
                               gradient: isSelected
-                                  ? LinearGradient(colors: [accentColor, accentColor.withValues(alpha: 0.8)])
-                                  : const LinearGradient(colors: [Color(0xFFFFEEF7), Colors.white]),
+                                  ? LinearGradient(colors: [
+                                      accentColor,
+                                      accentColor.withValues(alpha: 0.8)
+                                    ])
+                                  : const LinearGradient(colors: [
+                                      Color(0xFFFFEEF7),
+                                      Colors.white
+                                    ]),
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: [
                                 BoxShadow(

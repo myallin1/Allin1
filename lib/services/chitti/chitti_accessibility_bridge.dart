@@ -316,9 +316,18 @@ class ChittiAccessibilityBridge {
   /// Android's Acoustic Echo Cancellation was silencing before it
   /// reached the caller. Fire-and-forget on this call — the actual
   /// START/DONE/ERROR progress arrives via [onCallVoiceEvent].
-  Future<bool> speakOnCallStream(String text, String locale) async {
+  /// [voiceName] is the same name ChittiVoiceService.pinnedVoiceName
+  /// carries for the in-app screens — passed through so a voice pinned
+  /// in AI Settings also applies to this native call-stream engine,
+  /// which is otherwise a completely separate TextToSpeech instance
+  /// (see ChittiCallVoice.kt's header) that never saw it before.
+  Future<bool> speakOnCallStream(String text, String locale, {String? voiceName}) async {
     try {
-      final res = await _channel.invokeMethod<bool>('speakOnCallStream', {'text': text, 'locale': locale});
+      final res = await _channel.invokeMethod<bool>('speakOnCallStream', {
+        'text': text,
+        'locale': locale,
+        if (voiceName != null && voiceName.isNotEmpty) 'voiceName': voiceName,
+      });
       return res ?? false;
     } catch (_) {
       return false;

@@ -121,6 +121,25 @@ class SellerSideDrawer extends StatelessWidget {
                   );
                 },
               ),
+            // FIX (food-seller re-audit, Sep 2026 — real, confirmed gap):
+            // the Hotel/food dashboard (this drawer) was the ONLY seller
+            // vertical with no way to sign out in-app — grocery/
+            // electronics/mobile dashboards all call
+            // FirebaseAuth.instance.signOut() from their own AppBar. A
+            // Hotel seller switching accounts/devices had no path except
+            // clearing app storage. Mirrors that exact same pattern here
+            // so every vertical behaves consistently.
+            ListTile(
+              leading: const Icon(Icons.logout_rounded, color: Colors.redAccent),
+              title: const Text('Logout', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              onTap: () async {
+                Navigator.pop(context);
+                await FirebaseAuth.instance.signOut();
+                if (context.mounted) {
+                  Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+                }
+              },
+            ),
             const Spacer(),
             const DownloadAppBanner(appVariant: 'seller'),
             Padding(

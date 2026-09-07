@@ -32,15 +32,26 @@ import 'mobile_service_sheet.dart';
 /// all 9 issues (unlike pinkSlot above, which only has 5 3D renders
 /// today) since a real photo needs no bespoke asset production.
 const Map<String, String> kMobileIssuePhotoUrl = {
-  'screen': 'https://images.unsplash.com/photo-1601784551446-20c9e07cdbdb?w=200&q=80',
-  'battery': 'https://images.unsplash.com/photo-1620825141335-3b3d8c8b2a9c?w=200&q=80',
-  'charging': 'https://images.unsplash.com/photo-1583573636023-2b7b8b1a9c9c?w=200&q=80',
-  'water': 'https://images.unsplash.com/photo-1614064641938-3bbee52942c7?w=200&q=80',
-  'software': 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=200&q=80',
-  'camera': 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=200&q=80',
-  'speaker': 'https://images.unsplash.com/photo-1558756520-22cfe5d382ca?w=200&q=80',
-  'unlock': 'https://images.unsplash.com/photo-1633265486064-086b219458ec?w=200&q=80',
-  'other': 'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=200&q=80',
+  'screen':
+      'https://images.unsplash.com/photo-1601784551446-20c9e07cdbdb?w=200&q=80',
+  // FIX: both old IDs 404'd (dead links); swapped for already-verified
+  // working phone photos — closest confirmed matches on hand.
+  'battery':
+      'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=200&q=80',
+  'charging':
+      'https://images.unsplash.com/photo-1573148195900-7845dcb9b127?w=200&q=80',
+  'water':
+      'https://images.unsplash.com/photo-1614064641938-3bbee52942c7?w=200&q=80',
+  'software':
+      'https://images.unsplash.com/photo-1518770660439-4636190af475?w=200&q=80',
+  'camera':
+      'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=200&q=80',
+  'speaker':
+      'https://images.unsplash.com/photo-1558756520-22cfe5d382ca?w=200&q=80',
+  'unlock':
+      'https://images.unsplash.com/photo-1633265486064-086b219458ec?w=200&q=80',
+  'other':
+      'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=200&q=80',
 };
 
 /// The repair categories offered. Free local data — no database.
@@ -55,22 +66,29 @@ class _MobileIssue {
   // pattern as dashboard_screen.dart's taxi/food/electronics/hero icons).
   final int? pinkSlot;
 
-  const _MobileIssue(
-      this.id, this.title, this.subtitle, this.icon, this.color,
+  const _MobileIssue(this.id, this.title, this.subtitle, this.icon, this.color,
       {this.pinkSlot});
 }
 
 const List<_MobileIssue> _issues = [
-  _MobileIssue('screen', 'Screen / Display', 'Cracked, blank, touch not working',
-      Icons.phonelink_setup_rounded, Color(0xFFFF4FA3), pinkSlot: 3),
+  _MobileIssue(
+      'screen',
+      'Screen / Display',
+      'Cracked, blank, touch not working',
+      Icons.phonelink_setup_rounded,
+      Color(0xFFFF4FA3),
+      pinkSlot: 3),
   _MobileIssue('battery', 'Battery', 'Draining fast, not charging, swollen',
-      Icons.battery_alert_rounded, Color(0xFF00C853), pinkSlot: 1),
+      Icons.battery_alert_rounded, Color(0xFF00C853),
+      pinkSlot: 1),
   _MobileIssue('charging', 'Charging Port', 'Loose, not charging, slow charge',
       Icons.power_rounded, Color(0xFFFFBB00)),
   _MobileIssue('water', 'Water Damage', 'Dropped in water, moisture damage',
-      Icons.water_drop_rounded, Color(0xFF1565C0), pinkSlot: 5),
+      Icons.water_drop_rounded, Color(0xFF1565C0),
+      pinkSlot: 5),
   _MobileIssue('software', 'Software', 'Hang, restart loop, update, format',
-      Icons.settings_suggest_rounded, Color(0xFF7B6FE0), pinkSlot: 2),
+      Icons.settings_suggest_rounded, Color(0xFF7B6FE0),
+      pinkSlot: 2),
   _MobileIssue('camera', 'Camera', 'Blur, not opening, glass broken',
       Icons.photo_camera_rounded, Color(0xFF00BFA5)),
   _MobileIssue('speaker', 'Speaker / Mic', 'No sound, call not audible',
@@ -121,9 +139,11 @@ class MobileServiceTab extends StatelessWidget {
                 itemBuilder: (context, i) {
                   final issue = _issues[i];
                   final iconTheme = context.watch<ThemeService>().iconThemeKey;
-                  final usePink = iconTheme == 'pink_white_3d' && issue.pinkSlot != null;
+                  final usePink =
+                      iconTheme == 'pink_white_3d' && issue.pinkSlot != null;
                   final photoUrl = kMobileIssuePhotoUrl[issue.id];
-                  final usePhoto = iconTheme == 'photo_realistic' && photoUrl != null;
+                  final usePhoto =
+                      iconTheme == 'photo_realistic' && photoUrl != null;
                   return InkWell(
                     borderRadius: BorderRadius.circular(14),
                     onTap: () => showMobileServiceSheet(
@@ -142,46 +162,68 @@ class MobileServiceTab extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           usePhoto
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: CachedCloudImage(
-                                    photoUrl,
-                                    width: 42,
-                                    height: 42,
-                                    fit: BoxFit.cover,
-                                    cacheWidth: 168,
-                                    errorWidget: Container(
+                              // CHANGED (Nizam: "photo theme ah innum vera
+                              // level la set pannlam") — same shadow+ring
+                              // elevated-tile treatment used app-wide now.
+                              ? Container(
+                                  width: 42,
+                                  height: 42,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                        color: Colors.white, width: 1.5),
+                                    boxShadow: [
+                                      BoxShadow(
+                                          color: Colors.black
+                                              .withValues(alpha: 0.18),
+                                          blurRadius: 5,
+                                          offset: const Offset(0, 2)),
+                                    ],
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(10.5),
+                                    child: CachedCloudImage(
+                                      photoUrl,
                                       width: 42,
                                       height: 42,
-                                      decoration: BoxDecoration(
-                                        color: issue.color.withValues(alpha: 0.12),
-                                        shape: BoxShape.circle,
+                                      fit: BoxFit.cover,
+                                      cacheWidth: 168,
+                                      errorWidget: Container(
+                                        width: 42,
+                                        height: 42,
+                                        decoration: BoxDecoration(
+                                          color: issue.color
+                                              .withValues(alpha: 0.12),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(issue.icon,
+                                            color: issue.color, size: 21),
                                       ),
-                                      child: Icon(issue.icon, color: issue.color, size: 21),
                                     ),
                                   ),
                                 )
                               : usePink
-                              ? AutoImageSlider(
-                                  imagePaths: [
-                                    'assets/images/pink_icons/mobile_${issue.pinkSlot}_a.webp',
-                                    'assets/images/pink_icons/mobile_${issue.pinkSlot}_b.webp',
-                                  ],
-                                  width: 42,
-                                  height: 42,
-                                  fit: BoxFit.contain,
-                                  duration: const Duration(seconds: 3),
-                                )
-                              : Container(
-                                  width: 42,
-                                  height: 42,
-                                  decoration: BoxDecoration(
-                                    color: issue.color.withValues(alpha: 0.12),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(issue.icon,
-                                      color: issue.color, size: 21),
-                                ),
+                                  ? AutoImageSlider(
+                                      imagePaths: [
+                                        'assets/images/pink_icons/mobile_${issue.pinkSlot}_a.webp',
+                                        'assets/images/pink_icons/mobile_${issue.pinkSlot}_b.webp',
+                                      ],
+                                      width: 42,
+                                      height: 42,
+                                      fit: BoxFit.contain,
+                                      duration: const Duration(seconds: 3),
+                                    )
+                                  : Container(
+                                      width: 42,
+                                      height: 42,
+                                      decoration: BoxDecoration(
+                                        color:
+                                            issue.color.withValues(alpha: 0.12),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(issue.icon,
+                                          color: issue.color, size: 21),
+                                    ),
                           const SizedBox(height: 8),
                           Text(
                             issue.title,
@@ -243,8 +285,8 @@ class MobileServiceTab extends StatelessWidget {
                       ),
                       Text(
                         p[2],
-                        style: GoogleFonts.outfit(
-                            color: kMobMuted, fontSize: 11),
+                        style:
+                            GoogleFonts.outfit(color: kMobMuted, fontSize: 11),
                       ),
                     ],
                   ),

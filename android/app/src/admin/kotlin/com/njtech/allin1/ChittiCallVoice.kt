@@ -36,6 +36,7 @@ object ChittiCallVoice {
     private var pendingCallback: ((String) -> Unit)? = null
     private var pendingText: String? = null
     private var pendingLocale: String? = null
+    private var pendingVoiceName: String? = null
 
     @Volatile
     @JvmField
@@ -102,20 +103,37 @@ object ChittiCallVoice {
         }
     }
 
+    // voiceName param NEW (Sep 2026 — "option 3, continue": the male-
+    // voice pinning already built for the in-app screens via
+    // ChittiVoiceService never reached THIS engine — a completely
+    // separate native TextToSpeech instance from flutter_tts, used only
+    // for the real-phone-call greeting (see this file's own header).
+    // Pinning a voice in AI Settings therefore silently did nothing for
+    // an actual incoming call, which is arguably the single most-heard
+    // Chitti voice of all. Optional and additive: null behaves exactly
+    // as before (engine default voice for the language).
     @JvmStatic
-    fun speak(context: Context, text: String, languageTag: String, onEvent: (String) -> Unit) {
+    @JvmOverloads
+    fun speak(
+        context: Context,
+        text: String,
+        languageTag: String,
+        onEvent: (String) -> Unit,
+        voiceName: String? = null,
+    ) {
         pendingCallback = onEvent
         maximizeCallVolume(context)
         val engine = tts
         if (engine == null) {
             pendingText = text
             pendingLocale = languageTag
+            pendingVoiceName = voiceName
             tts = TextToSpeech(context.applicationContext, { status ->
                 ready = status == TextToSpeech.SUCCESS
                 if (ready) {
                     val t = pendingText
                     val l = pendingLocale
-                    if (t != null && l != null) configureAndSpeak(t, l)
+                    if (t != null && l != null) configureAndSpeak(t, l, pendingVoiceName)
                 } else {
                     lastEvent = "TTS engine init failed (status=$status)"
                     Log.e(TAG, lastEvent)
@@ -123,16 +141,17 @@ object ChittiCallVoice {
                 }
             }, GOOGLE_TTS_PACKAGE)
         } else if (ready) {
-            configureAndSpeak(text, languageTag)
+            configureAndSpeak(text, languageTag, voiceName)
         } else {
             // Init already in flight from a previous call; queue this
             // one's text/locale so the onInit callback above picks it up.
             pendingText = text
             pendingLocale = languageTag
+            pendingVoiceName = voiceName
         }
     }
 
-    private fun configureAndSpeak(text: String, languageTag: String) {
+    private fun configureAndSpeak(text: String, languageTag: String, voiceName: String? = null) {
         val engine = tts ?: return
         try {
             val attrs = AudioAttributes.Builder()
@@ -175,6 +194,30 @@ object ChittiCallVoice {
         } catch (e: Exception) {
             Log.e(TAG, "setLanguage($languageTag) failed: ${e.message}")
             pendingCallback?.invoke("setLanguage threw: ${e.message}")
+        }
+
+        // Apply the SAME voice pinned in AI Settings (ChittiVoiceService)
+        // — must run AFTER setLanguage, which resets the selected voice
+        // on some engines. Matched by name against this engine's own
+        // voice list rather than trusted blindly: the pinned name came
+        // from whatever TTS engine the in-app screens use, which is not
+        // guaranteed to be the same engine instance as this one (both
+        // request GOOGLE_TTS_PACKAGE, so in practice it usually is, but
+        // "usually" is not a reason to skip the check). No match is a
+        // silent no-op — the engine's own default voice for the
+        // language, exactly today's behaviour.
+        if (!voiceName.isNullOrEmpty()) {
+            try {
+                val match = engine.voices?.firstOrNull { it.name == voiceName }
+                if (match != null) {
+                    val setResult = engine.setVoice(match)
+                    Log.d(TAG, "setVoice($voiceName) -> $setResult")
+                } else {
+                    Log.d(TAG, "Pinned voice \"$voiceName\" not found on this engine — using language default")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "setVoice($voiceName) failed: ${e.message}")
+            }
         }
 
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {

@@ -54,6 +54,7 @@ import 'customer_usage_tracking_screen.dart';
 import 'bug_reports_screen.dart';
 import 'customer_demand_screen.dart';
 import 'admin_payment_reconciliation_screen.dart';
+import 'admin_seller_payouts_screen.dart';
 import 'payments_received_screen.dart';
 import 'usage_fee_ledger_screen.dart';
 import 'erode_offers_management_screen.dart';
@@ -1321,6 +1322,24 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute<void>(builder: (_) => const AdminPaymentReconciliationScreen()),
+                );
+              },
+            ),
+            // NEW (food-seller re-audit, Sep 2026 — closes a real gap:
+            // sellers/{id}.pendingPayouts was credited on every completed
+            // order but nothing anywhere ever wrote totalSettled, so the
+            // Seller Earnings screen's "Settled" figure was permanently
+            // stuck at ₹0.00 — see admin_seller_payouts_screen.dart.
+            ListTile(
+              leading: const Icon(Icons.payments_rounded, color: Color(0xFFFFBB00)),
+              title: const Text('Seller Payouts', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Record offline settlements owed to sellers',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const AdminSellerPayoutsScreen()),
                 );
               },
             ),

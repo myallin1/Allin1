@@ -153,7 +153,8 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Could not get your location. Check location permission.'),
+              content: Text(
+                  'Could not get your location. Check location permission.'),
               backgroundColor: Colors.red,
             ),
           );
@@ -174,7 +175,9 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not fetch location: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Could not fetch location: $e'),
+              backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -207,7 +210,9 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
     final hasItems = _lineItems.any((it) => !it.isEmpty);
     if (_shopCtrl.text.isEmpty || !hasItems || _addressCtrl.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in the required details 🍔'), backgroundColor: Colors.red),
+        const SnackBar(
+            content: Text('Please fill in the required details 🍔'),
+            backgroundColor: Colors.red),
       );
       return;
     }
@@ -227,11 +232,14 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final resolvedCustomerPhone = await AuthService().resolveCustomerPhone(user);
+      final resolvedCustomerPhone =
+          await AuthService().resolveCustomerPhone(user);
       final requestId = await ServiceRequestService().createServiceRequest(
         requestType: 'custom_food_order',
         customerId: user.uid,
-        customerName: _nameCtrl.text.trim().isNotEmpty ? _nameCtrl.text.trim() : (user.displayName ?? 'Customer'),
+        customerName: _nameCtrl.text.trim().isNotEmpty
+            ? _nameCtrl.text.trim()
+            : (user.displayName ?? 'Customer'),
         customerPhone: resolvedCustomerPhone,
         details: {
           'items': quickOrderItemsToJson(_lineItems),
@@ -245,10 +253,12 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
         },
       );
 
-      unawaited(Future.delayed(
-        const Duration(seconds: kServiceRequestPingExpirySeconds),
-        () => ServiceRequestService().markTimeoutIfStillPending(requestId),
-      ),);
+      unawaited(
+        Future.delayed(
+          const Duration(seconds: kServiceRequestPingExpirySeconds),
+          () => ServiceRequestService().markTimeoutIfStillPending(requestId),
+        ),
+      );
 
       if (!mounted) return;
       // Clear the form so the just-placed order shows cleanly in the
@@ -283,13 +293,20 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
     }
   }
 
-  Widget _buildField({required String label, required String hint, required TextEditingController ctrl, int lines = 1, IconData? icon}) {
+  Widget _buildField(
+      {required String label,
+      required String hint,
+      required TextEditingController ctrl,
+      int lines = 1,
+      IconData? icon}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: GoogleFonts.outfit(color: kText, fontSize: 17, fontWeight: FontWeight.w700)),
+          Text(label,
+              style: GoogleFonts.outfit(
+                  color: kText, fontSize: 17, fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           TextField(
             controller: ctrl,
@@ -297,12 +314,17 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
             style: const TextStyle(fontSize: 14),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: TextStyle(color: kMuted.withValues(alpha: 0.6), fontSize: 13),
-              prefixIcon: icon != null ? Icon(icon, color: kPink, size: 20) : null,
+              hintStyle:
+                  TextStyle(color: kMuted.withValues(alpha: 0.6), fontSize: 13),
+              prefixIcon:
+                  icon != null ? Icon(icon, color: kPink, size: 20) : null,
               filled: true,
               fillColor: kSurface,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
           ),
         ],
@@ -324,13 +346,23 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
                     elevation: 4,
                     shadowColor: kPink.withValues(alpha: 0.4),
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
                   ),
                   onPressed: _isLoading ? null : _placeOrder,
                   icon: _isLoading
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Icon(Icons.restaurant_rounded, color: Colors.white, size: 18),
-                  label: Text('Order Food', style: GoogleFonts.outfit(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2))
+                      : const Icon(Icons.restaurant_rounded,
+                          color: Colors.white, size: 18),
+                  label: Text('Order Food',
+                      style: GoogleFonts.outfit(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold)),
                 ),
               ),
             ),
@@ -341,14 +373,21 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(color: kPink, width: 1.4),
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
                   ),
                   onPressed: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const FoodOrderStatusScreen()),
+                    MaterialPageRoute(
+                        builder: (_) => const FoodOrderStatusScreen()),
                   ),
-                  icon: Icon(Icons.receipt_long_rounded, color: kPink, size: 18),
-                  label: Text('Order Status', style: GoogleFonts.outfit(color: kPink, fontSize: 17, fontWeight: FontWeight.bold)),
+                  icon:
+                      Icon(Icons.receipt_long_rounded, color: kPink, size: 18),
+                  label: Text('Order Status',
+                      style: GoogleFonts.outfit(
+                          color: kPink,
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold)),
                 ),
               ),
             ),
@@ -370,13 +409,16 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
           icon: Icon(Icons.arrow_back_ios_new_rounded, color: kText, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Food Genie 🧞‍♂️', style: GoogleFonts.outfit(color: kText, fontWeight: FontWeight.w800, fontSize: 18)),
+        title: Text('Food Genie 🧞‍♂️',
+            style: GoogleFonts.outfit(
+                color: kText, fontWeight: FontWeight.w800, fontSize: 18)),
         centerTitle: true,
       ),
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_currentTab == 1) _FoodSidebar(onCategoryTap: _openSidebarCategory),
+          if (_currentTab == 1)
+            _FoodSidebar(onCategoryTap: _openSidebarCategory),
           Expanded(
             child: _currentTab == 0
                 ? Column(
@@ -421,7 +463,8 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
       ),
     );
     try {
-      final sellers = await FoodSellerService().getSellersBySubCategory(subCategoryKey);
+      final sellers =
+          await FoodSellerService().getSellersBySubCategory(subCategoryKey);
       if (!mounted) return;
       Navigator.pop(context); // close loading dialog
       await Navigator.push(
@@ -437,69 +480,90 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not load ${cat?.label ?? subCategoryKey}: $e'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('Could not load ${cat?.label ?? subCategoryKey}: $e'),
+            backgroundColor: Colors.red),
       );
     }
   }
 
   Widget _buildFormBody() {
     return SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        physics: const BouncingScrollPhysics(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: kGold.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: kGold.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                children: [
-                  const Text('🤤', style: TextStyle(fontSize: 32)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Order from ANY Shop!', style: GoogleFonts.outfit(color: Colors.orange[800], fontWeight: FontWeight.w800, fontSize: 14)),
-                        const SizedBox(height: 2),
-                        Text('Just tell us what you want and from where. We will deliver it to you.', style: TextStyle(color: kText, fontSize: 11)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+      padding: const EdgeInsets.all(20),
+      physics: const BouncingScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: kGold.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: kGold.withValues(alpha: 0.3)),
             ),
-            const SizedBox(height: 24),
-            _buildShopField(),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('What do you want to eat?', style: GoogleFonts.outfit(color: kText, fontSize: 17, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 8),
-                  QuickOrderLineItemsForm(
-                    items: _lineItems,
-                    itemLabel: 'Dish',
-                    qtyLabel: 'Qty',
-                    onChanged: (items) => setState(() => _lineItems = items),
+            child: Row(
+              children: [
+                const Text('🤤', style: TextStyle(fontSize: 32)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Order from ANY Shop!',
+                          style: GoogleFonts.outfit(
+                              color: Colors.orange[800],
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14)),
+                      const SizedBox(height: 2),
+                      Text(
+                          'Just tell us what you want and from where. We will deliver it to you.',
+                          style: TextStyle(color: kText, fontSize: 11)),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            _buildField(label: 'Your Name', hint: 'Enter your name', ctrl: _nameCtrl, icon: Icons.person_outline_rounded),
-            _buildField(label: 'Delivery Location', hint: 'Enter your full address & landmark', ctrl: _addressCtrl, lines: 2, icon: Icons.location_on_outlined),
-            _buildLocationButtons(),
-            const SizedBox(height: 32),
-            _buildMyOrders(),
-            const SizedBox(height: 100),
-          ],
-        ),
-      );
+          ),
+          const SizedBox(height: 24),
+          _buildShopField(),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('What do you want to eat?',
+                    style: GoogleFonts.outfit(
+                        color: kText,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                QuickOrderLineItemsForm(
+                  items: _lineItems,
+                  itemLabel: 'Dish',
+                  qtyLabel: 'Qty',
+                  onChanged: (items) => setState(() => _lineItems = items),
+                ),
+              ],
+            ),
+          ),
+          _buildField(
+              label: 'Your Name',
+              hint: 'Enter your name',
+              ctrl: _nameCtrl,
+              icon: Icons.person_outline_rounded),
+          _buildField(
+              label: 'Delivery Location',
+              hint: 'Enter your full address & landmark',
+              ctrl: _addressCtrl,
+              lines: 2,
+              icon: Icons.location_on_outlined),
+          _buildLocationButtons(),
+          const SizedBox(height: 32),
+          _buildMyOrders(),
+          const SizedBox(height: 100),
+        ],
+      ),
+    );
   }
 
   Widget _buildHotelsGrid() {
@@ -509,9 +573,12 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Available Hotels', style: GoogleFonts.outfit(color: kText, fontSize: 14.5, fontWeight: FontWeight.w800)),
+          Text('Available Hotels',
+              style: GoogleFonts.outfit(
+                  color: kText, fontSize: 14.5, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          Text('Tap to view live menu or order online', style: GoogleFonts.outfit(color: kMuted, fontSize: 12)),
+          Text('Tap to view live menu or order online',
+              style: GoogleFonts.outfit(color: kMuted, fontSize: 12)),
           const SizedBox(height: 14),
           GridView.count(
             key: const Key('food_hub_partner_shops_grid'),
@@ -566,7 +633,9 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Restaurant / Shop Name', style: GoogleFonts.outfit(color: kText, fontSize: 17, fontWeight: FontWeight.w700)),
+          Text('Restaurant / Shop Name',
+              style: GoogleFonts.outfit(
+                  color: kText, fontSize: 17, fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           TextField(
             controller: _shopCtrl,
@@ -574,18 +643,27 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
             style: const TextStyle(fontSize: 14),
             decoration: InputDecoration(
               hintText: 'e.g., Erode Amman Mess, 16th Road',
-              hintStyle: TextStyle(color: kMuted.withValues(alpha: 0.6), fontSize: 13),
-              prefixIcon: Icon(Icons.storefront_rounded, color: kPink, size: 20),
+              hintStyle:
+                  TextStyle(color: kMuted.withValues(alpha: 0.6), fontSize: 13),
+              prefixIcon:
+                  Icon(Icons.storefront_rounded, color: kPink, size: 20),
               suffixIcon: _shopSearching
                   ? Padding(
                       padding: const EdgeInsets.all(14),
-                      child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: kPink)),
+                      child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: kPink)),
                     )
                   : null,
               filled: true,
               fillColor: kSurface,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
           ),
           if (_shopSuggestions.isNotEmpty)
@@ -595,14 +673,20 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: kPink.withValues(alpha: 0.15)),
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 10, offset: const Offset(0, 4))],
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4))
+                ],
               ),
               child: ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 itemCount: _shopSuggestions.length,
-                separatorBuilder: (_, __) => Divider(height: 1, color: kSurface),
+                separatorBuilder: (_, __) =>
+                    Divider(height: 1, color: kSurface),
                 itemBuilder: (context, i) {
                   final s = _shopSuggestions[i];
                   final name = (s['name'] as String?) ?? '';
@@ -610,19 +694,30 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
                   return InkWell(
                     onTap: () => _pickShopSuggestion(s),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
                       child: Row(
                         children: [
-                          Icon(Icons.location_on_outlined, color: kPink, size: 18),
+                          Icon(Icons.location_on_outlined,
+                              color: kPink, size: 18),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(name, style: GoogleFonts.outfit(color: kText, fontSize: 17, fontWeight: FontWeight.w700)),
+                                Text(name,
+                                    style: GoogleFonts.outfit(
+                                        color: kText,
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w700)),
                                 if (address.isNotEmpty)
-                                  Text(address, maxLines: 1, overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(color: kMuted, fontSize: 11),),
+                                  Text(
+                                    address,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style:
+                                        TextStyle(color: kMuted, fontSize: 11),
+                                  ),
                               ],
                             ),
                           ),
@@ -650,13 +745,20 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
             child: OutlinedButton.icon(
               onPressed: _locatingMe ? null : _useMyLocation,
               icon: _locatingMe
-                  ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: kPink))
+                  ? SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: kPink))
                   : Icon(Icons.my_location_rounded, size: 16, color: kPink),
-              label: Text('Use my location', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w700, color: kPink)),
+              label: Text('Use my location',
+                  style: GoogleFonts.outfit(
+                      fontSize: 12, fontWeight: FontWeight.w700, color: kPink)),
               style: OutlinedButton.styleFrom(
                 side: BorderSide(color: kPink.withValues(alpha: 0.4)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ),
@@ -665,11 +767,14 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
             child: OutlinedButton.icon(
               onPressed: _selectOnMap,
               icon: Icon(Icons.map_outlined, size: 16, color: kPink),
-              label: Text('Select on map', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w700, color: kPink)),
+              label: Text('Select on map',
+                  style: GoogleFonts.outfit(
+                      fontSize: 12, fontWeight: FontWeight.w700, color: kPink)),
               style: OutlinedButton.styleFrom(
                 side: BorderSide(color: kPink.withValues(alpha: 0.4)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ),
@@ -693,7 +798,9 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('My Orders', style: GoogleFonts.outfit(color: kText, fontSize: 16, fontWeight: FontWeight.w800)),
+        Text('My Orders',
+            style: GoogleFonts.outfit(
+                color: kText, fontSize: 16, fontWeight: FontWeight.w800)),
         const SizedBox(height: 12),
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: stream,
@@ -701,11 +808,14 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Center(child: CircularProgressIndicator(color: kPink, strokeWidth: 2)),
+                child: Center(
+                    child: CircularProgressIndicator(
+                        color: kPink, strokeWidth: 2)),
               );
             }
             if (snapshot.hasError) {
-              return Text('Could not load your orders.', style: TextStyle(color: kMuted, fontSize: 12));
+              return Text('Could not load your orders.',
+                  style: TextStyle(color: kMuted, fontSize: 12));
             }
             final docs = snapshot.data?.docs ?? [];
             if (docs.isEmpty) {
@@ -727,8 +837,9 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
               physics: const NeverScrollableScrollPhysics(),
               itemCount: docs.length,
               separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, i) =>
-                  _orderCard(ServiceRequestModel.fromFirestore(docs[i].data(), docs[i].id)),
+              itemBuilder: (context, i) => _orderCard(
+                  ServiceRequestModel.fromFirestore(
+                      docs[i].data(), docs[i].id)),
             );
           },
         ),
@@ -794,8 +905,13 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    (shop != null && shop.isNotEmpty) ? shop : 'Custom food order',
-                    style: GoogleFonts.outfit(color: kText, fontSize: 17, fontWeight: FontWeight.w700),
+                    (shop != null && shop.isNotEmpty)
+                        ? shop
+                        : 'Custom food order',
+                    style: GoogleFonts.outfit(
+                        color: kText,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -820,7 +936,10 @@ class _CustomFoodOrderScreenState extends State<CustomFoodOrderScreen> {
               ),
               child: Text(
                 statusLabel,
-                style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                    color: statusColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700),
               ),
             ),
           ],
@@ -857,10 +976,12 @@ class _FoodSidebar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 16),
           child: Column(
             children: items
-                .map((cat) => _SidebarIcon(
-                      category: cat,
-                      onTap: () => onCategoryTap(cat.key),
-                    ),)
+                .map(
+                  (cat) => _SidebarIcon(
+                    category: cat,
+                    onTap: () => onCategoryTap(cat.key),
+                  ),
+                )
                 .toList(),
           ),
         ),
@@ -871,7 +992,8 @@ class _FoodSidebar extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(ObjectFlagProperty<ValueChanged<String>>.has('onCategoryTap', onCategoryTap));
+    properties.add(ObjectFlagProperty<ValueChanged<String>>.has(
+        'onCategoryTap', onCategoryTap));
   }
 }
 
@@ -907,11 +1029,16 @@ const Map<String, int> _kSidebarPinkSlot = {
 // Photo Realistic theme — same CachedCloudImage disk-cache mechanism as
 // dashboard_screen.dart's kSlotPhotoUrl.
 const Map<String, String> _kSidebarPhotoUrl = {
-  'home_made': 'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=200&q=80',
-  'parotta': 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=200&q=80',
-  'biriyani': 'https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=200&q=80',
-  'south_indian': 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=200&q=80',
-  'fast_food': 'https://images.unsplash.com/photo-1550547660-d9450f859349?w=200&q=80',
+  'home_made':
+      'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=200&q=80',
+  'parotta':
+      'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=200&q=80',
+  'biriyani':
+      'https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=200&q=80',
+  'south_indian':
+      'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=200&q=80',
+  'fast_food':
+      'https://images.unsplash.com/photo-1550547660-d9450f859349?w=200&q=80',
 };
 
 class _SidebarIcon extends StatelessWidget {
@@ -923,7 +1050,8 @@ class _SidebarIcon extends StatelessWidget {
   Widget? _svgIcon() {
     switch (category.key) {
       case 'fast_food':
-        return SvgPicture.string(FluentEmojiFlat.french_fries, width: 24, height: 24);
+        return SvgPicture.string(FluentEmojiFlat.french_fries,
+            width: 24, height: 24);
       case 'multi_cuisine':
         return SvgPicture.string(FluentEmojiFlat.pizza, width: 24, height: 24);
       default:
@@ -955,7 +1083,8 @@ class _SidebarIcon extends StatelessWidget {
                   ],
                 ),
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: accent.withValues(alpha: 0.35), width: 1.4),
+                border: Border.all(
+                    color: accent.withValues(alpha: 0.35), width: 1.4),
                 boxShadow: [
                   BoxShadow(
                     color: accent.withValues(alpha: 0.18),
@@ -969,26 +1098,55 @@ class _SidebarIcon extends StatelessWidget {
                   final iconTheme = context.watch<ThemeService>().iconThemeKey;
                   final photoUrl = _kSidebarPhotoUrl[category.key];
                   if (iconTheme == 'photo_realistic' && photoUrl != null) {
-                    return ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: CachedCloudImage(
-                        photoUrl,
-                        width: 30, height: 30, fit: BoxFit.cover,
-                        cacheWidth: 120,
-                        errorWidget: svg ?? Text(category.emoji, style: const TextStyle(fontSize: 24)),
+                    // CHANGED (Nizam: "photo theme ah innum vera level la
+                    // set pannlam") — same shadow+ring elevated-tile
+                    // treatment used app-wide now.
+                    return Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(11),
+                        border: Border.all(color: Colors.white, width: 1.2),
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.18),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2)),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(9.8),
+                        child: CachedCloudImage(
+                          photoUrl,
+                          width: 30,
+                          height: 30,
+                          fit: BoxFit.cover,
+                          cacheWidth: 120,
+                          errorWidget: svg ??
+                              Text(category.emoji,
+                                  style: const TextStyle(fontSize: 24)),
+                        ),
                       ),
                     );
                   }
                   final pinkSlot = _kSidebarPinkSlot[category.key];
-                  final isPink = pinkSlot != null && iconTheme == 'pink_white_3d';
+                  final isPink =
+                      pinkSlot != null && iconTheme == 'pink_white_3d';
                   if (isPink) {
                     return Image.asset(
                       'assets/images/pink_icons/food_${pinkSlot}_a.webp',
-                      width: 30, height: 30, fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => svg ?? Text(category.emoji, style: const TextStyle(fontSize: 24)),
+                      width: 30,
+                      height: 30,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) =>
+                          svg ??
+                          Text(category.emoji,
+                              style: const TextStyle(fontSize: 24)),
                     );
                   }
-                  return svg ?? Text(category.emoji, style: const TextStyle(fontSize: 24));
+                  return svg ??
+                      Text(category.emoji,
+                          style: const TextStyle(fontSize: 24));
                 }),
               ),
             ),
@@ -1044,9 +1202,17 @@ class _HubTile extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 150),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
+          gradient: LinearGradient(
+              colors: gradient,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight),
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: gradient.first.withValues(alpha: 0.28), blurRadius: 16, offset: const Offset(0, 8))],
+          boxShadow: [
+            BoxShadow(
+                color: gradient.first.withValues(alpha: 0.28),
+                blurRadius: 16,
+                offset: const Offset(0, 8))
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1055,18 +1221,31 @@ class _HubTile extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: Colors.white, 
+                color: Colors.white,
                 shape: BoxShape.circle,
                 image: imageAsset != null
-                    ? DecorationImage(image: AssetImage(imageAsset!), fit: BoxFit.cover)
+                    ? DecorationImage(
+                        image: AssetImage(imageAsset!), fit: BoxFit.cover)
                     : null,
               ),
-              child: imageAsset == null ? Icon(icon, color: gradient.last, size: 22) : null,
+              child: imageAsset == null
+                  ? Icon(icon, color: gradient.last, size: 22)
+                  : null,
             ),
             const Spacer(),
-            Text(label, style: GoogleFonts.outfit(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w900), maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(label,
+                style: GoogleFonts.outfit(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
             const SizedBox(height: 4),
-            Text(subtitle, style: GoogleFonts.outfit(color: Colors.white.withValues(alpha: 0.85), fontSize: 11), maxLines: 2, overflow: TextOverflow.ellipsis),
+            Text(subtitle,
+                style: GoogleFonts.outfit(
+                    color: Colors.white.withValues(alpha: 0.85), fontSize: 11),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis),
           ],
         ),
       ),

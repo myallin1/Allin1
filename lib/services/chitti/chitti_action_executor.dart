@@ -199,8 +199,6 @@ class ChittiActionExecutor {
           return _shareReferral();
         case 'open_external_app':
           return await _openExternalApp(args);
-        case 'system_perform_action':
-          return await _executeSystemPerformAction(args);
 
         // ── reads ──────────────────────────────────────────────────
         //
@@ -470,46 +468,63 @@ class ChittiActionExecutor {
 
   // ── handlers ──────────────────────────────────────────────────────
 
+  // FIX (Sep 7 2026 audit): this used to be shadowed by a duplicate
+  // `case 'system_perform_action':` further down (Dart always runs the
+  // FIRST matching case, so the second one — _executeSystemPerformAction
+  // — was truly dead code, never executed despite looking like the more
+  // careful implementation). Merged the two: kept this one's
+  // Accessibility-permission gate (the dead one had none, so it would
+  // have called into the bridge without ever checking permission was
+  // granted), and pulled in the dead one's two real improvements —
+  // empty-targetText validation before click/launch_app, and correctly
+  // reporting `success: false` on failure.
+  //
+  // That second part matters beyond just "nicer text": ChittiActionResult
+  // .success defaults to true, and this method never overrode it on a
+  // failure branch — so a failed click/type/scroll here would have read
+  // as a SUCCESS to anything checking .success, which is exactly the
+  // signal ChittiTaskChain's "stop on first failure" rule depends on.
   static Future<ChittiActionResult> _executeSystemAction(Map<String, dynamic> args) async {
     final bridge = ChittiAccessibilityBridge.instance;
     final isGranted = await bridge.isPermissionGranted();
     if (!isGranted) {
       await bridge.openSettings();
       return const ChittiActionResult(
+        success: false,
         text: 'Accessibility permission is required for system control. Opening settings...',
         spokenTextOverride: 'Accessibility permission is required. Please enable it in settings.',
       );
     }
 
-    final actionType = args['actionType'] as String?;
-    final targetText = args['targetText'] as String? ?? '';
-    final inputValue = args['inputValue'] as String? ?? '';
-    final scrollDirection = args['scrollDirection'] as String? ?? 'down';
-
-    bool success = false;
-    String feedback = '';
+    final actionType = (args['actionType'] as String?)?.toLowerCase().trim() ?? '';
+    final targetText = (args['targetText'] as String?)?.trim() ?? '';
+    final inputValue = (args['inputValue'] as String?)?.trim() ?? '';
+    final scrollDirection = (args['scrollDirection'] as String?)?.toLowerCase().trim() ?? 'down';
 
     switch (actionType) {
       case 'click':
-        success = await bridge.clickElement(targetText);
-        feedback = success ? "Clicked $targetText" : "Could not find $targetText to click";
-        break;
+        if (targetText.isEmpty) {
+          return const ChittiActionResult(success: false, text: 'What element should I click?');
+        }
+        final ok = await bridge.clickElement(targetText);
+        final feedback = ok ? "Clicked $targetText" : "Could not find $targetText to click";
+        return ChittiActionResult(success: ok, text: feedback, spokenTextOverride: feedback);
       case 'type':
-        success = await bridge.inputText(targetText, inputValue);
-        feedback = success ? "Typed $inputValue in $targetText" : "Could not find input field $targetText";
-        break;
+        final ok = await bridge.inputText(targetText, inputValue);
+        final feedback = ok ? "Typed $inputValue in $targetText" : "Could not find input field $targetText";
+        return ChittiActionResult(success: ok, text: feedback, spokenTextOverride: feedback);
       case 'scroll':
-        success = await bridge.scroll(scrollDirection);
-        feedback = success ? "Scrolled $scrollDirection" : "Could not scroll";
-        break;
+        final ok = await bridge.scroll(scrollDirection);
+        final feedback = ok ? "Scrolled $scrollDirection" : "Could not scroll";
+        return ChittiActionResult(success: ok, text: feedback, spokenTextOverride: feedback);
       case 'go_back':
-        success = await bridge.goBack();
-        feedback = success ? "Went back" : "Could not go back";
-        break;
+        final ok = await bridge.goBack();
+        final feedback = ok ? "Went back" : "Could not go back";
+        return ChittiActionResult(success: ok, text: feedback, spokenTextOverride: feedback);
       case 'go_home':
-        success = await bridge.goHome();
-        feedback = success ? "Went home" : "Could not go home";
-        break;
+        final ok = await bridge.goHome();
+        final feedback = ok ? "Went home" : "Could not go home";
+        return ChittiActionResult(success: ok, text: feedback, spokenTextOverride: feedback);
       case 'read_screen':
         final screenText = await bridge.readScreen();
         return ChittiActionResult(
@@ -517,17 +532,16 @@ class ChittiActionExecutor {
           spokenTextOverride: "I have read the screen contents for you.",
         );
       case 'launch_app':
-        success = await bridge.launchApp(targetText);
-        feedback = success ? "Opened $targetText" : "Could not open $targetText";
-        break;
+        if (targetText.isEmpty) {
+          return const ChittiActionResult(success: false, text: 'Which app should I open?');
+        }
+        final ok = await bridge.launchApp(targetText);
+        final feedback = ok ? "Opened $targetText" : "Could not open $targetText";
+        return ChittiActionResult(success: ok, text: feedback, spokenTextOverride: feedback);
       default:
-        feedback = "Unknown action type: $actionType";
+        final feedback = "Unknown action type: $actionType";
+        return ChittiActionResult(success: false, text: feedback, spokenTextOverride: feedback);
     }
-
-    return ChittiActionResult(
-      text: feedback,
-      spokenTextOverride: feedback,
-    );
   }
 
   static ChittiActionResult _navigate(Map<String, dynamic> args) {
@@ -1739,90 +1753,5 @@ class ChittiActionExecutor {
           ? 'கூகுள் தேடலில் இதற்கான நேரடித் தகவல் கிடைக்கவில்லை பாஸ்.'
           : 'Could not fetch live search results for "$query".',
     );
-  }
-
-  static Future<ChittiActionResult> _executeSystemPerformAction(
-    Map<String, dynamic> args,
-  ) async {
-    final actionType = (args['actionType'] as String?)?.toLowerCase().trim() ?? '';
-    final targetText = (args['targetText'] as String?)?.trim() ?? '';
-    final inputValue = (args['inputValue'] as String?)?.trim() ?? '';
-    final scrollDir = (args['scrollDirection'] as String?)?.toLowerCase().trim() ?? 'down';
-
-    switch (actionType) {
-      case 'click':
-        if (targetText.isEmpty) {
-          return const ChittiActionResult(
-            success: false,
-            text: 'What element should I click?',
-          );
-        }
-        final ok = await ChittiAccessibilityBridge.instance.clickElement(targetText);
-        return ChittiActionResult(
-          success: ok,
-          text: ok
-              ? 'Clicked "$targetText".'
-              : 'Could not find "$targetText" to click on this screen.',
-        );
-
-      case 'type':
-        final ok = await ChittiAccessibilityBridge.instance.inputText(targetText, inputValue);
-        return ChittiActionResult(
-          success: ok,
-          text: ok
-              ? 'Typed "$inputValue".'
-              : 'Could not type into the target field on screen.',
-        );
-
-      case 'scroll':
-        final ok = await ChittiAccessibilityBridge.instance.scroll(scrollDir);
-        return ChittiActionResult(
-          success: ok,
-          text: ok
-              ? 'Scrolled $scrollDir.'
-              : 'Could not scroll on this screen.',
-        );
-
-      case 'go_back':
-        final ok = await ChittiAccessibilityBridge.instance.goBack();
-        return ChittiActionResult(
-          success: ok,
-          text: ok ? 'Going back.' : 'Could not go back.',
-        );
-
-      case 'go_home':
-        final ok = await ChittiAccessibilityBridge.instance.goHome();
-        return ChittiActionResult(
-          success: ok,
-          text: ok ? 'Going to home screen.' : 'Could not go to home screen.',
-        );
-
-      case 'read_screen':
-        final content = await ChittiAccessibilityBridge.instance.readScreen();
-        return ChittiActionResult(
-          text: content.isNotEmpty ? content : 'Screen is empty.',
-        );
-
-      case 'launch_app':
-        if (targetText.isEmpty) {
-          return const ChittiActionResult(
-            success: false,
-            text: 'Which app should I open?',
-          );
-        }
-        final ok = await ChittiAccessibilityBridge.instance.launchApp(targetText);
-        return ChittiActionResult(
-          success: ok,
-          text: ok
-              ? 'Opening $targetText...'
-              : 'Could not launch app "$targetText".',
-        );
-
-      default:
-        return const ChittiActionResult(
-          success: false,
-          text: 'Unknown system action.',
-        );
-    }
   }
 }
