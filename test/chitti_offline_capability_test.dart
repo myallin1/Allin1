@@ -65,6 +65,7 @@ void main() {
     'run_ux_audit',
     'read_recent_sms',
     'summarize_last_call',
+    'check_pr_status',
   };
 
   /// Tools that legitimately need the model. Listed explicitly so that
@@ -146,6 +147,7 @@ void main() {
       'run_ux_audit': (text: 'show qa audit', variant: 'admin'),
       'read_recent_sms': (text: 'read my recent sms', variant: 'admin'),
       'summarize_last_call': (text: 'summarize last call', variant: 'admin'),
+      'check_pr_status': (text: 'check pr status', variant: 'admin'),
     };
 
     test('no offline-capable tool is left without a phrasing', () {

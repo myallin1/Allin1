@@ -16,8 +16,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/service_request_model.dart';
 import '../services/service_request_service.dart';
 import '../utils/service_request_labels.dart';
+import '../widgets/cancellation_reason_sheet.dart';
 import '../widgets/delivery_challan_card.dart';
 import '../widgets/estimate_approval_card.dart';
+import '../widgets/rating_feedback_sheet.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
 const Color _kBg = Color(0xFFFFFFFF);
@@ -200,10 +202,99 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
                       ],
                     ),
                   ),
+                // FIX (Sep 6 2026 — hero app end-to-end audit): this
+                // screen is the "Single shared tracking screen for all
+                // 4 request categories" per the file header, but had NO
+                // rating prompt at all — hero_booking_tracking_screen.dart
+                // (a separate screen) has one, this one never did. Net
+                // effect: every custom order, food order, grocery order,
+                // NJ Tech/mobile service, and any skill-trade booking
+                // that routes through THIS screen left the hero
+                // permanently unrated — no in-app path ever asked. Same
+                // gate hero_booking_tracking_screen.dart uses.
+                if (requestModel.status == 'completed' &&
+                    requestModel.paymentStatus == 'paid' &&
+                    requestModel.customerRating == null)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      color: _kSurface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: _kBorder),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Rate your Hero',
+                          style: GoogleFonts.outfit(
+                              color: _kText, fontSize: 14, fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 10),
+                        RatingFeedbackSheet(
+                          completionCollection: 'service_requests',
+                          docId: requestModel.requestId,
+                          rateeCollection:
+                              requestModel.assignedHeroId != null ? 'heroes' : null,
+                          rateeId: requestModel.assignedHeroId,
+                          onSubmitted: (_) {},
+                        ),
+                      ],
+                    ),
+                  ),
                 _StatusStepper(labels: labels, currentIndex: currentIndex),
+                // FIX (Sep 6 2026 — hero app end-to-end audit): this
+                // screen had no cancel action at all. Mirrors
+                // hero_booking_tracking_screen.dart's own cancel gate
+                // exactly (same reason sheet, same cutoff) rather than
+                // inventing a new policy — cancellable only through
+                // 'hero_assigned' (currentIndex <= 1); once the hero has
+                // actually started, self-cancel is no longer offered,
+                // same as every other flow in this app.
+                if (currentIndex <= 1) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => _confirmAndCancel(context, requestId),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        side: const BorderSide(color: Colors.red),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text('Cancel Request'),
+                    ),
+                  ),
+                ],
               ],
             ),
           );
+  }
+
+  Future<void> _confirmAndCancel(BuildContext context, String requestId) async {
+    final reason = await showCancellationReasonSheet(context);
+    if (reason == null || !context.mounted) return;
+
+    try {
+      await ServiceRequestService().cancelServiceRequest(requestId, reason: reason);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Request cancelled.')),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not cancel: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   @override

@@ -45,16 +45,26 @@
 // ================================================================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../models/hero_wallet_model.dart';
 import './firestore_usage_tracking.dart';
 
 class HeroWalletService {
   factory HeroWalletService() => _instance;
-  HeroWalletService._internal();
+  HeroWalletService._internal() : _firestore = FirebaseFirestore.instance;
   static final HeroWalletService _instance = HeroWalletService._internal();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // Sep 6 2026 — test-only seam so the recharge/claw-back transaction
+  // logic can be verified against a fake in-memory Firestore, without
+  // touching how the real singleton behaves anywhere in the app: every
+  // existing `HeroWalletService()` call site is completely unaffected —
+  // `_internal()` above still always wires the real
+  // `FirebaseFirestore.instance`, exactly as before this change.
+  @visibleForTesting
+  HeroWalletService.test(this._firestore);
+
+  final FirebaseFirestore _firestore;
 
   DocumentReference<Map<String, dynamic>> _walletRef(String heroId) =>
       _firestore.collection('hero_wallets').doc(heroId);
@@ -119,14 +129,23 @@ class HeroWalletService {
 
       tx.set(
         requestRef,
-        WalletRechargeRequestModel(
-          id: requestRef.id,
-          heroId: heroId,
-          heroName: heroName,
-          amount: amount,
-          upiRefNumber: upiRefNumber,
-          screenshotUrl: screenshotUrl,
-        ).toFirestore(),
+        {
+          ...WalletRechargeRequestModel(
+            id: requestRef.id,
+            heroId: heroId,
+            heroName: heroName,
+            amount: amount,
+            upiRefNumber: upiRefNumber,
+            screenshotUrl: screenshotUrl,
+          ).toFirestore(),
+          // SECURITY (Sep 6 2026, round 2): a one-way flip required by
+          // firestore.rules' _heroWalletDeltaIsBacked — marks this
+          // specific request as "already spent" on wallet credit, so a
+          // hero can't point lastRechargeRequestId at the SAME
+          // still-pending request more than once to double (or n-tuple)
+          // credit themselves before an admin reviews it.
+          'creditedToWallet': true,
+        },
       );
 
       tx.set(
@@ -137,6 +156,15 @@ class HeroWalletService {
           'lowBalanceThreshold': threshold,
           'isEligibleForRequests': newBalance >= threshold,
           'updatedAt': FieldValue.serverTimestamp(),
+          // SECURITY (Sep 6 2026): required by firestore.rules'
+          // _heroWalletDeltaIsBacked — a balance increase is only
+          // accepted when it points at a matching, freshly-created
+          // `pending` recharge request for the exact same amount. Every
+          // legitimate recharge already creates exactly this request
+          // (see requestRef.set(...) above, same transaction), so this
+          // is purely a pointer to work that was already happening —
+          // nothing here changes what a real recharge does.
+          'lastRechargeRequestId': requestRef.id,
         },
         SetOptions(merge: true),
       );

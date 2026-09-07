@@ -47,12 +47,18 @@ builds share ONE codebase:
   /// suggest impossible things (webhooks, cron jobs, server validation).
   static const String constraints = '''
 HARD CONSTRAINTS:
-- Firebase SPARK (free) plan. There are NO Cloud Functions and no
-  server. Every workflow runs on the client, so security lives entirely
-  in firestore.rules and database.rules.json.
-- Because there is no trusted server, anything that must not be forged
-  is enforced by security rules, not by app code. Never propose a fix
-  that assumes server-side validation exists.
+- Firebase Blaze plan with a SMALL set of Cloud Functions (the
+  functions/ directory) — but they are one-way triggers only: FCM push
+  relays (new ride/order/SOS alerts, closed-app notifications) and
+  payment webhooks (PhonePe). There is NO general request/response
+  application server. Almost every workflow — booking, dispatch,
+  approvals, chat — still runs on the client.
+- Because there is no trusted server validating arbitrary app requests,
+  anything that must not be forged is enforced by security rules
+  (firestore.rules / database.rules.json), not by app code or by
+  assuming a Cloud Function will catch it. Never propose a fix that
+  assumes a general server-side validation layer exists — only the
+  specific triggers named above run server-side.
 - Firestore reads/writes are a real budget. Prefer cached and bounded
   reads; a permanent snapshot listener on a growing collection is a
   standing cost.

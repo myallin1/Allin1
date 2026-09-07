@@ -8,6 +8,7 @@
 // ================================================================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -320,6 +321,13 @@ class _AdminSellerApprovalScreenState extends State<AdminSellerApprovalScreen> {
           // toggle on their own dashboard, which most never knew existed.
           'isOpen': true,
           'approvedAt': FieldValue.serverTimestamp(),
+          // FIX (Sep 6 2026 audit — "no admin-identity audit trail on
+          // seller approval"): matches the reviewedBy pattern already
+          // used correctly for wallet recharge approve/reject
+          // (hero_wallet_service.dart) — records WHICH admin performed
+          // this, so a later dispute or audit isn't just "someone
+          // approved this at some point."
+          'approvedBy': FirebaseAuth.instance.currentUser?.uid,
           'updatedAt': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),
@@ -443,6 +451,9 @@ class _AdminSellerApprovalScreenState extends State<AdminSellerApprovalScreen> {
           'status': 'rejected',
           'rejectionReason': reason,
           'rejectedAt': FieldValue.serverTimestamp(),
+          // FIX (Sep 6 2026 audit — see the matching approvedBy note in
+          // _approveSeller above): same audit-trail gap, reject side.
+          'rejectedBy': FirebaseAuth.instance.currentUser?.uid,
           'updatedAt': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),

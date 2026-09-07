@@ -103,6 +103,52 @@ service cloud.firestore {
       return isAdmin() || isAdminViaCollection();
     }
 
+    // Hero wallet self-mint guard (Sep 6 2026 security audit fix) — see
+    // the full explanation on the hero_wallets match block below. A
+    // balance INCREASE by the hero themselves must reference, in
+    // `lastRechargeRequestId`, a `wallet_recharge_requests` document
+    // (written in the same client transaction, hence getAfter — the
+    // pre-transaction get() would not see it yet) that is `pending`,
+    // belongs to this same hero, and whose amount exactly matches the
+    // increase. A balance decrease (usage-fee debits) always passes —
+    // a hero has nothing to gain by faking a HIGHER debit against
+    // themselves. $(database)-bound here for the same reason as
+    // isAdminViaCollection() above.
+    // FIX ROUND 2 (Sep 6 2026 re-audit — self re-review caught this):
+    // the first version of this function checked that the referenced
+    // request MATCHED, but never checked it hadn't already been used. A
+    // pending request stays pending for as long as it takes an admin to
+    // review it — during that whole window, a hero could point
+    // `lastRechargeRequestId` at the SAME still-pending request over and
+    // over, crediting the same amount to their balance repeatedly,
+    // since nothing said "this one's spent." Closed by requiring the
+    // request to carry `creditedToWallet: true` in the POST-transaction
+    // state (getAfter) while being ABSENT/false in the PRE-transaction
+    // state (get) — a one-way flip, checkable without any counter or
+    // Cloud Function, that makes each request usable exactly once.
+    function _heroWalletDeltaIsBacked(heroId, oldBalance) {
+      let newBalance = request.resource.data.balance is number
+        ? request.resource.data.balance : 0;
+      let delta = newBalance - oldBalance;
+      let reqPath = /databases/$(database)/documents/wallet_recharge_requests/$(request.resource.data.lastRechargeRequestId);
+      return delta <= 0
+        || (
+          request.resource.data.lastRechargeRequestId is string
+          // The request is either brand new in THIS transaction (didn't
+          // exist a moment ago — get()/exists() see PRE-transaction
+          // state, so a fresh request always reads as "doesn't exist
+          // yet" here, which is exactly the normal, legitimate case and
+          // must short-circuit before calling .data on a doc that isn't
+          // there) OR it already existed and simply hasn't been spent.
+          && (!exists(reqPath)
+              || get(reqPath).data.get('creditedToWallet', false) == false)
+          && getAfter(reqPath).data.heroId == heroId
+          && getAfter(reqPath).data.status == 'pending'
+          && getAfter(reqPath).data.amount == delta
+          && getAfter(reqPath).data.creditedToWallet == true
+        );
+    }
+
     // Seller-earnings audit, Phase 1 — server-side idempotency +
     // ownership check for crediting a seller's pendingPayouts (and for
     // the matching wallet_transactions ledger entry). Declared here for
@@ -925,7 +971,26 @@ service cloud.firestore {
             && (!('status' in request.resource.data.diff(resource.data).affectedKeys()) ||
                 (resource.data.status == 'awaiting_seller' && request.resource.data.status == 'pinging')));
 
-      allow delete: if isAdminAny();
+      // FIX (Sep 6 2026 — hero app end-to-end audit): this was
+      // isAdminAny()-only, but cancelServiceRequest()
+      // (service_request_service.dart) does a hard .delete() and is
+      // called directly by the CUSTOMER from both
+      // hero_booking_tracking_screen.dart's existing "Cancel Task"
+      // button and service_request_tracking_screen.dart's new "Cancel
+      // Request" button — every such tap has been failing with
+      // permission-denied, silently, since neither screen surfaces the
+      // raw exception beyond a generic snackbar. Scoped as narrowly as
+      // the update clauses above: only the request's own customer, and
+      // only while it is still in a status either screen's own UI gate
+      // (currentIndex <= 1) actually offers the button for — a hero
+      // already mid-job can never have their accepted work deleted out
+      // from under them by this clause.
+      allow delete: if isAdminAny()
+        || (isAuth()
+            && resource.data.customerId == request.auth.uid
+            && (resource.data.status == 'pending'
+                || resource.data.status == 'admin_review'
+                || resource.data.status == 'hero_assigned'));
     }
 
 
@@ -1182,10 +1247,54 @@ service cloud.firestore {
     // tooling — write stays owner-only since nothing server-side should
     // need to edit another user's profile doc.
     // ==============================================================
+    // SECURITY AUDIT FIX (Sep 6 2026 — "admin app login UI-gate weak"):
+    // the admin app's own login screen (auth_service.dart's
+    // _isAdminUserData) decides whether to let someone into the Admin
+    // app's UI by reading userType/role/admin/isAdmin off exactly this
+    // document — and this document was previously fully self-writable
+    // by its own owner, with no field restriction at all. Any signed-in
+    // user could set `isAdmin: true` on their own profile and walk
+    // straight into the Admin app shell.
+    //
+    // The fix deliberately does NOT touch auth_service.dart's actual
+    // login check — this project has no confirmed way to verify every
+    // real admin account already has a matching, admin-provisioned
+    // `admins/{uid}` doc (that collection's own create rule is
+    // isAdminAny()-gated, so it's provisioned by another admin, not
+    // self-service), and switching the login gate to require it blind
+    // risks locking out a real admin whose account was only ever set up
+    // via the userType/isAdmin fields. Blocking the WRITE instead is
+    // just as effective against the exploit and can't lock anyone out:
+    // it only rejects a user trying to grant these fields to
+    // THEMSELVES going forward — an existing real admin's document,
+    // once already carrying isAdmin: true, is untouched by this (they
+    // just aren't setting it again), and every other profile field
+    // remains freely self-editable exactly as before.
+    function _isAdminFlagged(d) {
+      return (('userType' in d) && (d.userType == 2 || d.userType == '2' || d.userType == 'admin'))
+        || (('role' in d) && (d.role == 'admin' || d.role == 'Admin'))
+        || (('admin' in d) && (d.admin == true || d.admin == 'true'))
+        || (('isAdmin' in d) && (d.isAdmin == true || d.isAdmin == 'true'));
+    }
+
     match /users/{userId} {
       allow read: if isAdminAny() || (isAuth() && request.auth.uid == userId);
-      allow create: if isAuth() && request.auth.uid == userId;
-      allow update: if isAuth() && request.auth.uid == userId;
+      // A brand-new document can never have been "already admin" (it
+      // didn't exist) — so any create attempt introducing these fields
+      // needs isAdminAny(), full stop.
+      allow create: if isAuth() && request.auth.uid == userId
+        && (isAdminAny() || !_isAdminFlagged(request.resource.data));
+      // Updates get one more escape hatch: if the EXISTING document was
+      // already admin-flagged before this write, re-asserting the same
+      // state through (e.g. auth_service.dart's _ensureAdminUserDoc,
+      // which re-writes these exact fields on every admin login to
+      // self-heal a doc that's already privileged) is not a privilege
+      // escalation and must keep working — only a write that VALUE-ADDS
+      // admin status where there was none before is what needs blocking.
+      allow update: if isAuth() && request.auth.uid == userId
+        && (isAdminAny()
+            || _isAdminFlagged(resource.data)
+            || !_isAdminFlagged(request.resource.data));
       allow delete: if isAdminAny();
     }
 
@@ -1323,8 +1432,35 @@ service cloud.firestore {
     match /hero_wallets/{heroId} {
       allow read: if isAdminAny() || (isAuth() && request.auth.uid == heroId);
       // GUEST MODE: wallet balance mutation — real accounts only.
-      allow create, update: if isAdminAny()
-        || (isRealUser() && request.auth.uid == heroId);
+      //
+      // SECURITY AUDIT FIX (Sep 6 2026): this previously let a hero
+      // write ANY `balance` value to their own wallet with zero trace —
+      // there was nothing checking the write actually corresponded to a
+      // recharge. A hero could skip the app UI entirely and set
+      // `balance: 999999` directly.
+      //
+      // The app's own "Auto-Credit + Post-Verify / Claw-back" design
+      // (see hero_wallet_service.dart's header comment) already accepts
+      // that a fabricated recharge amount can't be caught BEFORE the
+      // balance is usable — that needs real server-side UPI
+      // verification, which needs Cloud Functions, which the Spark
+      // (free) plan doesn't support. This fix does NOT change that
+      // trade-off. What it DOES close is the silent, no-trace version:
+      // a balance INCREASE is now only allowed in the same write as (or
+      // immediately after) creating a matching `wallet_recharge_requests`
+      // document for the exact delta — so a self-minted balance always
+      // leaves a `pending` request behind for the admin claw-back flow
+      // to catch, instead of just... a bigger number with no paper
+      // trail at all. A balance decrease (usage-fee debits, which only
+      // ever reduce what a hero has) needs no such check.
+      allow create: if isAdminAny()
+        || (isRealUser() && request.auth.uid == heroId
+            && _heroWalletDeltaIsBacked(heroId, 0));
+      allow update: if isAdminAny()
+        || (isRealUser() && request.auth.uid == heroId
+            && _heroWalletDeltaIsBacked(
+                 heroId, resource.data.balance is number
+                   ? resource.data.balance : 0));
       allow delete: if isAdminAny();
 
       // hero_wallets/{heroId}/transactions/{txnId}: immutable ledger,
@@ -1720,12 +1856,21 @@ service cloud.firestore {
     // ==============================================================
     // sos_kyc_requests — Customer SOS Verification & Approvals
     // ==============================================================
-    match /sos_kyc_requests/{userId} {
-      allow read: if isAuth() && (request.auth.uid == userId || isAdminAny());
-      allow create, update: if isAuth() && (request.auth.uid == userId || isAdminAny());
-      allow delete: if isAdminAny();
-    }
-
+    // REMOVED (Sep 6 2026 security audit — duplicate rule, self-approve
+    // hole): this exact path was already defined above at
+    // `match /sos_kyc_requests/{uid}` (line ~1230) with a correct
+    // status-transition guard — a customer may only move their own
+    // request pending->pending or rejected->pending, never to
+    // 'approved'. This SECOND, later block for the same collection had
+    // no such guard at all (`allow create, update: if isAuth() &&
+    // (own doc || admin)`), and Firestore evaluates multiple `match`
+    // blocks for one path with OR semantics — whichever block grants
+    // access wins. So this weaker duplicate silently overrode the
+    // correct rule above it, letting a customer write
+    // `status: 'approved'` directly to their own doc and self-activate
+    // the SOS gate that's supposed to require admin sign-off. Deleting
+    // it restores the original (correct) rule as the only one in
+    // effect.
 
 
     // ==============================================================

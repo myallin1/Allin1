@@ -108,10 +108,50 @@ class MobileListingService {
     return doc.id;
   }
 
+  /// Throws [StateError] when the listing was changed elsewhere since
+  /// this editor session loaded it — see the FIX comment below.
   Future<void> updateListing(MobileListing listing) async {
-    await _refFor(listing.sellerId).doc(listing.id).update(<String, dynamic>{
-      ...listing.toJson(),
-      'updatedAt': FieldValue.serverTimestamp(),
+    final docRef = _refFor(listing.sellerId).doc(listing.id);
+    final expectedUpdatedAt = listing.updatedAt;
+
+    // FIX (Sep 6 2026 audit — "lost update" race): this used to be a
+    // blind full-document `.update()` with no precondition at all. A
+    // seller editing the same listing from two sessions (phone +
+    // tablet, or a full edit racing setInStock's targeted single-field
+    // toggle elsewhere in this file) meant whichever save landed second
+    // silently overwrote every field the first save had just committed
+    // — price, description, images, all of it — with the stale values
+    // this editor session started from.
+    //
+    // A transaction re-reads updatedAt at commit time: if the server's
+    // updatedAt is newer than what this editor loaded, someone else
+    // saved in between, and this write is refused rather than clobbering
+    // it. seller_mobile_listing_editor.dart already has an `on
+    // StateError` handler (for the listing-cap message) that shows the
+    // exception's message as a toast, so this integrates with zero UI
+    // changes needed there.
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(docRef);
+      if (!snap.exists) {
+        throw StateError(
+          'This listing no longer exists — it may have been deleted.',
+        );
+      }
+      if (expectedUpdatedAt != null) {
+        final serverUpdatedAt =
+            (snap.data()?['updatedAt'] as Timestamp?)?.toDate();
+        if (serverUpdatedAt != null &&
+            serverUpdatedAt.isAfter(expectedUpdatedAt)) {
+          throw StateError(
+            'This listing was changed elsewhere since you opened it. '
+            'Please go back and reload before saving again.',
+          );
+        }
+      }
+      tx.update(docRef, <String, dynamic>{
+        ...listing.toJson(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
     });
   }
 

@@ -27,14 +27,24 @@
 // collects delivery details and a payment decision, then hands a
 // [FoodCheckoutResult] back via Navigator.pop for the caller to act on.
 //
-// Two payment paths, matching the UPI pattern already proven in
-// payment_screen.dart / PaymentConfig (no new payment infra invented):
+// Three payment paths:
+//   - Pay via UPI (PhonePe, Sep 2026): server-verified — see
+//     phonepe_payment_service.dart / functions/phonepeWebhook.ts. Does
+//     NOT collect payment on this screen; it only records the choice
+//     and pops immediately. phonepeCreateOrder.ts requires the order
+//     doc to already exist (an ownership check against a real
+//     service_requests doc), so the actual checkout WebView only opens
+//     AFTER the caller creates the order — see seller_detail_screen
+//     .dart's call site for the exact sequencing. This gateway existed
+//     for a while with nothing in the app ever reaching it; this is
+//     the wiring that closes that gap.
 //   - Cash on Delivery: no UPI intent, order confirms immediately.
-//   - Pay via UPI now: opens the same intent:// / upi:// deep link
+//   - Pay via UPI now (fallback, kept for when the gateway is
+//     unreachable): opens the same intent:// / upi:// deep link
 //     PaymentConfig already builds for rides, pre-filled with the
 //     order total. The customer manually confirms "I've Paid" after —
-//     exactly the honesty-preserving pattern the rest of the app uses
-//     for UPI (there is no server here to verify a webhook on Spark).
+//     the same honesty-preserving pattern the rest of the app uses
+//     for UPI where no gateway is wired in.
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -66,7 +76,7 @@ class FoodCheckoutResult {
   final double? lng;
   final String customerName;
   final String customerPhone;
-  final String paymentMethod; // 'cod' | 'upi'
+  final String paymentMethod; // 'cod' | 'upi' | 'phonepe'
 
   const FoodCheckoutResult({
     required this.address,
@@ -194,6 +204,32 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
     }
   }
 
+  /// NEW (Sep 2026 — closing the "PhonePe built but unreachable" gap
+  /// found in the food-section audit): unlike Cash on Delivery / manual
+  /// UPI above, this does NOT collect payment on this screen at all —
+  /// it just records the customer's CHOICE. phonepeCreateOrder.ts (the
+  /// Cloud Function) requires the order doc to already exist before it
+  /// will create a payment session (it does an ownership check against
+  /// a real service_requests doc), so the actual PhonePe checkout only
+  /// happens AFTER the caller (seller_detail_screen.dart) creates the
+  /// order with this paymentMethod — see that file's own comment at the
+  /// call site for the exact sequencing.
+  void _confirmPhonePe() {
+    Navigator.pop(
+      context,
+      FoodCheckoutResult(
+        address: _addressCtrl.text.trim(),
+        lat: _lat,
+        lng: _lng,
+        customerName: _nameCtrl.text.trim().isNotEmpty
+            ? _nameCtrl.text.trim()
+            : (FirebaseAuth.instance.currentUser?.displayName ?? 'Customer'),
+        customerPhone: _phoneCtrl.text.trim(),
+        paymentMethod: 'phonepe',
+      ),
+    );
+  }
+
   Future<void> _confirmUpiPaid() async {
     setState(() => _confirming = true);
     // No server-side verification path exists on the Spark plan (no
@@ -292,6 +328,18 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
         const SizedBox(height: 20),
         _sectionLabel('Choose Payment Method'),
         const SizedBox(height: 10),
+        // NEW (Sep 2026 — PhonePe gateway, previously built but never
+        // reachable from any screen): server-verified, instant — unlike
+        // the manual "Pay via UPI now" card below, which is a self-
+        // attested honesty flow kept only as a fallback if the gateway
+        // is ever unreachable. Shown first as the recommended path.
+        _paymentOptionCard(
+          icon: Icons.verified_rounded,
+          title: 'Pay via UPI (Recommended)',
+          subtitle: 'GPay / PhonePe / Paytm — instantly verified, no manual confirmation.',
+          onTap: _confirmPhonePe,
+        ),
+        const SizedBox(height: 12),
         // Cash on Delivery
         _paymentOptionCard(
           icon: Icons.payments_rounded,
@@ -300,7 +348,7 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
           onTap: _confirmCod,
         ),
         const SizedBox(height: 12),
-        // UPI now
+        // Manual UPI (fallback — kept for when the gateway is unreachable)
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(

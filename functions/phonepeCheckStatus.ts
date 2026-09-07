@@ -36,7 +36,14 @@ interface CheckStatusRequest {
   merchantTransactionId: string;
 }
 
-export const checkPhonePeOrderStatus = functions.https.onCall(
+// FIX (food-section audit, Sep 2026 — same critical gap): without
+// runWith, MERCHANT_ID/SALT_KEY read as '' and every status-check call
+// sends PhonePe a checksum computed against an empty salt, which
+// PhonePe rejects — this fallback reconciliation path would silently
+// never actually reconcile anything.
+export const checkPhonePeOrderStatus = functions
+  .runWith({ secrets: ['PHONEPE_MERCHANT_ID', 'PHONEPE_SALT_KEY', 'PHONEPE_SALT_INDEX', 'PHONEPE_ENV'] })
+  .https.onCall(
   async (data: CheckStatusRequest, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'User must be logged in');
@@ -94,25 +101,50 @@ export const checkPhonePeOrderStatus = functions.https.onCall(
       // in the gap between the read above and this write.
       if (freshData.status === 'paid' || freshData.status === 'failed') return;
 
-      transaction.update(orderRef, {
+      // Collected into one object, written via a SINGLE
+      // transaction.update(orderRef, ...) — see phonepeWebhook.ts's
+      // identical orderUpdate pattern for why two separate .update()
+      // calls against the same ref within one transaction are avoided.
+      const orderUpdate: { [key: string]: any } = {
         status: newStatus,
         gatewayTransactionId: result?.data?.transactionId || null,
         gatewayState: gatewayState || null,
         reconciledBy: 'checkPhonePeOrderStatus',
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      };
 
+      // FIX (re-audit, Sep 2026 — same bug as phonepeWebhook.ts, fixed
+      // there first — see that file's comment for the full reasoning):
+      // an unconditional transaction.update() against a cancelled
+      // (deleted) order doc throws NOT_FOUND at commit and would abort
+      // this ENTIRE transaction, including the payment_orders status
+      // write. Check existence first, and surface the failure as a
+      // persisted flag (not just a log line nothing in the app ever
+      // reads) so admin_payment_reconciliation_screen.dart can show it.
       if (newStatus === 'paid') {
         const sourceRef = db
           .collection(freshData.sourceCollection || 'service_requests')
           .doc(freshData.requestId);
-        transaction.update(sourceRef, {
-          paymentStatus: 'paid',
-          paymentMethod: 'phonepe',
-          paymentGatewayTxnId: result?.data?.transactionId || null,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+        const sourceSnap = await transaction.get(sourceRef);
+        if (sourceSnap.exists) {
+          transaction.update(sourceRef, {
+            paymentStatus: 'paid',
+            paymentMethod: 'phonepe',
+            paymentGatewayTxnId: result?.data?.transactionId || null,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        } else {
+          orderUpdate.cascadeFailed = true;
+          orderUpdate.cascadeFailedReason = 'Order doc no longer existed when payment succeeded';
+          functions.logger.error(
+            `checkPhonePeOrderStatus: payment succeeded but order ${freshData.sourceCollection || 'service_requests'}/` +
+            `${freshData.requestId} no longer exists — payment_orders still marked paid for manual reconciliation.`,
+            { merchantTransactionId },
+          );
+        }
       }
+
+      transaction.update(orderRef, orderUpdate);
     });
 
     return { status: newStatus };

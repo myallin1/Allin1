@@ -9,6 +9,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -334,6 +335,22 @@ void main() async {
           webExperimentalForceLongPolling: true,
         );
       }
+      // FIX (Sep 2026 — "Google sign-in failed: HiveError: You need to
+      // initialize Hive or provide a path to store the box"): unlike
+      // main_customer.dart/main_hero.dart/main_admin.dart, this file never
+      // called Hive.initFlutter() anywhere. SellerApp's root route goes
+      // straight to LoginScreen with no boot-phase gate in front of it, so
+      // the very first Google sign-in attempt reaches
+      // SessionService.saveSession() -> Hive.openBox() before Hive has ever
+      // been told where to store its boxes — every seller login failed on
+      // this exact error. Awaited here, before runApp(), so LoginScreen is
+      // never even painted until Hive is ready — no race to lose.
+      try {
+        await Hive.initFlutter();
+      } catch (e) {
+        debugPrint('[main_seller] Hive.initFlutter() issue (non-fatal): $e');
+      }
+
       DbUsageTracker.instance.init('seller');
 
       // NEW (Issue 2 fix — "seller app not receiving any order

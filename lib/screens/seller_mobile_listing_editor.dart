@@ -226,6 +226,13 @@ class _SellerMobileListingEditorState extends State<SellerMobileListingEditor> {
         warrantyMonths: int.tryParse(_warrantyCtrl.text.trim()) ?? 0,
         inStock: widget.existing?.inStock ?? true,
         youtubeUrl: ytRaw.isEmpty ? null : ytRaw,
+        // FIX (Sep 6 2026 audit — lost-update race on concurrent edits):
+        // carries the updatedAt this editor session ORIGINALLY loaded,
+        // so MobileListingService.updateListing can detect "someone
+        // else saved this listing since I opened it" and refuse to
+        // silently clobber their change. Left null for a brand-new
+        // listing (addListing doesn't use this field at all).
+        updatedAt: widget.existing?.updatedAt,
       );
 
       if (_isEdit) {

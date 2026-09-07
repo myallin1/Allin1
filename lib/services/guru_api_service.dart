@@ -973,8 +973,18 @@ class GuruApiService {
       'service "bike".';
 
   String _buildSystemPrompt(String? languageLabel) {
+    // FIX (Sep 6 2026 audit — "conduct guardrails silently skipped for
+    // customer persona"): `agency` is still deliberately left out here
+    // (see the comment above _serviceNamingNote — it would dump a tool
+    // catalogue that crowds out normal conversation), but `conduct`'s
+    // actual content — flag consequences before money/irreversible
+    // actions, never state a figure that didn't come from a real read —
+    // is if anything MORE relevant to a customer placing real orders
+    // than to hero/admin, and its omission here looks like an
+    // oversight rather than a decision.
     var prompt = '${AppKnowledgeBriefing.product}\n\n'
         '${AppKnowledgeBriefing.constraints}\n\n'
+        '${AppKnowledgeBriefing.conduct}\n\n'
         '$_serviceNamingNote\n\n'
         '$systemPrompt';
 

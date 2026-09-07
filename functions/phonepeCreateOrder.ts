@@ -55,7 +55,26 @@ interface CreateOrderRequest {
   collection?: string; // defaults to 'service_requests'
 }
 
-export const createPhonePeOrder = functions.https.onCall(
+// FIX (food-section audit, Sep 2026 — critical, currently-live gap):
+// this is a 1st-gen Cloud Function (`functions.https.onCall`, not the
+// v2 API). A 1st-gen function ONLY receives a Secret-Manager-stored
+// value in process.env if it explicitly declares
+// `.runWith({ secrets: [...] })` — without this, MERCHANT_ID/SALT_KEY/
+// etc. above read as '' regardless of whether the secrets were ever
+// set via `firebase functions:secrets:set`, and every PhonePe checkout
+// attempt fails with "PhonePe is not configured on the server."
+export const createPhonePeOrder = functions
+  .runWith({
+    secrets: [
+      'PHONEPE_MERCHANT_ID',
+      'PHONEPE_SALT_KEY',
+      'PHONEPE_SALT_INDEX',
+      'PHONEPE_ENV',
+      'PHONEPE_CALLBACK_URL',
+      'PHONEPE_APP_REDIRECT_URL',
+    ],
+  })
+  .https.onCall(
   async (data: CreateOrderRequest, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'User must be logged in');
@@ -83,11 +102,62 @@ export const createPhonePeOrder = functions.https.onCall(
     if (!sourceDoc.exists) {
       throw new functions.https.HttpsError('not-found', 'Order not found');
     }
-    if (sourceDoc.data()?.customerId !== uid) {
+    const sourceData = sourceDoc.data()!;
+    if (sourceData.customerId !== uid) {
       throw new functions.https.HttpsError('permission-denied', 'Not your order');
     }
 
-    const merchantTransactionId = `MTX${data.requestId}${Date.now()}`;
+    // FIX (re-audit, Sep 2026 — found while wiring this into food
+    // checkout for real money): this function trusted the CLIENT-
+    // SUPPLIED [data.amount] outright, with nothing checked against
+    // what the order itself was actually created for. Once a real
+    // screen calls this (food checkout now does), an attacker could
+    // call it directly with the true requestId but an arbitrary LOWER
+    // amount, and PhonePe would happily collect that lower sum while
+    // the order's own item list/subtotal — and the seller's/hero's
+    // payout math, which reads details.subtotal — still reflects the
+    // full price. Cross-checks against every amount field this
+    // codebase's own order docs actually use (finalAmount ->
+    // estimatedAmount -> details.subtotal/totalAmount, the same
+    // fallback chain ServiceRequestModel.displayAmount already applies
+    // client-side) — small rounding tolerance for float noise, never
+    // exact-equality on money. An order shape with NONE of those
+    // fields resolves to `null` and is let through unchanged — this
+    // function is deliberately generic over "any order doc" per its
+    // own header, so an unrecognised shape must never be silently
+    // treated as invalid.
+    const details = (sourceData.details as Record<string, unknown>) || {};
+    const expectedAmount =
+      (sourceData.finalAmount as number | undefined) ??
+      (sourceData.estimatedAmount as number | undefined) ??
+      (details.subtotal as number | undefined) ??
+      (details.totalAmount as number | undefined) ??
+      null;
+    if (expectedAmount !== null && Math.abs(expectedAmount - data.amount) > 0.5) {
+      functions.logger.error('createPhonePeOrder: amount mismatch', {
+        requestId: data.requestId,
+        expected: expectedAmount,
+        received: data.amount,
+      });
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        'Payment amount does not match the order total',
+      );
+    }
+
+    // FIX (re-audit, Sep 2026 — real bug, previously undetectable
+    // because nothing reachable ever called this function): PhonePe's
+    // Standard Checkout API caps merchantTransactionId at 35 characters,
+    // alphanumeric only. The old format — 'MTX' + a 20-char Firestore
+    // auto-id + a 13-digit Date.now() — is 36 characters, ONE over the
+    // limit, which means PhonePe would reject every single order
+    // creation call at the gateway itself. Embedding requestId in the
+    // transaction id was never actually necessary for traceability —
+    // it's already stored as its own field on this payment_orders doc
+    // a few lines below, so a much shorter, still-unique id (timestamp
+    // + a short random suffix, well under the limit) works exactly the
+    // same for lookups and cannot collide within the same millisecond.
+    const merchantTransactionId = `MTX${Date.now()}${crypto.randomBytes(4).toString('hex')}`;
 
     const payload = {
       merchantId: MERCHANT_ID,
@@ -156,6 +226,26 @@ export const createPhonePeOrder = functions.https.onCall(
       return { merchantTransactionId, redirectUrl };
     } catch (error: any) {
       functions.logger.error(`createPhonePeOrder failed for ${merchantTransactionId}:`, error);
+      // FIX (full re-audit, Sep 2026): the `!response.ok` branch above
+      // explicitly marks payment_orders 'failed' before throwing, but
+      // an error thrown BEFORE that check runs at all (e.g.
+      // response.json() itself throwing on a malformed/non-JSON
+      // response — a real possibility for a gateway error page, not
+      // just a network drop) skipped that update entirely. The
+      // customer still sees an error either way, but the doc was left
+      // stuck on 'created' forever instead of clearly 'failed' — a
+      // stale, ambiguous record for anyone reconciling payment_orders
+      // later. Best-effort and non-blocking: a failure HERE must never
+      // mask the original error being thrown below.
+      try {
+        await db.collection('payment_orders').doc(merchantTransactionId).update({
+          status: 'failed',
+          failureReason: error?.message || 'Unexpected error before gateway response',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      } catch (cleanupError) {
+        functions.logger.error(`createPhonePeOrder: failure-status cleanup also failed for ${merchantTransactionId}:`, cleanupError);
+      }
       if (error instanceof functions.https.HttpsError) throw error;
       throw new functions.https.HttpsError('internal', 'Payment gateway request failed');
     }

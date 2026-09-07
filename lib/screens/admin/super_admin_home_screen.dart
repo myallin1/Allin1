@@ -53,6 +53,7 @@ import 'commission_settings_screen.dart';
 import 'customer_usage_tracking_screen.dart';
 import 'bug_reports_screen.dart';
 import 'customer_demand_screen.dart';
+import 'admin_payment_reconciliation_screen.dart';
 import 'payments_received_screen.dart';
 import 'usage_fee_ledger_screen.dart';
 import 'erode_offers_management_screen.dart';
@@ -1302,6 +1303,24 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute<void>(builder: (_) => const PaymentsReceivedScreen()),
+                );
+              },
+            ),
+            // NEW (re-audit, Sep 2026 — closes the gap where
+            // payment_orders (PhonePe checkouts) had zero admin
+            // visibility, including cascadeFailed rows where PhonePe
+            // took a customer's money but the linked order was deleted
+            // mid-payment — see admin_payment_reconciliation_screen.dart.
+            ListTile(
+              leading: const Icon(Icons.sync_problem_rounded, color: Color(0xFF6C63FF)),
+              title: const Text('PhonePe Reconciliation', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('PhonePe checkout orders + failed cascades',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const AdminPaymentReconciliationScreen()),
                 );
               },
             ),

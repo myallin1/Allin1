@@ -403,6 +403,18 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
           ? 'மன்னிக்கணும், இப்போ கேக்கல. மறுபடி சொல்றீங்களா?'
           : "Sorry, I didn't catch that — could you say it again?";
     }
+    // FIX (Sep 6 2026 security/correctness audit — "Chitti keeps
+    // talking, and the customer can hear Chitti and the admin
+    // simultaneously, after admin takeover"): sendMessage() above is a
+    // network round trip. If the admin tapped "Take Over" while it was
+    // in flight, _handleAdminTakeover() already ran, set _ended = true,
+    // and placed a real phone call to this customer — but this
+    // coroutine had no way to know that, and would otherwise sail on to
+    // _speak(reply) and start talking over that live call. `mounted`
+    // alone doesn't catch this: it only flips after Flutter's next
+    // frame actually disposes the widget, not the instant
+    // Navigator.pop() is called.
+    if (!mounted || _disposed || _ended) return;
     _history.add({'role': 'assistant', 'content': reply});
     _fullTranscript.add('Chitti: $reply');
     if (_activeCallSessionId != null) {
@@ -440,7 +452,11 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
   }
 
   Future<void> _speak(String text) async {
-    if (!mounted || text.trim().isEmpty) return;
+    // Last line of defense (Sep 6 2026 audit) for the same admin-
+    // takeover race described at _handleFinalResult's call site above —
+    // any OTHER future caller of _speak() gets this protection too, not
+    // just that one call path.
+    if (!mounted || _disposed || _ended || text.trim().isEmpty) return;
     setState(() => _phase = _CallPhase.speaking);
     _conversation.markSpeaking(text);
     try {

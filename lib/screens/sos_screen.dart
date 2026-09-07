@@ -78,39 +78,49 @@ class _SosScreenState extends State<SosScreen> {
     setState(() => _sending = true);
 
     try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please enable GPS to send an SOS alert.'),
-            backgroundColor: _darkRed,
-          ),
-        );
-        return;
+      // FIX (Sep 6 2026 safety audit — "SOS alert silently never sent if
+      // GPS/location fails"): this used to `return` on every location
+      // failure (service disabled, permission denied, getCurrentPosition
+      // timing out) BEFORE ever writing the sos_alerts document — the
+      // exact scenario a real emergency is most likely to hit (indoors,
+      // weak fix, phone locked, no time to grant a permission dialog).
+      // The user saw a SnackBar and nobody else saw anything at all.
+      //
+      // Location acquisition must never gate whether the alert is sent.
+      // This now ALWAYS tries getCurrentPosition, falls back to
+      // getLastKnownPosition() if that fails, and — even if both fail —
+      // still writes the alert with `location: null` and
+      // `locationPending: true` so the safety grid at least knows
+      // someone hit SOS and can act on phone number / last-known
+      // address, rather than nothing reaching anyone.
+      Position? position;
+      try {
+        final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        if (serviceEnabled) {
+          var permission = await Geolocator.checkPermission();
+          if (permission == LocationPermission.denied) {
+            permission = await Geolocator.requestPermission();
+          }
+          if (permission != LocationPermission.denied &&
+              permission != LocationPermission.deniedForever) {
+            position = await Geolocator.getCurrentPosition(
+              locationSettings: const LocationSettings(
+                accuracy: LocationAccuracy.high,
+                timeLimit: Duration(seconds: 8),
+              ),
+            );
+          }
+        }
+      } catch (locationError) {
+        debugPrint('[SosScreen] getCurrentPosition failed: $locationError');
       }
-
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Location permission is required for SOS.'),
-            backgroundColor: _darkRed,
-          ),
-        );
-        return;
-      }
-
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 8),
-        ),
+      // Fallback: a stale fix is still enormously more useful to a
+      // rescuer than no fix at all, and costs nothing to attempt.
+      position ??= await Geolocator.getLastKnownPosition().catchError(
+        (Object e) {
+          debugPrint('[SosScreen] getLastKnownPosition failed: $e');
+          return null;
+        },
       );
 
       // FIX (audit: customer/hero number wiring — SOS is life-safety, so
@@ -122,27 +132,39 @@ class _SosScreenState extends State<SosScreen> {
         'userId': user.uid,
         'userName': user.displayName ?? user.email ?? 'Customer',
         'userPhone': resolvedUserPhone,
-        'location': GeoPoint(position.latitude, position.longitude),
+        'location': position == null
+            ? null
+            : GeoPoint(position.latitude, position.longitude),
+        'locationPending': position == null,
         'status': 'active',
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      // Broadcast via 300m Offline SOS Mesh (Zero network beacon)
-      unawaited(
-        OfflineSosMeshService.instance.startBroadcasting(
-          userId: user.uid,
-          latitude: position.latitude,
-          longitude: position.longitude,
-          batteryLevel: 100,
-          userName: user.displayName ?? 'Customer',
-          userPhone: resolvedUserPhone,
-        ),
-      );
+      // Broadcast via 300m Offline SOS Mesh (Zero network beacon) — only
+      // possible with an actual fix, since the mesh beacon itself
+      // carries lat/lng. The Firestore alert above is unconditional and
+      // remains the primary channel either way.
+      if (position != null) {
+        unawaited(
+          OfflineSosMeshService.instance.startBroadcasting(
+            userId: user.uid,
+            latitude: position.latitude,
+            longitude: position.longitude,
+            batteryLevel: 100,
+            userName: user.displayName ?? 'Customer',
+            userPhone: resolvedUserPhone,
+          ),
+        );
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('SOS Alert sent to nearby Heroes and NJ Tech 24/7 Safety Grid.'),
+        SnackBar(
+          content: Text(
+            position != null
+                ? 'SOS Alert sent to nearby Heroes and NJ Tech 24/7 Safety Grid.'
+                : 'SOS Alert sent — location unavailable, but your alert and phone number reached the Safety Grid.',
+          ),
           backgroundColor: _darkRed,
           behavior: SnackBarBehavior.floating,
         ),

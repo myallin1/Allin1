@@ -3,6 +3,8 @@
 // Seller details with product menu and cart integration
 // ================================================================
 
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' hide Category;
@@ -22,6 +24,7 @@ import '../widgets/cached_cloud_image.dart';
 import '../widgets/product_card.dart';
 import 'custom_hotel_view_screen.dart';
 import 'food_checkout_screen.dart';
+import 'phonepe_checkout_screen.dart';
 import 'service_request_tracking_screen.dart';
 
 /// Reusing service_requests (rather than a separate food_orders
@@ -84,6 +87,21 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
   bool _hasCustomMenu = false;
   String _customHotelName = '';
 
+  // FIX (food-section audit, Sep 2026 — real pre-existing leak): this
+  // subscription was never stored or cancelled anywhere in this file —
+  // there was no dispose() override at all. CartService's cartStream is
+  // a broadcast stream off a SINGLETON, so every visit to any seller's
+  // food page attached one more listener that lived for the rest of the
+  // app process, regardless of how many times the customer navigated
+  // away. The `if (mounted)` guard below kept it from ever crashing
+  // (setState after dispose), but every leaked closure still fired on
+  // every future cart change anywhere in the app, and the State object
+  // it closed over could never be garbage-collected. Storing it and
+  // cancelling in dispose() is the actual fix — mirrors
+  // grocery_seller_detail_screen.dart's own _cartSub pattern, built
+  // correctly the first time this session.
+  StreamSubscription<List<CartItem>>? _cartSub;
+
   @override
   void initState() {
     super.initState();
@@ -92,13 +110,19 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
   }
 
   void _setupCartListener() {
-    _cart.cartStream.listen((items) {
+    _cartSub = _cart.cartStream.listen((items) {
       if (mounted) {
         setState(() {
           _cartItemCount = items.fold(0, (sum, item) => sum + item.quantity);
         });
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _cartSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadProducts() async {
@@ -1067,6 +1091,47 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
           'paymentMethod': checkoutResult.paymentMethod,
         },
       );
+
+      // FIX (food-section audit, Sep 2026 — closes the "PhonePe built,
+      // never wired in" gap): the order above always gets created
+      // FIRST, exactly as it already did for cod/upi — this is what
+      // satisfies phonepeCreateOrder.ts's ownership check (it requires
+      // a real service_requests doc to already exist). Only NOW, with
+      // a real requestId in hand, do we open the actual PhonePe
+      // checkout. If the customer cancels or the gateway fails, the
+      // order is deliberately NOT deleted — a late-arriving webhook
+      // for a payment that actually succeeded a moment after the
+      // customer gave up on the WebView must still be able to land on
+      // this doc. The seller simply sees an order with no confirmed
+      // payment yet, same as they already would for an unfollowed-
+      // through manual UPI order.
+      if (checkoutResult.paymentMethod == 'phonepe') {
+        bool? paid;
+        try {
+          paid = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute<bool>(
+              builder: (_) => PhonePeCheckoutScreen(
+                requestId: requestId,
+                amount: cart.subtotal,
+              ),
+            ),
+          );
+        } catch (e) {
+          debugPrint('[SellerDetailScreen] PhonePe checkout error (non-fatal, order already exists): $e');
+        }
+        if (mounted && paid != true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                "Order placed, but payment wasn't confirmed. "
+                'Track it from My Orders — the hotel will follow up on payment.',
+              ),
+              backgroundColor: Color(0xFFE07A00),
+            ),
+          );
+        }
+      }
 
       cart.clear();
 

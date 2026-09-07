@@ -121,6 +121,28 @@ class ChittiLiveCallService {
 
   StreamSubscription<DatabaseEvent>? _callSub;
 
+  // FIX (Sep 6 2026 audit — "zombie call resurrects the admin lock-
+  // screen alert"): cleanupCall() removes the whole `active_calls/
+  // {callId}` node, but a still-in-flight appendTranscript() (or any
+  // other update() call queued from an earlier turn) can land AFTER
+  // that remove() completes — RTDB has no ordering guarantee between
+  // two independent async calls from the same client once both are in
+  // flight. A .update()/.child().set() on a path that no longer exists
+  // simply CREATES it fresh, with only whatever few fields that one
+  // write touched — no `status`, so ChittiLiveCallState.fromRtdbData
+  // defaults it to 'ringing', which the admin app's incoming-call
+  // watchers treat as a brand-new call and alert on.
+  //
+  // Tracking ended call ids locally (this is a singleton within one
+  // app process, and cleanupCall/appendTranscript for one call are
+  // always called from the SAME process — the customer app that owns
+  // that call) means every mutating method below can check "did I
+  // already tear this call down?" before writing, and simply skip if
+  // so, instead of resurrecting a corpse.
+  final Set<String> _endedCallIds = <String>{};
+
+  bool _isEnded(String callId) => _endedCallIds.contains(callId);
+
   /// Starts a new outgoing in-app call from Customer to Admin
   Future<String> startOutgoingCall({
     required String callerId,
@@ -199,9 +221,20 @@ class ChittiLiveCallService {
 
   /// Appends a dialogue turn to the live transcript stream
   Future<void> appendTranscript(String callId, String speakerAndText) async {
+    if (_isEnded(callId)) return;
     try {
       final callRef = _calls.child(callId);
       await callRef.child('liveTranscript').push().set(speakerAndText);
+      // FIX (Sep 6 2026 re-re-audit): the entry check above only closes
+      // the race where cleanupCall() already ran BEFORE this method
+      // started. It does nothing for cleanupCall() landing DURING the
+      // gap between these two awaits — the push().set() above can
+      // itself resurrect the node (writing to a nested RTDB path
+      // recreates any missing ancestor), and this second write would
+      // then still go through even though the call was torn down a
+      // moment ago. Re-checking right before this write closes that
+      // narrower window too.
+      if (_isEnded(callId)) return;
       await callRef.update({
         'lastSpokenText': speakerAndText,
         'updatedAt': ServerValue.timestamp,
@@ -221,6 +254,7 @@ class ChittiLiveCallService {
   /// transcript/intents to log). Deleting here would remove the node
   /// before whichever side still needs to read it has had the chance.
   Future<void> endCall(String callId) async {
+    _endedCallIds.add(callId);
     try {
       await _calls.child(callId).update({
         'status': 'ended',
@@ -244,11 +278,38 @@ class ChittiLiveCallService {
   /// answerCallChitti(), which is an ADMIN action with an adminId —
   /// this one has no admin behind it at all.
   Future<void> markChittiAutoAnswered(String callId) async {
+    if (_isEnded(callId)) return;
+    // FIX (Sep 6 2026 audit — "out-of-order network delivery can revert
+    // an admin takeover"): this used to be a bare `.update()`, fired
+    // unawaited right after startOutgoingCall() returns. RTDB does not
+    // order writes from two different client connections by wall-clock
+    // time, only by arrival at the server — so on a slow customer
+    // connection, this write can arrive AFTER an admin's
+    // takeOverCall()/answerCallHuman() write and silently stomp
+    // `status`/`handlingMode` back to Chitti, even though a human is
+    // already on the line. A `runTransaction` makes this compare-and-
+    // swap: it only ever applies when the node is still exactly what
+    // this call expects to be overwriting (freshly created, nobody has
+    // acted on it yet) — any state written by an admin action in the
+    // meantime is left alone.
     try {
-      await _calls.child(callId).update({
-        'status': 'chitti_handling',
-        'handlingMode': 'chitti',
-        'answeredAt': ServerValue.timestamp,
+      await _calls.child(callId).runTransaction((Object? current) {
+        final data = current is Map ? Map<Object?, Object?>.from(current) : null;
+        final status = data?['status'] as String?;
+        // Only advance from the pre-answer state this call expects.
+        // 'ringing' (brand new) or already 'chitti_handling' (e.g. a
+        // retry of this exact call) are both fine to (re)stamp; anything
+        // else means an admin action already moved the call on, and
+        // this write must not touch it.
+        if (status != null && status != 'ringing' && status != 'chitti_handling') {
+          return Transaction.success(current);
+        }
+        return Transaction.success({
+          ...?data,
+          'status': 'chitti_handling',
+          'handlingMode': 'chitti',
+          'answeredAt': ServerValue.timestamp,
+        });
       });
     } catch (e) {
       debugPrint('[ChittiLiveCall] Error marking Chitti auto-answered: $e');
@@ -260,6 +321,7 @@ class ChittiLiveCallService {
   /// completed — this is the actual RTDB storage reclaim; endCall()
   /// above only ever writes a status, it never removes anything.
   Future<void> cleanupCall(String callId) async {
+    _endedCallIds.add(callId);
     try {
       await _calls.child(callId).remove();
       if (_currentCallId == callId) {

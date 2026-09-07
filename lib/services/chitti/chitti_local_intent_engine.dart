@@ -512,6 +512,21 @@ class ChittiLocalIntentEngine {
         'unresolved bugs', 'crash reports', 'bug irukka', 'பக் ரிப்போர்ட்',
       ],
     ),
+    // NEW (Sep 6 2026 — check_pr_status): only the common, no-argument
+    // phrasing ("check the latest PR") resolves locally, matching this
+    // tool's own optional prNumber — a specific "check PR #42" is rare
+    // enough, and the number-extraction from speech unreliable enough,
+    // that it is left to fall through to the model rather than risk a
+    // misheard digit silently checking the wrong PR.
+    _IntentRule(
+      action: 'check_pr_status',
+      variants: {'admin'},
+      phrases: [
+        'pr status', 'pr verify', 'check pr', 'pull request status',
+        'pr ready ah', 'merge aachaa', 'pr eppadi irukku',
+        'claude code work mudinjacha', 'develop pannathu ready ah',
+      ],
+    ),
     _IntentRule(
       action: 'admin_open_enquiries',
       variants: {'admin', 'seller'},

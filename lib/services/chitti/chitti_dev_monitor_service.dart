@@ -78,6 +78,50 @@ class DevTaskIssue {
   final DateTime? updatedAt;
 }
 
+/// One pull request against this repo — the "did Claude Code actually
+/// finish, and is it safe to merge" answer to a dev task issue.
+///
+/// NEW (Sep 6 2026 — Nizam: "chitti PR verify pandrathum app kulla
+/// pannalam"). fetch() above deliberately filters PRs OUT of its
+/// issues list (GitHub's issues endpoint returns them mixed in,
+/// tagged with a `pull_request` key) because that list is for dev
+/// TASKS; this is the PR itself, fetched separately via the richer
+/// `/pulls` endpoint, which is what actually carries draft/merged/
+/// mergeable state — the issues endpoint doesn't.
+@immutable
+class DevPullRequest {
+  const DevPullRequest({
+    required this.number,
+    required this.title,
+    required this.state,
+    required this.isDraft,
+    required this.merged,
+    required this.mergeableState,
+    required this.url,
+    required this.updatedAt,
+  });
+
+  final int number;
+  final String title;
+
+  /// open | closed (GitHub calls a merged PR "closed" too — see [merged]
+  /// for the actual distinction that matters to "is it done").
+  final String state;
+  final bool isDraft;
+  final bool merged;
+
+  /// GitHub's own classification: 'clean' (mergeable), 'dirty'
+  /// (conflicts), 'blocked' (failing required checks/reviews),
+  /// 'unstable' (non-required checks failing), 'unknown' (still
+  /// computing — ask again shortly). Null if GitHub hasn't computed it
+  /// yet for this response.
+  final String? mergeableState;
+  final String url;
+  final DateTime? updatedAt;
+
+  bool get isOpen => state == 'open';
+}
+
 /// One installable APK sitting on the rolling admin-test release.
 ///
 /// NEW (Sep 4 2026 — Nizam: "suppose lastversion problem iruntha admin
@@ -325,6 +369,105 @@ class ChittiDevMonitorService {
         latestRelease: null,
         error: 'Could not reach GitHub: $e',
       );
+    }
+  }
+
+  /// Fetches recent pull requests — the "verify" half of "create the
+  /// task and verify the PR", both from inside the app. A single
+  /// [prNumber] fetches exactly that PR (used when Chitti's caller
+  /// already knows which one); omitting it lists the most recent
+  /// [limit] PRs, newest first, open or closed.
+  ///
+  /// Same never-throw, explain-why contract as fetch() above — this
+  /// feeds a voice/chat answer, and "could not reach GitHub: <reason>"
+  /// spoken aloud is far more useful than a silent empty list.
+  static Future<({List<DevPullRequest> pullRequests, String? error})>
+      fetchPullRequests({int? prNumber, int limit = 5}) async {
+    final token = await ChittiDevTaskService.readToken();
+    if (token == null || token.trim().isEmpty) {
+      return (
+        pullRequests: <DevPullRequest>[],
+        error: 'No GitHub token saved yet — add it in Admin AI '
+            'Configuration (Developer Automation) first.',
+      );
+    }
+
+    final repo = await ChittiDevTaskService.readRepo();
+    if (repo.owner.trim().isEmpty || repo.name.trim().isEmpty) {
+      return (
+        pullRequests: <DevPullRequest>[],
+        error: 'GitHub owner/repo not set — add them in Admin AI Configuration.',
+      );
+    }
+
+    final headers = {
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    };
+    final base = '$_apiBase/repos/${repo.owner}/${repo.name}';
+
+    DevPullRequest parsePr(Map<String, dynamic> m) => DevPullRequest(
+          number: (m['number'] as num?)?.toInt() ?? 0,
+          title: (m['title'] as String?) ?? '(untitled)',
+          state: (m['state'] as String?) ?? 'open',
+          isDraft: m['draft'] == true,
+          merged: m['merged'] == true ||
+              ((m['merged_at'] as String?)?.isNotEmpty ?? false),
+          mergeableState: m['mergeable_state'] as String?,
+          url: (m['html_url'] as String?) ?? '',
+          updatedAt: DateTime.tryParse((m['updated_at'] as String?) ?? ''),
+        );
+
+    try {
+      if (prNumber != null) {
+        final res = await http.get(Uri.parse('$base/pulls/$prNumber'), headers: headers);
+        if (res.statusCode == 404) {
+          return (
+            pullRequests: <DevPullRequest>[],
+            error: 'No pull request #$prNumber found on ${repo.owner}/${repo.name}.',
+          );
+        }
+        if (res.statusCode == 401 || res.statusCode == 403) {
+          return (
+            pullRequests: <DevPullRequest>[],
+            error: 'GitHub rejected the token (${res.statusCode}).',
+          );
+        }
+        if (res.statusCode != 200) {
+          return (
+            pullRequests: <DevPullRequest>[],
+            error: 'GitHub returned ${res.statusCode} for PR #$prNumber.',
+          );
+        }
+        return (
+          pullRequests: [parsePr(jsonDecode(res.body) as Map<String, dynamic>)],
+          error: null,
+        );
+      }
+
+      final res = await http.get(
+        Uri.parse('$base/pulls?state=all&sort=updated&direction=desc&per_page=$limit'),
+        headers: headers,
+      );
+      if (res.statusCode == 401 || res.statusCode == 403) {
+        return (
+          pullRequests: <DevPullRequest>[],
+          error: 'GitHub rejected the token (${res.statusCode}).',
+        );
+      }
+      if (res.statusCode != 200) {
+        return (
+          pullRequests: <DevPullRequest>[],
+          error: 'GitHub returned ${res.statusCode} listing pull requests.',
+        );
+      }
+      final list = (jsonDecode(res.body) as List<dynamic>)
+          .map((e) => parsePr(e as Map<String, dynamic>))
+          .toList();
+      return (pullRequests: list, error: null);
+    } catch (e) {
+      return (pullRequests: <DevPullRequest>[], error: 'Could not reach GitHub: $e');
     }
   }
 }

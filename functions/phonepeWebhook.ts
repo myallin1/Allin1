@@ -39,7 +39,15 @@ interface PhonePeCallbackBody {
   data: PhonePeCallbackData;
 }
 
-export const phonepeWebhook = functions.https.onRequest(async (req, res) => {
+// FIX (food-section audit, Sep 2026 — same critical gap as
+// phonepeCreateOrder.ts): without `.runWith({ secrets: [...] })`,
+// SALT_KEY reads as '' regardless of Secret Manager, so the checksum
+// verification below can never match a real PhonePe-computed
+// signature — every genuine payment callback gets rejected as
+// "Invalid signature," silently stranding the order as unpaid forever.
+export const phonepeWebhook = functions
+  .runWith({ secrets: ['PHONEPE_SALT_KEY', 'PHONEPE_SALT_INDEX'] })
+  .https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).json({ success: false, message: 'Method not allowed' });
     return;
@@ -126,28 +134,80 @@ export const phonepeWebhook = functions.https.onRequest(async (req, res) => {
 
       const newStatus = isSuccess ? 'paid' : 'failed';
 
-      transaction.update(orderRef, {
+      // Collected into one object and written via a SINGLE
+      // transaction.update(orderRef, ...) call below (see the
+      // cascadeFailed branch further down) — deliberately avoiding two
+      // separate .update() calls against the same DocumentReference
+      // within one transaction. The Admin SDK's actual behavior for
+      // that isn't clearly documented either way, so rather than rely
+      // on unverified behavior, every field this function might write
+      // to orderRef is merged into one map and applied once.
+      const orderUpdate: { [key: string]: any } = {
         status: newStatus,
         gatewayTransactionId: transactionId || null,
         gatewayState: state || null,
         rawCallback: payload,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      };
 
       // Cascade to the actual order/booking doc this payment was for.
       // Admin SDK write — bypasses Firestore rules by design, since
       // this is the one path allowed to set a GATEWAY-verified paid
       // status, distinct from the existing hero-marks-paid cash/UPI-QR
       // flow that service_requests' own security rules already govern.
+      //
+      // FIX (re-audit, Sep 2026 — real, previously-undetectable bug
+      // now that this path is reachable from real food checkouts): this
+      // used to call transaction.update(sourceRef, ...) UNCONDITIONALLY.
+      // This app deletes a cancelled order's doc entirely rather than
+      // soft-deleting it (see ServiceRequestService.cancelServiceRequest)
+      // — a real, available action while a payment can genuinely be in
+      // flight. Firestore's transaction.update() throws NOT_FOUND at
+      // COMMIT time against a missing doc, which aborts the WHOLE
+      // transaction — including the payment_orders status write just
+      // above. Net effect before this fix: a customer whose order got
+      // cancelled mid-payment would have PhonePe genuinely take their
+      // money, then this webhook would fail every single retry forever,
+      // leaving payment_orders stuck on 'created' with no record
+      // anywhere that the payment actually succeeded. Checking
+      // existence first means the payment_orders record — which is
+      // what actually matters for reconciling real money — always
+      // correctly reflects the true outcome, regardless of what
+      // happened to the order doc in the meantime.
       if (newStatus === 'paid') {
         const sourceRef = db.collection(order.sourceCollection || 'service_requests').doc(order.requestId);
-        transaction.update(sourceRef, {
-          paymentStatus: 'paid',
-          paymentMethod: 'phonepe',
-          paymentGatewayTxnId: transactionId || null,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+        const sourceSnap = await transaction.get(sourceRef);
+        if (sourceSnap.exists) {
+          transaction.update(sourceRef, {
+            paymentStatus: 'paid',
+            paymentMethod: 'phonepe',
+            paymentGatewayTxnId: transactionId || null,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        } else {
+          // FIX (re-audit, Sep 2026 — the "manual reconciliation" this
+          // comment promised didn't actually exist anywhere: nothing in
+          // the app ever reads payment_orders, so a log line only an
+          // engineer manually tailing Cloud Functions logs would ever
+          // see wasn't a real safety net. Folded into orderUpdate (see
+          // above) rather than a second transaction.update(orderRef,
+          // ...) call, so this doc is only ever written once per
+          // invocation — this flag is what lets
+          // admin_payment_reconciliation_screen.dart surface it without
+          // having to re-check every single 'paid' row's linked order
+          // for existence.
+          orderUpdate.cascadeFailed = true;
+          orderUpdate.cascadeFailedReason = 'Order doc no longer existed when payment succeeded';
+          logger.error(
+            `phonepeWebhook: payment succeeded but order ${order.sourceCollection || 'service_requests'}/` +
+            `${order.requestId} no longer exists (likely cancelled mid-payment) — payment_orders is still ` +
+            'marked paid for manual reconciliation, but nothing was cascaded.',
+            { merchantTransactionId },
+          );
+        }
       }
+
+      transaction.update(orderRef, orderUpdate);
 
       return { alreadyProcessed: false, status: newStatus };
     });

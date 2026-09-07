@@ -41,6 +41,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/app_knowledge_briefing.dart';
 import 'chitti/chitti_local_answer_service.dart';
 import 'chitti/chitti_model_provider.dart';
 import 'guru_api_service.dart';
@@ -56,7 +57,19 @@ class GuruAdminApiService {
   //      cross-verifies, produces a report.
   //   3. Strict Approval Gate — no write/approve action executes without
   //      the CTO's explicit Yes/No in the Quick Task Chatbox.
-  static const String systemPrompt =
+  // FIX (Sep 6 2026 audit — "detailed admin briefing was dead code"):
+  // AppKnowledgeBriefing.build(detailed: true) exists specifically for
+  // this persona ("the ADMIN assistant, which is expected to answer
+  // structural questions") but was never actually called from
+  // anywhere — this file had its own hardcoded systemPrompt with no
+  // connection to it. Prepending it here is the fix: the admin
+  // co-pilot now gets the real, current collection/RTDB/route/service/
+  // screen inventory ahead of its own role description, instead of
+  // that inventory only existing in a comment's promise.
+  static String get systemPrompt =>
+      '${AppKnowledgeBriefing.build(detailed: true)}\n\n$_baseSystemPrompt';
+
+  static const String _baseSystemPrompt =
       'You are the Allin1 Admin AI Co-Pilot, an autonomous support agent '
       'for the CTO of Allin1 (Erode, Tamil Nadu super-app, run by NJ '
       'Tech). You assist with three responsibilities:\n'

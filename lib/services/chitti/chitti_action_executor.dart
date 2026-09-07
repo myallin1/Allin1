@@ -62,6 +62,7 @@ import 'chitti_role_lookup_service.dart';
 import 'chitti_section_registry.dart';
 import 'chitti_tool_registry.dart';
 import 'chitti_accessibility_bridge.dart';
+import 'chitti_dev_monitor_service.dart';
 import 'chitti_dev_task_service.dart';
 import 'chitti_screen_loop.dart';
 import 'chitti_summarizer.dart';
@@ -422,6 +423,8 @@ class ChittiActionExecutor {
           return await _summarizeLastCall(isTamil: languageCode == 'ta');
         case 'create_dev_task':
           return await _createDevTask(args);
+        case 'check_pr_status':
+          return await _checkPrStatus(args, isTamil: languageCode == 'ta');
         case 'control_screen':
           return await _controlScreen(args, isTamil: languageCode == 'ta');
         case 'screen_step_approved':
@@ -1619,6 +1622,63 @@ class ChittiActionExecutor {
     return ChittiActionResult(
       success: false,
       text: 'Could not create the GitHub task: ${result.error}',
+    );
+  }
+
+  /// The "verify" half of create_dev_task — reads live PR state via
+  /// ChittiDevMonitorService.fetchPullRequests() rather than the admin
+  /// having to open the Dev Monitor screen to see the same thing.
+  static Future<ChittiActionResult> _checkPrStatus(
+    Map<String, dynamic> args, {
+    bool isTamil = true,
+  }) async {
+    final prNumber = (args['prNumber'] as num?)?.toInt();
+    final result = await ChittiDevMonitorService.fetchPullRequests(prNumber: prNumber);
+
+    if (result.error != null) {
+      return ChittiActionResult(success: false, text: result.error!);
+    }
+    if (result.pullRequests.isEmpty) {
+      return ChittiActionResult(
+        text: isTamil
+            ? 'இப்போதைக்கு எந்த pull request உம் இல்லை.'
+            : 'There are no pull requests to report right now.',
+      );
+    }
+
+    final pr = result.pullRequests.first;
+    final String statusLine;
+    if (pr.merged) {
+      statusLine = isTamil
+          ? 'மெர்ஜ் ஆகிடுச்சு — லைவ்ல இருக்கும்.'
+          : 'Merged — this change is live.';
+    } else if (!pr.isOpen) {
+      statusLine = isTamil ? 'மூடப்பட்டுச்சு (மெர்ஜ் ஆகல).' : 'Closed without merging.';
+    } else if (pr.isDraft) {
+      statusLine = isTamil ? 'இன்னும் ட்ராஃப்ட் — ரெடி ஆகல.' : 'Still a draft — not ready yet.';
+    } else {
+      statusLine = switch (pr.mergeableState) {
+        'clean' => isTamil
+            ? 'ரெடி — மெர்ஜ் பண்ணலாம்.'
+            : 'Ready to merge, no conflicts.',
+        'dirty' => isTamil
+            ? 'கான்ஃப்ளிக்ட் இருக்கு, சரி பண்ணனும்.'
+            : 'Has merge conflicts that need resolving.',
+        'blocked' => isTamil
+            ? 'சில செக்குகள் அல்லது ரிவியூ இன்னும் பாஸ் ஆகல.'
+            : 'Blocked — required checks or reviews have not passed yet.',
+        'unstable' => isTamil
+            ? 'மெர்ஜ் பண்ணலாம், ஆனா சில செக்குகள் ஃபெயில் ஆகிருச்சு.'
+            : 'Mergeable, but some non-required checks are failing.',
+        _ => isTamil
+            ? 'GitHub இன்னும் செக் பண்ணிட்டு இருக்கு, கொஞ்சம் நேரம் கழிச்சு கேளுங்க.'
+            : 'GitHub is still computing this — ask again shortly.',
+      };
+    }
+
+    return ChittiActionResult(
+      text: 'PR #${pr.number} "${pr.title}" — $statusLine\n${pr.url}',
+      suggestions: const <String>["Today's activity", 'Create a new task'],
     );
   }
 

@@ -1955,7 +1955,23 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
   }
 
   // ── Booking ───────────────────────────────────────────────────
+  // FIX (Sep 6 2026 audit — "no re-entrancy guard on Book button, real
+  // double-booking path"): _isSearching only becomes true deep inside
+  // _createRide, AFTER the vehicle-selection sheet (and, for parcels,
+  // the recipient-details sheet) have already been shown and confirmed.
+  // Nothing blocked a second _triggerBooking() call in that entire
+  // window — a fast double-tap before the first sheet frame renders, or
+  // an impatient tap on a laggy device, could open the sheet twice (or
+  // race two independent _confirmBookingWithOptionalParcelDetails calls),
+  // each eventually writing its own rides/{id} doc: a genuine double
+  // booking with two live fare estimates. This flag closes that entire
+  // window, from the very first tap through to the booking flow fully
+  // settling (confirmed & created, or backed out of every sheet) —
+  // whichever happens.
+  bool _bookingFlowActive = false;
+
   void _triggerBooking() {
+    if (_bookingFlowActive) return;
     final dist = _distance;
     if (dist <= 0) {
       _showError(
@@ -1963,6 +1979,8 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       );
       return;
     }
+    _bookingFlowActive = true;
+    var confirmed = false;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1972,11 +1990,21 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         fares: _fares,
         initialVehicleType: _selectedVehicleTypeKey,
         onConfirm: (vehicleType, fare) {
+          if (confirmed) return; // guards a double-tap on Confirm itself
+          confirmed = true;
           Navigator.of(ctx).pop();
-          unawaited(_confirmBookingWithOptionalParcelDetails(vehicleType, fare, dist));
+          unawaited(
+            _confirmBookingWithOptionalParcelDetails(vehicleType, fare, dist)
+                .whenComplete(() => _bookingFlowActive = false),
+          );
         },
       ),
-    );
+    ).then((_) {
+      // Sheet closed without ever confirming (backed out / tapped
+      // outside) — the .whenComplete() above never runs in that case,
+      // so this is the only place left to release the flag.
+      if (!confirmed) _bookingFlowActive = false;
+    });
   }
 
   /// Parcel bookings additionally collect who's receiving the parcel
@@ -2158,6 +2186,24 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
 
        // ── Background Write: Start Firebase task without awaiting blocking ──
       debugPrint('🔥 [RIDE CREATION] About to create Firestore document...');
+      // FIX (Sep 6 2026 audit — "stuck on Finding a Hero forever" if
+      // this background write fails): the write below is deliberately
+      // not awaited so the customer sees RideSearchScreen instantly
+      // (the "Optimistic UI" this section is named for) — that part is
+      // intentional and unchanged. What was missing is what happens if
+      // the write then genuinely fails: previously this only showed
+      // showServerBusyDialog OVER a RideSearchScreen that is watching a
+      // rides/{id} document that was never actually created — a hero
+      // could never appear to accept it, RideSearchScreen's own
+      // _finalizeRideToFirestore would throw on `.update()` against a
+      // nonexistent doc the moment one somehow tried anyway, and the
+      // customer would just sit on "Finding a Hero" with no way out
+      // except manually backing out. This flag lets the failure handler
+      // pop RideSearchScreen back to this booking screen — the same
+      // screen the busy dialog appears on — so the error message and
+      // the screen the customer is looking at actually agree with each
+      // other.
+      var navigatedToRideSearch = false;
        rideRef.set({
          'rideId': rideRef.id,
          'userId': user.uid,
@@ -2238,6 +2284,9 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
        }).catchError((e) {
          debugPrint('[BikeBookingScreen] Background ride creation failed: $e');
          if (mounted) {
+           if (navigatedToRideSearch && Navigator.of(context).canPop()) {
+             Navigator.of(context).pop();
+           }
            showServerBusyDialog(context);
          }
        });
@@ -2245,6 +2294,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       if (!mounted) return;
 
       // ── Instant Navigation: User sees the search screen immediately ──
+      navigatedToRideSearch = true;
       unawaited(Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => RideSearchScreen(

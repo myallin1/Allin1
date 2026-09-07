@@ -32,7 +32,20 @@ interface AffiliatePostback {
 /**
  * WEBHOOK ENDPOINT
  */
-export const affiliatePostbackWebhook = functions.https.onRequest(
+// FIX (adjacent finding from the food-section audit — same structural
+// gap as the PhonePe functions): a 1st-gen function only receives a
+// Secret-Manager value in process.env if it declares
+// `.runWith({ secrets: [...] })`. Without this, and with
+// AFFILIATE_HMAC_SECRET never having been set at all, this webhook has
+// been running on the hardcoded fallback 'dev-secret-key' — anyone who
+// knows or guesses that literal string can forge an affiliate postback
+// and credit themselves real NJ Coins (see the payout math below).
+// This fixes the CODE gap; a real random secret still needs to be set
+// via `firebase functions:secrets:set AFFILIATE_HMAC_SECRET` (e.g.
+// `openssl rand -hex 32`) before the fallback stops being reachable.
+export const affiliatePostbackWebhook = functions
+  .runWith({ secrets: ['AFFILIATE_HMAC_SECRET'] })
+  .https.onRequest(
   async (req: functions.https.Request, res: functions.Response) => {
     // 1. Only accept POST
     if (req.method !== 'POST') {

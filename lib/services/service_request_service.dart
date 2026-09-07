@@ -442,6 +442,72 @@ class ServiceRequestService {
     }
   }
 
+  /// Re-runs the REAL per-hero broadcast for an existing request — the
+  /// hero-side "stranded order" safety net's actual dispatch step.
+  ///
+  /// FIX (Sep 6 2026 — hero app end-to-end audit): CRITICAL bug found
+  /// tracing chitti_order_escalation_service.dart end to end. That
+  /// service's `_makeClaimable()` only ever wrote a status flip to
+  /// `active_service_requests/{requestId}` — it never wrote a single
+  /// `hero_service_pings/{heroId}/{requestId}` node for any hero. Every
+  /// hero client (this file's own acceptServiceRequest() family,
+  /// hero_home_screen.dart's ping listener) discovers NEW work purely
+  /// from that per-hero path; nothing listens on `active_service_requests`
+  /// for first-contact discovery. Net effect: tapping "Release" on the
+  /// StrandedOrdersBanner told the hero "Sent to all heroes. Accept it
+  /// from your ride alerts." and then genuinely notified nobody — the
+  /// order sat in Firestore status 'pending' with no live ping to a
+  /// single hero, silently undoing the entire safety net Nizam asked
+  /// for ("customer ku message anupuravaraikkum" — guarantee dispatch
+  /// even when no admin is watching).
+  ///
+  /// This method is the fix: it re-derives every parameter
+  /// `_broadcastToEligibleHeroes()` needs — including `requiredSkill`
+  /// and `customerLat`/`customerLng` for a skill trade — so an escalated
+  /// skill job re-broadcasts to the matching trade within radius, not
+  /// to every hero city-wide.
+  Future<void> rebroadcastForEscalation(String requestId) async {
+    final doc = await FirebaseFirestore.instance
+        .collection('service_requests')
+        .doc(requestId)
+        .trackedGet();
+    final data = doc.data();
+    if (data == null) return;
+
+    final requestType = (data['requestType'] as String?) ?? '';
+    final details = data['details'] is Map
+        ? Map<String, dynamic>.from(data['details'] as Map)
+        : <String, dynamic>{};
+    final requiredSkill = requestType == 'electronics_service'
+        ? (details[kSkillRequestCategoryKey] as String?)
+        : null;
+    final customerLat = (details['locationLat'] as num?)?.toDouble();
+    final customerLng = (details['locationLng'] as num?)?.toDouble();
+    final requestCity = (data['city'] as String?) ?? kDefaultCity;
+    final pingExpiresAt = DateTime.now().toUtc().millisecondsSinceEpoch +
+        kServiceRequestPingExpirySeconds * 1000;
+
+    await rtdb.FirebaseDatabase.instance
+        .ref('active_service_requests/$requestId')
+        .update({
+      'status': 'pinging',
+      'pingExpiresAt': pingExpiresAt,
+    });
+
+    await _broadcastToEligibleHeroes(
+      requestId: requestId,
+      requestType: requestType,
+      customerName: (data['customerName'] as String?) ?? 'Customer',
+      customerPhone: (data['customerPhone'] as String?) ?? '',
+      details: details,
+      pingExpiresAt: pingExpiresAt,
+      requestCity: requestCity,
+      requiredSkill: requiredSkill,
+      customerLat: customerLat,
+      customerLng: customerLng,
+    );
+  }
+
   /// Fires the held-back hero broadcast for a deferred order — the
   /// seller's "Book Delivery Partner" button.
   ///
@@ -694,17 +760,40 @@ class ServiceRequestService {
       return false;
     }
 
-    await FirebaseFirestore.instance
-        .collection('service_requests')
-        .doc(requestId)
-        .update({
-      'status': 'hero_assigned',
-      'assignedHeroId': heroId,
-      'assignedHeroName': heroName,
-      'assignedHeroPhone': heroPhone,
-      'assignmentMethod': 'broadcast',
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    // FIX (Sep 6 2026 — hero app end-to-end audit): this .update() had
+    // no existence guard, which was safe back when only isAdminAny()
+    // could delete a service_requests doc. Now that the same audit's
+    // customer-delete rules fix lets the request's OWN CUSTOMER cancel
+    // (hard .delete()) while status is still 'pending'/'admin_review'/
+    // 'hero_assigned', a customer cancelling in the narrow window
+    // between this hero's RTDB accept-transaction committing and this
+    // Firestore write would make .update() throw NOT_FOUND — an
+    // unhandled exception surfacing as a raw error in the hero's accept
+    // flow for what is actually a normal, legitimate "customer cancelled
+    // first" outcome. Same graceful handling as losing the accept race
+    // above: clean up this hero's own ping and report a plain false
+    // rather than letting the exception propagate.
+    try {
+      await FirebaseFirestore.instance
+          .collection('service_requests')
+          .doc(requestId)
+          .update({
+        'status': 'hero_assigned',
+        'assignedHeroId': heroId,
+        'assignedHeroName': heroName,
+        'assignedHeroPhone': heroPhone,
+        'assignmentMethod': 'broadcast',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (e) {
+      if (e.code == 'not-found') {
+        await rtdb.FirebaseDatabase.instance
+            .ref('hero_service_pings/$heroId/$requestId')
+            .remove();
+        return false;
+      }
+      rethrow;
+    }
 
     // Start the BILLABLE clock here — the moment this hero actually won
     // the job. Everything before this (being online, receiving pings,

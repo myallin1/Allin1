@@ -145,6 +145,17 @@ class ServiceRequestModel {
   final String? paymentStatus;
   final bool? estimateApprovedByCustomer;
 
+  // FIX (Sep 6 2026 — hero app end-to-end audit): written by
+  // RatingFeedbackSheet directly onto service_requests/{docId} (see
+  // rating_feedback_sheet.dart). Needed here so a tracking screen can
+  // tell "already rated" from "not rated yet" without a second,
+  // untyped doc read — the same gap that let ServiceRequestTrackingScreen
+  // skip the rating prompt entirely for every skill trade (electrician,
+  // plumber, ..., acting_driver) and every custom/grocery/food order
+  // that routes through it, while hero_booking_tracking_screen.dart
+  // (which reads the raw doc snapshot directly) had it all along.
+  final num? customerRating;
+
   /// Seller's own kitchen stage for shop-menu food orders — 'new',
   /// 'accepted', 'preparing', 'ready', 'delivery_requested'.
   /// (Aug 17 2026 seller audit.)
@@ -195,6 +206,7 @@ class ServiceRequestModel {
     this.finalAmountRoot,
     this.paymentStatus,
     this.estimateApprovedByCustomer,
+    this.customerRating,
     this.sellerStage,
     this.sellerStageAt,
     this.createdAt,
@@ -282,6 +294,7 @@ class ServiceRequestModel {
       finalAmountRoot: map['finalAmount'] as num?,
       paymentStatus: map['paymentStatus'] as String?,
       estimateApprovedByCustomer: map['estimateApprovedByCustomer'] as bool?,
+      customerRating: map['customerRating'] as num?,
       sellerStage: map['sellerStage'] as String?,
       sellerStageAt: parseFlexibleTimestamp(map['sellerStageAt']),
       createdAt: parseFlexibleTimestamp(map['createdAt']),
@@ -362,6 +375,7 @@ class ServiceRequestModel {
       finalAmountRoot: finalAmountRoot,
       paymentStatus: paymentStatus,
       estimateApprovedByCustomer: estimateApprovedByCustomer,
+      customerRating: customerRating,
       sellerStage: sellerStage,
       sellerStageAt: sellerStageAt,
       createdAt: createdAt,

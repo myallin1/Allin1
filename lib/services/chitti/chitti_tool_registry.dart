@@ -970,6 +970,41 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
       'required': ['title', 'description'],
     },
   ),
+
+  // NEW (Sep 6 2026 — Nizam: "pr verify pandrathum app kullaye
+  // pannalam"). The read-only counterpart to create_dev_task: that
+  // tool opens the GitHub issue and tells the admin "I'll let you know
+  // once a PR is ready" — this is how Chitti actually answers when
+  // asked, instead of that promise depending on the admin remembering
+  // to open the Dev Monitor screen themselves. No confirmation needed;
+  // it never writes anything.
+  ChittiTool(
+    name: 'check_pr_status',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        'Check the status of a pull request Claude Code opened (or any '
+        'recent PR) on this GitHub repo — open/merged, draft, mergeable '
+        'state. Read-only. If no PR number is given, reports the most '
+        'recently updated one.',
+    keywords: [
+      'pr status', 'pr verify', 'check pr', 'pull request', 'pr ready ah',
+      'merge aachaa', 'pr eppadi irukku', 'claude code work mudinjacha',
+      'develop pannathu ready ah', 'code ready ah',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'prNumber': <String, dynamic>{
+          'type': 'integer',
+          'description':
+              'Specific PR number to check. Omit to get the most '
+              'recently updated pull request instead.',
+        },
+      },
+      'required': <String>[],
+    },
+  ),
   ChittiTool(
     name: 'google_search',
     domain: ChittiDomain.support,
