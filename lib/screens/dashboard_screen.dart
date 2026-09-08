@@ -450,66 +450,26 @@ class _DashboardScreenState extends State<DashboardScreen>
     // — but only AFTER the first-open coach mark tour (if any) has been
     // shown/dismissed, so the two overlays never fight for the screen.
     // Runs after first frame so a bottom sheet/overlay can be shown safely.
+    // NEW (Nizam: "customer app open agumbothu customer ku theme select
+    // pandra option kuduthuruppom, athulaye intha 3 type icon selection
+    // kum app open agurappa set pannikura optionum serthu vacharlam") —
+    // a one-time "Personalize your Allin1" sheet (color Theme + Icon
+    // Theme together) shown the FIRST time the dashboard appears. Runs
+    // BEFORE the coach-mark tour / scratch card, using the exact same
+    // "never stack two overlays" sequencing those already use — see
+    // _runOnboardingOverlaySequence(). Deliberately NOT a boot-time
+    // route: main_customer.dart's boot gate has an explicit "Do NOT
+    // re-add a login gate here" / "exactly ONE transition on boot"
+    // mandate, so this shows as an overlay AFTER DashboardScreen has
+    // already mounted, same mechanism as the scratch card modal below.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      final seenTour = await CoachMarkPrefs.hasSeenTour(_dashboardTourId);
-      if (!seenTour) {
+      if (!await _hasSeenPersonalizeModalEver()) {
         if (!mounted) return;
-        await CoachMarkPrefs.markTourSeen(_dashboardTourId);
-        final t = context.read<LocalizationService>().t;
-        showCoachMarkTour(
-          context,
-          steps: [
-            CoachMarkStep(
-              title: t('tour_welcome_title'),
-              description: t('tour_welcome_desc'),
-            ),
-            CoachMarkStep(
-              title: t('nav_home_label'),
-              description: t('tour_home_desc'),
-              targetKey: _navTabKeys[0],
-            ),
-            CoachMarkStep(
-              title: t('nav_rewards_label'),
-              description: t('tour_rewards_desc'),
-              targetKey: _navTabKeys[1],
-            ),
-            CoachMarkStep(
-              title: t('nav_playzone_label'),
-              description: t('tour_playzone_desc'),
-              targetKey: _navTabKeys[2],
-            ),
-            CoachMarkStep(
-              title: t('nav_guru_label'),
-              description: t('tour_guru_desc'),
-              targetKey: _navTabKeys[3],
-            ),
-            CoachMarkStep(
-              title: t('nav_safety_label'),
-              description: t('tour_safety_desc'),
-              targetKey: _navTabKeys[4],
-            ),
-          ],
-          onFinish: () async {
-            if (!mounted) return;
-            // _hasSeenScratchCardEver() is async because HiveCache.get() is.
-            if (!await _hasSeenScratchCardEver()) {
-              if (!mounted) return;
-              _showScratchCardModal();
-            }
-          },
-        );
+        _showPersonalizeModal();
         return;
       }
-
-      // _hasSeenScratchCardEver() is async because HiveCache.get() is.
-      // It previously read the Future without awaiting and cast it to
-      // String?, which threw a TypeError before this branch could run —
-      // so the scratch card never appeared at all.
-      if (!await _hasSeenScratchCardEver()) {
-        if (!mounted) return;
-        _showScratchCardModal();
-      }
+      unawaited(_runOnboardingOverlaySequence());
     });
 
     // Web: watch for a newer deployment.
@@ -740,6 +700,94 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Future<bool> _hasSeenScratchCardEver() async =>
       (await HiveCache.get<bool>('scratch_card_seen_once')) ?? false;
+
+  Future<bool> _hasSeenPersonalizeModalEver() async =>
+      (await HiveCache.get<bool>('personalize_modal_seen_once')) ?? false;
+
+  // The exact tour -> scratch-card sequencing that used to live directly
+  // in initState's post-frame callback, extracted unchanged so the new
+  // personalize sheet can run BEFORE it without duplicating the logic —
+  // called either immediately (customer already saw the sheet on a past
+  // launch) or from the sheet's "Continue" button.
+  Future<void> _runOnboardingOverlaySequence() async {
+    if (!mounted) return;
+    final seenTour = await CoachMarkPrefs.hasSeenTour(_dashboardTourId);
+    if (!seenTour) {
+      if (!mounted) return;
+      await CoachMarkPrefs.markTourSeen(_dashboardTourId);
+      final t = context.read<LocalizationService>().t;
+      showCoachMarkTour(
+        context,
+        steps: [
+          CoachMarkStep(
+            title: t('tour_welcome_title'),
+            description: t('tour_welcome_desc'),
+          ),
+          CoachMarkStep(
+            title: t('nav_home_label'),
+            description: t('tour_home_desc'),
+            targetKey: _navTabKeys[0],
+          ),
+          CoachMarkStep(
+            title: t('nav_rewards_label'),
+            description: t('tour_rewards_desc'),
+            targetKey: _navTabKeys[1],
+          ),
+          CoachMarkStep(
+            title: t('nav_playzone_label'),
+            description: t('tour_playzone_desc'),
+            targetKey: _navTabKeys[2],
+          ),
+          CoachMarkStep(
+            title: t('nav_guru_label'),
+            description: t('tour_guru_desc'),
+            targetKey: _navTabKeys[3],
+          ),
+          CoachMarkStep(
+            title: t('nav_safety_label'),
+            description: t('tour_safety_desc'),
+            targetKey: _navTabKeys[4],
+          ),
+        ],
+        onFinish: () async {
+          if (!mounted) return;
+          // _hasSeenScratchCardEver() is async because HiveCache.get() is.
+          if (!await _hasSeenScratchCardEver()) {
+            if (!mounted) return;
+            _showScratchCardModal();
+          }
+        },
+      );
+      return;
+    }
+
+    // _hasSeenScratchCardEver() is async because HiveCache.get() is.
+    // It previously read the Future without awaiting and cast it to
+    // String?, which threw a TypeError before this branch could run —
+    // so the scratch card never appeared at all.
+    if (!await _hasSeenScratchCardEver()) {
+      if (!mounted) return;
+      _showScratchCardModal();
+    }
+  }
+
+  void _showPersonalizeModal() {
+    // Mark as seen forever so the sheet auto-shows at most ONCE per
+    // customer, ever — same "seen once" contract as the scratch card.
+    unawaited(
+      HiveCache.put('personalize_modal_seen_once', true, ttl: _foreverTtl),
+    );
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      isDismissible: false,
+      enableDrag: false,
+      builder: (_) => _PersonalizeModal(
+        onContinue: () => unawaited(_runOnboardingOverlaySequence()),
+      ),
+    );
+  }
 
   /// Multi-city (Plan 3): resolves the customer's real current city via
   /// GPS + reverse-geocoding, entirely in the background. Loads the
@@ -6250,6 +6298,230 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
                           ),
                         ],
                       ),
+      ),
+    );
+  }
+}
+
+// ================================================================
+// PERSONALIZE MODAL — first-open Theme + Icon Theme picker
+// ================================================================
+// Combines the two settings that already live in settings_screen.dart
+// (Theme dropdown, Icon Theme dropdown) into one compact "set it up
+// once, right when you open the app" sheet, per Nizam's request. Not
+// mandatory — no backdrop-tap-to-dismiss/swipe-to-dismiss (so it can't
+// vanish by accident before a first choice is made), but every value
+// defaults to whatever ThemeService already has (pink_white /
+// pink_white_3d), and "Continue" works immediately with no selection
+// required — a customer who just wants in can tap through in one tap.
+// NOT const: kPink is a mutable top-level `Color` (re-synced from the
+// live ColorScheme elsewhere in this file), not a compile-time
+// constant, so a `const` list literal referencing it fails to compile.
+List<({String key, String label, Color swatch})>
+    get _kPersonalizeThemeOptions => [
+          (key: 'pink_white', label: 'Pink & White', swatch: kPink),
+          (
+            key: 'dark_purple',
+            label: 'Dark Purple',
+            swatch: const Color(0xFF2D1B4E)
+          ),
+          (
+            key: 'system_dark',
+            label: 'System Dark',
+            swatch: const Color(0xFF121212)
+          ),
+          (
+            key: 'system_light',
+            label: 'System Light',
+            swatch: const Color(0xFFF5F5F5)
+          ),
+          (
+            key: 'multicolor',
+            label: 'Multicolor',
+            swatch: const Color(0xFF00C853)
+          ),
+        ];
+
+const List<({String key, String label, String hint, IconData icon})>
+    _kPersonalizeIconThemeOptions = [
+  (
+    key: 'pink_white_3d',
+    label: 'Pink & White 3D',
+    hint: 'Soft 3D renders',
+    icon: Icons.view_in_ar_rounded,
+  ),
+  (
+    key: 'multicolor',
+    label: 'Multicolor',
+    hint: 'Flat colorful icons',
+    icon: Icons.palette_rounded,
+  ),
+  (
+    key: 'photo_realistic',
+    label: 'Photo Realistic',
+    hint: 'Real photos everywhere',
+    icon: Icons.photo_camera_rounded,
+  ),
+];
+
+class _PersonalizeModal extends StatelessWidget {
+  final VoidCallback onContinue;
+  const _PersonalizeModal({required this.onContinue});
+
+  @override
+  Widget build(BuildContext context) {
+    final themeService = context.watch<ThemeService>();
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 24,
+                offset: const Offset(0, 8)),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Personalize your Allin1 ✨',
+                style: GoogleFonts.outfit(
+                    fontSize: 18, fontWeight: FontWeight.w800, color: kText)),
+            const SizedBox(height: 4),
+            Text(
+                'Pick your favourite look — you can always change this later in Settings.',
+                style: GoogleFonts.outfit(fontSize: 12, color: kMuted)),
+            const SizedBox(height: 18),
+            Text('APP THEME',
+                style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: kMuted,
+                    letterSpacing: 0.5)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _kPersonalizeThemeOptions.map((opt) {
+                final selected = themeService.themeKey == opt.key;
+                return GestureDetector(
+                  onTap: () => themeService.setTheme(opt.key),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      color: selected
+                          ? kPink.withValues(alpha: 0.12)
+                          : Colors.grey.withValues(alpha: 0.06),
+                      border: Border.all(
+                          color: selected ? kPink : Colors.transparent,
+                          width: 1.5),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 14,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: opt.swatch,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.black12),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(opt.label,
+                            style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: selected ? kPink : kText)),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 18),
+            Text('ICON STYLE',
+                style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: kMuted,
+                    letterSpacing: 0.5)),
+            const SizedBox(height: 8),
+            ..._kPersonalizeIconThemeOptions.map((opt) {
+              final selected = themeService.iconThemeKey == opt.key;
+              return GestureDetector(
+                onTap: () => themeService.setIconTheme(opt.key),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    color: selected
+                        ? kPink.withValues(alpha: 0.1)
+                        : Colors.grey.withValues(alpha: 0.06),
+                    border: Border.all(
+                        color: selected ? kPink : Colors.transparent,
+                        width: 1.5),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(opt.icon,
+                          color: selected ? kPink : kMuted, size: 22),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(opt.label,
+                                style: GoogleFonts.outfit(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: selected ? kPink : kText)),
+                            Text(opt.hint,
+                                style: GoogleFonts.outfit(
+                                    fontSize: 11, color: kMuted)),
+                          ],
+                        ),
+                      ),
+                      if (selected)
+                        Icon(Icons.check_circle_rounded,
+                            color: kPink, size: 20),
+                    ],
+                  ),
+                ),
+              );
+            }),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  onContinue();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kPink,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                child: Text('Continue',
+                    style: GoogleFonts.outfit(
+                        fontSize: 15, fontWeight: FontWeight.w800)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

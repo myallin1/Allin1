@@ -44,9 +44,13 @@ class TaskProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // FIX (database-wastage audit, Sep 2026): unbounded — every active
+      // task, forever, on every fetch/refresh. Capped as a safety net
+      // against unbounded catalog growth.
       final snapshot = await _firestore
           .collection('affiliate_tasks')
           .where('isActive', isEqualTo: true)
+          .limit(100)
           .get();
 
       _tasks = snapshot.docs

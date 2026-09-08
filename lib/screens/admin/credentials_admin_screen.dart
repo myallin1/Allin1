@@ -1410,23 +1410,42 @@ class _AdminManagedViewState extends State<_AdminManagedView> {
     }
   }
 
-  Future<void> _showAssignUsersDialog(
-    AdminCredential credential,
-    String docId,
-  ) async {
-    // Get all users
-    final usersSnapshot =
-        await FirebaseFirestore.instance.collection('users').get();
-
-    final users = usersSnapshot.docs.map((doc) {
+  // FIX (database-wastage audit, Sep 2026): this used to fetch the
+  // ENTIRE `users` collection, unbounded, every single time this dialog
+  // opened — every admin credential's "Assign Users" tap re-read every
+  // registered user in the app, full documents, discarding almost all
+  // of it into an unfiltered checkbox list. Capping with a bare
+  // `.limit()` would have silently hidden real users an admin needs to
+  // find (no search existed), so this adds an actual search-as-you-type
+  // field instead: an initial bounded batch loads on open, and typing
+  // runs a server-side prefix query on `username` instead of ever
+  // pulling the whole collection into memory.
+  Future<List<Map<String, String>>> _searchUsers(String query) async {
+    Query<Map<String, dynamic>> q =
+        FirebaseFirestore.instance.collection('users');
+    final trimmed = query.trim();
+    if (trimmed.isNotEmpty) {
+      q = q
+          .orderBy('username')
+          .startAt([trimmed]).endAt(['$trimmed']);
+    }
+    final snapshot = await q.limit(200).get();
+    return snapshot.docs.map((doc) {
       return {
         'id': doc.id,
         'username': doc.get('username') as String? ?? 'Unknown',
         'email': doc.get('email') as String? ?? '',
       };
     }).toList();
+  }
 
+  Future<void> _showAssignUsersDialog(
+    AdminCredential credential,
+    String docId,
+  ) async {
+    List<Map<String, String>> users = await _searchUsers('');
     final List<String> selectedUserIds = List.from(credential.assignedUserIds);
+    final searchCtrl = TextEditingController();
     if (!mounted) {
       return;
     }
@@ -1439,35 +1458,55 @@ class _AdminManagedViewState extends State<_AdminManagedView> {
           title: const Text('Assign Users', style: TextStyle(color: kText)),
           content: SizedBox(
             width: double.maxFinite,
-            height: 400,
-            child: ListView.builder(
-              itemCount: users.length,
-              itemBuilder: (context, index) {
-                final user = users[index];
-                final isSelected = selectedUserIds.contains(user['id']);
-                return CheckboxListTile(
-                  value: isSelected,
-                  onChanged: (value) {
-                    setDialogState(() {
-                      if (value ?? false) {
-                        selectedUserIds.add(user['id']!);
-                      } else {
-                        selectedUserIds.remove(user['id']);
-                      }
-                    });
+            height: 460,
+            child: Column(
+              children: [
+                TextField(
+                  controller: searchCtrl,
+                  style: const TextStyle(color: kText),
+                  decoration: const InputDecoration(
+                    hintText: 'Search by username…',
+                    hintStyle: TextStyle(color: kMuted),
+                    prefixIcon: Icon(Icons.search, color: kMuted),
+                  ),
+                  onChanged: (value) async {
+                    final results = await _searchUsers(value);
+                    setDialogState(() => users = results);
                   },
-                  title: Text(
-                    user['username']!,
-                    style: const TextStyle(color: kText),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: users.length,
+                    itemBuilder: (context, index) {
+                      final user = users[index];
+                      final isSelected = selectedUserIds.contains(user['id']);
+                      return CheckboxListTile(
+                        value: isSelected,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            if (value ?? false) {
+                              selectedUserIds.add(user['id']!);
+                            } else {
+                              selectedUserIds.remove(user['id']);
+                            }
+                          });
+                        },
+                        title: Text(
+                          user['username']!,
+                          style: const TextStyle(color: kText),
+                        ),
+                        subtitle: Text(
+                          user['email']!,
+                          style: const TextStyle(color: kMuted, fontSize: 12),
+                        ),
+                        activeColor: kPurple,
+                        checkColor: kText,
+                      );
+                    },
                   ),
-                  subtitle: Text(
-                    user['email']!,
-                    style: const TextStyle(color: kMuted, fontSize: 12),
-                  ),
-                  activeColor: kPurple,
-                  checkColor: kText,
-                );
-              },
+                ),
+              ],
             ),
           ),
           actions: [

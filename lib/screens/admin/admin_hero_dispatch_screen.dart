@@ -174,9 +174,14 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
   Future<void> _loadAllHeroes() async {
     setState(() => _allHeroesLoading = true);
     try {
+      // FIX (database-wastage audit, Sep 2026): was unbounded — every
+      // approved hero, forever, on every "All" filter tap. Capped as a
+      // safety net against unbounded roster growth; today's roster is
+      // far under this, so no functional change yet.
       final snap = await FirebaseFirestore.instance
           .collection('heroes')
           .where('approvalStatus', isEqualTo: 'approved')
+          .limit(300)
           .get();
       if (!mounted) return;
       setState(() {

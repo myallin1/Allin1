@@ -104,6 +104,26 @@ class _HeroHistoryScreenState extends State<HeroHistoryScreen>
         .limit(20);
   }
 
+  // FIX (Sep 8 2026 — offline-DB audit, "namma new heros catogory add
+  // panirukkom... admin/hero/customer 3 pero offline db"): this screen
+  // only ever queried `rides` — a hero who completed 20 electrician/
+  // plumber/Acting-Driver/hero_booking/grocery/food jobs saw ZERO of
+  // them here, no history at all. Same cache-first + throttled-server-
+  // sync ("0-cost") pattern _historyQuery() already uses for rides,
+  // applied to service_requests — `assignedHeroId` is that collection's
+  // equivalent of `heroId`.
+  Query<Map<String, dynamic>>? _serviceRequestsQuery() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || uid.isEmpty) {
+      return null;
+    }
+    return FirebaseFirestore.instance
+        .collection('service_requests')
+        .where('assignedHeroId', isEqualTo: uid)
+        .where('status', isEqualTo: 'completed')
+        .limit(20);
+  }
+
   DateTime? _extractWhen(Map<String, dynamic> data) {
     final candidates = <Object?>[
       data['paidAt'],
@@ -128,9 +148,23 @@ class _HeroHistoryScreenState extends State<HeroHistoryScreen>
     return items;
   }
 
+  // FIX (Sep 8 2026 — offline-DB audit): service_requests docs are
+  // already filtered to status == 'completed' at the query level, so
+  // there's no isCompleted re-check needed the way rides' _mapSnapshot
+  // has one (rides' query has no status filter and relies on that
+  // check instead).
+  List<_HeroHistoryItem> _mapServiceRequestSnapshot(
+      QuerySnapshot<Map<String, dynamic>> snap) {
+    return snap.docs
+        .map((doc) =>
+            _HeroHistoryItem.fromServiceRequest(doc.id, doc.data(), _extractWhen))
+        .toList();
+  }
+
   Future<void> _loadHistory() async {
-    final query = _historyQuery();
-    if (query == null) {
+    final rideQuery = _historyQuery();
+    final serviceQuery = _serviceRequestsQuery();
+    if (rideQuery == null) {
       if (!mounted) {
         return;
       }
@@ -142,14 +176,22 @@ class _HeroHistoryScreenState extends State<HeroHistoryScreen>
     }
 
     try {
-      final cacheSnap = await query.get(const GetOptions(source: Source.cache));
+      final results = await Future.wait([
+        rideQuery.get(const GetOptions(source: Source.cache)),
+        if (serviceQuery != null)
+          serviceQuery.get(const GetOptions(source: Source.cache)),
+      ]);
       if (!mounted) {
         return;
       }
+      final merged = <_HeroHistoryItem>[
+        ..._mapSnapshot(results[0]),
+        if (results.length > 1) ..._mapServiceRequestSnapshot(results[1]),
+      ]..sort((a, b) => b.when.compareTo(a.when));
       setState(() {
         _rides
           ..clear()
-          ..addAll(_mapSnapshot(cacheSnap));
+          ..addAll(merged);
         _loading = false;
         _errorMessage = null;
       });
@@ -171,8 +213,9 @@ class _HeroHistoryScreenState extends State<HeroHistoryScreen>
       return;
     }
     _lastServerSyncAt = now;
-    final query = _historyQuery();
-    if (query == null) {
+    final rideQuery = _historyQuery();
+    final serviceQuery = _serviceRequestsQuery();
+    if (rideQuery == null) {
       return;
     }
     if (mounted) {
@@ -184,14 +227,22 @@ class _HeroHistoryScreenState extends State<HeroHistoryScreen>
       });
     }
     try {
-      final serverSnap = await query.get(const GetOptions(source: Source.server));
+      final results = await Future.wait([
+        rideQuery.get(const GetOptions(source: Source.server)),
+        if (serviceQuery != null)
+          serviceQuery.get(const GetOptions(source: Source.server)),
+      ]);
       if (!mounted) {
         return;
       }
+      final merged = <_HeroHistoryItem>[
+        ..._mapSnapshot(results[0]),
+        if (results.length > 1) ..._mapServiceRequestSnapshot(results[1]),
+      ]..sort((a, b) => b.when.compareTo(a.when));
       setState(() {
         _rides
           ..clear()
-          ..addAll(_mapSnapshot(serverSnap));
+          ..addAll(merged);
         _syncing = false;
         _errorMessage = null;
         _lastServerSyncAt = DateTime.now();
@@ -613,6 +664,50 @@ class _HeroHistoryItem {
           ((data['finalFare'] ?? data['amountPaid'] ?? data['lockedFare'] ?? data['fare']) as num?)
               ?.toDouble() ??
           0.0,
+      when: whenReader(data) ?? DateTime.fromMillisecondsSinceEpoch(0),
+    );
+  }
+
+  // FIX (Sep 8 2026 — offline-DB audit): maps a completed
+  // service_requests doc (skill trades — electrician/plumber/.../
+  // acting_driver — plus hero_booking/grocery_order/custom_food_order,
+  // every non-ride job type) onto the same shape _HistoryCard already
+  // renders for rides. `pickup`/`drop` are repurposed as "what job" /
+  // "what it was for" rather than literal pickup/drop points, since a
+  // skill job has one site, not two — same repurposing
+  // hero_home_screen.dart's ping-dialog location box already does for
+  // this exact requestType.
+  static _HeroHistoryItem fromServiceRequest(
+    String id,
+    Map<String, dynamic> data,
+    DateTime? Function(Map<String, dynamic>) whenReader,
+  ) {
+    final details = data['details'] is Map
+        ? Map<String, dynamic>.from(data['details'] as Map)
+        : <String, dynamic>{};
+    final requestType = (data['requestType'] as String? ?? '').trim();
+    final categoryLabel = (details['categoryLabel'] as String?)?.trim();
+    final jobLabel = (categoryLabel != null && categoryLabel.isNotEmpty)
+        ? categoryLabel
+        : requestType.replaceAll('_', ' ');
+    final detail = (details['issue'] as String?)?.trim().isNotEmpty ?? false
+        ? (details['issue'] as String).trim()
+        : ((details['address'] as String?)?.trim() ??
+            (details['taskDescription'] as String?)?.trim() ??
+            'Details unavailable');
+    final finalAmount = ((data['finalAmount'] ?? details['finalAmount']) as num?)
+            ?.toDouble() ??
+        0.0;
+    return _HeroHistoryItem(
+      id: id,
+      pickup: jobLabel.isEmpty ? 'Service Request' : jobLabel,
+      drop: detail,
+      status: (data['status'] as String? ?? '').trim(),
+      paymentStatus: (data['paymentStatus'] as String? ?? '').trim(),
+      paymentDispute: false,
+      amount: finalAmount,
+      tip: 0.0,
+      netEarnings: finalAmount,
       when: whenReader(data) ?? DateTime.fromMillisecondsSinceEpoch(0),
     );
   }

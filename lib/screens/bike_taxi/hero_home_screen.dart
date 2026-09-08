@@ -1103,23 +1103,29 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       // (see _watchServiceAccess below)
 
       // Stats — fetch once per session, cache in state
+      //
+      // FIX (database-wastage audit, Sep 2026): this used to fetch every
+      // FULL ride document (fare, pickup/drop coords, timestamps, the
+      // whole doc) this hero has ever completed, just to sum `fare` and
+      // count `.docs.length` — cost grew with the hero's entire lifetime
+      // ride history, forever, on every single session start. Firestore
+      // aggregate queries (count()/sum()) compute both server-side for
+      // a small fixed number of billed reads regardless of how many
+      // rides match, instead of one full-document read per ride.
       if (!_statsLoaded) {
         try {
-          final ridesSnap = await FirebaseFirestore.instance
+          final baseQuery = FirebaseFirestore.instance
               .collection('rides')
               .where('captainId', isEqualTo: _user!.uid)
-              .where('status', isEqualTo: 'completed')
+              .where('status', isEqualTo: 'completed');
+          final agg = await baseQuery
+              .aggregate(count(), sum('fare'))
               .get();
-          DbUsageTracker.instance
-              .recordRead(ridesSnap.docs.length, 'hero_completed_rides_count');
-          double earn = 0;
-          for (final d in ridesSnap.docs) {
-            earn += (d.data()['fare'] as num? ?? 0).toDouble();
-          }
+          DbUsageTracker.instance.recordRead(1, 'hero_completed_rides_count');
           if (mounted) {
             setState(() {
-              _totalRides = ridesSnap.docs.length;
-              _totalEarnings = earn;
+              _totalRides = agg.count ?? 0;
+              _totalEarnings = (agg.getSum('fare') ?? 0).toDouble();
               _statsLoaded = true;
             });
           }

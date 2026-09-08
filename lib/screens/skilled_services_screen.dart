@@ -31,14 +31,42 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
 import '../config/hero_skill_catalog.dart';
 import '../services/auth_prompt_service.dart';
 import '../services/location_service.dart';
 import '../services/service_request_service.dart';
+import '../services/theme_service.dart';
+import '../widgets/cached_cloud_image.dart';
 import '../widgets/location_capture_field.dart';
 import 'hero_search_radar_screen.dart';
 import 'service_request_tracking_screen.dart';
+
+// NEW (Nizam: "photo reality theme app la end to end varramari pannu")
+// — this trade-picker never had ANY icon-theme awareness before (not
+// even Pink & White 3D), so it always showed the flat FluentEmojiFlat
+// glyph regardless of Settings. Adding Photo Realistic ONLY here: the
+// other 2 themes' behaviour on this screen is completely unchanged
+// (still the same glyph they always showed) — only a photo_realistic
+// check is new. Keyed by HeroSkill.key exactly, but this map is purely
+// a display lookup — it is never written to `heroes/{uid}.skills` or
+// `details.category`, so hero dispatch matching is untouched.
+const Map<String, String> kHeroSkillPhotoUrl = {
+  'electrician':
+      'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=200&q=80',
+  'plumber':
+      'https://images.unsplash.com/photo-1503789146722-cf137a3c0fea?w=200&q=80',
+  'laptop_pc':
+      'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=200&q=80',
+  'tv_service':
+      'https://images.unsplash.com/photo-1593784991095-a205069470b6?w=200&q=80',
+  // Reuses nj_tech_store_screen.dart's already-verified fridge photo
+  // (that map's own 'ac_service' entry 404'd and was fixed separately —
+  // this one is NOT that dead ID).
+  'fridge_ac':
+      'https://images.unsplash.com/photo-1571175443880-49e1d25b2bc5?w=200&q=80',
+};
 
 const Color _bg = Color(0xFF0E0B12);
 const Color _card = Color(0xFF1A1420);
@@ -115,7 +143,10 @@ class _SkilledServicesScreenState extends State<SkilledServicesScreen> {
                 (heroData['longitude'] as num?)?.toDouble();
             if (heroLat == null || heroLng == null) return;
             final km = Geolocator.distanceBetween(
-                  _lat!, _lng!, heroLat, heroLng,
+                  _lat!,
+                  _lng!,
+                  heroLat,
+                  heroLng,
                 ) /
                 1000.0;
             if (km > kSkillDispatchRadiusKm) return;
@@ -235,18 +266,56 @@ class _SkillCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: skill.color.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              // Full-color illustrated icon, not the flat Material glyph
-              // — see HeroSkill.svgIcon's doc comment for why a
-              // customer needs to tell these apart at a glance too.
-              child: SvgPicture.string(skill.svgIcon, width: 30, height: 30),
-            ),
+            Builder(builder: (context) {
+              final iconTheme = context.watch<ThemeService>().iconThemeKey;
+              final photoUrl = kHeroSkillPhotoUrl[skill.key];
+              if (iconTheme == 'photo_realistic' && photoUrl != null) {
+                return Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white, width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.18),
+                          blurRadius: 6,
+                          offset: const Offset(0, 3)),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14.5),
+                    child: CachedCloudImage(
+                      photoUrl,
+                      width: 52,
+                      height: 52,
+                      fit: BoxFit.cover,
+                      cacheWidth: 208,
+                      errorWidget: Container(
+                        decoration: BoxDecoration(
+                          color: skill.color.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: SvgPicture.string(skill.svgIcon,
+                            width: 30, height: 30),
+                      ),
+                    ),
+                  ),
+                );
+              }
+              return Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: skill.color.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                // Full-color illustrated icon, not the flat Material glyph
+                // — see HeroSkill.svgIcon's doc comment for why a
+                // customer needs to tell these apart at a glance too.
+                child: SvgPicture.string(skill.svgIcon, width: 30, height: 30),
+              );
+            }),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -295,9 +364,7 @@ class _SkillCard extends StatelessWidget {
                           height: 7,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: available
-                                ? const Color(0xFF27AE60)
-                                : _muted,
+                            color: available ? const Color(0xFF27AE60) : _muted,
                           ),
                         ),
                         const SizedBox(width: 6),
@@ -307,9 +374,7 @@ class _SkillCard extends StatelessWidget {
                                   '${kSkillDispatchRadiusKm.toStringAsFixed(0)} km'
                               : 'None nearby right now — you can still book',
                           style: GoogleFonts.outfit(
-                            color: available
-                                ? const Color(0xFF27AE60)
-                                : _muted,
+                            color: available ? const Color(0xFF27AE60) : _muted,
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                           ),
@@ -420,7 +485,8 @@ class _SkillBookingSheetState extends State<_SkillBookingSheet> {
     // quietly, is what keeps that promise instead of breaking it the
     // first time a customer's GPS permission is off.
     if (_lat == null || _lng == null) {
-      _toast('Please set your location so nearby ${widget.skill.title}s can be found');
+      _toast(
+          'Please set your location so nearby ${widget.skill.title}s can be found');
       return;
     }
     if (!await requireRealAuth(
@@ -539,7 +605,8 @@ class _SkillBookingSheetState extends State<_SkillBookingSheet> {
   Widget build(BuildContext context) {
     final skill = widget.skill;
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: DraggableScrollableSheet(
         initialChildSize: 0.85,
         minChildSize: 0.5,
@@ -569,19 +636,62 @@ class _SkillBookingSheetState extends State<_SkillBookingSheet> {
                     children: [
                       Row(
                         children: [
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: skill.color.withValues(alpha: 0.16),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: SvgPicture.string(
-                              skill.svgIcon,
-                              width: 24,
-                              height: 24,
-                            ),
-                          ),
+                          Builder(builder: (context) {
+                            final iconTheme =
+                                context.watch<ThemeService>().iconThemeKey;
+                            final photoUrl = kHeroSkillPhotoUrl[skill.key];
+                            if (iconTheme == 'photo_realistic' &&
+                                photoUrl != null) {
+                              return Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(13),
+                                  border: Border.all(
+                                      color: Colors.white, width: 1.2),
+                                  boxShadow: [
+                                    BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.18),
+                                        blurRadius: 5,
+                                        offset: const Offset(0, 2)),
+                                  ],
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(11.8),
+                                  child: CachedCloudImage(
+                                    photoUrl,
+                                    width: 44,
+                                    height: 44,
+                                    fit: BoxFit.cover,
+                                    cacheWidth: 176,
+                                    errorWidget: Container(
+                                      decoration: BoxDecoration(
+                                        color:
+                                            skill.color.withValues(alpha: 0.16),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: SvgPicture.string(skill.svgIcon,
+                                          width: 24, height: 24),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                            return Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: skill.color.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: SvgPicture.string(
+                                skill.svgIcon,
+                                width: 24,
+                                height: 24,
+                              ),
+                            );
+                          }),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(

@@ -79,22 +79,13 @@ class _RatingFeedbackSheetState extends State<RatingFeedbackSheet> {
       final rateeCollection = widget.rateeCollection;
       final rateeId = widget.rateeId;
       if (rateeCollection != null && rateeId != null && rateeId.isNotEmpty) {
-        final idField = '${_rateeSingular}Id';
-        final ratingField = '${_rateeSingular}Rating';
-        final snap = await FirebaseFirestore.instance
-            .collection(widget.completionCollection)
-            .where(idField, isEqualTo: rateeId)
-            .where('customerRating', isGreaterThan: 0)
-            .get();
-        final avg = snap.docs.fold<double>(0, (s, d) {
-              final r = (d.data()['customerRating'] as num?)?.toDouble() ?? 0;
-              return s + r;
-            }) /
-            (snap.docs.isNotEmpty ? snap.docs.length : 1);
-        await FirebaseFirestore.instance
-            .collection(rateeCollection)
-            .doc(rateeId)
-            .set({ratingField: avg}, SetOptions(merge: true));
+        await updateRateeRatingAverage(
+          completionCollection: widget.completionCollection,
+          rateeCollection: rateeCollection,
+          rateeId: rateeId,
+          rateeSingular: _rateeSingular,
+          newRating: _rating,
+        );
       }
     } catch (e) {
       debugPrint('[RatingFeedbackSheet] Save failed: $e');
@@ -165,4 +156,82 @@ class _RatingFeedbackSheetState extends State<RatingFeedbackSheet> {
       ),
     );
   }
+}
+
+// FIX (database-wastage audit, Sep 2026): shared by RatingFeedbackSheet
+// above and ride_tracking_screen.dart's hero-rating flow — both used to
+// independently re-fetch EVERY prior completion doc for a ratee
+// (`where(idField).where('customerRating', > 0).get()`) on every single
+// new rating, just to recompute an average. Cost grew unbounded with
+// the ratee's entire rating history, forever, and the exact same wasteful
+// query was duplicated in two places. This now maintains running
+// `<rateeSingular>RatingSum`/`<rateeSingular>RatingCount` totals on the
+// ratee doc — one extra doc read (the ratee doc itself, inside a
+// transaction) per rating instead of N historical-completion reads.
+//
+// CORRECTNESS (why this can't just start both counters at 0): a ratee
+// rated before this fix shipped already has a correct
+// `<rateeSingular>Rating` average on their doc, computed from real
+// history — but no stored sum/count to resume from. Starting fresh at 0
+// would silently overwrite months of real rating history with "just
+// this one rating" the moment their next rating comes in. So the FIRST
+// rating after this fix for any given ratee pays the same one-time
+// full-history scan the old code always paid (seeding sum/count
+// correctly from real data); every rating after that for the same
+// ratee is cheap.
+Future<void> updateRateeRatingAverage({
+  required String completionCollection,
+  required String rateeCollection,
+  required String rateeId,
+  required String rateeSingular,
+  required int newRating,
+}) async {
+  final rateeRef =
+      FirebaseFirestore.instance.collection(rateeCollection).doc(rateeId);
+  final sumField = '${rateeSingular}RatingSum';
+  final countField = '${rateeSingular}RatingCount';
+  final ratingField = '${rateeSingular}Rating';
+
+  // Peek once, outside the transaction, to decide whether a one-time
+  // seed scan is needed. The transaction below re-checks this itself
+  // before trusting the seed, so a second rating racing in during this
+  // peek can't cause double-seeding.
+  final peek = await rateeRef.get();
+  double? seedSum;
+  int? seedCount;
+  if (peek.data()?[countField] == null) {
+    final idField = '${rateeSingular}Id';
+    final snap = await FirebaseFirestore.instance
+        .collection(completionCollection)
+        .where(idField, isEqualTo: rateeId)
+        .where('customerRating', isGreaterThan: 0)
+        .get();
+    seedSum = snap.docs.fold<double>(
+        0, (s, d) => s + ((d.data()['customerRating'] as num?)?.toDouble() ?? 0),);
+    seedCount = snap.docs.length;
+  }
+
+  await FirebaseFirestore.instance.runTransaction((tx) async {
+    final rateeSnap = await tx.get(rateeRef);
+    final data = rateeSnap.data();
+    final double sum;
+    final int count;
+    if (data?[countField] != null) {
+      sum = (data![sumField] as num?)?.toDouble() ?? 0;
+      count = (data[countField] as num?)?.toInt() ?? 0;
+    } else {
+      // Still unseeded at transaction time — use the values found
+      // during the peek above (or 0/0 if this ratee genuinely has no
+      // prior ratings at all).
+      sum = seedSum ?? 0;
+      count = seedCount ?? 0;
+    }
+    final newSum = sum + newRating;
+    final newCount = count + 1;
+    tx.set(rateeRef, {
+      sumField: newSum,
+      countField: newCount,
+      ratingField: newSum / newCount,
+    }, SetOptions(merge: true),);
+  });
 }

@@ -18,6 +18,19 @@
 // so each call is a one-time query, run on demand from the admin
 // screen rather than continuously, to avoid adding to the read-cost
 // problems fixed elsewhere this session.
+//
+// FIX (database-wastage audit, Sep 2026): all three queries below used
+// to filter ONLY on the equality field (status / requestType+status)
+// and do the monthStart/monthEnd narrowing entirely client-side, on
+// the theory that adding the date range server-side would need a new
+// composite index. That traded a one-time index build for an
+// unbounded, ever-growing cost instead: every report run re-read
+// EVERY completed ride/order/request that has EVER existed, filtering
+// 99% of it straight into the bin. That only gets worse as the app
+// accumulates history — a report a year from now would re-read a
+// year of completed orders just to bill one month. The composite
+// indexes this needs (added to firestore.indexes.json) are a one-time,
+// safe operation; re-reading the whole collection forever is not.
 // ================================================================
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -26,8 +39,11 @@ class UsageBillingService {
 
   /// Returns {sellerId: completedOrderCount} for all catalog_food_order
   /// sellers with at least one completed order in between monthStart and monthEnd (end exclusive).
-  /// Single query (requestType + status equality, no composite index
-  /// needed beyond what already exists), grouped client-side.
+  /// Server-side date range now (requestType + status equality +
+  /// updatedAt range) — needs the (requestType, status, updatedAt)
+  /// composite index in firestore.indexes.json; grouped by seller
+  /// client-side since that's cheap once the read set is already
+  /// scoped to one month.
   Future<Map<String, int>> getSellerCompletedOrderCounts({
     required DateTime monthStart,
     required DateTime monthEnd,
@@ -36,17 +52,13 @@ class UsageBillingService {
         .collection('service_requests')
         .where('requestType', isEqualTo: 'catalog_food_order')
         .where('status', isEqualTo: 'completed')
+        .where('updatedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(monthStart))
+        .where('updatedAt', isLessThan: Timestamp.fromDate(monthEnd))
         .get();
 
     final counts = <String, int>{};
     for (final doc in snapshot.docs) {
       final data = doc.data();
-      final updatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
-      if (updatedAt == null ||
-          updatedAt.isBefore(monthStart) ||
-          !updatedAt.isBefore(monthEnd)) {
-        continue;
-      }
       final details = data['details'] as Map<String, dynamic>?;
       final sellerId = details?['sellerId'] as String?;
       if (sellerId == null || sellerId.isEmpty) continue;
@@ -80,15 +92,11 @@ class UsageBillingService {
     final ridesSnapshot = await _firestore
         .collection('rides')
         .where('status', isEqualTo: 'completed')
+        .where('completedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(monthStart))
+        .where('completedAt', isLessThan: Timestamp.fromDate(monthEnd))
         .get();
     for (final doc in ridesSnapshot.docs) {
       final data = doc.data();
-      final completedAt = (data['completedAt'] as Timestamp?)?.toDate();
-      if (completedAt == null ||
-          completedAt.isBefore(monthStart) ||
-          !completedAt.isBefore(monthEnd)) {
-        continue;
-      }
       final heroId = data['heroId'] as String?;
       if (heroId == null || heroId.isEmpty) continue;
       counts[heroId] = (counts[heroId] ?? 0) + 1;
@@ -97,15 +105,11 @@ class UsageBillingService {
     final requestsSnapshot = await _firestore
         .collection('service_requests')
         .where('status', isEqualTo: 'completed')
+        .where('updatedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(monthStart))
+        .where('updatedAt', isLessThan: Timestamp.fromDate(monthEnd))
         .get();
     for (final doc in requestsSnapshot.docs) {
       final data = doc.data();
-      final updatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
-      if (updatedAt == null ||
-          updatedAt.isBefore(monthStart) ||
-          !updatedAt.isBefore(monthEnd)) {
-        continue;
-      }
       final heroId = data['assignedHeroId'] as String?;
       if (heroId == null || heroId.isEmpty) continue;
       counts[heroId] = (counts[heroId] ?? 0) + 1;

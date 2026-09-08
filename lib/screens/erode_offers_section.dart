@@ -41,6 +41,8 @@ class _OfferRecord {
   final Map<String, dynamic> data;
 }
 
+enum _OfferCategory { video, image }
+
 class ErodeOffersSection extends StatefulWidget {
   const ErodeOffersSection({super.key});
 
@@ -78,6 +80,13 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
 
   Future<List<_OfferRecord>?>? _future;
   int _lastAppliedVersion = -1;
+
+  // Sub-category filter (Sep 7 2026 — Nizam: split Erode Offers into
+  // Video Offers / Image Offers with a toggle, same theme, same
+  // backend). No schema change: an offer is "video" if it has a
+  // videoUrl, else "image". Purely a client-side filter over the same
+  // cached list — zero extra reads.
+  _OfferCategory _category = _OfferCategory.video;
 
   // Active inline video controllers, keyed by offerId. Capped at 3 to prevent OOM crashes on budget devices.
   final Map<String, YoutubePlayerController> _inlineControllers = {};
@@ -173,6 +182,15 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
       final controller = _inlineControllers[offerId]!;
       try {
         controller.playVideo();
+        // Reels-style (Sep 8 2026 — Nizam: "youtube app la reels
+        // page full-ah theriramari"): the card's own preview box is
+        // only 140px tall, so a 16:9 video shown there reads as tiny
+        // and centered. Jumping straight to the package's own
+        // fullscreen mode (already portrait-locked, no rotation — see
+        // setFullScreenListener below) gives the same full-width,
+        // immersive playback a Reels/Shorts video gets, without
+        // rebuilding a separate player.
+        controller.enterFullScreen(lock: false);
       } catch (e) {
         debugPrint('Resume video failed: $e');
       }
@@ -245,6 +263,9 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
       }
       try {
         await newController.playVideo();
+        // Same reels-style jump as the "already warm in pool" resume
+        // path above — see the comment there.
+        newController.enterFullScreen(lock: false);
       } catch (e) {
         debugPrint('Inline autostart failed: $e');
       }
@@ -391,12 +412,33 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
             subtitle: 'Please try again in a moment.',
           );
         }
-        final docs = snapshot.data ?? const <_OfferRecord>[];
-        if (docs.isEmpty) {
+        final allDocs = snapshot.data ?? const <_OfferRecord>[];
+        final docs = allDocs.where((d) {
+          final hasVideo =
+              youtubeVideoId(d.data['videoUrl'] as String?) != null;
+          return _category == _OfferCategory.video ? hasVideo : !hasVideo;
+        }).toList();
+        if (allDocs.isEmpty) {
           return _emptyState(
             icon: Icons.storefront_rounded,
             title: 'No offers right now',
             subtitle: 'Check back soon — Erode shop offers appear here.',
+          );
+        }
+        if (docs.isEmpty) {
+          return Column(
+            children: [
+              _buildCategoryToggle(),
+              _emptyState(
+                icon: _category == _OfferCategory.video
+                    ? Icons.videocam_off_rounded
+                    : Icons.image_not_supported_rounded,
+                title: _category == _OfferCategory.video
+                    ? 'No video offers right now'
+                    : 'No photo offers right now',
+                subtitle: 'Check the other tab, or check back soon.',
+              ),
+            ],
           );
         }
         // VIRTUALIZED (Aug 18 2026 — CTO performance review). This was
@@ -424,12 +466,14 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
               parent: BouncingScrollPhysics(),
             ),
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
-            // +1 for the gradient banner, kept inside the list so it
-            // scrolls away naturally instead of eating permanent space.
-            itemCount: docs.length + 1,
+            // +2: the gradient banner and the video/photo toggle, both
+            // kept inside the list so they scroll away naturally instead
+            // of eating permanent space.
+            itemCount: docs.length + 2,
             itemBuilder: (context, index) {
               if (index == 0) return _buildBanner();
-              final doc = docs[index - 1];
+              if (index == 1) return _buildCategoryToggle();
+              final doc = docs[index - 2];
               final videoId = youtubeVideoId(doc.data['videoUrl'] as String?);
               return Padding(
                 key: ValueKey(doc.id),
@@ -495,6 +539,77 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
                   fontWeight: FontWeight.w800,
                   height: 1.3,
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryToggle() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _offerPink.withValues(alpha: 0.15)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: _categoryTab(
+                label: 'Video Offers',
+                icon: Icons.play_circle_fill_rounded,
+                selected: _category == _OfferCategory.video,
+                onTap: () => setState(() => _category = _OfferCategory.video),
+              ),
+            ),
+            Expanded(
+              child: _categoryTab(
+                label: 'Photo Offers',
+                icon: Icons.image_rounded,
+                selected: _category == _OfferCategory.image,
+                onTap: () => setState(() => _category = _OfferCategory.image),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _categoryTab({
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        decoration: BoxDecoration(
+          gradient: selected
+              ? const LinearGradient(colors: [_offerInk, Color(0xFF2A3B8F)])
+              : null,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 15, color: selected ? Colors.white : _offerMuted),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.outfit(
+                color: selected ? Colors.white : _offerMuted,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ],

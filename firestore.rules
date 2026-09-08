@@ -554,7 +554,25 @@ service cloud.firestore {
             // simply absent from their stored document.
             && request.resource.data.pendingPayouts > resource.data.get('pendingPayouts', 0)
             && request.resource.data.lastCreditedRequestId is string
-            && creditableRequest(request.resource.data.lastCreditedRequestId, sellerId));
+            && creditableRequest(request.resource.data.lastCreditedRequestId, sellerId))
+        // Clause E: a customer rating this seller after a completed
+        // order — same gap and same fix as heroes/{heroId}'s matching
+        // clause (see that one's full comment, including why count must
+        // only strictly increase rather than exactly +1 — the one-time
+        // history-seed write legitimately jumps by more than 1): NOTHING
+        // here ever permitted a customer to write sellerRating at all
+        // (Clause B's existing 'rating' field is a different, unrelated
+        // field), so RatingFeedbackSheet's seller-rating path has been
+        // silently failing permission-denied since it was built.
+        || (isRealUser()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['sellerRating', 'sellerRatingSum', 'sellerRatingCount'])
+            && request.resource.data.sellerRatingCount
+                 > resource.data.get('sellerRatingCount', 0)
+            && request.resource.data.sellerRating
+                 == request.resource.data.sellerRatingSum / request.resource.data.sellerRatingCount
+            && request.resource.data.sellerRating >= 1
+            && request.resource.data.sellerRating <= 5);
 
       allow delete: if isAdminAny();
 
@@ -680,7 +698,36 @@ service cloud.firestore {
             && (request.resource.data.approvalStatus == resource.data.approvalStatus
                 || (request.resource.data.approvalStatus == 'pending'
                     && resource.data.approvalStatus != 'approved'
-                    && resource.data.approvalStatus != 'rejected')));
+                    && resource.data.approvalStatus != 'rejected')))
+        // FIX (database-wastage audit, Sep 2026 — real, pre-existing bug
+        // found while fixing the rating-average read cost, unrelated to
+        // that fix itself): NOTHING in this rule ever permitted a
+        // CUSTOMER to write heroRating on a hero's own doc after rating
+        // them — only isAdminAny() or the hero themselves (auth.uid ==
+        // heroId) could update this doc at all. ride_tracking_screen.dart
+        // has been calling exactly this write (customer rates hero ->
+        // writes heroes/{heroId}.heroRating) since the feature was
+        // built; it has been silently failing with permission-denied
+        // and swallowed by a bare `catch (e) { debugPrint(...) }` this
+        // whole time — every hero rating a customer ever submitted was
+        // silently lost. Tightly scoped to exactly the three rating
+        // aggregate fields. Count must strictly increase (never go
+        // backwards — rejects a forged reset/decrease) rather than
+        // exactly +1, because updateRateeRatingAverage's one-time
+        // history-seed write (a ratee's first rating after this fix)
+        // legitimately jumps count by more than 1 in a single write.
+        // The average itself is bounds-checked (1-5 stars) and must
+        // equal sum/count, so a client can't detach the displayed
+        // rating from the aggregate it's supposed to represent.
+        || (isRealUser()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['heroRating', 'heroRatingSum', 'heroRatingCount'])
+            && request.resource.data.heroRatingCount
+                 > resource.data.get('heroRatingCount', 0)
+            && request.resource.data.heroRating
+                 == request.resource.data.heroRatingSum / request.resource.data.heroRatingCount
+            && request.resource.data.heroRating >= 1
+            && request.resource.data.heroRating <= 5);
 
       allow delete: if isAdminAny();
 

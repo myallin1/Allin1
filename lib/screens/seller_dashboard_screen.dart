@@ -409,9 +409,15 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
 
   Future<void> _loadMenuItemCount(String sellerId) async {
     try {
-      final items = await _service.getAvailableMenuItems(sellerId);
+      // FIX (database-wastage audit, Sep 2026): was
+      // getAvailableMenuItems(sellerId).length — a full document fetch
+      // of every available dish just to read off the count. count()
+      // aggregation is one billed read regardless of how many items
+      // match, instead of one read per dish. See
+      // FoodSellerService.getAvailableMenuItemCount's own comment.
+      final count = await _service.getAvailableMenuItemCount(sellerId);
       if (mounted) {
-        setState(() => _menuItemCount = items.length);
+        setState(() => _menuItemCount = count);
       }
     } catch (_) {}
   }

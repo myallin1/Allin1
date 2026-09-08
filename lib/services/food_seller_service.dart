@@ -205,6 +205,31 @@ class FoodSellerService {
     });
   }
 
+  // FIX (database-wastage audit, Sep 2026): seller_dashboard_screen.dart
+  // used to call getAvailableMenuItems() below just to show a count
+  // badge (`items.length`) — downloading every field of every available
+  // menu item (name, price, image URL, description, ...) on every
+  // dashboard open, then discarding all of it except the length. A
+  // seller with 40 dishes paid for 40 document reads to display the
+  // number "40". Firestore's count() aggregation query returns the
+  // same number for exactly ONE billed read regardless of how many
+  // documents match — this is what the count-only call site should use
+  // instead. getAvailableMenuItems() itself is left untouched: it's
+  // still the correct call for seller_menu_setup_screen.dart, which
+  // genuinely needs the full item data, not just a count.
+  Future<int> getAvailableMenuItemCount(String sellerId) async {
+    try {
+      final agg = await _menuItemsRef(sellerId)
+          .where('isAvailable', isEqualTo: true)
+          .count()
+          .get();
+      return agg.count ?? 0;
+    } catch (e) {
+      debugPrint('[FoodSellerService] Failed to get menu item count: $e');
+      return 0;
+    }
+  }
+
   /// Fetch available menu items only (isAvailable == true).
   Future<List<MenuItemModel>> getAvailableMenuItems(String sellerId) async {
     try {

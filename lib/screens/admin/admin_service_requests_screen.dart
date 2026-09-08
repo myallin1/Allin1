@@ -69,11 +69,35 @@ class AdminServiceRequestsScreen extends StatefulWidget {
 
 class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
     with WidgetsBindingObserver, AdminSelectionMixin {
-  // FIX (CTO mandate — Final UI Migration Sweep): typed models instead
-  // of raw QueryDocumentSnapshots — same pattern already applied to
-  // admin_new_orders_screen.dart and hero_home_screen.dart. Query/
-  // subscription itself unchanged.
-  List<ServiceRequestModel> _requests = [];
+  // FIX (Sep 8 2026 — database wastage audit, "offline db"): this used
+  // to be ONE live listener over every status, completed included. A
+  // completed request never changes again, yet it stayed on a
+  // permanently-open real-time listener and got silently re-fetched on
+  // every screen resume — the definition of the 0-cost pattern this
+  // audit already applied to nj_tech_store_screen.dart and
+  // hero_history_screen.dart, just missing here. Split in two:
+  //   _activeRequests — the live listener, now scoped to ONLY
+  //     non-final statuses, so it stops growing forever as a
+  //     requestType accumulates history.
+  //   _completedRequests — a one-time, cache-first fetch (instant,
+  //     free, matches the read the device already paid for) with a
+  //     throttled server re-sync, same shape as hero_history_screen
+  //     .dart's _refreshFromServer().
+  // The two are merged back into one sorted list at render time —
+  // every existing feature (selection, bulk delete, phone filter, the
+  // "N Total" badge) keeps working against that merged list unchanged.
+  static const List<String> _kActiveStatuses = [
+    'pending',
+    'admin_review',
+    'hero_assigned',
+    'in_progress',
+    'nearing_completion',
+  ];
+  static const Duration _completedSyncThrottle = Duration(seconds: 30);
+
+  List<ServiceRequestModel> _activeRequests = [];
+  List<ServiceRequestModel> _completedRequests = [];
+  DateTime? _lastCompletedSyncAt;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _sub;
 
   @override
@@ -81,6 +105,7 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _listen();
+    unawaited(_loadCompleted());
   }
 
   @override
@@ -104,8 +129,20 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
         break;
       case AppLifecycleState.resumed:
         _listen();
+        // Throttled internally — safe to call on every resume, matches
+        // hero_history_screen.dart's own resume behaviour.
+        unawaited(_loadCompleted());
         break;
     }
+  }
+
+  List<ServiceRequestModel> _mapAndSort(
+      QuerySnapshot<Map<String, dynamic>> snap) {
+    return snap.docs
+        .map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id))
+        .toList()
+      ..sort((a, b) => (b.createdAt ?? DateTime(0))
+          .compareTo(a.createdAt ?? DateTime(0)));
   }
 
   void _listen() {
@@ -113,27 +150,62 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
     _sub = FirebaseFirestore.instance
         .collection('service_requests')
         .where('requestType', isEqualTo: widget.requestType)
-        .orderBy('createdAt', descending: true)
-        // FIX (read-spike follow-up from the IndexedStack fix): this
-        // query used to be unbounded, re-reading this request type's
-        // ENTIRE history on every listen. Admin only ever needs to
-        // work the recent/active queue here, not months of completed
-        // history — 100 most-recent covers that with room to spare.
-        // Picked a safe default rather than blocking on a product
-        // decision; raise this if 100 ever turns out to be too few.
+        // FIX (Sep 8 2026): scoped to active statuses only — see class-
+        // level comment. No orderBy on this query on purpose: a
+        // whereIn + orderBy-on-a-different-field combination needs a
+        // composite index, which the Spark plan turns into a hard
+        // query failure if it's ever missing rather than a slow query.
+        // Sorting client-side in _mapAndSort() avoids that risk
+        // entirely for a 100-row page.
+        .where('status', whereIn: _kActiveStatuses)
         .limit(100)
         .trackedSnapshots()
         .listen(
       (snapshot) {
-        final models = snapshot.docs
-            .map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id))
-            .toList();
-        if (mounted) setState(() => _requests = models);
+        if (mounted) setState(() => _activeRequests = _mapAndSort(snapshot));
       },
       onError: (Object e) {
         debugPrint('[AdminServiceRequests] listener error: $e');
       },
     );
+  }
+
+  Query<Map<String, dynamic>> _completedQuery() => FirebaseFirestore.instance
+      .collection('service_requests')
+      .where('requestType', isEqualTo: widget.requestType)
+      .where('status', isEqualTo: 'completed')
+      .limit(100);
+
+  Future<void> _loadCompleted() async {
+    try {
+      final cacheSnap =
+          await _completedQuery().get(const GetOptions(source: Source.cache));
+      if (mounted) {
+        setState(() => _completedRequests = _mapAndSort(cacheSnap));
+      }
+    } catch (_) {
+      // No cache yet (first-ever open on this device) — fine, the
+      // server sync below covers it.
+    }
+    unawaited(_refreshCompletedFromServer());
+  }
+
+  Future<void> _refreshCompletedFromServer() async {
+    final now = DateTime.now();
+    if (_lastCompletedSyncAt != null &&
+        now.difference(_lastCompletedSyncAt!) < _completedSyncThrottle) {
+      return;
+    }
+    _lastCompletedSyncAt = now;
+    try {
+      final serverSnap =
+          await _completedQuery().get(const GetOptions(source: Source.server));
+      if (mounted) {
+        setState(() => _completedRequests = _mapAndSort(serverSnap));
+      }
+    } catch (e) {
+      debugPrint('[AdminServiceRequests] completed sync failed: $e');
+    }
   }
 
   Future<void> _call(String phone) async {
@@ -174,10 +246,20 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
         assignedHeroId: request.assignedHeroId,
       ),
     );
-    // No local removal needed — this screen is a live .snapshots()
-    // listener (see _listen()), so the delete's own snapshot event
-    // updates _requests automatically. A manual removal here would
-    // just race that event.
+    // FIX (Sep 8 2026 — offline-DB split): the old comment here ("no
+    // local removal needed, the live listener's own snapshot event
+    // updates _requests automatically") stopped being true for half
+    // this screen's rows the moment _completedRequests became a
+    // one-time cached fetch instead of part of the live listener —
+    // nothing will ever emit a snapshot event for it again. Removing
+    // from both lists is safe/idempotent: whichever list actually held
+    // this id loses it, the other removeWhere is just a no-op.
+    if (mounted) {
+      setState(() {
+        _activeRequests.removeWhere((r) => r.requestId == request.requestId);
+        _completedRequests.removeWhere((r) => r.requestId == request.requestId);
+      });
+    }
   }
 
   Future<void> _deleteSelected(List<ServiceRequestModel> visible) async {
@@ -198,14 +280,33 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
               ),)
           .toList(),
     );
+    // FIX (Sep 8 2026 — offline-DB split): same reasoning as
+    // _deleteOne() above — a bulk selection can span both the live
+    // list and the cached-completed list.
+    final deletedIds = targets.map((r) => r.requestId).toSet();
+    if (mounted) {
+      setState(() {
+        _activeRequests.removeWhere((r) => deletedIds.contains(r.requestId));
+        _completedRequests.removeWhere((r) => deletedIds.contains(r.requestId));
+      });
+    }
     clearSelection();
   }
 
   @override
   Widget build(BuildContext context) {
+    // FIX (Sep 8 2026 — offline-DB split): _requests is gone — merge
+    // the live (active) and cached (completed) lists back into one,
+    // sorted the same way both already are individually. Every
+    // existing consumer below (the "N Total" badge, the selection
+    // toolbar, the empty-state check, bulk delete) reads this merged
+    // list and is otherwise completely unchanged.
+    final requests = <ServiceRequestModel>[..._activeRequests, ..._completedRequests]
+      ..sort((a, b) =>
+          (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
     // Test Data Cleanup (Aug 11 2026): client-side filter on the
     // already-loaded, already-paid-for page — never a second query.
-    final visible = _requests
+    final visible = requests
         .where((r) => matchesPhoneFilter(r.customerPhone))
         .toList();
 
@@ -224,7 +325,7 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: _pink.withValues(alpha: 0.4)),
             ),
-            child: Text('${_requests.length} Total',
+            child: Text('${requests.length} Total',
                 style: const TextStyle(
                     color: _pink, fontSize: 12, fontWeight: FontWeight.bold,),),
           ),
@@ -244,7 +345,7 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
       body: visible.isEmpty
           ? Center(
               child: Text(
-                _requests.isEmpty ? 'No requests yet' : 'No matches for that number',
+                requests.isEmpty ? 'No requests yet' : 'No matches for that number',
                 style: const TextStyle(color: _muted),
               ),)
           : ListView.builder(

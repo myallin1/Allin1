@@ -160,6 +160,26 @@ class ChittiLiveCallService {
       'createdAt': ServerValue.timestamp,
     });
 
+    // FIX (Sep 8 2026 — database wastage/leakage audit): cleanupCall()
+    // is the ONLY thing that ever deletes this node, and it has exactly
+    // ONE call site in the whole app — chitti_call_screen.dart's
+    // _logCallAndCleanup(), reached only through the graceful
+    // _endCall() path. If the app is force-closed, crashes, or the OS
+    // kills it mid-call, dispose() runs at most (and often not even
+    // that, on a hard kill) — cleanupCall() never fires, and this node
+    // (plus every liveTranscript child appendTranscript() wrote for it)
+    // sits in RTDB forever. No Cloud Function exists in this project to
+    // sweep it later (Spark plan). onDisconnect() is the Firebase-native
+    // answer to exactly this: the SERVER removes this node the moment
+    // it detects the client's connection actually dropped, with no
+    // client code needing to run at all. Safe to hard-remove here (not
+    // just mark 'ended' the way endCall() does): a client that has
+    // truly disconnected can never call logCall() to persist the
+    // transcript anyway, so there is nothing left to protect by
+    // deferring the delete — same trade-off any client-only signaling
+    // node accepts.
+    unawaited(ref.onDisconnect().remove());
+
     _currentCallId = callId;
     debugPrint('[ChittiLiveCall] Started outgoing call: $callId');
     return callId;
@@ -323,7 +343,16 @@ class ChittiLiveCallService {
   Future<void> cleanupCall(String callId) async {
     _endedCallIds.add(callId);
     try {
-      await _calls.child(callId).remove();
+      final ref = _calls.child(callId);
+      // Hygiene: this call is being torn down through the normal,
+      // graceful path — cancel the onDisconnect() armed in
+      // startOutgoingCall() so it doesn't sit registered on the server
+      // for a node that's about to be gone anyway. Harmless either way
+      // (removing an already-gone path is a no-op), but leaving a
+      // fired-and-forgotten disconnect hook armed past the point it's
+      // needed is exactly the kind of loose end this audit is for.
+      unawaited(ref.onDisconnect().cancel());
+      await ref.remove();
       if (_currentCallId == callId) {
         _currentCallId = null;
       }

@@ -32,6 +32,7 @@ import '../payment_screen.dart';
 import 'bike_booking_screen.dart';
 import '../location_picker_screen.dart';
 import '../../services/firestore_usage_tracking.dart';
+import '../../widgets/rating_feedback_sheet.dart' show updateRateeRatingAverage;
 
 class RideTrackingScreen extends StatefulWidget {
   final RideModel ride;
@@ -529,20 +530,18 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
           'ratedAt': FieldValue.serverTimestamp(),
         });
         if (heroId != null && heroId.isNotEmpty) {
-          final ridesSnap = await FirebaseFirestore.instance
-              .collection('rides')
-              .where('heroId', isEqualTo: heroId)
-              .where('customerRating', isGreaterThan: 0)
-              .get();
-          final avg = ridesSnap.docs.fold<double>(0, (s, d) {
-                final r = (d.data()['customerRating'] as num?)?.toDouble() ?? 0;
-                return s + r;
-              }) /
-              (ridesSnap.docs.isNotEmpty ? ridesSnap.docs.length : 1);
-          await FirebaseFirestore.instance
-              .collection('heroes')
-              .doc(heroId)
-              .set({'heroRating': avg}, SetOptions(merge: true));
+          // FIX (database-wastage audit, Sep 2026): was re-fetching this
+          // hero's ENTIRE completed-ride rating history on every single
+          // new rating just to recompute an average — see
+          // updateRateeRatingAverage's own header for the full
+          // reasoning and the running-totals fix.
+          await updateRateeRatingAverage(
+            completionCollection: 'rides',
+            rateeCollection: 'heroes',
+            rateeId: heroId,
+            rateeSingular: 'hero',
+            newRating: rating,
+          );
         }
       } catch (e) {
         debugPrint('[Rating] Save failed: $e');

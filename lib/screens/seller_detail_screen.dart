@@ -102,11 +102,26 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
   // correctly the first time this session.
   StreamSubscription<List<CartItem>>? _cartSub;
 
+  // FIX (re-audit, Sep 2026 — the field-consistency fix above only made
+  // the badge check the SAME fields the checkout transaction does; it
+  // was still a one-time snapshot from `widget.seller`, captured at
+  // navigation time, and never updated for as long as the customer sat
+  // on this page. custom_hotel_view_screen.dart already solved this
+  // exact problem correctly with a live doc StreamBuilder — this
+  // mirrors that pattern here instead of leaving this screen weaker
+  // than its sibling. Null until the first snapshot arrives, so
+  // `_isOpen()` falls back to `widget.seller`'s own values for that
+  // first frame (no flash of "closed" before live data loads).
+  bool? _liveIsOpen;
+  String? _liveStatus;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _sellerDocSub;
+
   @override
   void initState() {
     super.initState();
     _loadProducts();
     _setupCartListener();
+    _setupSellerLiveStatus();
   }
 
   void _setupCartListener() {
@@ -119,9 +134,27 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
     });
   }
 
+  void _setupSellerLiveStatus() {
+    final sellerId = widget.seller['id'] as String? ?? '';
+    if (sellerId.isEmpty) return;
+    _sellerDocSub = FirebaseFirestore.instance
+        .collection('sellers')
+        .doc(sellerId)
+        .snapshots()
+        .listen((snap) {
+      if (!mounted) return;
+      final data = snap.data();
+      setState(() {
+        _liveIsOpen = data?['isOpen'] as bool? ?? true;
+        _liveStatus = data?['status'] as String? ?? 'active';
+      });
+    });
+  }
+
   @override
   void dispose() {
     _cartSub?.cancel();
+    _sellerDocSub?.cancel();
     super.dispose();
   }
 
@@ -805,7 +838,36 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
   }
 
   // ── Helper: Open/Closed ─────────────────────────────────────
+  // FIX (Sep 2026 — "menu screen shows Open, checkout says shop just
+  // closed" report): this used to check ONLY `widget.seller['hours']`
+  // (a business-hours schedule most sellers never set, defaulting to
+  // "Open" whenever it's missing) and never looked at the seller's own
+  // manual isOpen toggle or account status at all. The checkout
+  // transaction (_checkout(), below) enforces the REAL gate —
+  // `sellerData['isOpen']` / `sellerData['status']`, read live from
+  // Firestore — so a seller who manually closed their shop (or was
+  // deactivated) still showed a cheerful green "Open" badge right up
+  // until the customer had filled in delivery details and hit
+  // "Continue to Payment," where the order was correctly rejected but
+  // the customer had no way to know why until then. Checking the same
+  // two fields here — same defaults as the transaction (`true`/
+  // `'active'` when absent, so an old seller doc with neither field
+  // still reads as open, matching existing behavior for those sellers)
+  // — makes the badge tell the truth up front. `widget.seller` is the
+  // same sellers/{id} doc shape (SellerModel.toJson()) the transaction
+  // reads, so both fields are already present whenever they're set.
   bool _isOpen() {
+    // Live values (from _setupSellerLiveStatus's snapshots() listener)
+    // win once they've arrived — that's the whole point of making this
+    // live. Before the first snapshot lands, fall back to the
+    // navigation-time widget.seller values so the badge never flashes
+    // an incorrect state on the very first frame.
+    final status =
+        _liveStatus ?? widget.seller['status'] as String? ?? 'active';
+    final manuallyOpen =
+        _liveIsOpen ?? widget.seller['isOpen'] as bool? ?? true;
+    if (status != 'active' || !manuallyOpen) return false;
+
     final hours = widget.seller['hours'] as Map<String, dynamic>?;
     if (hours == null) return true;
 
