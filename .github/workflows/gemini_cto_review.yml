@@ -9,6 +9,21 @@ permissions:
   pull-requests: write
   issues: write
 
+# NEW (Sep 9 2026 — Nizam: "gemini ku problem therinja again atha
+# sonnet kita or chitti kita sollanum apram again audit,work same loop
+# no problemnu vanthu testing mudinja than enaku notification
+# varanum"). This review already produces a structured
+# APPROVED/CHANGES REQUESTED verdict — it just never DID anything with
+# it beyond posting a comment for a human to read. Two things close the
+# loop:
+#   1. On a 🔴 CHANGES REQUESTED verdict, auto-comment @claude so the
+#      same PR gets picked back up by claude.yml's own trigger — no
+#      human has to notice and re-ping it.
+#   2. Label the PR gemini-clean or gemini-changes-requested so
+#      ci-cd.yml's admin-notify step (see its own new comment) can tell
+#      whether the build it is about to announce actually passed this
+#      final audit, instead of announcing on "the build compiled" alone.
+
 jobs:
   cto-review:
     runs-on: ubuntu-latest
@@ -126,6 +141,57 @@ jobs:
                   body: reviewText
                 });
                 console.log('Successfully posted Gemini CTO review comment.');
+
+                // Close the loop: parse the verdict line and act on it
+                // rather than leaving it for a human to notice.
+                const prNumber = context.payload.pull_request.number;
+                const changesRequested = /Status:\*\*\s*\[?.*🔴/i.test(reviewText) ||
+                  /🔴\s*CHANGES REQUESTED/i.test(reviewText);
+
+                const ensureLabel = async (name, color, description) => {
+                  try {
+                    await github.rest.issues.createLabel({
+                      owner: context.repo.owner, repo: context.repo.repo,
+                      name, color, description
+                    });
+                  } catch (_) { /* already exists */ }
+                };
+
+                if (changesRequested) {
+                  await ensureLabel('gemini-changes-requested', 'E05555',
+                    'Gemini final audit found a real problem — not yet safe to release');
+                  await ensureLabel('gemini-clean', '4ADE80',
+                    'Gemini final audit found nothing — safe to notify/release');
+                  // Swap the label rather than let both accumulate.
+                  try {
+                    await github.rest.issues.removeLabel({
+                      owner: context.repo.owner, repo: context.repo.repo,
+                      issue_number: prNumber, name: 'gemini-clean'
+                    });
+                  } catch (_) {}
+                  await github.rest.issues.addLabels({
+                    owner: context.repo.owner, repo: context.repo.repo,
+                    issue_number: prNumber, labels: ['gemini-changes-requested']
+                  });
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner, repo: context.repo.repo,
+                    issue_number: prNumber,
+                    body: '@claude please fix the issues raised in the Gemini CTO review above, then push to this same branch.'
+                  });
+                } else {
+                  await ensureLabel('gemini-clean', '4ADE80',
+                    'Gemini final audit found nothing — safe to notify/release');
+                  try {
+                    await github.rest.issues.removeLabel({
+                      owner: context.repo.owner, repo: context.repo.repo,
+                      issue_number: prNumber, name: 'gemini-changes-requested'
+                    });
+                  } catch (_) {}
+                  await github.rest.issues.addLabels({
+                    owner: context.repo.owner, repo: context.repo.repo,
+                    issue_number: prNumber, labels: ['gemini-clean']
+                  });
+                }
               } else {
                 console.log('No review output from Gemini:', JSON.stringify(data));
               }

@@ -630,6 +630,41 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # NEW (Sep 9 2026 — Nizam: "gemini... same loop no problemnu
+      # vanthu testing mudinja than enaku notification varanum athuku
+      # munnadi yethum varakudathu"). This job runs on every push to
+      # main, regardless of whether the PR that landed there carried a
+      # 🔴 CHANGES REQUESTED verdict from gemini_cto_review.yml — the
+      # notify step below used to fire purely on "the build compiled",
+      # with zero connection to that review's outcome. This step reads
+      # the merge commit's own PR number (GitHub appends "(#123)" to a
+      # squash-merge subject and writes "Merge pull request #123" for a
+      # regular merge — both handled) and checks that PR's labels for
+      # `gemini-changes-requested`. Deliberately does NOT block the
+      # build/release itself — only the "hey, this is ready" ping,
+      # since a merge already happened and hiding that from Nizam
+      # entirely would be worse than a notification he has to read
+      # skeptically once.
+      - name: Check Gemini final-audit gate
+        id: gemini_gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SUBJECT="$(git log -1 --format=%s)"
+          PR_NUMBER="$(echo "$SUBJECT" | grep -oE '#[0-9]+' | head -1 | tr -d '#')"
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No PR number found in merge commit subject — nothing to gate on."
+            echo "should_notify=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          LABELS="$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json labels --jq '.labels[].name' 2>/dev/null || true)"
+          if echo "$LABELS" | grep -q "gemini-changes-requested"; then
+            echo "PR #$PR_NUMBER still carries gemini-changes-requested — skipping the notify ping."
+            echo "should_notify=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_notify=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Notify admin app via FCM
         # FIX (Sep 2 2026): a job-level `if:` referencing the `secrets`
         # context directly caused GitHub to reject this entire workflow
@@ -641,6 +676,7 @@ jobs:
         # does on its own (see its early `if (!serviceAccountJson)`
         # exit) — this step always runs, and simply no-ops when the
         # secret hasn't been added yet.
+        if: steps.gemini_gate.outputs.should_notify != 'false'
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           RELEASE_URL: https://github.com/${{ github.repository }}/releases/tag/latest-admin-test

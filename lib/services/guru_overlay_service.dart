@@ -561,30 +561,35 @@ class GuruOverlayService extends ChangeNotifier {
     _closeDialogOpen = true;
     try {
       final confirmed = await showDialog<bool>(
-      context: ctx,
-      builder: (dialogCtx) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          'Close Chitti AI?',
-          style: GoogleFonts.outfit(color: const Color(0xFF4A1236), fontWeight: FontWeight.w800),
-        ),
-        content: Text(
-          'Are you sure you want to close Chitti AI?',
-          style: GoogleFonts.outfit(color: const Color(0xFF8A4E72), fontSize: 13.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogCtx).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Color(0xFF8A4E72))),
+        context: ctx,
+        builder: (dialogCtx) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(
+            'Close Chitti AI?',
+            style: GoogleFonts.outfit(
+                color: const Color(0xFF4A1236), fontWeight: FontWeight.w800),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogCtx).pop(true),
-            child: const Text('Close', style: TextStyle(color: Color(0xFFFF4FA3))),
+          content: Text(
+            'Are you sure you want to close Chitti AI?',
+            style: GoogleFonts.outfit(
+                color: const Color(0xFF8A4E72), fontSize: 13.5),
           ),
-        ],
-      ),
-    );
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(false),
+              child: const Text('Cancel',
+                  style: TextStyle(color: Color(0xFF8A4E72))),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(true),
+              child: const Text('Close',
+                  style: TextStyle(color: Color(0xFFFF4FA3))),
+            ),
+          ],
+        ),
+      );
       if (confirmed == true) {
         _forceClose();
       }
@@ -653,7 +658,8 @@ class GuruOverlayService extends ChangeNotifier {
       } else if (decision == VoiceYesNo.no) {
         _pendingTaskChain = null;
         chain.abort();
-        messages.add(GuruChatTurn(role: 'assistant', text: chain.summaryText()));
+        messages
+            .add(GuruChatTurn(role: 'assistant', text: chain.summaryText()));
         _sending = false;
         notifyListeners();
         unawaited(_speak(chain.summaryText()));
@@ -688,7 +694,9 @@ class GuruOverlayService extends ChangeNotifier {
           args: pending,
           resolved: false,
         ));
-        messages.add(const GuruChatTurn(role: 'assistant', text: 'Okay, cancelled — let me know if you need anything else.'));
+        messages.add(const GuruChatTurn(
+            role: 'assistant',
+            text: 'Okay, cancelled — let me know if you need anything else.'));
         _sending = false;
         notifyListeners();
         return;
@@ -733,12 +741,14 @@ class GuruOverlayService extends ChangeNotifier {
       languageCode: _languageInfo().label == 'Tamil' ? 'ta' : 'en',
     );
     if (talk != null) {
-      messages.add(GuruChatTurn(
-        role: 'assistant',
-        text: talk.text,
-        suggestions: talk.suggestions,
-        videoId: talk.videoId,
-      ),);
+      messages.add(
+        GuruChatTurn(
+          role: 'assistant',
+          text: talk.text,
+          suggestions: talk.suggestions,
+          videoId: talk.videoId,
+        ),
+      );
       _sending = false;
       notifyListeners();
       unawaited(_speak(talk.text));
@@ -798,19 +808,22 @@ class GuruOverlayService extends ChangeNotifier {
             ).suggestions;
       // See the twin in guru_chat_screen.dart: a clip belongs under a
       // model reply too, not only under a local one.
-      messages.add(GuruChatTurn(
-        role: 'assistant',
-        text: parsed.text,
-        suggestions: replySuggestions,
-        videoId: ChittiVideoService.findFor(trimmed)?.videoId,
-      ),);
+      messages.add(
+        GuruChatTurn(
+          role: 'assistant',
+          text: parsed.text,
+          suggestions: replySuggestions,
+          videoId: ChittiVideoService.findFor(trimmed)?.videoId,
+        ),
+      );
       unawaited(_speak(parsed.text));
       persist();
     } catch (e) {
       messages.add(
         const GuruChatTurn(
           role: 'assistant',
-          text: 'Chitti AI is temporarily unavailable. Please try again shortly.',
+          text:
+              'Chitti AI is temporarily unavailable. Please try again shortly.',
         ),
       );
     } finally {
@@ -915,7 +928,8 @@ class GuruOverlayService extends ChangeNotifier {
     if (input.isEmpty) return false;
     Map<String, dynamic>? args;
     try {
-      args = await _api.extractAgentAction(message: input, apiKeyOverride: apiKey);
+      args =
+          await _api.extractAgentAction(message: input, apiKeyOverride: apiKey);
     } catch (e) {
       debugPrint('[GuruOverlayService] extractAgentAction failed: $e');
     }
@@ -967,7 +981,11 @@ class GuruOverlayService extends ChangeNotifier {
     // not dead defensive code.
     if (!ChittiToolRegistry.requiresConfirmation(action)) {
       final logArgs = <String, dynamic>{...args, 'source': source};
-      unawaited(_logGuruAnalyticsEvent(eventType: 'intent_resolved', action: action, args: logArgs, resolved: true));
+      unawaited(_logGuruAnalyticsEvent(
+          eventType: 'intent_resolved',
+          action: action,
+          args: logArgs,
+          resolved: true));
       await _executePendingAction(args);
       return true;
     }
@@ -1017,7 +1035,9 @@ class GuruOverlayService extends ChangeNotifier {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       final languageLabel = _languageInfo().label;
-      await FirebaseFirestore.instance.collection('guru_analytics').add(<String, dynamic>{
+      await FirebaseFirestore.instance
+          .collection('guru_analytics')
+          .add(<String, dynamic>{
         'customerId': uid,
         'source': 'overlay',
         'eventType': eventType,
@@ -1042,8 +1062,8 @@ class GuruOverlayService extends ChangeNotifier {
       case 'create_service_request':
         final items = (args['items'] as String?)?.trim() ?? 'your request';
         final vendor = (args['vendor'] as String?)?.trim();
-        final label =
-            ChittiActionExecutor.requestTypeLabel(args['request_type'] as String?);
+        final label = ChittiActionExecutor.requestTypeLabel(
+            args['request_type'] as String?);
         return vendor != null && vendor.isNotEmpty
             ? 'I\'ll place a $label for "$items" from $vendor and send it to '
                 'nearby Heroes — should I proceed?'
@@ -1057,6 +1077,21 @@ class GuruOverlayService extends ChangeNotifier {
         return dest != null && dest.isNotEmpty
             ? 'Shall I set up that booking to $dest again?'
             : 'Shall I set up that booking again?';
+      // NEW (Sep 9 2026 — Nizam: "chitti antha popup chat la nana
+      // sonnatha type panni itha plan ok va nu enkita approve
+      // kekkatum"). Before this, create_dev_task fell through to the
+      // generic 'Should I proceed?' — the admin had to trust that
+      // Chitti extracted the right title/description from a spoken or
+      // typed request before it opened a real GitHub issue that kicks
+      // off a real coding run. Now it echoes back exactly what will be
+      // submitted, so the admin is confirming the actual plan, not a
+      // blind yes/no.
+      case 'create_dev_task':
+        final title = (args['title'] as String?)?.trim() ?? '(untitled)';
+        final desc = (args['description'] as String?)?.trim() ?? '';
+        return 'Here\'s the plan I\'ll send to Claude:\n\n'
+            '"$title"\n$desc\n\n'
+            'Should I create this dev task?';
       default:
         return 'Should I proceed?';
     }
@@ -1145,9 +1180,11 @@ class GuruOverlayService extends ChangeNotifier {
     if (open != null) {
       final navState = navigatorKey.currentState;
       if (navState != null) {
-        unawaited(navState.push(
-          ChittiNav.routeForBuilder<void>(open, result.openScreenLabel),
-        ),);
+        unawaited(
+          navState.push(
+            ChittiNav.routeForBuilder<void>(open, result.openScreenLabel),
+          ),
+        );
         // Same proactive follow-up as the full chat screen — see the
         // note there. This is the surface hero/seller/admin actually
         // use, so it needs the fix at least as much.
@@ -1182,14 +1219,16 @@ class GuruOverlayService extends ChangeNotifier {
       messages.add(
         const GuruChatTurn(
           role: 'assistant',
-          text: "You're on the app store build — updates install automatically in the background, nothing to trigger here.",
+          text:
+              "You're on the app store build — updates install automatically in the background, nothing to trigger here.",
         ),
       );
       notifyListeners();
       return;
     }
 
-    messages.add(const GuruChatTurn(role: 'assistant', text: 'Checking for an update...'));
+    messages.add(const GuruChatTurn(
+        role: 'assistant', text: 'Checking for an update...'));
     notifyListeners();
 
     try {
@@ -1199,19 +1238,26 @@ class GuruOverlayService extends ChangeNotifier {
     }
 
     if (!WebVersionChecker.instance.isUpdateAvailable) {
-      messages.add(const GuruChatTurn(role: 'assistant', text: "You're already on the latest version!"));
+      messages.add(const GuruChatTurn(
+          role: 'assistant', text: "You're already on the latest version!"));
       notifyListeners();
       return;
     }
 
-    messages.add(const GuruChatTurn(role: 'assistant', text: 'Found a new version — updating now, the app will refresh in a moment...'));
+    messages.add(const GuruChatTurn(
+        role: 'assistant',
+        text:
+            'Found a new version — updating now, the app will refresh in a moment...'));
     notifyListeners();
 
     try {
       await PwaCachePlatform().clearAndReload();
     } catch (e) {
       debugPrint('[GuruOverlayService] update apply failed: $e');
-      messages.add(const GuruChatTurn(role: 'assistant', text: "The update didn't go through — please try again from the side menu."));
+      messages.add(const GuruChatTurn(
+          role: 'assistant',
+          text:
+              "The update didn't go through — please try again from the side menu."));
       notifyListeners();
     }
   }
@@ -1407,13 +1453,15 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
 
     if (!_speechReady) {
       if (!kIsWeb) {
-        final micGranted = await PermissionService().requestMicrophonePermission();
+        final micGranted =
+            await PermissionService().requestMicrophonePermission();
         if (!micGranted) {
           debugPrint('[GuruOverlayService] Microphone permission not granted');
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Please grant microphone permission to speak with Chitti.'),
+                content: Text(
+                    'Please grant microphone permission to speak with Chitti.'),
                 backgroundColor: Color(0xFF4A1236),
               ),
             );
@@ -1441,7 +1489,8 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
               msg.contains('error_audio') ||
               msg.contains('busy');
           if (isRecoverable && _voiceSessionActive && mounted) {
-            debugPrint('[GuruOverlayService] transient speech error "$msg" — auto-recovering listening session');
+            debugPrint(
+                '[GuruOverlayService] transient speech error "$msg" — auto-recovering listening session');
             Future.delayed(const Duration(milliseconds: 400), () {
               if (_voiceSessionActive && mounted) {
                 unawaited(_startVoiceSegment(_conversationLocaleId));
@@ -1514,8 +1563,9 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
             convo.queuePendingTopic(words);
           }
           if (words.isNotEmpty) {
-            _accumulatedVoiceText =
-                _accumulatedVoiceText.isEmpty ? words : '$_accumulatedVoiceText $words';
+            _accumulatedVoiceText = _accumulatedVoiceText.isEmpty
+                ? words
+                : '$_accumulatedVoiceText $words';
             _voiceSegmentCount++;
             // The recogniser's other candidates — see the matching
             // comment in guru_chat_screen.dart for why these are worth
@@ -1729,8 +1779,8 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
 
   void _onResizeDrag(Offset delta, Size screenSize) {
     setState(() {
-      _customWidth = (_panelWidth + delta.dx)
-          .clamp(_minPanelWidth, screenSize.width - 24);
+      _customWidth =
+          (_panelWidth + delta.dx).clamp(_minPanelWidth, screenSize.width - 24);
       _customHeight = (_panelHeight + delta.dy)
           .clamp(_minPanelHeight, screenSize.height - 120);
     });
@@ -1785,71 +1835,71 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
                 ),
               ),
               Positioned(
-          left: left,
-          top: top,
-          child: GestureDetector(
-            onPanUpdate: (details) {
-              service.setPosition(service.position + details.delta);
-            },
-            child: Material(
-              color: Colors.transparent,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  AnimatedContainer(
-                    // A drag frame must land exactly where the finger is,
-                    // with no easing lag behind it — only the 3-stage
-                    // button's own jump needs (and gets) an animated
-                    // transition, via _resizingByDrag below.
-                    duration: _resizingByDrag
-                        ? Duration.zero
-                        : const Duration(milliseconds: 250),
-                    curve: Curves.easeOutCubic,
-                    width: _panelWidth,
-                    height: _panelHeight,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: const Color(0x33FF4FA3)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.14),
-                          blurRadius: 30,
-                          offset: const Offset(0, 14),
-                        ),
-                        BoxShadow(
-                          color:
-                              const Color(0xFFFF4FA3).withValues(alpha: 0.18),
-                          blurRadius: 34,
-                          spreadRadius: -10,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: Column(
+                left: left,
+                top: top,
+                child: GestureDetector(
+                  onPanUpdate: (details) {
+                    service.setPosition(service.position + details.delta);
+                  },
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Stack(
+                      clipBehavior: Clip.none,
                       children: [
-                        _buildHeader(service),
-                        Expanded(child: _buildMessages(service)),
-                        _buildInput(service),
+                        AnimatedContainer(
+                          // A drag frame must land exactly where the finger is,
+                          // with no easing lag behind it — only the 3-stage
+                          // button's own jump needs (and gets) an animated
+                          // transition, via _resizingByDrag below.
+                          duration: _resizingByDrag
+                              ? Duration.zero
+                              : const Duration(milliseconds: 250),
+                          curve: Curves.easeOutCubic,
+                          width: _panelWidth,
+                          height: _panelHeight,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: const Color(0x33FF4FA3)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.14),
+                                blurRadius: 30,
+                                offset: const Offset(0, 14),
+                              ),
+                              BoxShadow(
+                                color: const Color(0xFFFF4FA3)
+                                    .withValues(alpha: 0.18),
+                                blurRadius: 34,
+                                spreadRadius: -10,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              _buildHeader(service),
+                              Expanded(child: _buildMessages(service)),
+                              _buildInput(service),
+                            ],
+                          ),
+                        ),
+                        Positioned(
+                          right: -6,
+                          bottom: -6,
+                          child: _ResizeHandle(
+                            onDragStart: () =>
+                                setState(() => _resizingByDrag = true),
+                            onDragUpdate: (delta) => _onResizeDrag(
+                                delta, MediaQuery.sizeOf(context)),
+                            onDragEnd: () =>
+                                setState(() => _resizingByDrag = false),
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  Positioned(
-                    right: -6,
-                    bottom: -6,
-                    child: _ResizeHandle(
-                      onDragStart: () =>
-                          setState(() => _resizingByDrag = true),
-                      onDragUpdate: (delta) =>
-                          _onResizeDrag(delta, MediaQuery.sizeOf(context)),
-                      onDragEnd: () =>
-                          setState(() => _resizingByDrag = false),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+                ),
               ),
             ],
           ),
@@ -1925,7 +1975,8 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
           else if (currentAppVariant == 'customer' ||
               currentAppVariant == 'hero')
             IconButton(
-              icon: const Icon(Icons.call_rounded, color: Colors.white, size: 16),
+              icon:
+                  const Icon(Icons.call_rounded, color: Colors.white, size: 16),
               tooltip: 'Call Chitti',
               onPressed: () => unawaited(openChittiCallScreen(context)),
               padding: EdgeInsets.zero,
@@ -1957,7 +2008,9 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
           ),
           IconButton(
             icon: Icon(
-              service.autoSpeak ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+              service.autoSpeak
+                  ? Icons.volume_up_rounded
+                  : Icons.volume_off_rounded,
               color: Colors.white,
               size: 16,
             ),
@@ -1967,7 +2020,8 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
             constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
           ),
           IconButton(
-            icon: const Icon(Icons.history_rounded, color: Colors.white, size: 16),
+            icon: const Icon(Icons.history_rounded,
+                color: Colors.white, size: 16),
             tooltip: 'Past chats',
             onPressed: () async {
               final picked = await showChittiHistorySheet(context);
@@ -1979,7 +2033,8 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
             constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
           ),
           IconButton(
-            icon: const Icon(Icons.add_comment_outlined, color: Colors.white, size: 16),
+            icon: const Icon(Icons.add_comment_outlined,
+                color: Colors.white, size: 16),
             tooltip: 'New chat',
             onPressed: () => service.startNewChat(),
             padding: EdgeInsets.zero,
@@ -2055,7 +2110,8 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
         return Align(
           alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
           child: Column(
-            crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            crossAxisAlignment:
+                isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
               GestureDetector(
                 // Claude-mobile-style long-press-to-copy. UI-only: no
@@ -2081,9 +2137,12 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
                   // popup's own narrow frame.
                   margin: const EdgeInsets.symmetric(vertical: 5),
                   constraints: const BoxConstraints(maxWidth: 240),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: isUser ? const Color(0xFFFF4FA3) : const Color(0xFFFFF1F8),
+                    color: isUser
+                        ? const Color(0xFFFF4FA3)
+                        : const Color(0xFFFFF1F8),
                     borderRadius: BorderRadius.circular(18),
                   ),
                   // FIX (Aug 29 2026 - Nizam: "popup chat font pink la
@@ -2144,11 +2203,13 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
                     onTap: () {
                       final ctx = navigatorKey.currentContext;
                       if (ctx == null) return;
-                      unawaited(showPremiumVideoModal(
-                        ctx,
-                        videoId: m.videoId!,
-                        title: 'Chitti suggests',
-                      ),);
+                      unawaited(
+                        showPremiumVideoModal(
+                          ctx,
+                          videoId: m.videoId!,
+                          title: 'Chitti suggests',
+                        ),
+                      );
                     },
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
@@ -2187,7 +2248,10 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
                     children: m.suggestions
                         .map(
                           (s) => ActionChip(
-                            label: Text(s, style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF4A1236))),
+                            label: Text(s,
+                                style: GoogleFonts.outfit(
+                                    fontSize: 11,
+                                    color: const Color(0xFF4A1236))),
                             backgroundColor: const Color(0xFFFFF1F8),
                             side: const BorderSide(color: Color(0x33FF4FA3)),
                             onPressed: () => unawaited(service.sendMessage(s)),
@@ -2210,57 +2274,63 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              style: GoogleFonts.outfit(color: const Color(0xFF2B0F1F), fontSize: 12.5),
-              decoration: InputDecoration(
-                hintText: 'Ask Chitti AI...',
-                hintStyle: GoogleFonts.outfit(color: Colors.white38, fontSize: 12.5),
-                filled: true,
-                fillColor: const Color(0xFFFFF1F8),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  style: GoogleFonts.outfit(
+                      color: const Color(0xFF2B0F1F), fontSize: 12.5),
+                  decoration: InputDecoration(
+                    hintText: 'Ask Chitti AI...',
+                    hintStyle: GoogleFonts.outfit(
+                        color: Colors.white38, fontSize: 12.5),
+                    filled: true,
+                    fillColor: const Color(0xFFFFF1F8),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  onSubmitted: (_) => _send(service),
                 ),
               ),
-              onSubmitted: (_) => _send(service),
-            ),
-          ),
-          const SizedBox(width: 6),
-          // NEW (CTO mandate — Final Overlay Tool Wiring): "tap the
-          // overlay mic" — same finalResult-only speech flow as the
-          // full chat screen, feeding straight into
-          // GuruOverlayService.sendMessage() (which now runs the same
-          // agent-action + confirmation gate typed text does).
-          GestureDetector(
-            onTap: _onMicTapped,
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: _isListening ? const Color(0xFFFF4FA3) : const Color(0xFFFFF1F8),
-                shape: BoxShape.circle,
+              const SizedBox(width: 6),
+              // NEW (CTO mandate — Final Overlay Tool Wiring): "tap the
+              // overlay mic" — same finalResult-only speech flow as the
+              // full chat screen, feeding straight into
+              // GuruOverlayService.sendMessage() (which now runs the same
+              // agent-action + confirmation gate typed text does).
+              GestureDetector(
+                onTap: _onMicTapped,
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: _isListening
+                        ? const Color(0xFFFF4FA3)
+                        : const Color(0xFFFFF1F8),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
               ),
-              child: Icon(
-                _isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
-                color: Colors.white,
-                size: 16,
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: () => _send(service),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: const BoxDecoration(
+                      color: Color(0xFFFF4FA3), shape: BoxShape.circle),
+                  child: const Icon(Icons.send, color: Colors.white, size: 16),
+                ),
               ),
-            ),
+            ],
           ),
-          const SizedBox(width: 6),
-          GestureDetector(
-            onTap: () => _send(service),
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: const BoxDecoration(color: Color(0xFFFF4FA3), shape: BoxShape.circle),
-              child: const Icon(Icons.send, color: Colors.white, size: 16),
-            ),
-          ),
-        ],
-      ),
           const SizedBox(height: 4),
           // Same quiet line as the full chat screen. Under the input,
           // not on every bubble: repeated per reply it becomes
@@ -2286,8 +2356,6 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
     unawaited(service.sendMessage(text));
   }
 }
-
-
 
 /// The bottom-right drag handle that resizes the panel freehand.
 ///
@@ -2360,9 +2428,9 @@ class _GuruOverlayTypingBubbleState extends State<_GuruOverlayTypingBubble>
   @override
   void initState() {
     super.initState();
-    _controller =
-        AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
-          ..repeat();
+    _controller = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 900))
+      ..repeat();
   }
 
   @override

@@ -127,7 +127,8 @@ class GuruChatScreen extends StatefulWidget {
   State<GuruChatScreen> createState() => _GuruChatScreenState();
 }
 
-class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObserver {
+class _GuruChatScreenState extends State<GuruChatScreen>
+    with WidgetsBindingObserver {
   final GuruApiService _api = GuruApiService();
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -200,7 +201,8 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _offerToResumeSavedChat());
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _offerToResumeSavedChat());
   }
 
   /// Fires on foreground<->background transitions (NOT just app close) —
@@ -276,7 +278,8 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
         _messages.addAll(saved.map((m) => _GuruMessage(
               role: m['role'] as String? ?? 'assistant',
               text: m['text'] as String? ?? '',
-              suggestions: (m['suggestions'] as List?)?.cast<String>() ?? const [],
+              suggestions:
+                  (m['suggestions'] as List?)?.cast<String>() ?? const [],
               videoId: m['videoId'] as String?,
             )));
       });
@@ -391,12 +394,14 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
           if (_conversation.hasPendingTopic) {
             final pending = _conversation.popPendingTopic();
             if (pending != null && mounted) {
-              final isTamil = context.read<LocalizationService>().languageCode == 'ta';
+              final isTamil =
+                  context.read<LocalizationService>().languageCode == 'ta';
               final bridgeText = isTamil
                   ? "பாஸ், நீங்க பேசும்போது இன்னொன்னு கேட்டீங்களே: '${pending.text}' — அதை இப்போ பார்க்கிறேன்..."
                   : "Boss, you also asked: '${pending.text}' — checking that now...";
               setState(() {
-                _messages.add(_GuruMessage(role: 'assistant', text: bridgeText));
+                _messages
+                    .add(_GuruMessage(role: 'assistant', text: bridgeText));
               });
               unawaited(_sendMessage(pending.text));
               return;
@@ -421,7 +426,8 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
     if ((input.isEmpty && pendingImage == null) || _isTyping) return;
 
     setState(() {
-      _messages.add(_GuruMessage(role: 'user', text: input, imageBytes: pendingImage));
+      _messages.add(
+          _GuruMessage(role: 'user', text: input, imageBytes: pendingImage));
       _isTyping = true;
       _inputController.clear();
       _pendingImageBytes = null;
@@ -440,7 +446,6 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
   }
 
   Future<void> _doSendMessage(String input, Uint8List? pendingImage) async {
-
     final customerKey = context.read<AiActivationService>().apiKey;
     final backend = await _api.resolveBackendDirect();
     final effectiveApiKey = customerKey.trim().isNotEmpty
@@ -476,7 +481,10 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
         ));
         if (!mounted) return;
         setState(() {
-          _messages.add(const _GuruMessage(role: 'assistant', text: 'Okay, cancelled — let me know if you need anything else.'));
+          _messages.add(const _GuruMessage(
+              role: 'assistant',
+              text:
+                  'Okay, cancelled — let me know if you need anything else.'));
           _isTyping = false;
         });
         _scrollToBottom();
@@ -656,12 +664,14 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
       // just as much as under a local one. Looking it up only on the
       // no-key path meant the video feature disappeared the moment a
       // customer was activated.
-      _messages.add(_GuruMessage(
-        role: 'assistant',
-        text: parsed.text,
-        suggestions: replySuggestions,
-        videoId: ChittiVideoService.findFor(input)?.videoId,
-      ),);
+      _messages.add(
+        _GuruMessage(
+          role: 'assistant',
+          text: parsed.text,
+          suggestions: replySuggestions,
+          videoId: ChittiVideoService.findFor(input)?.videoId,
+        ),
+      );
       _isTyping = false;
     });
     _scrollToBottom();
@@ -828,7 +838,9 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
   Future<void> _actOnVisionHandoffAction(Uint8List imageBytes) async {
     if (!mounted) return;
     setState(() {
-      _messages.add(const _GuruMessage(role: 'assistant', text: 'Let me take a closer look at that photo...'));
+      _messages.add(const _GuruMessage(
+          role: 'assistant',
+          text: 'Let me take a closer look at that photo...'));
     });
     _scrollToBottom();
 
@@ -843,7 +855,8 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
       setState(() {
         _messages.add(const _GuruMessage(
           role: 'assistant',
-          text: "I couldn't clearly identify a product in that photo — please try a "
+          text:
+              "I couldn't clearly identify a product in that photo — please try a "
               'clearer photo, or just type the item into the chat.',
         ));
       });
@@ -858,26 +871,30 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
       final item = entry['item'] ?? '';
       if (item.isEmpty) continue;
       final quantity = entry['quantity'];
-      GroceryAiNotesService.instance.addItem(item, quantity: (quantity?.isEmpty ?? true) ? null : quantity);
+      GroceryAiNotesService.instance.addItem(item,
+          quantity: (quantity?.isEmpty ?? true) ? null : quantity);
     }
 
     final numbered = items.asMap().entries.map((e) {
       final n = e.key + 1;
       final item = e.value['item'] ?? '';
       final quantity = e.value['quantity'];
-      final label = (quantity != null && quantity.isNotEmpty) ? '$quantity $item' : item;
+      final label =
+          (quantity != null && quantity.isNotEmpty) ? '$quantity $item' : item;
       return '$n. $label';
     }).join('\n');
 
     setState(() {
       _messages.add(_GuruMessage(
         role: 'assistant',
-        text: 'Found these in your photo and added them to your grocery list:\n$numbered\n\n'
+        text:
+            'Found these in your photo and added them to your grocery list:\n$numbered\n\n'
             'Open Grocery Order to review and submit.',
       ));
     });
     _scrollToBottom();
-    unawaited(_speak('I found ${items.length} item${items.length == 1 ? '' : 's'} in your photo and added '
+    unawaited(_speak(
+        'I found ${items.length} item${items.length == 1 ? '' : 's'} in your photo and added '
         '${items.length == 1 ? 'it' : 'them'} to your grocery list.'));
   }
 
@@ -918,7 +935,9 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
       debugPrint('[GuruChatScreen] image pick failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open the screenshot. Please try again.')),
+          const SnackBar(
+              content:
+                  Text('Could not open the screenshot. Please try again.')),
         );
       }
     } finally {
@@ -1110,7 +1129,8 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
               msg.contains('error_audio') ||
               msg.contains('busy');
           if (isRecoverable && _voiceSessionActive && mounted) {
-            debugPrint('[GuruChatScreen] transient speech error "$msg" — auto-recovering listening session');
+            debugPrint(
+                '[GuruChatScreen] transient speech error "$msg" — auto-recovering listening session');
             Future.delayed(const Duration(milliseconds: 400), () {
               if (_voiceSessionActive && mounted) {
                 unawaited(_startVoiceSegment(_conversationLocaleId));
@@ -1234,7 +1254,8 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
               ? words
               : '$_accumulatedVoiceText $words';
           _inputController.text = preview;
-          _inputController.selection = TextSelection.collapsed(offset: preview.length);
+          _inputController.selection =
+              TextSelection.collapsed(offset: preview.length);
 
           if (!result.finalResult) return;
 
@@ -1255,8 +1276,9 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
             _conversation.queuePendingTopic(words);
           }
           if (words.isNotEmpty) {
-            _accumulatedVoiceText =
-                _accumulatedVoiceText.isEmpty ? words : '$_accumulatedVoiceText $words';
+            _accumulatedVoiceText = _accumulatedVoiceText.isEmpty
+                ? words
+                : '$_accumulatedVoiceText $words';
             _voiceSegmentCount++;
             // Keep the recogniser's OTHER candidates for this segment.
             // They are thrown away today, and they are the cheapest
@@ -1357,9 +1379,8 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
     if (mounted) setState(() => _isListening = false);
 
     final text = _accumulatedVoiceText.trim();
-    final alternates = _voiceSegmentCount == 1
-        ? _voiceAlternates
-        : const <String>[];
+    final alternates =
+        _voiceSegmentCount == 1 ? _voiceAlternates : const <String>[];
     _accumulatedVoiceText = '';
     _voiceAlternates = const <String>[];
     // In a hands-free session even an EMPTY turn matters — two silent
@@ -1545,7 +1566,9 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       final languageLabel = mounted ? _languageInfo(context).label : null;
-      await FirebaseFirestore.instance.collection('guru_analytics').add(<String, dynamic>{
+      await FirebaseFirestore.instance
+          .collection('guru_analytics')
+          .add(<String, dynamic>{
         'customerId': uid,
         'source': 'chat_screen',
         'eventType': eventType,
@@ -1724,6 +1747,16 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
         return dest != null && dest.isNotEmpty
             ? 'Shall I set up that booking to $dest again?'
             : 'Shall I set up that booking again?';
+      // NEW (Sep 9 2026 — Nizam: "chitti antha popup chat la nana
+      // sonnatha type panni itha plan ok va nu enkita approve
+      // kekkatum"). Mirrors guru_overlay_service.dart's own fix — see
+      // that header for the full why.
+      case 'create_dev_task':
+        final title = (args['title'] as String?)?.trim() ?? '(untitled)';
+        final desc = (args['description'] as String?)?.trim() ?? '';
+        return 'Here\'s the plan I\'ll send to Claude:\n\n'
+            '"$title"\n$desc\n\n'
+            'Should I create this dev task?';
       default:
         return 'Should I proceed?';
     }
@@ -1753,7 +1786,8 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
 
     setState(() {
       _messages.add(
-        const _GuruMessage(role: 'assistant', text: 'Checking for an update...'),
+        const _GuruMessage(
+            role: 'assistant', text: 'Checking for an update...'),
       );
     });
     _scrollToBottom();
@@ -1783,7 +1817,8 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
       _messages.add(
         const _GuruMessage(
           role: 'assistant',
-          text: 'Found a new version — updating now, the app will refresh in a moment...',
+          text:
+              'Found a new version — updating now, the app will refresh in a moment...',
         ),
       );
     });
@@ -1800,7 +1835,8 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
         _messages.add(
           const _GuruMessage(
             role: 'assistant',
-            text: "The update didn't go through — please try again from the side menu.",
+            text:
+                "The update didn't go through — please try again from the side menu.",
           ),
         );
       });
@@ -1847,25 +1883,25 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
       // the banner below, so anyone who wants the full model-backed
       // Chitti can still reach it in one tap.
       body: SafeArea(
-              child: Stack(
-                children: [
-                  const _GlowBackdrop(),
-                  Column(
-                    children: [
-                      _buildAppBar(context, activation),
-                      if (!activation.isAiActivated) _buildOfflineBanner(),
-                      Expanded(
-                        child: _messages.isEmpty
-                            ? _buildWelcomeState()
-                            : _buildMessages(),
-                      ),
-                      if (_isTyping) const _GuruTypingIndicator(),
-                      _buildInputBar(),
-                    ],
-                  ),
-                ],
-              ),
+        child: Stack(
+          children: [
+            const _GlowBackdrop(),
+            Column(
+              children: [
+                _buildAppBar(context, activation),
+                if (!activation.isAiActivated) _buildOfflineBanner(),
+                Expanded(
+                  child: _messages.isEmpty
+                      ? _buildWelcomeState()
+                      : _buildMessages(),
+                ),
+                if (_isTyping) const _GuruTypingIndicator(),
+                _buildInputBar(),
+              ],
             ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -2041,7 +2077,8 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
             Text(
               'Ask me anything about rides, deliveries, or services in Erode.',
               textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(color: muted, fontSize: 13.5, height: 1.4),
+              style:
+                  GoogleFonts.outfit(color: muted, fontSize: 13.5, height: 1.4),
             ),
             const SizedBox(height: 22),
             Wrap(
@@ -2058,7 +2095,8 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
               runSpacing: 10,
               alignment: WrapAlignment.center,
               children: _suggestedPrompts
-                  .map((p) => _PromptChip(label: p, onTap: () => unawaited(_sendMessage(p))))
+                  .map((p) => _PromptChip(
+                      label: p, onTap: () => unawaited(_sendMessage(p))))
                   .toList(),
             ),
           ],
@@ -2119,8 +2157,10 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
                         onTap: _clearAttachment,
                         child: Container(
                           padding: const EdgeInsets.all(3),
-                          decoration: BoxDecoration(color: surfaceElevated, shape: BoxShape.circle),
-                          child: Icon(Icons.close_rounded, color: muted, size: 16),
+                          decoration: BoxDecoration(
+                              color: surfaceElevated, shape: BoxShape.circle),
+                          child:
+                              Icon(Icons.close_rounded, color: muted, size: 16),
                         ),
                       ),
                     ),
@@ -2134,12 +2174,14 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
                 // button so the customer can send a screenshot of an
                 // app issue for Guru to troubleshoot.
                 IconButton(
-                  onPressed: _pickingImage ? null : () => unawaited(_pickAttachment()),
+                  onPressed:
+                      _pickingImage ? null : () => unawaited(_pickAttachment()),
                   icon: _pickingImage
                       ? SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: muted),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: muted),
                         )
                       : Icon(Icons.attach_file_rounded, color: muted),
                 ),
@@ -2155,45 +2197,55 @@ class _GuruChatScreenState extends State<GuruChatScreen> with WidgetsBindingObse
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 48, maxHeight: 140),
-                decoration: BoxDecoration(
-                  color: surfaceElevated,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: border),
-                ),
-                child: TextField(
-                  controller: _inputController,
-                  minLines: 1,
-                  maxLines: 5,
-                  onSubmitted: (_) => unawaited(_sendMessage()),
-                  textInputAction: TextInputAction.send,
-                  style: GoogleFonts.notoSansTamil(color: ink, fontWeight: FontWeight.w500, fontSize: 14.5),
-                  decoration: InputDecoration(
-                    hintText: _isListening ? 'Listening...' : 'Message your Super Hero...',
-                    hintStyle: GoogleFonts.outfit(color: muted, fontWeight: FontWeight.w500),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+                  child: Container(
+                    constraints:
+                        const BoxConstraints(minHeight: 48, maxHeight: 140),
+                    decoration: BoxDecoration(
+                      color: surfaceElevated,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: border),
+                    ),
+                    child: TextField(
+                      controller: _inputController,
+                      minLines: 1,
+                      maxLines: 5,
+                      onSubmitted: (_) => unawaited(_sendMessage()),
+                      textInputAction: TextInputAction.send,
+                      style: GoogleFonts.notoSansTamil(
+                          color: ink,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14.5),
+                      decoration: InputDecoration(
+                        hintText: _isListening
+                            ? 'Listening...'
+                            : 'Message your Super Hero...',
+                        hintStyle: GoogleFonts.outfit(
+                            color: muted, fontWeight: FontWeight.w500),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 18, vertical: 13),
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 44,
-              height: 44,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [accentB, accentA]),
-                  shape: BoxShape.circle,
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [accentB, accentA]),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      onPressed:
+                          _isTyping ? null : () => unawaited(_sendMessage()),
+                      icon: const Icon(Icons.arrow_upward_rounded,
+                          color: Colors.white, size: 20),
+                      padding: EdgeInsets.zero,
+                    ),
+                  ),
                 ),
-                child: IconButton(
-                  onPressed: _isTyping ? null : () => unawaited(_sendMessage()),
-                  icon: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 20),
-                  padding: EdgeInsets.zero,
-                ),
-              ),
-            ),
               ],
             ),
             const SizedBox(height: 6),
@@ -2233,7 +2285,9 @@ class _SuperHeroActivationScreen extends StatelessWidget {
     final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!launched && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open WhatsApp. Please call Admin Support directly.')),
+        const SnackBar(
+            content: Text(
+                'Could not open WhatsApp. Please call Admin Support directly.')),
       );
     }
   }
@@ -2299,7 +2353,8 @@ class _SuperHeroActivationScreen extends StatelessWidget {
                           'Bike, Auto, Cab, Parcel, Mini Truck, Lorry, and SOS — '
                           'plus every other service in the app.',
                           textAlign: TextAlign.center,
-                          style: GoogleFonts.outfit(color: muted, fontSize: 14, height: 1.5),
+                          style: GoogleFonts.outfit(
+                              color: muted, fontSize: 14, height: 1.5),
                         ),
                         const SizedBox(height: 26),
                         Wrap(
@@ -2327,10 +2382,14 @@ class _SuperHeroActivationScreen extends StatelessWidget {
                                   Container(
                                     padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
-                                      gradient: LinearGradient(colors: [accentA, accentC]),
-                                      borderRadius: BorderRadius.all(Radius.circular(14)),
+                                      gradient: LinearGradient(
+                                          colors: [accentA, accentC]),
+                                      borderRadius:
+                                          BorderRadius.all(Radius.circular(14)),
                                     ),
-                                    child: const Icon(Icons.support_agent_rounded, color: Colors.white),
+                                    child: const Icon(
+                                        Icons.support_agent_rounded,
+                                        color: Colors.white),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
@@ -2352,15 +2411,19 @@ class _SuperHeroActivationScreen extends StatelessWidget {
                                 children: [
                                   Expanded(
                                     child: OutlinedButton.icon(
-                                      onPressed: () => unawaited(_callAdmin(context)),
-                                      icon: const Icon(Icons.call_rounded, size: 18),
+                                      onPressed: () =>
+                                          unawaited(_callAdmin(context)),
+                                      icon: const Icon(Icons.call_rounded,
+                                          size: 18),
                                       label: const Text('Call'),
                                       style: OutlinedButton.styleFrom(
                                         foregroundColor: ink,
                                         side: BorderSide(color: border),
-                                        padding: const EdgeInsets.symmetric(vertical: 14),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 14),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(16),
+                                          borderRadius:
+                                              BorderRadius.circular(16),
                                         ),
                                       ),
                                     ),
@@ -2368,15 +2431,20 @@ class _SuperHeroActivationScreen extends StatelessWidget {
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: ElevatedButton.icon(
-                                      onPressed: () => unawaited(_contactAdmin(context)),
-                                      icon: const Icon(Icons.chat_rounded, size: 18),
+                                      onPressed: () =>
+                                          unawaited(_contactAdmin(context)),
+                                      icon: const Icon(Icons.chat_rounded,
+                                          size: 18),
                                       label: const Text('WhatsApp'),
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFF25D366),
+                                        backgroundColor:
+                                            const Color(0xFF25D366),
                                         foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(vertical: 14),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 14),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(16),
+                                          borderRadius:
+                                              BorderRadius.circular(16),
                                         ),
                                       ),
                                     ),
@@ -2457,13 +2525,15 @@ class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
                 gradient: LinearGradient(colors: [accentC, accentA]),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.mic_rounded, color: Colors.white, size: 30),
+              child:
+                  const Icon(Icons.mic_rounded, color: Colors.white, size: 30),
             ),
             const SizedBox(height: 16),
             Text(
               'Voice Mode',
               textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(color: ink, fontSize: 19, fontWeight: FontWeight.w800),
+              style: GoogleFonts.outfit(
+                  color: ink, fontSize: 19, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
             Text(
@@ -2471,7 +2541,8 @@ class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
               'let Super Hero understand and place it for you. It\'s completely '
               'free, one tap away.',
               textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(color: muted, fontSize: 13.5, height: 1.5),
+              style:
+                  GoogleFonts.outfit(color: muted, fontSize: 13.5, height: 1.5),
             ),
             const SizedBox(height: 12),
             Container(
@@ -2482,7 +2553,10 @@ class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
               ),
               child: Text(
                 'FREE • No card, no catch',
-                style: GoogleFonts.outfit(color: accentC, fontWeight: FontWeight.w800, fontSize: 12.5),
+                style: GoogleFonts.outfit(
+                    color: accentC,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12.5),
               ),
             ),
             const SizedBox(height: 20),
@@ -2494,7 +2568,8 @@ class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
                       )
                     : const Icon(Icons.mic_rounded),
                 label: const Text('Claim My Free Voice Access'),
@@ -2502,14 +2577,17 @@ class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
                   backgroundColor: accentB,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 15),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18)),
                 ),
               ),
             ),
             const SizedBox(height: 8),
             TextButton(
               onPressed: () => Navigator.of(context).maybePop(),
-              child: Text('Maybe later', style: GoogleFonts.outfit(color: muted, fontWeight: FontWeight.w600)),
+              child: Text('Maybe later',
+                  style: GoogleFonts.outfit(
+                      color: muted, fontWeight: FontWeight.w600)),
             ),
           ],
         ),
@@ -2552,7 +2630,8 @@ class _CapabilityChip extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             capability.label,
-            style: GoogleFonts.outfit(color: ink, fontSize: 12.5, fontWeight: FontWeight.w700),
+            style: GoogleFonts.outfit(
+                color: ink, fontSize: 12.5, fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -2586,7 +2665,9 @@ class _PromptChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: border),
         ),
-        child: Text(label, style: GoogleFonts.outfit(color: ink, fontSize: 13, fontWeight: FontWeight.w600)),
+        child: Text(label,
+            style: GoogleFonts.outfit(
+                color: ink, fontSize: 13, fontWeight: FontWeight.w600)),
       ),
     );
   }
@@ -2622,7 +2703,8 @@ class _VoiceMicButton extends StatefulWidget {
   }
 }
 
-class _VoiceMicButtonState extends State<_VoiceMicButton> with SingleTickerProviderStateMixin {
+class _VoiceMicButtonState extends State<_VoiceMicButton>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _pulse = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1100),
@@ -2651,7 +2733,9 @@ class _VoiceMicButtonState extends State<_VoiceMicButton> with SingleTickerProvi
           height: 46,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: widget.isListening ? accentC.withValues(alpha: 0.18) : surfaceElevated,
+            color: widget.isListening
+                ? accentC.withValues(alpha: 0.18)
+                : surfaceElevated,
             border: Border.all(
               color: widget.isListening ? accentC : border,
               width: widget.isListening ? 1.6 : 1,
@@ -2672,8 +2756,12 @@ class _VoiceMicButtonState extends State<_VoiceMicButton> with SingleTickerProvi
               IconButton(
                 onPressed: widget.onTap,
                 icon: Icon(
-                  widget.isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
-                  color: widget.isListening ? accentC : (widget.isPro ? ink : muted),
+                  widget.isListening
+                      ? Icons.mic_rounded
+                      : Icons.mic_none_rounded,
+                  color: widget.isListening
+                      ? accentC
+                      : (widget.isPro ? ink : muted),
                   size: 20,
                 ),
                 padding: EdgeInsets.zero,
@@ -2682,7 +2770,8 @@ class _VoiceMicButtonState extends State<_VoiceMicButton> with SingleTickerProvi
                 Positioned(
                   right: 2,
                   top: 2,
-                  child: Icon(Icons.workspace_premium_rounded, size: 11, color: accentB),
+                  child: Icon(Icons.workspace_premium_rounded,
+                      size: 11, color: accentB),
                 ),
             ],
           ),
@@ -2851,9 +2940,12 @@ class _GuruMessageBubble extends StatelessWidget {
                     children: message.suggestions
                         .map(
                           (s) => ActionChip(
-                            label: Text(s, style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600)),
+                            label: Text(s,
+                                style: GoogleFonts.outfit(
+                                    fontSize: 13, fontWeight: FontWeight.w600)),
                             backgroundColor: surfaceElevated,
-                            side: BorderSide(color: border.withValues(alpha: 0.6)),
+                            side: BorderSide(
+                                color: border.withValues(alpha: 0.6)),
                             labelStyle: TextStyle(color: ink),
                             // Softer pill + a real touch target: these
                             // are tapped one-handed, often in motion.
@@ -2864,7 +2956,9 @@ class _GuruMessageBubble extends StatelessWidget {
                               horizontal: 6,
                               vertical: 8,
                             ),
-                            onPressed: onSuggestionTap == null ? null : () => onSuggestionTap!(s),
+                            onPressed: onSuggestionTap == null
+                                ? null
+                                : () => onSuggestionTap!(s),
                           ),
                         )
                         .toList(),
@@ -2899,7 +2993,9 @@ class _GuruTypingIndicatorState extends State<_GuruTypingIndicator>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat();
+    _controller = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 900))
+      ..repeat();
   }
 
   @override
@@ -2969,12 +3065,19 @@ class _GuruAvatar extends StatelessWidget {
         ),
         boxShadow: glow
             ? [
-                BoxShadow(color: accentA.withValues(alpha: 0.45), blurRadius: 34, spreadRadius: 4),
-                BoxShadow(color: accentB.withValues(alpha: 0.3), blurRadius: 18, spreadRadius: 1),
+                BoxShadow(
+                    color: accentA.withValues(alpha: 0.45),
+                    blurRadius: 34,
+                    spreadRadius: 4),
+                BoxShadow(
+                    color: accentB.withValues(alpha: 0.3),
+                    blurRadius: 18,
+                    spreadRadius: 1),
               ]
             : null,
       ),
-      child: Icon(Icons.auto_awesome_rounded, color: Colors.white, size: size * 0.5),
+      child: Icon(Icons.auto_awesome_rounded,
+          color: Colors.white, size: size * 0.5),
     );
   }
 
@@ -3087,7 +3190,8 @@ class _GlowBackdropState extends State<_GlowBackdrop>
 }
 
 class _GlowOrb extends StatelessWidget {
-  const _GlowOrb({required this.color, required this.size, required this.opacity});
+  const _GlowOrb(
+      {required this.color, required this.size, required this.opacity});
 
   final Color color;
   final double size;
@@ -3101,7 +3205,10 @@ class _GlowOrb extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: RadialGradient(
-          colors: [color.withValues(alpha: opacity), color.withValues(alpha: 0)],
+          colors: [
+            color.withValues(alpha: opacity),
+            color.withValues(alpha: 0)
+          ],
         ),
       ),
     );
@@ -3200,4 +3307,3 @@ class _GuruMessage {
   /// one player, one set of playback bugs, one place to fix them.
   final String? videoId;
 }
-
