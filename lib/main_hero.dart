@@ -36,6 +36,7 @@ import 'widgets/branded_loading_screen.dart';
 import 'widgets/migration_notice_overlay.dart';
 import 'services/guru_overlay_service.dart';
 import 'services/chitti/hero_memory_service.dart';
+import 'services/chitti/chitti_screen_tracker.dart';
 
 String? _rideIdFromPushData(Map<String, dynamic> data) {
   for (final key in const <String>[
@@ -70,7 +71,8 @@ String? _serviceRequestIdFromPushData(Map<String, dynamic> data) {
   return null;
 }
 
-const String kPendingHeroServiceRequestIdKey = 'pending_hero_service_request_id';
+const String kPendingHeroServiceRequestIdKey =
+    'pending_hero_service_request_id';
 
 // FIX (Aug 10 2026 — Nizam's "video every launch is too slow / disturbs
 // repeat users" report, same pattern as main_customer.dart): gates
@@ -226,18 +228,24 @@ class _BootFailedApp extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.wifi_off_rounded, color: Color(0xFF8F5A78), size: 48),
+                const Icon(Icons.wifi_off_rounded,
+                    color: Color(0xFF8F5A78), size: 48),
                 const SizedBox(height: 16),
                 const Text(
                   "Couldn't connect. Please check your internet and try again.",
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Color(0xFF3D1230), fontSize: 14, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                      color: Color(0xFF3D1230),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: onRetry,
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4FA3)),
-                  child: const Text('Retry', style: TextStyle(color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF4FA3)),
+                  child: const Text('Retry',
+                      style: TextStyle(color: Colors.white)),
                 ),
               ],
             ),
@@ -295,7 +303,8 @@ Future<void> _syncFcmTokenForHero(String uid) async {
   }
 
   _fcmTokenRefreshSub?.cancel();
-  _fcmTokenRefreshSub = FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+  _fcmTokenRefreshSub =
+      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
     unawaited(
       FirebaseFirestore.instance.collection('heroes').doc(uid).set({
         'fcmToken': newToken,
@@ -326,116 +335,130 @@ void _initGlobalHeroPingListener() {
     unawaited(_syncFcmTokenForHero(uid));
     debugPrint('[GlobalPing] Attaching global hero_pings/$uid listener');
 
-    _globalHeroPingSub = FirebaseDatabase.instance
-        .ref('hero_pings/$uid')
-        .onChildAdded
-        .listen((event) async {
-      final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
-      final requestId = event.snapshot.key ?? '';
-      if (pingData == null || requestId.isEmpty) return;
+    _globalHeroPingSub =
+        FirebaseDatabase.instance.ref('hero_pings/$uid').onChildAdded.listen(
+      (event) async {
+        final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
+        final requestId = event.snapshot.key ?? '';
+        if (pingData == null || requestId.isEmpty) return;
 
-      // Expiry check
-      final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
-      if (pingExpiresAt == null) return;
-      if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
-        debugPrint('[GlobalPing] Expired ping — removing: $requestId');
-        await FirebaseDatabase.instance.ref('hero_pings/$uid/$requestId').remove();
-        return;
-      }
-
-      debugPrint('[GlobalPing] ✅ New ping received: $requestId');
-
-      // De-duplication check
-      if (!await HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
-        debugPrint('[GlobalPing] ⏭️ Duplicate ping skipped: $requestId');
-        return;
-      }
-
-      // Fire local notification using the new v5 channel configuration
-      // Note: playAlertTone: false here — ringtone will be triggered by _showRideRequestDialog
-      // AFTER the dialog is visible, so it loops continuously while the hero sees it.
-      // FIX (Aug 8 2026 — "notification has no 3 buttons" live-device bug):
-      // this is a GLOBAL listener, always attached from main() regardless of
-      // whether hero_home_screen.dart's own richer (showDetails:true) RTDB
-      // listener is also attached — and because this one is registered at
-      // app boot, it almost always wins the shouldProcessRideNotification
-      // dedup race and is the notification the hero actually sees, even
-      // while the app is in the foreground. Passing showDetails:false here
-      // meant the hero essentially NEVER saw the View/Accept/Minimize
-      // buttons in practice — the exact bug reported. Now always shows full
-      // details/actions, matching hero_home_screen.dart's own calls.
-      if (!kIsWeb) {
-        try {
-          await HeroRideNotificationService.showRideAssigned(
-            rideId: requestId,
-            data: Map<String, dynamic>.from(pingData),
-            playAlertTone: false,
-            showDetails: true,
-          );
-          debugPrint('[GlobalPing] 🔔 Notification fired for: $requestId');
-        } catch (e) {
-          debugPrint('[GlobalPing] Notification error: $e');
+        // Expiry check
+        final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
+        if (pingExpiresAt == null) return;
+        if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
+          debugPrint('[GlobalPing] Expired ping — removing: $requestId');
+          await FirebaseDatabase.instance
+              .ref('hero_pings/$uid/$requestId')
+              .remove();
+          return;
         }
-      }
-    }, onError: (Object e) {
-      debugPrint('[GlobalPing] RTDB listener error: $e');
-    },);
+
+        debugPrint('[GlobalPing] ✅ New ping received: $requestId');
+
+        // De-duplication check
+        if (!await HeroRideNotificationService.shouldProcessRideNotification(
+            requestId)) {
+          debugPrint('[GlobalPing] ⏭️ Duplicate ping skipped: $requestId');
+          return;
+        }
+
+        // Fire local notification using the new v5 channel configuration
+        // Note: playAlertTone: false here — ringtone will be triggered by _showRideRequestDialog
+        // AFTER the dialog is visible, so it loops continuously while the hero sees it.
+        // FIX (Aug 8 2026 — "notification has no 3 buttons" live-device bug):
+        // this is a GLOBAL listener, always attached from main() regardless of
+        // whether hero_home_screen.dart's own richer (showDetails:true) RTDB
+        // listener is also attached — and because this one is registered at
+        // app boot, it almost always wins the shouldProcessRideNotification
+        // dedup race and is the notification the hero actually sees, even
+        // while the app is in the foreground. Passing showDetails:false here
+        // meant the hero essentially NEVER saw the View/Accept/Minimize
+        // buttons in practice — the exact bug reported. Now always shows full
+        // details/actions, matching hero_home_screen.dart's own calls.
+        if (!kIsWeb) {
+          try {
+            await HeroRideNotificationService.showRideAssigned(
+              rideId: requestId,
+              data: Map<String, dynamic>.from(pingData),
+              playAlertTone: false,
+              showDetails: true,
+            );
+            debugPrint('[GlobalPing] 🔔 Notification fired for: $requestId');
+          } catch (e) {
+            debugPrint('[GlobalPing] Notification error: $e');
+          }
+        }
+      },
+      onError: (Object e) {
+        debugPrint('[GlobalPing] RTDB listener error: $e');
+      },
+    );
 
     // ── Broadcast Order System — parallel ping channel ────────────
     // Same wake/notification mechanism as hero_pings, generic text.
     // The in-app accept dialog is handled by hero_home_screen.dart's
     // own hero_service_pings listener; this only fires the
     // lock-screen notification so the hero is woken up.
-    debugPrint('[GlobalServicePing] Attaching global hero_service_pings/$uid listener');
+    debugPrint(
+        '[GlobalServicePing] Attaching global hero_service_pings/$uid listener');
     _globalServicePingSub = FirebaseDatabase.instance
         .ref('hero_service_pings/$uid')
         .onChildAdded
-        .listen((event) async {
-      final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
-      final requestId = event.snapshot.key ?? '';
-      if (pingData == null || requestId.isEmpty) return;
+        .listen(
+      (event) async {
+        final pingData = event.snapshot.value as Map<dynamic, dynamic>?;
+        final requestId = event.snapshot.key ?? '';
+        if (pingData == null || requestId.isEmpty) return;
 
-      final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
-      if (pingExpiresAt == null) return;
-      if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
-        debugPrint('[GlobalServicePing] Expired ping — removing: $requestId');
-        await FirebaseDatabase.instance.ref('hero_service_pings/$uid/$requestId').remove();
-        return;
-      }
-
-      debugPrint('[GlobalServicePing] ✅ New service ping received: $requestId');
-
-      if (!await HeroRideNotificationService.shouldProcessRideNotification(requestId)) {
-        debugPrint('[GlobalServicePing] ⏭️ Duplicate ping skipped: $requestId');
-        return;
-      }
-
-      if (!kIsWeb) {
-        try {
-          await HeroRideNotificationService.showRideAssigned(
-            rideId: requestId,
-            data: Map<String, dynamic>.from(pingData),
-            playAlertTone: false,
-            // FIX (same root cause as the ride-ping listener above): this
-            // global listener wins the dedup race almost every time, so a
-            // quiet showDetails:false here meant the hero effectively never
-            // saw the 3-button notification for service requests either.
-            showDetails: true,
-            pushType: 'service_request',
-            title: 'New Service Request',
-            channelDescription:
-                'Lock-screen ride and service-request alerts with ACCEPT action and ringtone.',
-            ticker: 'New service request assigned',
-            emptyBodyFallback: 'Tap ACCEPT to open the request.',
-          );
-          debugPrint('[GlobalServicePing] 🔔 Notification fired for: $requestId');
-        } catch (e) {
-          debugPrint('[GlobalServicePing] Notification error: $e');
+        final pingExpiresAt = (pingData['pingExpiresAt'] as num?)?.toInt();
+        if (pingExpiresAt == null) return;
+        if (DateTime.now().toUtc().millisecondsSinceEpoch > pingExpiresAt) {
+          debugPrint('[GlobalServicePing] Expired ping — removing: $requestId');
+          await FirebaseDatabase.instance
+              .ref('hero_service_pings/$uid/$requestId')
+              .remove();
+          return;
         }
-      }
-    }, onError: (Object e) {
-      debugPrint('[GlobalServicePing] RTDB listener error: $e');
-    },);
+
+        debugPrint(
+            '[GlobalServicePing] ✅ New service ping received: $requestId');
+
+        if (!await HeroRideNotificationService.shouldProcessRideNotification(
+            requestId)) {
+          debugPrint(
+              '[GlobalServicePing] ⏭️ Duplicate ping skipped: $requestId');
+          return;
+        }
+
+        if (!kIsWeb) {
+          try {
+            await HeroRideNotificationService.showRideAssigned(
+              rideId: requestId,
+              data: Map<String, dynamic>.from(pingData),
+              playAlertTone: false,
+              // FIX (same root cause as the ride-ping listener above): this
+              // global listener wins the dedup race almost every time, so a
+              // quiet showDetails:false here meant the hero effectively never
+              // saw the 3-button notification for service requests either.
+              showDetails: true,
+              pushType: 'service_request',
+              title: 'New Service Request',
+              channelDescription:
+                  'Lock-screen ride and service-request alerts with ACCEPT action and ringtone.',
+              ticker: 'New service request assigned',
+              emptyBodyFallback: 'Tap ACCEPT to open the request.',
+            );
+            debugPrint(
+                '[GlobalServicePing] 🔔 Notification fired for: $requestId');
+          } catch (e) {
+            debugPrint('[GlobalServicePing] Notification error: $e');
+          }
+        }
+      },
+      onError: (Object e) {
+        debugPrint('[GlobalServicePing] RTDB listener error: $e');
+      },
+    );
   });
 }
 
@@ -550,7 +573,8 @@ void main() async {
           await earlyPrefs.setString(AffiliateService.kPendingCodeKey, refCode);
           final refType = Uri.base.queryParameters['rtype'];
           if (refType != null && refType.isNotEmpty) {
-            await earlyPrefs.setString(AffiliateService.kPendingTypeKey, refType);
+            await earlyPrefs.setString(
+                AffiliateService.kPendingTypeKey, refType);
           }
         }
       }
@@ -564,7 +588,8 @@ void main() async {
         videoDone.complete();
       }
 
-      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+      FirebaseMessaging.onBackgroundMessage(
+          _firebaseMessagingBackgroundHandler);
 
       // FIX (black/white-screen-stuck audit, per Nizam's request): retry
       // a few times with a short delay (covers the common transient
@@ -587,7 +612,8 @@ void main() async {
         }
       }
       if (!firebaseReady) {
-        debugPrint('[main_hero] Fatal: Firebase init failed after retries: $lastFirebaseError');
+        debugPrint(
+            '[main_hero] Fatal: Firebase init failed after retries: $lastFirebaseError');
         runApp(const _BootFailedApp(onRetry: main));
         return;
       }
@@ -716,6 +742,12 @@ class HeroApp extends StatelessWidget {
             // customer app's proven pattern here for consistency.
             key: ValueKey<String>('hero_${themeService.themeKey}'),
             navigatorKey: navigatorKey,
+            navigatorObservers: [
+              // Keeps ChittiMemoryService.currentScreen in step with the
+              // navigator so Chitti knows which page the hero is on, and
+              // lifts the overlay panel above newly pushed screens.
+              ChittiScreenObserver(),
+            ],
             title: 'hero allin1',
             debugShowCheckedModeBanner: false,
             theme: themeService.currentTheme,
@@ -877,7 +909,9 @@ class _HeroSetupGateState extends State<_HeroSetupGate> {
   }
 
   void _ensureFuturesFor(String uid) {
-    if (_cachedUid == uid && _usersDocFuture != null && _heroDocFuture != null) {
+    if (_cachedUid == uid &&
+        _usersDocFuture != null &&
+        _heroDocFuture != null) {
       return;
     }
     _cachedUid = uid;
@@ -978,7 +1012,8 @@ class _HeroSetupGateState extends State<_HeroSetupGate> {
         // existing Firestore-based gate below, unchanged.
         if (_onboardingCacheLoaded) {
           if (_cachedOnboardingStatus == 'approved') {
-            return _buildFadingChild('hero-dashboard', const HeroDashboardShell());
+            return _buildFadingChild(
+                'hero-dashboard', const HeroDashboardShell());
           }
           if (_cachedOnboardingStatus == 'pending') {
             return _buildFadingChild('hero-pending', const HeroPendingScreen());
@@ -1087,7 +1122,8 @@ class _HeroSetupGateState extends State<_HeroSetupGate> {
                       {'isSetupComplete': true},
                       SetOptions(merge: true),
                     ).catchError((Object e) {
-                      debugPrint('[HeroSetupGate] self-heal isSetupComplete failed: $e');
+                      debugPrint(
+                          '[HeroSetupGate] self-heal isSetupComplete failed: $e');
                     }),
                   );
 

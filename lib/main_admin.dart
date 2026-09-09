@@ -43,6 +43,7 @@ import 'services/migration_gate_service.dart';
 import 'services/chitti/chitti_accessibility_bridge.dart';
 import 'services/chitti/chitti_commitment_alarms.dart';
 import 'services/chitti/chitti_followup_service.dart';
+import 'services/chitti/chitti_screen_tracker.dart';
 import 'services/session_service.dart';
 import 'services/theme_service.dart';
 import 'widgets/branded_loading_screen.dart';
@@ -58,7 +59,8 @@ import 'widgets/migration_notice_overlay.dart';
 // killed; this handler exists so the OS actually wakes/registers the
 // background messaging pipeline at all).
 @pragma('vm:entry-point')
-Future<void> _adminFirebaseMessagingBackgroundHandler(RemoteMessage message) async {
+Future<void> _adminFirebaseMessagingBackgroundHandler(
+    RemoteMessage message) async {
   debugPrint('[main_admin] Background push received: ${message.messageId}');
 }
 
@@ -309,7 +311,8 @@ void main() {
               options: DefaultFirebaseOptions.currentPlatform,
             );
           } catch (initErr) {
-            debugPrint('[main_admin] Options init error: $initErr, attempting native fallback');
+            debugPrint(
+                '[main_admin] Options init error: $initErr, attempting native fallback');
             if (Firebase.apps.isEmpty) {
               await Firebase.initializeApp();
             }
@@ -339,14 +342,16 @@ void main() {
         } else {
           debugPrint('[main_admin] Firebase init failed: $e\n$stack');
           if (Firebase.apps.isEmpty) {
-            runApp(_InitErrorApp('[BUILD-FINGERPRINT-31AUG-1348] Firebase initialization failed:\n$e\n\nSTACK:\n$stack'));
+            runApp(_InitErrorApp(
+                '[BUILD-FINGERPRINT-31AUG-1348] Firebase initialization failed:\n$e\n\nSTACK:\n$stack'));
             return;
           }
         }
       } catch (e, stack) {
         debugPrint('[main_admin] Firebase init failed: $e\n$stack');
         if (Firebase.apps.isEmpty) {
-          runApp(_InitErrorApp('[BUILD-FINGERPRINT-31AUG-1348] Firebase initialization failed:\n$e\n\nSTACK:\n$stack'));
+          runApp(_InitErrorApp(
+              '[BUILD-FINGERPRINT-31AUG-1348] Firebase initialization failed:\n$e\n\nSTACK:\n$stack'));
           return;
         }
       }
@@ -358,7 +363,8 @@ void main() {
       // starts syncing this admin's FCM token the moment they're
       // signed in (works for both a fresh login and an already-warm
       // session restored from disk).
-      FirebaseMessaging.onBackgroundMessage(_adminFirebaseMessagingBackgroundHandler);
+      FirebaseMessaging.onBackgroundMessage(
+          _adminFirebaseMessagingBackgroundHandler);
       // FIX (Aug 10 2026 — rocket-speed repeat opens): same treatment as
       // Hive.initFlutter() above — first-ever launch still awaits these
       // (unchanged timing, hidden behind the video), a repeat launch fires
@@ -484,7 +490,8 @@ void main() {
       // so the admin doesn't have to keep opening Development Monitor
       // to find out. Uses the SAME foreground-alert path as every other
       // admin notification above/below — no new UI needed.
-      unawaited(FirebaseMessaging.instance.subscribeToTopic('chitti_dev_builds'));
+      unawaited(
+          FirebaseMessaging.instance.subscribeToTopic('chitti_dev_builds'));
       // NEW (Sep 5 2026 — Nizam: a GitHub password-reset link tapped in
       // Gmail offered Chrome and the system browser, not this app.)
       //
@@ -585,109 +592,115 @@ class AdminApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (_) => LocalizationService(),
       child: MaterialApp(
-      // NEW (CTO mandate — Admin App Autonomous Agent Support System):
-      // wires the app's shared navigatorKey (app_navigator.dart) into
-      // the Admin app's own MaterialApp, same as main_customer.dart and
-      // main_hero.dart already do. AdminApp never had this before —
-      // without it, AdminQuickTaskService (below) has no Overlay/
-      // Navigator to insert its floating panel into or push admin
-      // screens from.
-      navigatorKey: navigatorKey,
-      title: 'Allin1 Admin',
-      debugShowCheckedModeBanner: false,
-      // FIX (typography audit): this used to be a bare ThemeData.dark()
-      // with no fontFamily set, so any bare TextStyle() in the admin
-      // screens (which don't route through the customer/hero apps'
-      // ThemeService) silently rendered in the platform default (Roboto)
-      // while every GoogleFonts.outfit(...) call around it rendered in
-      // Outfit -- same inconsistency as the customer app, just via a
-      // different theme object. Reusing AppBrandTheme's shared
-      // Outfit + NotoSansTamil-fallback text theme brings the admin
-      // panel in line with the rest of the app.
-      theme: ThemeData.dark().copyWith(
-        // NOTE: ThemeData.copyWith() has no fontFamily/fontFamilyFallback
-        // named params (those only exist on the ThemeData() constructor) --
-        // textTheme below already carries Outfit + the Tamil fallback via
-        // AppBrandTheme.brandTextTheme(), which is what actually matters
-        // for text rendering.
-        textTheme: AppBrandTheme.brandTextTheme(
-          ThemeData.dark().textTheme,
-          bodyColor: const Color(0xFFEEEEF5),
-          displayColor: const Color(0xFFEEEEF5),
+        // NEW (CTO mandate — Admin App Autonomous Agent Support System):
+        // wires the app's shared navigatorKey (app_navigator.dart) into
+        // the Admin app's own MaterialApp, same as main_customer.dart and
+        // main_hero.dart already do. AdminApp never had this before —
+        // without it, AdminQuickTaskService (below) has no Overlay/
+        // Navigator to insert its floating panel into or push admin
+        // screens from.
+        navigatorKey: navigatorKey,
+        navigatorObservers: [
+          // Keeps ChittiMemoryService.currentScreen in step with the
+          // navigator so Chitti knows which page the admin is on, and
+          // lifts the overlay panel above newly pushed screens.
+          ChittiScreenObserver(),
+        ],
+        title: 'Allin1 Admin',
+        debugShowCheckedModeBanner: false,
+        // FIX (typography audit): this used to be a bare ThemeData.dark()
+        // with no fontFamily set, so any bare TextStyle() in the admin
+        // screens (which don't route through the customer/hero apps'
+        // ThemeService) silently rendered in the platform default (Roboto)
+        // while every GoogleFonts.outfit(...) call around it rendered in
+        // Outfit -- same inconsistency as the customer app, just via a
+        // different theme object. Reusing AppBrandTheme's shared
+        // Outfit + NotoSansTamil-fallback text theme brings the admin
+        // panel in line with the rest of the app.
+        theme: ThemeData.dark().copyWith(
+          // NOTE: ThemeData.copyWith() has no fontFamily/fontFamilyFallback
+          // named params (those only exist on the ThemeData() constructor) --
+          // textTheme below already carries Outfit + the Tamil fallback via
+          // AppBrandTheme.brandTextTheme(), which is what actually matters
+          // for text rendering.
+          textTheme: AppBrandTheme.brandTextTheme(
+            ThemeData.dark().textTheme,
+            bodyColor: const Color(0xFFEEEEF5),
+            displayColor: const Color(0xFFEEEEF5),
+          ),
+          scaffoldBackgroundColor: const Color(0xFF0A0A1A),
+          colorScheme: const ColorScheme.dark(
+            primary: Color(0xFFE05555),
+            secondary: Color(0xFFF5C542),
+          ),
         ),
-        scaffoldBackgroundColor: const Color(0xFF0A0A1A),
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFFE05555),
-          secondary: Color(0xFFF5C542),
+        // FIX (boot-flicker root cause, mirrors main_customer.dart/
+        // main_hero.dart's fix): no `initialData` here meant EVERY
+        // relaunch — even for an already-signed-in admin — started at
+        // ConnectionState.waiting and mounted a bare CircularProgressIndicator
+        // scaffold (a THIRD, visually distinct loading design) right after
+        // the boot sequence's second runApp(AdminApp()) had already torn
+        // down _BootLoadingApp's BrandedLoadingScreen. Seeding
+        // FirebaseAuth.instance.currentUser (available synchronously once
+        // Firebase is initialized, no network wait) as initialData skips
+        // this mount entirely for a returning admin, and the waiting-state
+        // fallback now reuses BrandedLoadingScreen instead of a different-
+        // looking bare spinner for the rare genuine cold-cache case.
+        // FIX (video-as-natural-buffer, per Nizam's request): app_splash.mp4
+        // plays pre-Firebase/Hive as the very first boot frame (see
+        // _BootLoadingApp above) instead of here — this used to wrap the
+        // StreamBuilder auth gate in a second AppSplashVideoScreen play,
+        // which would have shown the same video twice back to back on every
+        // launch. Now goes straight to the (unchanged) StreamBuilder gate.
+        // UPDATED (Aug 10 2026): the pre-Firebase video itself is now
+        // first-ever-launch-only (see _kSplashVideoSeenEverKey in main())
+        // — on every later launch nothing plays before this route at all,
+        // and this StreamBuilder's existing initialData fast-path is what
+        // the admin actually sees appear almost instantly.
+        home: StreamBuilder<User?>(
+          stream: FirebaseAuth.instance.authStateChanges(),
+          initialData: FirebaseAuth.instance.currentUser,
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const BrandedLoadingScreen();
+            }
+            if (snap.hasData && snap.data != null) {
+              return const SuperAdminHomeScreen();
+            }
+            return const LoginScreen(
+              presetUserType: UserType.admin,
+              lockUserType: true,
+              title: '🔐 Admin Access',
+              subtitle: 'Authorized personnel only',
+              lockedUserLabel: 'Admin',
+            );
+          },
         ),
-      ),
-      // FIX (boot-flicker root cause, mirrors main_customer.dart/
-      // main_hero.dart's fix): no `initialData` here meant EVERY
-      // relaunch — even for an already-signed-in admin — started at
-      // ConnectionState.waiting and mounted a bare CircularProgressIndicator
-      // scaffold (a THIRD, visually distinct loading design) right after
-      // the boot sequence's second runApp(AdminApp()) had already torn
-      // down _BootLoadingApp's BrandedLoadingScreen. Seeding
-      // FirebaseAuth.instance.currentUser (available synchronously once
-      // Firebase is initialized, no network wait) as initialData skips
-      // this mount entirely for a returning admin, and the waiting-state
-      // fallback now reuses BrandedLoadingScreen instead of a different-
-      // looking bare spinner for the rare genuine cold-cache case.
-      // FIX (video-as-natural-buffer, per Nizam's request): app_splash.mp4
-      // plays pre-Firebase/Hive as the very first boot frame (see
-      // _BootLoadingApp above) instead of here — this used to wrap the
-      // StreamBuilder auth gate in a second AppSplashVideoScreen play,
-      // which would have shown the same video twice back to back on every
-      // launch. Now goes straight to the (unchanged) StreamBuilder gate.
-      // UPDATED (Aug 10 2026): the pre-Firebase video itself is now
-      // first-ever-launch-only (see _kSplashVideoSeenEverKey in main())
-      // — on every later launch nothing plays before this route at all,
-      // and this StreamBuilder's existing initialData fast-path is what
-      // the admin actually sees appear almost instantly.
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        initialData: FirebaseAuth.instance.currentUser,
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const BrandedLoadingScreen();
-          }
-          if (snap.hasData && snap.data != null) {
-            return const SuperAdminHomeScreen();
-          }
-          return const LoginScreen(
-             presetUserType: UserType.admin,
-             lockUserType: true,
-             title: '🔐 Admin Access',
-             subtitle: 'Authorized personnel only',
-             lockedUserLabel: 'Admin',
-           );
+        // NEW (CTO mandate — Task 1: The Admin Confirmation Gate): the
+        // "Quick Task Chatbox" FAB, laid over every admin screen exactly
+        // like GlobalGuruFab is on the customer app. The actual panel is
+        // a separate root-level OverlayEntry (see
+        // AdminQuickTaskService.show()) inserted via `navigatorKey`, so
+        // it survives Navigator.push/pop the same way this FAB does.
+        // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch"): MigrationGate
+        // wraps EVERYTHING else here, including the Quick Task FAB — a
+        // migration lock must hide the whole app, not sit under a
+        // still-interactive overlay.
+        builder: (context, child) => MigrationGate(
+          child: Stack(
+            children: [
+              if (child != null) child,
+              const GlobalGuruFab(),
+            ],
+          ),
+        ),
+        routes: {
+          '/admin-home': (_) => const AdminDashboardScreen(),
+          '/admin/ads': (_) => const AdsManagementScreen(),
+          '/admin/credentials': (_) => const CredentialsAdminScreen(),
+          '/admin/tasks': (_) => const TaskApprovalsScreen(),
+          '/admin/fares': (_) => const FareManagementScreen(),
         },
-      ),
-      // NEW (CTO mandate — Task 1: The Admin Confirmation Gate): the
-      // "Quick Task Chatbox" FAB, laid over every admin screen exactly
-      // like GlobalGuruFab is on the customer app. The actual panel is
-      // a separate root-level OverlayEntry (see
-      // AdminQuickTaskService.show()) inserted via `navigatorKey`, so
-      // it survives Navigator.push/pop the same way this FAB does.
-      // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch"): MigrationGate
-      // wraps EVERYTHING else here, including the Quick Task FAB — a
-      // migration lock must hide the whole app, not sit under a
-      // still-interactive overlay.
-      builder: (context, child) => MigrationGate(
-        child: Stack(
-          children: [
-            if (child != null) child,
-            const GlobalGuruFab(),
-          ],
-        ),
-      ),
-      routes: {
-        '/admin-home':       (_) => const AdminDashboardScreen(),
-        '/admin/ads': (_) => const AdsManagementScreen(),
-        '/admin/credentials': (_) => const CredentialsAdminScreen(),
-        '/admin/tasks': (_) => const TaskApprovalsScreen(),
-        '/admin/fares': (_) => const FareManagementScreen(),
-      },
       ),
     );
   }

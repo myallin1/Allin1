@@ -32,6 +32,7 @@ import 'services/seller_alert_notification_service.dart';
 import 'widgets/branded_loading_screen.dart';
 import 'widgets/migration_notice_overlay.dart';
 import 'services/guru_overlay_service.dart';
+import 'services/chitti/chitti_screen_tracker.dart';
 
 // NEW (Issue 2 fix — "seller app not receiving any order notification").
 // Zero-cost infra constraint: no Cloud Functions / Blaze plan, so this is
@@ -71,7 +72,8 @@ void _initSellerPingListener() {
       final requestId = event.snapshot.key ?? '';
       if (pingData == null || requestId.isEmpty) return;
 
-      final nodeRef = FirebaseDatabase.instance.ref('seller_pings/$uid/$requestId');
+      final nodeRef =
+          FirebaseDatabase.instance.ref('seller_pings/$uid/$requestId');
 
       // 1GB RTDB budget (per Nizam/CTO's zero-cost constraint): a ping is
       // a wake-up trigger, not the order record itself (the seller's
@@ -96,7 +98,8 @@ void _initSellerPingListener() {
           // the alert (customerName/itemsSummary written at order-creation
           // time — see ServiceRequestService.createServiceRequest) so this
           // never needs an extra Firestore read just to notify.
-          final customerName = pingData['customerName'] as String? ?? 'A customer';
+          final customerName =
+              pingData['customerName'] as String? ?? 'A customer';
           final itemsSummary = pingData['itemsSummary'] as String? ?? '';
           await SellerAlertNotificationService.showForegroundAlert(
             title: '🛎️ New Order Received!',
@@ -430,61 +433,68 @@ class SellerApp extends StatelessWidget {
       ],
       child: Consumer<ThemeService>(
         builder: (context, themeService, _) => MaterialApp(
-      title: 'Allin1 Partner Dashboard',
-      debugShowCheckedModeBanner: false,
-      // FIX (Nizam's request): was a hardcoded ThemeData.dark() copyWith
-      // -- now driven by ThemeService.currentTheme so the seller can
-      // actually change it from Settings, same as customer/hero. The
-      // textTheme/brand-font handling ThemeService.currentTheme applies
-      // internally already matches what this hardcoded block used to do
-      // by hand (AppBrandTheme.brandTextTheme with the Tamil fallback).
-      theme: themeService.currentTheme,
-      initialRoute: '/',
-      routes: {
-        // FIX (video-as-natural-buffer, per Nizam's request): app_splash.mp4
-        // plays pre-Firebase as the very first boot frame (see
-        // _BootLoadingApp above) instead of here — this route used to wrap
-        // LoginScreen in a second AppSplashVideoScreen play, which would
-        // have shown the same video twice back to back on every launch.
-        // Now goes straight to LoginScreen.
-        // UPDATED (Aug 10 2026): the pre-Firebase video itself is now
-        // first-ever-launch-only (see _kSplashVideoSeenEverKey in main())
-        // — on every later launch nothing plays before this route at all.
-        '/': (_) => const LoginScreen(
-              presetUserType: UserType.customer,
-              lockUserType: true,
-              title: 'Seller Login',
-              subtitle: 'Manage your Allin1 store',
-              lockedUserLabel: 'Seller',
-              postLoginRoute: '/seller-home',
-            ),
-        '/seller-home': (_) => const SellerDashboardScreen(),
-        '/seller-store': (_) => const SellerScreen(),
-        '/seller-onboarding': (_) => const SellerOnboardingScreen(),
-      },
-      onGenerateRoute: (settings) {
-        if (settings.name == '/seller-menu-setup') {
-          final sellerId = settings.arguments! as String;
-          // FIX (per Nizam's request): every seller authors their own
-          // custom dishes now — see seller_dashboard_screen.dart and
-          // seller_onboarding_screen.dart for the same change.
-          return MaterialPageRoute(
-            builder: (_) => SellerHomeKitchenMenuScreen(sellerId: sellerId, title: 'My Menu', categoryName: 'Menu'),
-          );
-        }
-        return null;
-      },
-      // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch"): Seller app had no
-      // builder: before this — added purely to host MigrationGate, same
-      // pattern as the other 3 apps. child can briefly be null on the very
-      // first MaterialApp build, so fall back to an empty box.
-      // Also hosts GlobalGuruFab for Seller Chitti Assistant.
-      builder: (context, child) => Stack(
-        children: [
-          MigrationGate(child: child ?? const SizedBox.shrink()),
-          const GlobalGuruFab(),
-        ],
-      ),
+          title: 'Allin1 Partner Dashboard',
+          debugShowCheckedModeBanner: false,
+          navigatorObservers: [
+            // Keeps ChittiMemoryService.currentScreen in step with the
+            // navigator so Chitti knows which page the seller is on, and
+            // lifts the overlay panel above newly pushed screens.
+            ChittiScreenObserver(),
+          ],
+          // FIX (Nizam's request): was a hardcoded ThemeData.dark() copyWith
+          // -- now driven by ThemeService.currentTheme so the seller can
+          // actually change it from Settings, same as customer/hero. The
+          // textTheme/brand-font handling ThemeService.currentTheme applies
+          // internally already matches what this hardcoded block used to do
+          // by hand (AppBrandTheme.brandTextTheme with the Tamil fallback).
+          theme: themeService.currentTheme,
+          initialRoute: '/',
+          routes: {
+            // FIX (video-as-natural-buffer, per Nizam's request): app_splash.mp4
+            // plays pre-Firebase as the very first boot frame (see
+            // _BootLoadingApp above) instead of here — this route used to wrap
+            // LoginScreen in a second AppSplashVideoScreen play, which would
+            // have shown the same video twice back to back on every launch.
+            // Now goes straight to LoginScreen.
+            // UPDATED (Aug 10 2026): the pre-Firebase video itself is now
+            // first-ever-launch-only (see _kSplashVideoSeenEverKey in main())
+            // — on every later launch nothing plays before this route at all.
+            '/': (_) => const LoginScreen(
+                  presetUserType: UserType.customer,
+                  lockUserType: true,
+                  title: 'Seller Login',
+                  subtitle: 'Manage your Allin1 store',
+                  lockedUserLabel: 'Seller',
+                  postLoginRoute: '/seller-home',
+                ),
+            '/seller-home': (_) => const SellerDashboardScreen(),
+            '/seller-store': (_) => const SellerScreen(),
+            '/seller-onboarding': (_) => const SellerOnboardingScreen(),
+          },
+          onGenerateRoute: (settings) {
+            if (settings.name == '/seller-menu-setup') {
+              final sellerId = settings.arguments! as String;
+              // FIX (per Nizam's request): every seller authors their own
+              // custom dishes now — see seller_dashboard_screen.dart and
+              // seller_onboarding_screen.dart for the same change.
+              return MaterialPageRoute(
+                builder: (_) => SellerHomeKitchenMenuScreen(
+                    sellerId: sellerId, title: 'My Menu', categoryName: 'Menu'),
+              );
+            }
+            return null;
+          },
+          // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch"): Seller app had no
+          // builder: before this — added purely to host MigrationGate, same
+          // pattern as the other 3 apps. child can briefly be null on the very
+          // first MaterialApp build, so fall back to an empty box.
+          // Also hosts GlobalGuruFab for Seller Chitti Assistant.
+          builder: (context, child) => Stack(
+            children: [
+              MigrationGate(child: child ?? const SizedBox.shrink()),
+              const GlobalGuruFab(),
+            ],
+          ),
         ),
       ),
     );
