@@ -232,49 +232,67 @@ class ChittiLiveCallService {
     }
 
     () async {
-      final snap = await callRef.get();
-      if (!snap.exists) {
-        initialized = true;
-        ended = true;
-        emit();
-        return;
-      }
-      final data = Map<Object?, Object?>.from(snap.value as Map);
-      final rawTranscript = data.remove('liveTranscript');
-      if (rawTranscript is Map) {
-        rawTranscript
-            .forEach((k, v) => transcript[k.toString()] = v.toString());
-      }
-      fields.addAll(data.map((k, v) => MapEntry(k.toString(), v)));
-      initialized = true;
-      emit();
-
-      subs.add(callRef.child('status').onValue.listen((event) {
-        if (!event.snapshot.exists) {
+      try {
+        final snap = await callRef.get();
+        if (!snap.exists) {
+          initialized = true;
           ended = true;
           emit();
           return;
         }
-        fields['status'] = event.snapshot.value;
+        // Same defensive fallback as ChittiLiveCallState.fromRtdbData
+        // (rawValue is Map ? ... : {}) — an unguarded `as Map` here
+        // would throw inside this fire-and-forget async block with no
+        // caller to catch it, permanently stalling the stream with no
+        // error surfaced anywhere.
+        final rawValue = snap.value;
+        final data = rawValue is Map
+            ? Map<Object?, Object?>.from(rawValue)
+            : <Object?, Object?>{};
+        final rawTranscript = data.remove('liveTranscript');
+        if (rawTranscript is Map) {
+          rawTranscript
+              .forEach((k, v) => transcript[k.toString()] = v.toString());
+        }
+        fields.addAll(data.map((k, v) => MapEntry(k.toString(), v)));
+        initialized = true;
         emit();
-      }));
 
-      void onScalarChange(DatabaseEvent event) {
-        final key = event.snapshot.key;
-        if (key == null || key == 'liveTranscript' || key == 'status') return;
-        fields[key] = event.snapshot.value;
+        subs.add(callRef.child('status').onValue.listen((event) {
+          if (!event.snapshot.exists) {
+            ended = true;
+            emit();
+            return;
+          }
+          fields['status'] = event.snapshot.value;
+          emit();
+        }));
+
+        void onScalarChange(DatabaseEvent event) {
+          final key = event.snapshot.key;
+          if (key == null || key == 'liveTranscript' || key == 'status') {
+            return;
+          }
+          fields[key] = event.snapshot.value;
+          emit();
+        }
+
+        subs.add(callRef.onChildChanged.listen(onScalarChange));
+        subs.add(callRef.onChildAdded.listen(onScalarChange));
+
+        subs.add(callRef.child('liveTranscript').onChildAdded.listen((event) {
+          final key = event.snapshot.key;
+          if (key == null) return;
+          transcript[key] = event.snapshot.value.toString();
+          emit();
+        }));
+      } catch (e) {
+        debugPrint(
+            '[ChittiLiveCall] watchCall($callId) failed to initialize: $e');
+        initialized = true;
+        ended = true;
         emit();
       }
-
-      subs.add(callRef.onChildChanged.listen(onScalarChange));
-      subs.add(callRef.onChildAdded.listen(onScalarChange));
-
-      subs.add(callRef.child('liveTranscript').onChildAdded.listen((event) {
-        final key = event.snapshot.key;
-        if (key == null) return;
-        transcript[key] = event.snapshot.value.toString();
-        emit();
-      }));
     }();
 
     controller.onCancel = () async {
@@ -320,13 +338,25 @@ class ChittiLiveCallService {
     }
 
     () async {
-      final snap = await _calls.get();
-      if (snap.exists) {
-        for (final child in snap.children) {
-          final key = child.key;
-          if (key == null) continue;
-          cache[key] = ChittiLiveCallState.fromSnapshot(child);
+      // This is the mechanism that alerts the admin to an incoming
+      // customer call — a failed initial fetch (a transient network
+      // blip on app launch, say) must not leave the admin with a
+      // permanently silent watcher for the rest of the session. The
+      // incremental listeners below don't depend on this succeeding,
+      // so they still get attached either way; only the one-time
+      // catch-up snapshot is skipped on failure.
+      try {
+        final snap = await _calls.get();
+        if (snap.exists) {
+          for (final child in snap.children) {
+            final key = child.key;
+            if (key == null) continue;
+            cache[key] = ChittiLiveCallState.fromSnapshot(child);
+          }
         }
+      } catch (e) {
+        debugPrint(
+            '[ChittiLiveCall] watchIncomingRingingCalls() initial fetch failed: $e');
       }
       emit();
 
