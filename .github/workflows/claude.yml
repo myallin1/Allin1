@@ -72,4 +72,28 @@ jobs:
           # claude-code-review.yml is a real, confirmed-working ID --
           # that one stays as-is.)
 
+      # NEW (Sep 9 2026 — Nizam: "claude token vachu ... sonnet work ...
+      # antha new feauture build agi code wise proper working pipeline
+      # sariya irukkanu ... loop panni check panni mudichu"). This step
+      # is the dual-engine fallback: claude-code-action has a known,
+      # still-open upstream bug (anthropics/claude-code-action#1720)
+      # that silently kills the run above with is_error:true, zero
+      # turns, zero cost, no error text -- confirmed via real run logs,
+      # not a guess. When that happens the issue/PR just sits there
+      # forever with nobody told. Instead, on ANY failure of the Claude
+      # step, post a @gemini comment on the same issue/PR -- that
+      # exact tag is what gemini_coder.yml's own trigger already
+      # listens for (see its `if:`), so this hands the same task to the
+      # second engine automatically instead of silently going nowhere.
+      - name: Fallback to Gemini Coder if Claude failed
+        if: failure() && steps.claude.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NUMBER="${{ github.event.issue.number || github.event.pull_request.number }}"
+          if [ -n "$NUMBER" ] && [ "$NUMBER" != "null" ]; then
+            gh issue comment "$NUMBER" --repo "${{ github.repository }}" \
+              --body "@gemini please implement this instead — the Claude engine failed on this task (known claude-code-action issue #1720)."
+          fi
+
 

@@ -2,6 +2,12 @@
 
 All notable changes to the Allin1 Super App are recorded here.
 
+## [Unreleased] - 2026-09-09
+
+### Added
+- feat(ci) — Dual-engine fallback: when the Sonnet coder (`claude.yml`) fails on a dev-task issue/PR (known upstream `claude-code-action` bug #1720, confirmed via live run logs), it now automatically comments `@gemini please implement this instead` so `gemini_coder.yml`'s existing trigger picks up the same task — closing a gap where the loop silently went nowhere.
+- feat(admin) — "Approve & Release to Customers": the Development Monitor's test-build card now has an explicit, confirm-gated button that fires a new `promote-release.yml` workflow, publishing the approved build to `myallin1/Allin1-update-release` (the repo every live app's own update-checker reads) — previously nothing, automated or manual, ever pushed a build there, so customer auto-updates had no real path to ship.
+
 ## [Build 0136] - 2026-09-07
 
 ### Fixed

@@ -157,8 +157,7 @@ class DevApkAsset {
   /// + build number" step in ci-cd.yml. Old assets keep working, so
   /// rolling back to a pre-rename build still shows something useful.
   String get shortSha {
-    final versioned =
-        RegExp(r'allin1-admin-b(\d+)-v([^-]+)-').firstMatch(name);
+    final versioned = RegExp(r'allin1-admin-b(\d+)-v([^-]+)-').firstMatch(name);
     if (versioned != null) {
       return 'Build ${versioned.group(1)} · v${versioned.group(2)}';
     }
@@ -166,7 +165,8 @@ class DevApkAsset {
     return legacy?.group(1) ?? '';
   }
 
-  String get sizeLabel => '${(sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  String get sizeLabel =>
+      '${(sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 }
 
 /// The newest published build the admin can install.
@@ -248,7 +248,8 @@ class ChittiDevMonitorService {
         runs: [],
         issues: [],
         latestRelease: null,
-        error: 'GitHub owner/repo not set — add them in Admin AI Configuration.',
+        error:
+            'GitHub owner/repo not set — add them in Admin AI Configuration.',
       );
     }
 
@@ -261,8 +262,10 @@ class ChittiDevMonitorService {
 
     try {
       final results = await Future.wait([
-        http.get(Uri.parse('$base/actions/runs?per_page=$limit'), headers: headers),
-        http.get(Uri.parse('$base/issues?state=all&per_page=$limit'), headers: headers),
+        http.get(Uri.parse('$base/actions/runs?per_page=$limit'),
+            headers: headers),
+        http.get(Uri.parse('$base/issues?state=all&per_page=$limit'),
+            headers: headers),
         http.get(Uri.parse('$base/releases/latest'), headers: headers),
       ]);
 
@@ -340,7 +343,8 @@ class ChittiDevMonitorService {
             name: name,
             downloadUrl: url,
             sizeBytes: (asset['size'] as num?)?.toInt() ?? 0,
-            updatedAt: DateTime.tryParse((asset['updated_at'] as String?) ?? ''),
+            updatedAt:
+                DateTime.tryParse((asset['updated_at'] as String?) ?? ''),
           ));
         }
         apks.sort((a, b) {
@@ -353,7 +357,8 @@ class ChittiDevMonitorService {
         });
         latest = DevRelease(
           tag: (m['tag_name'] as String?) ?? '',
-          name: (m['name'] as String?) ?? (m['tag_name'] as String?) ?? 'Release',
+          name:
+              (m['name'] as String?) ?? (m['tag_name'] as String?) ?? 'Release',
           htmlUrl: (m['html_url'] as String?) ?? '',
           apkUrl: apks.isEmpty ? null : apks.first.downloadUrl,
           publishedAt: DateTime.tryParse((m['published_at'] as String?) ?? ''),
@@ -361,7 +366,8 @@ class ChittiDevMonitorService {
         );
       }
 
-      return DevMonitorSnapshot(runs: runs, issues: issues, latestRelease: latest);
+      return DevMonitorSnapshot(
+          runs: runs, issues: issues, latestRelease: latest);
     } catch (e) {
       return DevMonitorSnapshot(
         runs: empty.runs,
@@ -396,7 +402,8 @@ class ChittiDevMonitorService {
     if (repo.owner.trim().isEmpty || repo.name.trim().isEmpty) {
       return (
         pullRequests: <DevPullRequest>[],
-        error: 'GitHub owner/repo not set — add them in Admin AI Configuration.',
+        error:
+            'GitHub owner/repo not set — add them in Admin AI Configuration.',
       );
     }
 
@@ -421,11 +428,13 @@ class ChittiDevMonitorService {
 
     try {
       if (prNumber != null) {
-        final res = await http.get(Uri.parse('$base/pulls/$prNumber'), headers: headers);
+        final res = await http.get(Uri.parse('$base/pulls/$prNumber'),
+            headers: headers);
         if (res.statusCode == 404) {
           return (
             pullRequests: <DevPullRequest>[],
-            error: 'No pull request #$prNumber found on ${repo.owner}/${repo.name}.',
+            error:
+                'No pull request #$prNumber found on ${repo.owner}/${repo.name}.',
           );
         }
         if (res.statusCode == 401 || res.statusCode == 403) {
@@ -447,7 +456,8 @@ class ChittiDevMonitorService {
       }
 
       final res = await http.get(
-        Uri.parse('$base/pulls?state=all&sort=updated&direction=desc&per_page=$limit'),
+        Uri.parse(
+            '$base/pulls?state=all&sort=updated&direction=desc&per_page=$limit'),
         headers: headers,
       );
       if (res.statusCode == 401 || res.statusCode == 403) {
@@ -467,7 +477,153 @@ class ChittiDevMonitorService {
           .toList();
       return (pullRequests: list, error: null);
     } catch (e) {
-      return (pullRequests: <DevPullRequest>[], error: 'Could not reach GitHub: $e');
+      return (
+        pullRequests: <DevPullRequest>[],
+        error: 'Could not reach GitHub: $e'
+      );
     }
   }
+
+  /// Fetches the current `latest-admin-test` release — the rolling
+  /// build ci-cd.yml's `publish_admin_test_build` job publishes on
+  /// every push to main. This is the build Nizam is meant to install
+  /// and try before deciding whether it should reach customers.
+  static Future<({DevTestBuild? build, String? error})>
+      fetchLatestTestBuild() async {
+    final token = await ChittiDevTaskService.readToken();
+    if (token == null || token.trim().isEmpty) {
+      return (
+        build: null,
+        error: 'No GitHub token saved yet — add it in Admin AI '
+            'Configuration (Developer Automation) first.',
+      );
+    }
+    final repo = await ChittiDevTaskService.readRepo();
+    if (repo.owner.trim().isEmpty || repo.name.trim().isEmpty) {
+      return (
+        build: null,
+        error: 'GitHub owner/repo not set — add them in Admin AI Configuration.'
+      );
+    }
+
+    final headers = {
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    };
+
+    try {
+      final res = await http.get(
+        Uri.parse(
+            '$_apiBase/repos/${repo.owner}/${repo.name}/releases/tags/latest-admin-test'),
+        headers: headers,
+      );
+      if (res.statusCode == 404) {
+        return (
+          build: null,
+          error: 'No test build published yet — push to main first.'
+        );
+      }
+      if (res.statusCode == 401 || res.statusCode == 403) {
+        return (
+          build: null,
+          error: 'GitHub rejected the token (${res.statusCode}).'
+        );
+      }
+      if (res.statusCode != 200) {
+        return (
+          build: null,
+          error: 'GitHub returned ${res.statusCode} fetching the test build.'
+        );
+      }
+      final m = jsonDecode(res.body) as Map<String, dynamic>;
+      final assets =
+          (m['assets'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+      final apkUrls = <String, String>{};
+      for (final a in assets) {
+        final name = (a['name'] as String?) ?? '';
+        final url = (a['browser_download_url'] as String?) ?? '';
+        if (url.isEmpty) continue;
+        if (name.startsWith('allin1-admin-')) apkUrls['admin'] = url;
+        if (name.startsWith('allin1-customer-')) apkUrls['customer'] = url;
+        if (name.startsWith('allin1-hero-')) apkUrls['hero'] = url;
+        if (name.startsWith('allin1-seller-')) apkUrls['seller'] = url;
+      }
+      return (
+        build: DevTestBuild(
+          title: (m['name'] as String?) ?? 'latest-admin-test',
+          publishedAt: DateTime.tryParse((m['published_at'] as String?) ?? ''),
+          releaseUrl: (m['html_url'] as String?) ?? '',
+          apkUrls: apkUrls,
+        ),
+        error: null,
+      );
+    } catch (e) {
+      return (build: null, error: 'Could not reach GitHub: $e');
+    }
+  }
+
+  /// Fires `promote-release.yml` (workflow_dispatch) — the ONLY path
+  /// that pushes a build into myallin1/Allin1-update-release, which is
+  /// the repo every live app actually checks for updates
+  /// (lib/services/app_update_checker.dart). Nothing in the app calls
+  /// this without the admin having tapped an explicit "Approve &
+  /// Release" button first — this is a one-way door for every
+  /// customer's phone, never something Chitti or a background process
+  /// triggers on its own.
+  static Future<({bool success, String? error})>
+      promoteTestBuildToCustomers() async {
+    final token = await ChittiDevTaskService.readToken();
+    if (token == null || token.trim().isEmpty) {
+      return (success: false, error: 'No GitHub token saved yet.');
+    }
+    final repo = await ChittiDevTaskService.readRepo();
+    if (repo.owner.trim().isEmpty || repo.name.trim().isEmpty) {
+      return (success: false, error: 'GitHub owner/repo not set.');
+    }
+
+    try {
+      final res = await http.post(
+        Uri.parse(
+          '$_apiBase/repos/${repo.owner}/${repo.name}/actions/workflows/promote-release.yml/dispatches',
+        ),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        body: jsonEncode(<String, dynamic>{
+          'ref': 'main',
+          'inputs': <String, String>{'source_tag': 'latest-admin-test'},
+        }),
+      );
+      if (res.statusCode == 204) {
+        return (success: true, error: null);
+      }
+      return (
+        success: false,
+        error: 'GitHub returned ${res.statusCode}: ${res.body}',
+      );
+    } catch (e) {
+      return (success: false, error: 'Could not reach GitHub: $e');
+    }
+  }
+}
+
+/// The current admin-test rolling release — what Nizam is meant to
+/// install and verify before approving it for customer release.
+class DevTestBuild {
+  const DevTestBuild({
+    required this.title,
+    required this.publishedAt,
+    required this.releaseUrl,
+    required this.apkUrls,
+  });
+
+  final String title;
+  final DateTime? publishedAt;
+  final String releaseUrl;
+
+  /// Keyed by flavor: 'admin' | 'customer' | 'hero' | 'seller'.
+  final Map<String, String> apkUrls;
 }

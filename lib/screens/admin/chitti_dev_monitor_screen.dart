@@ -52,6 +52,7 @@ class ChittiDevMonitorScreen extends StatefulWidget {
 class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
   DevMonitorSnapshot? _snapshot;
   bool _loading = true;
+  bool _promoting = false;
 
   @override
   void initState() {
@@ -74,6 +75,54 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
     final uri = Uri.tryParse(url);
     if (uri == null) return;
     await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _confirmAndPromote(DevRelease release) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _card,
+        title: Text('Release to customers?',
+            style:
+                GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700)),
+        content: Text(
+          'This publishes "${release.name}" to every customer/hero/seller '
+          'phone as the next auto-update. Only do this after you have '
+          'installed and checked the build yourself.',
+          style: GoogleFonts.outfit(color: _muted, fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Cancel', style: GoogleFonts.outfit(color: _muted)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: _purple, foregroundColor: Colors.white),
+            child: const Text('Release now'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _promoting = true);
+    final result = await ChittiDevMonitorService.promoteTestBuildToCustomers();
+    if (!mounted) return;
+    setState(() => _promoting = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: result.success ? _green : _red,
+        content: Text(
+          result.success
+              ? 'Release started — customers will see this update shortly.'
+              : (result.error ?? 'Could not start the release.'),
+          style: const TextStyle(color: Colors.black),
+        ),
+      ),
+    );
   }
 
   Future<void> _openInApp(BuildContext context, String url) async {
@@ -114,7 +163,8 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
         iconTheme: const IconThemeData(color: _text),
         title: Text(
           'Development Monitor',
-          style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 16),
+          style: GoogleFonts.outfit(
+              color: _text, fontWeight: FontWeight.w700, fontSize: 16),
         ),
         actions: [
           // NEW (Sep 2026 — CTO review of PR #61): "App Versions &
@@ -168,22 +218,26 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
                 padding: const EdgeInsets.all(14),
                 children: [
                   if (snap != null && snap.hasError) _errorCard(snap.error!),
-                  _sectionHeader('1 · LATEST BUILD YOU CAN TEST', Icons.android_rounded),
+                  _sectionHeader(
+                      '1 · LATEST BUILD YOU CAN TEST', Icons.android_rounded),
                   _releaseCard(snap?.latestRelease),
                   const SizedBox(height: 18),
-                  _sectionHeader('2 · BUILDS RUNNING / RECENT', Icons.build_circle_outlined),
+                  _sectionHeader('2 · BUILDS RUNNING / RECENT',
+                      Icons.build_circle_outlined),
                   if (snap == null || snap.runs.isEmpty)
                     _emptyCard('No workflow runs found yet.')
                   else
                     ...snap.runs.map(_runTile),
                   const SizedBox(height: 18),
-                  _sectionHeader('3 · DEV TASKS (Chitti → Claude)', Icons.task_alt_rounded),
+                  _sectionHeader('3 · DEV TASKS (Chitti → Claude)',
+                      Icons.task_alt_rounded),
                   if (snap == null || snap.issues.isEmpty)
                     _emptyCard('No dev tasks opened yet.')
                   else
                     ...snap.issues.map(_issueTile),
                   const SizedBox(height: 18),
-                  _sectionHeader('4 · REPO CONFIGURATION', Icons.rocket_launch_rounded),
+                  _sectionHeader(
+                      '4 · REPO CONFIGURATION', Icons.rocket_launch_rounded),
                   const _GithubRepoConfigCard(),
                   const SizedBox(height: 30),
                 ],
@@ -230,7 +284,8 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
           Expanded(
             child: Text(
               message,
-              style: GoogleFonts.outfit(color: _red, fontSize: 12, height: 1.35),
+              style:
+                  GoogleFonts.outfit(color: _red, fontSize: 12, height: 1.35),
             ),
           ),
         ],
@@ -247,7 +302,8 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _border),
       ),
-      child: Text(message, style: GoogleFonts.outfit(color: _muted, fontSize: 12)),
+      child:
+          Text(message, style: GoogleFonts.outfit(color: _muted, fontSize: 12)),
     );
   }
 
@@ -276,7 +332,8 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
               Expanded(
                 child: Text(
                   release.name,
-                  style: GoogleFonts.outfit(color: _text, fontSize: 14, fontWeight: FontWeight.w700),
+                  style: GoogleFonts.outfit(
+                      color: _text, fontSize: 14, fontWeight: FontWeight.w700),
                 ),
               ),
             ],
@@ -301,7 +358,8 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
                   backgroundColor: _green,
                   foregroundColor: Colors.black,
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ),
@@ -314,7 +372,8 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
               child: OutlinedButton.icon(
                 onPressed: () => SharePlus.instance.share(
                   ShareParams(
-                    text: 'Allin1 Admin test build — ${release.name}\n${release.apkUrl}',
+                    text:
+                        'Allin1 Admin test build — ${release.name}\n${release.apkUrl}',
                     subject: 'Allin1 test build',
                   ),
                 ),
@@ -324,6 +383,43 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
                   foregroundColor: _green,
                   side: const BorderSide(color: _green),
                   padding: const EdgeInsets.symmetric(vertical: 11),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            // NEW (Sep 9 2026 — Nizam: "nan atha installa panni check
+            // pannitu ok nu approve pannita antha app git release ku
+            // poganum angirunthu customer download pannikuvanga"). The
+            // ONLY thing that pushes a build into
+            // myallin1/Allin1-update-release — the repo every live
+            // app's update-checker actually reads
+            // (app_update_checker.dart) — is this button. Nothing
+            // automatic ever calls promoteTestBuildToCustomers(); it is
+            // a one-way door for every customer's phone, so it needs
+            // Nizam's own tap plus a confirm dialog, not a background
+            // process's guess that a build is good.
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed:
+                    _promoting ? null : () => _confirmAndPromote(release),
+                icon: _promoting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.black),
+                      )
+                    : const Icon(Icons.rocket_launch_rounded, size: 18),
+                label: Text(_promoting
+                    ? 'Releasing…'
+                    : 'Approve & Release to Customers'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _purple,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ),
@@ -367,18 +463,26 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
             ? (_green, Icons.check_circle_outline_rounded, 'Passed')
             : run.isFailure
                 ? (_red, Icons.error_outline_rounded, 'Failed')
-                : (_muted, Icons.remove_circle_outline_rounded, run.conclusion ?? 'Done');
+                : (
+                    _muted,
+                    Icons.remove_circle_outline_rounded,
+                    run.conclusion ?? 'Done'
+                  );
 
     return _rowCard(
       onTap: () => _openInApp(context, run.url),
       leading: Icon(icon, color: color, size: 17),
       title: run.name,
       subtitleWidgets: [
-        Text(label, style: GoogleFonts.outfit(color: color, fontSize: 11, fontWeight: FontWeight.w700)),
+        Text(label,
+            style: GoogleFonts.outfit(
+                color: color, fontSize: 11, fontWeight: FontWeight.w700)),
         if (run.branch.isNotEmpty)
-          Text('  ·  ${run.branch}', style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
+          Text('  ·  ${run.branch}',
+              style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
         if (run.updatedAt != null)
-          Text('  ·  ${_ago(run.updatedAt!)}', style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
+          Text('  ·  ${_ago(run.updatedAt!)}',
+              style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
       ],
     );
   }
@@ -388,7 +492,9 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
     return _rowCard(
       onTap: () => _openInApp(context, issue.url),
       leading: Icon(
-        isOpen ? Icons.radio_button_unchecked_rounded : Icons.check_circle_outline_rounded,
+        isOpen
+            ? Icons.radio_button_unchecked_rounded
+            : Icons.check_circle_outline_rounded,
         color: isOpen ? _amber : _green,
         size: 17,
       ),
@@ -403,7 +509,8 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
           ),
         ),
         if (issue.updatedAt != null)
-          Text('  ·  ${_ago(issue.updatedAt!)}', style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
+          Text('  ·  ${_ago(issue.updatedAt!)}',
+              style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
       ],
     );
   }
@@ -439,7 +546,10 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
                       title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.outfit(color: _text, fontSize: 12.5, fontWeight: FontWeight.w600),
+                      style: GoogleFonts.outfit(
+                          color: _text,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 3),
                     Row(children: subtitleWidgets),
@@ -511,7 +621,8 @@ class _GithubRepoConfigCardState extends State<_GithubRepoConfigCard> {
     setState(() => _saving = true);
     try {
       await ChittiDevTaskService.saveToken(_tokenCtrl.text);
-      await ChittiDevTaskService.saveRepo(owner: _ownerCtrl.text, name: _repoCtrl.text);
+      await ChittiDevTaskService.saveRepo(
+          owner: _ownerCtrl.text, name: _repoCtrl.text);
       if (!mounted) return;
       setState(() {
         _editing = false;
@@ -522,7 +633,8 @@ class _GithubRepoConfigCardState extends State<_GithubRepoConfigCard> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not save: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Could not save: $e')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -542,7 +654,8 @@ class _GithubRepoConfigCardState extends State<_GithubRepoConfigCard> {
     if (_loading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 20),
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: _purple)),
+        child: Center(
+            child: CircularProgressIndicator(strokeWidth: 2, color: _purple)),
       );
     }
     return Container(
@@ -561,11 +674,13 @@ class _GithubRepoConfigCardState extends State<_GithubRepoConfigCard> {
             "to build or fix something — the Claude Code GitHub App picks it "
             "up automatically. Use a fine-grained token scoped to ONLY this "
             "repo, with ONLY 'Issues: Write' permission.",
-            style: GoogleFonts.outfit(color: _muted, fontSize: 11.5, height: 1.35),
+            style:
+                GoogleFonts.outfit(color: _muted, fontSize: 11.5, height: 1.35),
           ),
           const SizedBox(height: 12),
           if (!_editing) ...[
-            _readOnlyRow('Owner', _ownerCtrl.text.isEmpty ? '—' : _ownerCtrl.text),
+            _readOnlyRow(
+                'Owner', _ownerCtrl.text.isEmpty ? '—' : _ownerCtrl.text),
             _readOnlyRow('Repo', _repoCtrl.text.isEmpty ? '—' : _repoCtrl.text),
             _readOnlyRow('Token', _hasToken ? '•' * 24 : 'Not set'),
             const SizedBox(height: 10),
@@ -594,7 +709,9 @@ class _GithubRepoConfigCardState extends State<_GithubRepoConfigCard> {
                       hintStyle: const TextStyle(color: _muted),
                       filled: true,
                       fillColor: _bg,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none),
                     ),
                   ),
                 ),
@@ -608,7 +725,9 @@ class _GithubRepoConfigCardState extends State<_GithubRepoConfigCard> {
                       hintStyle: const TextStyle(color: _muted),
                       filled: true,
                       fillColor: _bg,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none),
                     ),
                   ),
                 ),
@@ -625,7 +744,9 @@ class _GithubRepoConfigCardState extends State<_GithubRepoConfigCard> {
                 prefixIcon: const Icon(Icons.key_rounded, color: _red),
                 filled: true,
                 fillColor: _bg,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none),
               ),
             ),
             const SizedBox(height: 12),
@@ -633,7 +754,12 @@ class _GithubRepoConfigCardState extends State<_GithubRepoConfigCard> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: _saving ? null : () => setState(() { _editing = false; _load(); }),
+                    onPressed: _saving
+                        ? null
+                        : () => setState(() {
+                              _editing = false;
+                              _load();
+                            }),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _muted,
                       side: const BorderSide(color: _border),
@@ -648,15 +774,18 @@ class _GithubRepoConfigCardState extends State<_GithubRepoConfigCard> {
                     onPressed: _saving ? null : _save,
                     icon: _saving
                         ? const SizedBox(
-                            width: 14, height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.black))
                         : const Icon(Icons.check_rounded, size: 17),
                     label: const Text('Save'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _green,
                       foregroundColor: Colors.black,
                       padding: const EdgeInsets.symmetric(vertical: 11),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
                 ),
@@ -675,13 +804,15 @@ class _GithubRepoConfigCardState extends State<_GithubRepoConfigCard> {
         children: [
           SizedBox(
             width: 56,
-            child: Text(label, style: GoogleFonts.outfit(color: _muted, fontSize: 12)),
+            child: Text(label,
+                style: GoogleFonts.outfit(color: _muted, fontSize: 12)),
           ),
           Expanded(
             child: Text(
               value,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.outfit(color: _text, fontSize: 12.5, fontWeight: FontWeight.w600),
+              style: GoogleFonts.outfit(
+                  color: _text, fontSize: 12.5, fontWeight: FontWeight.w600),
             ),
           ),
         ],

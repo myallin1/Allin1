@@ -1,0 +1,96 @@
+name: Promote Test Build to Customer Release
+
+# NEW (Sep 9 2026 — Nizam: "namma test app la kaatanum nan atha installa
+# panni check pannitu ok nu approve pannita antha app git release ku
+# poganum angirunthu customer download pannikuvanga").
+#
+# THE GAP THIS CLOSES: ci-cd.yml's `publish_admin_test_build` job
+# already publishes all 4 flavor APKs to THIS repo's own
+# `latest-admin-test` release (prerelease, for Nizam's phone only) —
+# but every live app's own update-checker
+# (lib/services/app_update_checker.dart /
+# lib/services/update_service.dart) reads from a COMPLETELY DIFFERENT
+# repo: myallin1/Allin1-update-release. Nothing anywhere ever pushes a
+# release into that second repo — confirmed by reading both files, not
+# assumed. So today there is no path, automated or manual, from "Nizam
+# approved this build" to "customers can download it". This workflow
+# is that missing path, and it exists ONLY as a manual, explicit
+# workflow_dispatch — never automatic — because publishing something
+# every customer's phone will auto-update to is exactly the kind of
+# action that needs a human's deliberate "yes", not a bot's guess.
+#
+# WHAT IT NEEDS: a `RELEASE_REPO_TOKEN` secret — a GitHub PAT with
+# `contents: write` on myallin1/Allin1-update-release specifically
+# (the default GITHUB_TOKEN this workflow gets is scoped to THIS repo
+# only and cannot push a release to a different one). Create it once:
+# a fine-grained PAT scoped to that single repo, then
+# `gh secret set RELEASE_REPO_TOKEN --repo myallin1/Allin1 --body <pat>`.
+# Without it this job fails loudly at the first step rather than
+# silently doing nothing.
+on:
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: 'Tag in THIS repo to promote (the test build Nizam approved)'
+        required: false
+        default: 'latest-admin-test'
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Download approved test-build APKs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p release_assets
+          gh release download "${{ github.event.inputs.source_tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern "allin1-*.apk" \
+            --dir release_assets
+          echo "Downloaded:"
+          ls -la release_assets
+
+      - name: Publish to the customer-facing update repo
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::RELEASE_REPO_TOKEN secret is not set."
+            echo "Every live app checks myallin1/Allin1-update-release/releases/latest"
+            echo "for updates (see lib/services/app_update_checker.dart) — without a"
+            echo "token that can push a release there, approving a build here can never"
+            echo "reach a single customer phone. Create a fine-grained PAT scoped to"
+            echo "myallin1/Allin1-update-release with contents:write, then:"
+            echo "  gh secret set RELEASE_REPO_TOKEN --repo myallin1/Allin1 --body <pat>"
+            exit 1
+          fi
+          SOURCE_TAG="${{ github.event.inputs.source_tag }}"
+          TITLE="Approved by Nizam — promoted from $SOURCE_TAG ($(date -u +%Y-%m-%d))"
+          # update_service.dart's download URLs are fixed filenames
+          # (allin1-customer.apk / allin1-hero.apk / allin1-admin.apk /
+          # allin1-seller.apk) under releases/latest/download/ — the
+          # test-build assets carry build-number/version/sha in their
+          # names instead, so they're renamed to the exact filenames
+          # every app is hardcoded to fetch.
+          mkdir -p promoted
+          cp release_assets/allin1-customer-*.apk promoted/allin1-customer.apk
+          cp release_assets/allin1-hero-*.apk promoted/allin1-hero.apk
+          cp release_assets/allin1-admin-*.apk promoted/allin1-admin.apk
+          cp release_assets/allin1-seller-*.apk promoted/allin1-seller.apk
+
+          # Delete any existing "latest" release+tag first (--cleanup-tag
+          # removes the git tag too, not just the release) — the apps
+          # always read /releases/latest, so there must be exactly one
+          # non-prerelease release for that to resolve predictably.
+          gh release delete latest --repo myallin1/Allin1-update-release --yes --cleanup-tag 2>/dev/null || true
+
+          gh release create latest promoted/*.apk \
+            --repo myallin1/Allin1-update-release \
+            --title "$TITLE" \
+            --notes "Promoted from myallin1/Allin1 release '$SOURCE_TAG' after in-app admin approval."
