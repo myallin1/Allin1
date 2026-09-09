@@ -80,7 +80,9 @@ class ChittiLiveCallState {
   /// `snap.value` would hand it, so the test below exercises the real
   /// parsing rules, not a stand-in for them.
   factory ChittiLiveCallState.fromRtdbData(String callId, Object? rawValue) {
-    final data = rawValue is Map ? Map<Object?, Object?>.from(rawValue) : <Object?, Object?>{};
+    final data = rawValue is Map
+        ? Map<Object?, Object?>.from(rawValue)
+        : <Object?, Object?>{};
 
     DateTime parseTimestamp(Object? value) {
       if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
@@ -185,25 +187,166 @@ class ChittiLiveCallService {
     return callId;
   }
 
-  /// Listens to a specific active call's state changes
+  /// Listens to a specific active call's state changes.
+  ///
+  /// NEW (Sep 10 2026 — Nizam: "rtdb la live listening vacha quota
+  /// mudinjurum ... same database bandwith ah carefula waste agama
+  /// handle pananum"). The old version was one `.onValue` on the whole
+  /// call node — RTDB's `.onValue` re-sends the ENTIRE current value on
+  /// every single write, and `liveTranscript` only ever grows during a
+  /// call, so a 10-turn call re-downloaded turn 1's text nine more
+  /// times, turn 2's text eight more times, and so on. Every open
+  /// `watchCall` (customer + admin, for the whole call) paid that cost.
+  ///
+  /// This splits the one expensive listener into three cheap ones and
+  /// merges them into the same local snapshot in memory:
+  ///   - `status` alone (tiny field) — also the ended/removed signal,
+  ///     since a listener on a child of a deleted node reports
+  ///     non-existence same as any other.
+  ///   - the other scalar fields via `onChildChanged`/`onChildAdded` on
+  ///     the call node, skipping the `liveTranscript` key (handled
+  ///     below) so those events never carry the growing transcript.
+  ///   - `liveTranscript` via `onChildAdded` on ITS OWN path — RTDB
+  ///     delivers exactly the one new entry per event, never the
+  ///     entries already seen, which is the actual fix: turn N's text
+  ///     is downloaded once, not N more times as the call goes on.
   Stream<ChittiLiveCallState?> watchCall(String callId) {
-    return _calls.child(callId).onValue.map((event) {
-      final snap = event.snapshot;
-      if (!snap.exists) return null;
-      return ChittiLiveCallState.fromSnapshot(snap);
-    });
+    final controller = StreamController<ChittiLiveCallState?>.broadcast();
+    final callRef = _calls.child(callId);
+    final fields = <String, Object?>{};
+    final transcript = <String, String>{};
+    var initialized = false;
+    var ended = false;
+    final subs = <StreamSubscription<DatabaseEvent>>[];
+
+    void emit() {
+      if (controller.isClosed || !initialized) return;
+      if (ended) {
+        controller.add(null);
+        return;
+      }
+      controller.add(
+        ChittiLiveCallState.fromRtdbData(
+            callId, {...fields, 'liveTranscript': transcript}),
+      );
+    }
+
+    () async {
+      final snap = await callRef.get();
+      if (!snap.exists) {
+        initialized = true;
+        ended = true;
+        emit();
+        return;
+      }
+      final data = Map<Object?, Object?>.from(snap.value as Map);
+      final rawTranscript = data.remove('liveTranscript');
+      if (rawTranscript is Map) {
+        rawTranscript
+            .forEach((k, v) => transcript[k.toString()] = v.toString());
+      }
+      fields.addAll(data.map((k, v) => MapEntry(k.toString(), v)));
+      initialized = true;
+      emit();
+
+      subs.add(callRef.child('status').onValue.listen((event) {
+        if (!event.snapshot.exists) {
+          ended = true;
+          emit();
+          return;
+        }
+        fields['status'] = event.snapshot.value;
+        emit();
+      }));
+
+      void onScalarChange(DatabaseEvent event) {
+        final key = event.snapshot.key;
+        if (key == null || key == 'liveTranscript' || key == 'status') return;
+        fields[key] = event.snapshot.value;
+        emit();
+      }
+
+      subs.add(callRef.onChildChanged.listen(onScalarChange));
+      subs.add(callRef.onChildAdded.listen(onScalarChange));
+
+      subs.add(callRef.child('liveTranscript').onChildAdded.listen((event) {
+        final key = event.snapshot.key;
+        if (key == null) return;
+        transcript[key] = event.snapshot.value.toString();
+        emit();
+      }));
+    }();
+
+    controller.onCancel = () async {
+      for (final s in subs) {
+        await s.cancel();
+      }
+      await controller.close();
+    };
+    return controller.stream;
   }
 
-  /// Listens for active incoming calls (ringing or being handled by Chitti, used in Admin App)
+  /// Listens for active incoming calls (ringing or being handled by
+  /// Chitti, used in Admin App).
+  ///
+  /// NEW (Sep 10 2026 — same bandwidth audit as watchCall() above):
+  /// `.onValue` on the WHOLE `active_calls` collection meant any single
+  /// change to any one call — a new transcript turn on a call the
+  /// admin isn't even looking at — re-downloaded every OTHER active
+  /// call's full data too. `onChildAdded`/`onChildChanged`/
+  /// `onChildRemoved` each carry only the ONE call node that actually
+  /// changed; a local cache is kept and re-filtered/re-emitted on every
+  /// event so callers still see the full current list each time.
   Stream<List<ChittiLiveCallState>> watchIncomingRingingCalls() {
-    return _calls.onValue.map((event) {
-      final snap = event.snapshot;
-      if (!snap.exists) return <ChittiLiveCallState>[];
-      return snap.children
-          .map(ChittiLiveCallState.fromSnapshot)
-          .where((s) => s.status == 'ringing' || s.status == 'chitti_handling')
-          .toList();
-    });
+    final controller = StreamController<List<ChittiLiveCallState>>.broadcast();
+    final cache = <String, ChittiLiveCallState>{};
+    final subs = <StreamSubscription<DatabaseEvent>>[];
+
+    void emit() {
+      if (controller.isClosed) return;
+      controller.add(
+        cache.values
+            .where(
+                (s) => s.status == 'ringing' || s.status == 'chitti_handling')
+            .toList(),
+      );
+    }
+
+    void upsert(DatabaseEvent event) {
+      final key = event.snapshot.key;
+      if (key == null) return;
+      cache[key] = ChittiLiveCallState.fromSnapshot(event.snapshot);
+      emit();
+    }
+
+    () async {
+      final snap = await _calls.get();
+      if (snap.exists) {
+        for (final child in snap.children) {
+          final key = child.key;
+          if (key == null) continue;
+          cache[key] = ChittiLiveCallState.fromSnapshot(child);
+        }
+      }
+      emit();
+
+      subs.add(_calls.onChildAdded.listen(upsert));
+      subs.add(_calls.onChildChanged.listen(upsert));
+      subs.add(_calls.onChildRemoved.listen((event) {
+        final key = event.snapshot.key;
+        if (key == null) return;
+        cache.remove(key);
+        emit();
+      }));
+    }();
+
+    controller.onCancel = () async {
+      for (final s in subs) {
+        await s.cancel();
+      }
+      await controller.close();
+    };
+    return controller.stream;
   }
 
   /// Admin answers the call directly in human voice mode
@@ -218,7 +361,8 @@ class ChittiLiveCallService {
   }
 
   /// Admin assigns the call to Chitti AI automated receptionist
-  Future<void> answerCallChitti(String callId, {required String adminId}) async {
+  Future<void> answerCallChitti(String callId,
+      {required String adminId}) async {
     await _calls.child(callId).update({
       'status': 'chitti_handling',
       'handlingMode': 'chitti',
@@ -314,14 +458,17 @@ class ChittiLiveCallService {
     // meantime is left alone.
     try {
       await _calls.child(callId).runTransaction((Object? current) {
-        final data = current is Map ? Map<Object?, Object?>.from(current) : null;
+        final data =
+            current is Map ? Map<Object?, Object?>.from(current) : null;
         final status = data?['status'] as String?;
         // Only advance from the pre-answer state this call expects.
         // 'ringing' (brand new) or already 'chitti_handling' (e.g. a
         // retry of this exact call) are both fine to (re)stamp; anything
         // else means an admin action already moved the call on, and
         // this write must not touch it.
-        if (status != null && status != 'ringing' && status != 'chitti_handling') {
+        if (status != null &&
+            status != 'ringing' &&
+            status != 'chitti_handling') {
           return Transaction.success(current);
         }
         return Transaction.success({
