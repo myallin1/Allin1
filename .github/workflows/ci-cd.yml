@@ -332,7 +332,28 @@ jobs:
               flutter build web --release
               ;;
             windows)
-              flutter build windows --release
+              # AUDIT FIX (Sep 10 2026 — Nizam: "windows kum 4 catogory
+              # build panirukkiya?"). Same root cause as the android
+              # fix above: no -t entry point meant this built
+              # lib/main.dart, which is just `void main() =>
+              # customer.main();` -- only the customer app, every
+              # single Windows build so far. Windows has no Gradle-
+              # style product flavors (confirmed: no flavor config in
+              # windows/CMakeLists.txt or windows/runner/CMakeLists.txt),
+              # so `--flavor` isn't needed here, only `-t` -- but
+              # `flutter build windows` always writes to the SAME
+              # build/windows/x64/runner/Release/ path regardless of
+              # entry point (BINARY_NAME is a fixed "kutty_guru_ai" in
+              # windows/CMakeLists.txt), so each flavor's output is
+              # copied to its own folder before the next build
+              # overwrites it -- copying the whole Release dir, not
+              # just the .exe, since the app needs its DLLs and the
+              # data/ folder next to it to actually run.
+              for flavor in admin customer hero seller; do
+                flutter build windows --release -t lib/main_$flavor.dart
+                mkdir -p build/windows-flavors/$flavor
+                cp -r build/windows/x64/runner/Release/. build/windows-flavors/$flavor/
+              done
               ;;
           esac
 
@@ -345,7 +366,7 @@ jobs:
             build/app/outputs/**/*.aab
             build/ios/**/*.ipa
             build/web/**
-            build/windows/**/*.exe
+            build/windows-flavors/**
           retention-days: 30
 
   # ============================================================
