@@ -301,13 +301,29 @@ jobs:
       # for that reason alone, nothing to do with Flutter/the app
       # itself. `shell: bash` forces Git Bash (present on all GitHub-
       # hosted Windows runners) instead of letting the OS default win.
+      # AUDIT FIX (Sep 10 2026 — confirms the comment already on
+      # publish_admin_test_build above: "runs flutter build apk with
+      # NO --flavor, which compiles lib/main.dart -- not
+      # lib/main_admin.dart"). This project has 4 Android product
+      # flavors (see android/app/build.gradle.kts) and NO unflavored
+      # entry point that actually matches one -- `flutter build apk`
+      # with no --flavor/-t builds against whatever lib/main.dart
+      # happens to be, which is not one of the 4 real apps. Gradle ran
+      # a real ~937s assembleRelease and still failed with "couldn't
+      # find" an apk, because the flavor-less variant it built doesn't
+      # produce a recognizable release artifact at all. Building all 4
+      # real flavors explicitly, exactly like publish_admin_test_build
+      # already does successfully below, is the actual fix -- not a
+      # workaround, the correct build for a project with flavors.
       - name: Build for ${{ matrix.platform }}
         shell: bash
         run: |
           case ${{ matrix.platform }} in
             android)
-              flutter build apk --release --split-per-abi
-              flutter build appbundle --release
+              flutter build apk --release --flavor admin -t lib/main_admin.dart
+              flutter build apk --release --flavor customer -t lib/main_customer.dart
+              flutter build apk --release --flavor hero -t lib/main_hero.dart
+              flutter build apk --release --flavor seller -t lib/main_seller.dart
               ;;
             ios)
               flutter build ios --release --no-codesign
