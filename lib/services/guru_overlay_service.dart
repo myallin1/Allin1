@@ -82,6 +82,7 @@ import 'chitti/chitti_video_service.dart';
 import 'chitti/chitti_local_answer_service.dart';
 import 'chitti/chitti_local_intent_engine.dart';
 import 'chitti/chitti_screen_tracker.dart';
+import 'chitti/chitti_screen_vision_helper.dart';
 import 'chitti/chitti_voice_service.dart';
 import 'chitti/chitti_tool_registry.dart';
 import '../screens/chitti_call_screen.dart';
@@ -786,6 +787,39 @@ class GuruOverlayService extends ChangeNotifier {
       _sending = false;
       notifyListeners();
       return;
+    }
+
+    // NEW (Sep 10 2026 — Nizam: "chitti ku current screen la yenna
+    // nadakuthunu theriyanum gemini vision model moolama ... Chitti
+    // confuse agumbothu"). Reached only here — after the local intent
+    // engine AND a model tool-call attempt both failed to resolve
+    // anything — which is exactly what "confused" means for this
+    // trigger. Admin-only (the ask was specifically about dev/admin
+    // work), and a real, billed Gemini vision call, so it only ever
+    // fires on this already-rare "nothing else worked" path, never on
+    // every message. A null result (no vision key configured, capture
+    // failed, or Gemini genuinely couldn't answer from the screenshot)
+    // falls through to the existing plain-chat reply unchanged.
+    if (currentAppVariant == 'admin') {
+      try {
+        final visionAnswer =
+            await ChittiScreenVisionHelper.describeCurrentScreen(
+          question: trimmed,
+          isTamil: _languageInfo().label == 'Tamil',
+        );
+        if (visionAnswer != null && visionAnswer.trim().isNotEmpty) {
+          messages.add(
+            GuruChatTurn(role: 'assistant', text: visionAnswer),
+          );
+          unawaited(_speak(visionAnswer));
+          persist();
+          _sending = false;
+          notifyListeners();
+          return;
+        }
+      } catch (e) {
+        debugPrint('[GuruOverlayService] screen vision fallback failed: $e');
+      }
     }
 
     final history = messages

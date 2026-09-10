@@ -78,7 +78,8 @@ class GeminiApiService {
 
   /// Public wrapper so admin_ai_settings_screen.dart can show the
   /// currently-active model as the dropdown's initial value.
-  Future<String> resolveModel() async => (await _preferredModel()) ?? _modelCandidates.first;
+  Future<String> resolveModel() async =>
+      (await _preferredModel()) ?? _modelCandidates.first;
 
   static Uri _endpointForModel(String model, String apiKey) => Uri.parse(
         'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
@@ -208,13 +209,16 @@ class GeminiApiService {
         {'contents': contents},
       );
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        debugPrint('[GeminiApiService] sendMessage failed: ${response.statusCode} ${response.body}');
+        debugPrint(
+            '[GeminiApiService] sendMessage failed: ${response.statusCode} ${response.body}');
         // Surface the REAL reason instead of a generic string — see
         // _explainFailure. This is what makes the problem diagnosable.
         return _explainFailure(response);
       }
       final text = _extractText(response.body);
-      return (text == null || text.isEmpty) ? 'Gemini agent replied with an empty response.' : text;
+      return (text == null || text.isEmpty)
+          ? 'Gemini agent replied with an empty response.'
+          : text;
     } catch (e) {
       debugPrint('[GeminiApiService] sendMessage error: $e');
       return 'Gemini agent is temporarily unavailable. Please try again shortly.';
@@ -267,13 +271,15 @@ class GeminiApiService {
         'generationConfig': {'temperature': 0},
       });
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        debugPrint('[GeminiApiService] extractAgentAction failed: ${response.statusCode} ${response.body}');
+        debugPrint(
+            '[GeminiApiService] extractAgentAction failed: ${response.statusCode} ${response.body}');
         return null;
       }
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       final candidates = body['candidates'] as List<dynamic>? ?? const [];
       if (candidates.isEmpty) return null;
-      final content = (candidates.first as Map<String, dynamic>)['content'] as Map<String, dynamic>?;
+      final content = (candidates.first as Map<String, dynamic>)['content']
+          as Map<String, dynamic>?;
       final parts = content?['parts'] as List<dynamic>? ?? const [];
       for (final part in parts) {
         if (part is! Map<String, dynamic>) continue;
@@ -281,7 +287,8 @@ class GeminiApiService {
         if (functionCall == null) continue;
         final name = functionCall['name'] as String?;
         if (name == null || !kAdminKnownActions.contains(name)) continue;
-        final args = functionCall['args'] as Map<String, dynamic>? ?? const <String, dynamic>{};
+        final args = functionCall['args'] as Map<String, dynamic>? ??
+            const <String, dynamic>{};
         return {'action': name, ...args};
       }
       return null;
@@ -312,8 +319,7 @@ class GeminiApiService {
             'role': 'user',
             'parts': [
               {
-                'text':
-                    'This is a photo of a grocery product or shopping app screen. '
+                'text': 'This is a photo of a grocery product or shopping app screen. '
                     'Identify EVERY distinct product visible — there may be one or '
                     'several. For each, note the quantity/pack size if visible. '
                     'Respond with ONLY strict JSON, no other text, no markdown '
@@ -333,7 +339,8 @@ class GeminiApiService {
         'generationConfig': {'temperature': 0, 'maxOutputTokens': 500},
       });
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        debugPrint('[GeminiApiService] vision analysis failed: ${response.statusCode} ${response.body}');
+        debugPrint(
+            '[GeminiApiService] vision analysis failed: ${response.statusCode} ${response.body}');
         return null;
       }
       final text = _extractText(response.body);
@@ -346,11 +353,80 @@ class GeminiApiService {
         if (raw is! Map<String, dynamic>) continue;
         final item = (raw['item'] as String?)?.trim() ?? '';
         if (item.isEmpty) continue;
-        items.add({'item': item, 'quantity': (raw['quantity'] as String?)?.trim() ?? ''});
+        items.add({
+          'item': item,
+          'quantity': (raw['quantity'] as String?)?.trim() ?? ''
+        });
       }
       return items;
     } catch (e) {
       debugPrint('[GeminiApiService] analyzeGroceryScreenshot error: $e');
+      return null;
+    }
+  }
+
+  /// General-purpose "what's actually on this screen" vision call —
+  /// unlike [analyzeGroceryScreenshot] (which only ever extracts a
+  /// product list), this answers an arbitrary question about an
+  /// arbitrary screenshot in plain text.
+  ///
+  /// NEW (Sep 10 2026 — Nizam: "chitti ku current screen la yenna
+  /// nadakuthunu theriyanum gemini vision model moolama ... Chitti
+  /// confuse agumbothu"). Deliberately NOT the tool the model reaches
+  /// for on every message — see chitti_screen_vision_helper.dart for
+  /// where this is actually called from (only when Chitti's normal
+  /// intent resolution comes up empty), since every call here is a
+  /// real, billed Gemini vision request. Returns null on any
+  /// failure/empty read, same never-crash contract as every vision
+  /// method in this app.
+  Future<String?> describeScreen({
+    required Uint8List imageBytes,
+    required String question,
+    required String apiKey,
+    bool isTamil = false,
+  }) async {
+    if (apiKey.trim().isEmpty) return null;
+    try {
+      final response = await _postWithModelFallback(apiKey.trim(), {
+        'contents': [
+          {
+            'role': 'user',
+            'parts': [
+              {
+                'text': 'This is a screenshot of a screen inside the Allin1 '
+                    'admin app (a Flutter super-app for NJ Tech, Erode). '
+                    'The admin just asked, but Chitti (the app\'s AI '
+                    'assistant) could not resolve their question from the '
+                    'words alone: "$question"\n\n'
+                    'Look at exactly what is on screen — the visible '
+                    'buttons, labels, numbers, and current state — and '
+                    'answer their question directly, in one or two short, '
+                    'plain sentences. Do not describe the whole screen, '
+                    'only answer what they actually asked. If the '
+                    'screenshot genuinely does not contain the answer, say '
+                    'so plainly instead of guessing.'
+                    '${isTamil ? ' Reply in Tamil.' : ''}',
+              },
+              {
+                'inline_data': {
+                  'mime_type': 'image/jpeg',
+                  'data': base64Encode(imageBytes),
+                },
+              },
+            ],
+          },
+        ],
+        'generationConfig': {'temperature': 0.1, 'maxOutputTokens': 300},
+      });
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        debugPrint(
+            '[GeminiApiService] describeScreen failed: ${response.statusCode} ${response.body}');
+        return null;
+      }
+      final text = _extractText(response.body)?.trim();
+      return (text == null || text.isEmpty) ? null : text;
+    } catch (e) {
+      debugPrint('[GeminiApiService] describeScreen error: $e');
       return null;
     }
   }
@@ -360,7 +436,8 @@ class GeminiApiService {
       final body = jsonDecode(responseBody) as Map<String, dynamic>;
       final candidates = body['candidates'] as List<dynamic>? ?? const [];
       if (candidates.isEmpty) return null;
-      final content = (candidates.first as Map<String, dynamic>)['content'] as Map<String, dynamic>?;
+      final content = (candidates.first as Map<String, dynamic>)['content']
+          as Map<String, dynamic>?;
       final parts = content?['parts'] as List<dynamic>? ?? const [];
       if (parts.isEmpty) return null;
       return (parts.first as Map<String, dynamic>)['text'] as String?;

@@ -44,6 +44,7 @@ import 'services/chitti/chitti_accessibility_bridge.dart';
 import 'services/chitti/chitti_commitment_alarms.dart';
 import 'services/chitti/chitti_followup_service.dart';
 import 'services/chitti/chitti_screen_tracker.dart';
+import 'services/chitti/chitti_screen_vision_helper.dart';
 import 'services/session_service.dart';
 import 'services/theme_service.dart';
 import 'widgets/branded_loading_screen.dart';
@@ -686,10 +687,20 @@ class AdminApp extends StatelessWidget {
         // wraps EVERYTHING else here, including the Quick Task FAB — a
         // migration lock must hide the whole app, not sit under a
         // still-interactive overlay.
+        // NEW (Sep 10 2026 — Nizam: "chitti ku current screen la yenna
+        // nadakuthunu theriyanum gemini vision model moolama"). Wraps
+        // the actual app content (not the FAB on top of it) so
+        // ChittiScreenVisionHelper.captureScreen() has something real
+        // to capture when Chitti's normal resolution comes up empty —
+        // see guru_overlay_service.dart's sendMessage for the trigger.
         builder: (context, child) => MigrationGate(
           child: Stack(
             children: [
-              if (child != null) child,
+              if (child != null)
+                RepaintBoundary(
+                  key: ChittiScreenVisionHelper.screenCaptureKey,
+                  child: child,
+                ),
               const GlobalGuruFab(),
             ],
           ),
