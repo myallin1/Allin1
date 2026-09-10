@@ -333,12 +333,27 @@ class ChittiDevMonitorService {
         final m = jsonDecode(releaseRes.body) as Map<String, dynamic>;
         // See DevRelease.apkUrl: collect ALL apks and sort newest
         // first, rather than taking whichever one the API listed first.
+        // AUDIT FIX (Sep 10 2026 — Nizam: "admin app kullaye 4 appum
+        // updated version display agumanu paathuko"). This used to
+        // collect EVERY .apk on the release regardless of flavor —
+        // ci-cd.yml's rolling release carries all 4
+        // (allin1-admin/customer/hero/seller-*.apk) uploaded in the
+        // same run, so `apks.first` after sorting by upload time was
+        // effectively a coin flip between them. An admin tapping
+        // "Download APK & Test" could silently get the CUSTOMER app
+        // instead of their own, and DevApkAsset.shortSha's regex only
+        // ever matches an `allin1-admin-` filename, so a non-admin
+        // asset that DID win the sort rendered its version label
+        // blank. This screen is documented (see the file header) as
+        // admin's OWN build history — scoped to admin-flavor assets
+        // only, matching that intent.
         final apks = <DevApkAsset>[];
         for (final a in (m['assets'] as List<dynamic>? ?? [])) {
           final asset = a as Map<String, dynamic>;
           final name = (asset['name'] as String?) ?? '';
           final url = asset['browser_download_url'] as String?;
           if (url == null || !name.toLowerCase().endsWith('.apk')) continue;
+          if (!name.startsWith('allin1-admin-')) continue;
           apks.add(DevApkAsset(
             name: name,
             downloadUrl: url,

@@ -54,6 +54,14 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
   bool _loading = true;
   bool _promoting = false;
 
+  // NEW (Sep 10 2026 — Nizam: "admin app kullaye 4 appum updated
+  // version display agumanu paathuko"). The main release card above
+  // is now scoped to admin's own APK only (see the fetch() audit fix
+  // in chitti_dev_monitor_service.dart) — this is where the other 3
+  // flavors actually get surfaced, via the same per-flavor apkUrls map
+  // promoteTestBuildToCustomers() already relies on internally.
+  DevTestBuild? _testBuild;
+
   @override
   void initState() {
     super.initState();
@@ -62,10 +70,14 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final snap = await ChittiDevMonitorService.fetch();
+    final results = await Future.wait([
+      ChittiDevMonitorService.fetch(),
+      ChittiDevMonitorService.fetchLatestTestBuild(),
+    ]);
     if (!mounted) return;
     setState(() {
-      _snapshot = snap;
+      _snapshot = results[0] as DevMonitorSnapshot;
+      _testBuild = (results[1] as ({DevTestBuild? build, String? error})).build;
       _loading = false;
     });
   }
@@ -222,6 +234,10 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
                       '1 · LATEST BUILD YOU CAN TEST', Icons.android_rounded),
                   _releaseCard(snap?.latestRelease),
                   const SizedBox(height: 18),
+                  _sectionHeader('1B · CUSTOMER / HERO / SELLER BUILDS',
+                      Icons.apps_rounded),
+                  _otherFlavorsCard(),
+                  const SizedBox(height: 18),
                   _sectionHeader('2 · BUILDS RUNNING / RECENT',
                       Icons.build_circle_outlined),
                   if (snap == null || snap.runs.isEmpty)
@@ -309,6 +325,73 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
 
   // The section that answers "can I install and test something right
   // now" — kept first and visually heaviest for exactly that reason.
+  /// Answers "4 apps-um updated version display agumanu" directly —
+  /// the three flavors the admin's own APK card above deliberately no
+  /// longer shows (see fetch()'s audit fix), each with its own
+  /// download link straight from the same rolling release.
+  Widget _otherFlavorsCard() {
+    final build = _testBuild;
+    if (build == null || build.apkUrls.isEmpty) {
+      return _emptyCard(
+          'No test build published yet, or GitHub token/repo not configured.');
+    }
+    const labels = {
+      'customer': 'Customer',
+      'hero': 'Hero',
+      'seller': 'Seller',
+    };
+    final rows =
+        labels.entries.where((e) => build.apkUrls.containsKey(e.key)).toList();
+    if (rows.isEmpty) {
+      return _emptyCard('No customer/hero/seller .apk on this release yet.');
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (build.publishedAt != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text(
+                'Same rolling build · ${_ago(build.publishedAt!)}',
+                style: GoogleFonts.outfit(color: _muted, fontSize: 11),
+              ),
+            ),
+          for (final entry in rows)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      entry.value,
+                      style: GoogleFonts.outfit(
+                          color: _text,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _open(build.apkUrls[entry.key]!),
+                    icon: const Icon(Icons.download_rounded, size: 15),
+                    label: const Text('Download'),
+                    style: TextButton.styleFrom(foregroundColor: _green),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _releaseCard(DevRelease? release) {
     if (release == null) {
       return _emptyCard('No published release yet. Once a build finishes, the '
