@@ -259,7 +259,50 @@ jobs:
       - name: Create placeholder .env for asset bundling
         run: touch .env
 
+      # AUDIT FIX (Sep 10 2026 — Nizam: "RELEASE_REPO_TOKEN pola oru
+      # Android keystore secret theva-a"). No NEW secret needed — this
+      # is the EXACT same "Restore the stable signing key" step
+      # publish_admin_test_build already runs successfully, just never
+      # duplicated into THIS job. Without it, android/app/build.gradle.kts's
+      # release signingConfig reads a key.properties file that never
+      # gets created here, and every signed android/appbundle build in
+      # this matrix fails with "SigningConfig 'release' is missing
+      # required property 'storeFile'". Android-only: ios/web/windows
+      # don't touch this signingConfig at all.
+      - name: Restore the stable signing key
+        if: matrix.platform == 'android'
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is not set."
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_B64" | tr -cd 'A-Za-z0-9+/=' | base64 -d > android/app/admin-release.jks
+          if [ ! -s android/app/admin-release.jks ]; then
+            echo "::error::The keystore decoded to an empty file."
+            exit 1
+          fi
+          STORE_PW=$(printf '%s' "$KEYSTORE_PASSWORD" | tr -cd '[:print:]')
+          KEY_PW=$(printf '%s' "$KEY_PASSWORD" | tr -cd '[:print:]')
+          ALIAS=$(printf '%s' "$KEY_ALIAS" | tr -cd '[:print:]')
+          printf "storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=admin-release.jks\n" "$STORE_PW" "$KEY_PW" "$ALIAS" > android/key.properties
+
+      # AUDIT FIX (Sep 9 2026 — Nizam's earlier "vera bug gape" audit):
+      # this `case` statement is bash syntax. GitHub Actions defaults
+      # the shell PER RUNNER OS when none is given — bash on
+      # ubuntu/macos, but PowerShell on windows-latest, which cannot
+      # parse a bash `case...esac` at all. Every Windows build in this
+      # matrix has failed on a ParserError since this step was written,
+      # for that reason alone, nothing to do with Flutter/the app
+      # itself. `shell: bash` forces Git Bash (present on all GitHub-
+      # hosted Windows runners) instead of letting the OS default win.
       - name: Build for ${{ matrix.platform }}
+        shell: bash
         run: |
           case ${{ matrix.platform }} in
             android)
