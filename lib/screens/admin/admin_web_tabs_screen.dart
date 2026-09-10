@@ -238,7 +238,7 @@ class _AdminWebTabsScreenState extends State<AdminWebTabsScreen>
 /// Used by the incoming-link handler in main_admin: a github.com link
 /// tapped in Gmail now offers this app, and it should land on the web
 /// tab rather than wherever the admin happened to be.
-Future<void> openInAdminBrowser(String url) async {
+Future<bool> openInAdminBrowser(String url) async {
   AdminWebTabsScreen._segment = 1;
   // AUDIT FIX (second pass): switching the segment is not enough — the
   // shell's bottom tab has to come forward too, or the link loads on a
@@ -250,7 +250,7 @@ Future<void> openInAdminBrowser(String url) async {
   // has ever been built, and it is what tells the segment to build its
   // child at all.
   AdminWebBrowserScreen.wanted = true;
-  await AdminWebBrowserScreen.open(url);
+  return AdminWebBrowserScreen.open(url);
 }
 
 /// Opens a GitHub URL in the admin's own GitHub segment from anywhere —

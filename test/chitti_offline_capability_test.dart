@@ -91,6 +91,7 @@ void main() {
     // only because its phrases and its tools are both fixed lists.
     'control_screen',
     'google_search', // live web search querying Google Grounding
+    'browse_admin_url', // free-text URL, no safe default to route locally
   };
 
   test('every tool is accounted for on one side of the line', () {

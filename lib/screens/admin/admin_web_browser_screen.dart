@@ -108,15 +108,30 @@ class AdminWebBrowserScreen extends StatefulWidget {
   /// Static because the caller (the GitHub tab's navigation delegate)
   /// has no handle on this State, and the controller outlives any
   /// single instance anyway.
-  static Future<void> open(String url) async {
+  /// Opens `url` and waits to know whether it actually loaded.
+  ///
+  /// NEW (Sep 10 2026 — Nizam: "namma chitti browser um handle
+  /// pannanum" — same fix as GitHubEmbeddedScreen.open(), extended to
+  /// this general-purpose tab). Used to be fire-and-forget; now
+  /// resolves true on the next page-settle, false on a real load error
+  /// or a timeout, so a caller driving this on Chitti's behalf can
+  /// actually report what happened.
+  static Future<bool> open(
+    String url, {
+    Duration timeout = const Duration(seconds: 12),
+  }) async {
     // AUDIT FIX (Sep 5 2026): the first version added the url to a queue
     // AND loaded it immediately, then never removed it — so the next
     // rebuild drained the same entry and navigated a second time, on top
     // of wherever the admin had since browsed. One pending slot, cleared
     // by whoever consumes it, is the whole fix.
     _pendingUrl = url;
+    _pendingResult = Completer<bool>();
     final live = _AdminWebBrowserScreenState._live;
-    if (live != null && live.mounted) await live._consumePending();
+    if (live != null && live.mounted) {
+      await live._consumePending();
+    }
+    return _pendingResult!.future.timeout(timeout, onTimeout: () => false);
   }
 
   /// The one link waiting to be shown, if any.
@@ -125,6 +140,22 @@ class AdminWebBrowserScreen extends StatefulWidget {
   /// Gmail on a COLD START arrives long before this widget is built, and
   /// dropping it would look exactly like the app ignoring the tap.
   static String? _pendingUrl;
+
+  /// Resolved by the navigation delegate's onPageFinished/
+  /// onWebResourceError for whichever load [open] most recently
+  /// started.
+  static Completer<bool>? _pendingResult;
+
+  /// Completes [_pendingResult] exactly once and clears it, so a LATER
+  /// page load — the admin browsing normally after Chitti's navigation
+  /// already settled — never tries to complete an already-used (or
+  /// already-cleared) completer.
+  static void _completePending(bool success) {
+    final pending = _pendingResult;
+    if (pending == null || pending.isCompleted) return;
+    _pendingResult = null;
+    pending.complete(success);
+  }
 
   /// True once a link has been handed over or the segment tapped.
   ///
@@ -251,6 +282,22 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
             // Android can kill the process without ever calling
             // dispose(), which is precisely the case this is for.
             unawaited(_rememberUrl(url));
+            AdminWebBrowserScreen._completePending(true);
+          },
+          onWebResourceError: (error) {
+            // Only the main frame failing means the requested page
+            // itself didn't load — a failed sub-resource must not
+            // report false for a page that actually rendered.
+            if (error.isForMainFrame ?? true) {
+              if (mounted) {
+                setState(() {
+                  _loading = false;
+                  _refreshing = false;
+                  _refreshTimeout?.cancel();
+                });
+              }
+              AdminWebBrowserScreen._completePending(false);
+            }
           },
           onNavigationRequest: (request) {
             // NEW (Sep 2026 — CTO review of PR #61): a .apk link used to
@@ -330,6 +377,7 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
       await _controller.loadRequest(Uri.parse(url));
     } catch (e) {
       debugPrint('[AdminBrowser] could not open handed-off link: $e');
+      AdminWebBrowserScreen._completePending(false);
     }
   }
 

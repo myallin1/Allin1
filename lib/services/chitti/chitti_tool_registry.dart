@@ -1295,6 +1295,43 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
       'required': <String>[],
     },
   ),
+  // NEW (Sep 10 2026 — Nizam: "nammaa chitti browser um handle
+  // pannanum and embedded la github irunthuchulla athayum handle
+  // pannanum"). The GENERAL-purpose browser segment next to the
+  // GitHub tab (AdminWebBrowserScreen) — any http(s) site, not just
+  // github.com. Kept as a SEPARATE tool from open_admin_browser rather
+  // than one tool with an "any site" flag, so the safety boundary
+  // (GitHub-only vs. anywhere) stays an explicit choice of which tool
+  // gets called, not a parameter a misheard word could flip. Same
+  // wait-for-load-then-report contract as open_admin_browser.
+  ChittiTool(
+    name: 'browse_admin_url',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        'Open any http(s) URL in the admin app\'s general-purpose browser '
+        'tab (next to the GitHub tab) and confirm whether it actually '
+        'loaded. Not restricted to github.com — use open_admin_browser '
+        'instead for GitHub links. Read-only.',
+    keywords: [
+      'browse to',
+      'open website',
+      'open this site',
+      'go to this url',
+      'website open pannu',
+      'oru site open pannu',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'url': <String, dynamic>{
+          'type': 'string',
+          'description': 'The http(s) URL to open.',
+        },
+      },
+      'required': ['url'],
+    },
+  ),
   ChittiTool(
     name: 'google_search',
     domain: ChittiDomain.support,

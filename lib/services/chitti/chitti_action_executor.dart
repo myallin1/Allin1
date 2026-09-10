@@ -428,6 +428,8 @@ class ChittiActionExecutor {
           return await _checkPrStatus(args, isTamil: languageCode == 'ta');
         case 'open_admin_browser':
           return await _openAdminBrowser(args, isTamil: languageCode == 'ta');
+        case 'browse_admin_url':
+          return await _browseAdminUrl(args, isTamil: languageCode == 'ta');
         case 'control_screen':
           return await _controlScreen(args, isTamil: languageCode == 'ta');
         case 'screen_step_approved':
@@ -1800,6 +1802,43 @@ class ChittiActionExecutor {
     }
 
     final loaded = await openGitHubIssueInAdminTab(url);
+    return ChittiActionResult(
+      success: loaded,
+      text: loaded
+          ? (isTamil ? 'திறந்துடுச்சு.' : 'Opened it.')
+          : (isTamil
+              ? 'திறக்க முயற்சி பண்ணேன், ஆனா பக்கம் சரியா லோட் ஆகல.'
+              : 'I tried, but the page didn\'t load correctly.'),
+    );
+  }
+
+  /// Same contract as [_openAdminBrowser], for the general-purpose
+  /// browser tab instead of the GitHub-only one — see
+  /// browse_admin_url's own registry comment for why this is a
+  /// separate tool rather than an "any site" flag on the other one.
+  static Future<ChittiActionResult> _browseAdminUrl(
+    Map<String, dynamic> args, {
+    bool isTamil = true,
+  }) async {
+    final raw = (args['url'] as String?)?.trim();
+    if (raw == null || raw.isEmpty) {
+      return ChittiActionResult(
+        text: isTamil
+            ? 'எந்த website open பண்ணனும்?'
+            : 'Which website should I open?',
+      );
+    }
+    final scheme = Uri.tryParse(raw)?.scheme ?? '';
+    if (scheme != 'http' && scheme != 'https') {
+      return ChittiActionResult(
+        success: false,
+        text: isTamil
+            ? 'இது ஒரு valid website link இல்ல.'
+            : 'That doesn\'t look like a valid website link.',
+      );
+    }
+
+    final loaded = await openInAdminBrowser(raw);
     return ChittiActionResult(
       success: loaded,
       text: loaded
