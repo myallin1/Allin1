@@ -315,7 +315,16 @@ jobs:
       # real flavors explicitly, exactly like publish_admin_test_build
       # already does successfully below, is the actual fix -- not a
       # workaround, the correct build for a project with flavors.
+      # NEW (Sep 10 2026 — Nizam: "udane 4apps um windows ku build
+      # pannatha wait pannu, aprama venhumbothu pandren"). Building all
+      # 4 flavors sequentially on Windows roughly quadrupled that leg's
+      # time on EVERY push, for a platform this project isn't shipping
+      # yet. Skipped on a normal push; still runs when someone
+      # deliberately triggers this workflow by hand (Actions tab ->
+      # Run workflow), so it's one click away whenever it's actually
+      # wanted.
       - name: Build for ${{ matrix.platform }}
+        if: matrix.platform != 'windows' || github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           case ${{ matrix.platform }} in
@@ -358,6 +367,7 @@ jobs:
           esac
 
       - name: Upload build artifacts
+        if: matrix.platform != 'windows' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.platform }}
