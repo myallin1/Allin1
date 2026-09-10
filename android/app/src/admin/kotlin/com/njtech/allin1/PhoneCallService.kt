@@ -235,6 +235,21 @@ object PhoneCallService {
         answerRunnable?.let { handler.removeCallbacks(it) }
         Log.d("PhoneCallService", "Call ended. Finalizing recording and resetting audio.")
 
+        // AUDIT FIX (Sep 2026 — Nizam: "chitti call cut agi 10 sec range
+        // ku apram um admin phone la pesitrukku"). Nothing here ever
+        // stopped ChittiCallVoice's TTS engine on hangup -- if Chitti
+        // was mid-sentence the moment either side hung up, Android's
+        // TextToSpeech kept playing the rest of that utterance to
+        // completion regardless, which for a longer greeting can easily
+        // run several seconds past the call actually ending. Stopped
+        // FIRST, before the recording/volume teardown below, so a
+        // half-spoken sentence cannot keep going through any of that.
+        try {
+            ChittiCallVoice.stop()
+        } catch (e: Exception) {
+            Log.e("PhoneCallService", "ChittiCallVoice.stop() failed: ${e.message}")
+        }
+
         activeCallState = null
         activeCallerNumber = null
 
@@ -763,6 +778,16 @@ object PhoneCallService {
     }
 
     fun onTelecomCallRemoved(context: Context, call: Call) {
+        // AUDIT FIX (Sep 2026): same gap as onCallEnded above -- this is
+        // the newer Telecom-bound removal path (fires once Android
+        // actually tears the Call down, which onCallEnded's own
+        // PHONE_STATE broadcast can race), and it never stopped
+        // Chitti's TTS either.
+        try {
+            ChittiCallVoice.stop()
+        } catch (e: Exception) {
+            Log.e("PhoneCallService", "ChittiCallVoice.stop() failed: ${e.message}")
+        }
         if (activeTelecomCall == call) {
             activeTelecomCall = null
         }
