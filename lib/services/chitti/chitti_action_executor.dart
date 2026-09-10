@@ -46,6 +46,7 @@ import '../../screens/bike_taxi/bike_booking_screen.dart';
 import '../../screens/sos_screen.dart';
 import '../../screens/service_request_tracking_screen.dart';
 import '../../screens/admin/admin_ride_tracking_detail_screen.dart';
+import '../../screens/admin/admin_web_tabs_screen.dart';
 import '../auth_prompt_service.dart';
 import '../auth_service.dart';
 import '../chitti_order_memory_service.dart';
@@ -171,7 +172,8 @@ class ChittiActionExecutor {
     // this is the last point before a real Firestore write, and the
     // cost of the check is nothing.
     if (!ChittiToolRegistry.isAllowedFor(action)) {
-      debugPrint('[ChittiActionExecutor] refused "$action" in $currentAppVariant');
+      debugPrint(
+          '[ChittiActionExecutor] refused "$action" in $currentAppVariant');
       return const ChittiActionResult();
     }
 
@@ -292,7 +294,8 @@ class ChittiActionExecutor {
         case 'hero_set_online_status':
           return await _heroSetOnline(args);
         case 'hero_today_earnings':
-          final earnings = await ChittiRoleLookupService.heroTodayEarningsSummary();
+          final earnings =
+              await ChittiRoleLookupService.heroTodayEarningsSummary();
           // NEW (Sep 1 2026 — Hero Memory offline fallback): a real,
           // personalized comparison against yesterday when the local
           // memory has enough data (see HeroMemoryService.offlineInsight
@@ -423,6 +426,8 @@ class ChittiActionExecutor {
           return await _createDevTask(args);
         case 'check_pr_status':
           return await _checkPrStatus(args, isTamil: languageCode == 'ta');
+        case 'open_admin_browser':
+          return await _openAdminBrowser(args, isTamil: languageCode == 'ta');
         case 'control_screen':
           return await _controlScreen(args, isTamil: languageCode == 'ta');
         case 'screen_step_approved':
@@ -484,47 +489,61 @@ class ChittiActionExecutor {
   // failure branch — so a failed click/type/scroll here would have read
   // as a SUCCESS to anything checking .success, which is exactly the
   // signal ChittiTaskChain's "stop on first failure" rule depends on.
-  static Future<ChittiActionResult> _executeSystemAction(Map<String, dynamic> args) async {
+  static Future<ChittiActionResult> _executeSystemAction(
+      Map<String, dynamic> args) async {
     final bridge = ChittiAccessibilityBridge.instance;
     final isGranted = await bridge.isPermissionGranted();
     if (!isGranted) {
       await bridge.openSettings();
       return const ChittiActionResult(
         success: false,
-        text: 'Accessibility permission is required for system control. Opening settings...',
-        spokenTextOverride: 'Accessibility permission is required. Please enable it in settings.',
+        text:
+            'Accessibility permission is required for system control. Opening settings...',
+        spokenTextOverride:
+            'Accessibility permission is required. Please enable it in settings.',
       );
     }
 
-    final actionType = (args['actionType'] as String?)?.toLowerCase().trim() ?? '';
+    final actionType =
+        (args['actionType'] as String?)?.toLowerCase().trim() ?? '';
     final targetText = (args['targetText'] as String?)?.trim() ?? '';
     final inputValue = (args['inputValue'] as String?)?.trim() ?? '';
-    final scrollDirection = (args['scrollDirection'] as String?)?.toLowerCase().trim() ?? 'down';
+    final scrollDirection =
+        (args['scrollDirection'] as String?)?.toLowerCase().trim() ?? 'down';
 
     switch (actionType) {
       case 'click':
         if (targetText.isEmpty) {
-          return const ChittiActionResult(success: false, text: 'What element should I click?');
+          return const ChittiActionResult(
+              success: false, text: 'What element should I click?');
         }
         final ok = await bridge.clickElement(targetText);
-        final feedback = ok ? "Clicked $targetText" : "Could not find $targetText to click";
-        return ChittiActionResult(success: ok, text: feedback, spokenTextOverride: feedback);
+        final feedback =
+            ok ? "Clicked $targetText" : "Could not find $targetText to click";
+        return ChittiActionResult(
+            success: ok, text: feedback, spokenTextOverride: feedback);
       case 'type':
         final ok = await bridge.inputText(targetText, inputValue);
-        final feedback = ok ? "Typed $inputValue in $targetText" : "Could not find input field $targetText";
-        return ChittiActionResult(success: ok, text: feedback, spokenTextOverride: feedback);
+        final feedback = ok
+            ? "Typed $inputValue in $targetText"
+            : "Could not find input field $targetText";
+        return ChittiActionResult(
+            success: ok, text: feedback, spokenTextOverride: feedback);
       case 'scroll':
         final ok = await bridge.scroll(scrollDirection);
         final feedback = ok ? "Scrolled $scrollDirection" : "Could not scroll";
-        return ChittiActionResult(success: ok, text: feedback, spokenTextOverride: feedback);
+        return ChittiActionResult(
+            success: ok, text: feedback, spokenTextOverride: feedback);
       case 'go_back':
         final ok = await bridge.goBack();
         final feedback = ok ? "Went back" : "Could not go back";
-        return ChittiActionResult(success: ok, text: feedback, spokenTextOverride: feedback);
+        return ChittiActionResult(
+            success: ok, text: feedback, spokenTextOverride: feedback);
       case 'go_home':
         final ok = await bridge.goHome();
         final feedback = ok ? "Went home" : "Could not go home";
-        return ChittiActionResult(success: ok, text: feedback, spokenTextOverride: feedback);
+        return ChittiActionResult(
+            success: ok, text: feedback, spokenTextOverride: feedback);
       case 'read_screen':
         final screenText = await bridge.readScreen();
         return ChittiActionResult(
@@ -533,14 +552,18 @@ class ChittiActionExecutor {
         );
       case 'launch_app':
         if (targetText.isEmpty) {
-          return const ChittiActionResult(success: false, text: 'Which app should I open?');
+          return const ChittiActionResult(
+              success: false, text: 'Which app should I open?');
         }
         final ok = await bridge.launchApp(targetText);
-        final feedback = ok ? "Opened $targetText" : "Could not open $targetText";
-        return ChittiActionResult(success: ok, text: feedback, spokenTextOverride: feedback);
+        final feedback =
+            ok ? "Opened $targetText" : "Could not open $targetText";
+        return ChittiActionResult(
+            success: ok, text: feedback, spokenTextOverride: feedback);
       default:
         final feedback = "Unknown action type: $actionType";
-        return ChittiActionResult(success: false, text: feedback, spokenTextOverride: feedback);
+        return ChittiActionResult(
+            success: false, text: feedback, spokenTextOverride: feedback);
     }
   }
 
@@ -581,8 +604,9 @@ class ChittiActionExecutor {
     final destinationRaw = (args['destination'] as String?)?.trim();
     final intent = VoiceBookingIntent(
       service: service,
-      destinationQuery:
-          (destinationRaw != null && destinationRaw.isNotEmpty) ? destinationRaw : null,
+      destinationQuery: (destinationRaw != null && destinationRaw.isNotEmpty)
+          ? destinationRaw
+          : null,
     );
 
     // SOS has its own KYC gate on its own screen — never pre-fill or
@@ -608,7 +632,8 @@ class ChittiActionExecutor {
           'Cancel this booking',
           'Ask something else',
         ],
-        openScreen: (_) => BikeBookingScreen(initialCategory: intent.categoryKey),
+        openScreen: (_) =>
+            BikeBookingScreen(initialCategory: intent.categoryKey),
         openScreenLabel: intent.displayName,
       );
     }
@@ -681,7 +706,8 @@ class ChittiActionExecutor {
     final items = (args['items'] as String?)?.trim() ?? '';
     if (requestType == null || requestType.isEmpty || items.isEmpty) {
       return const ChittiActionResult(
-        text: "I didn't catch what to order. Tell me the item and I'll place it.",
+        text:
+            "I didn't catch what to order. Tell me the item and I'll place it.",
         suggestions: <String>['Order food', 'Order groceries', 'Book a Hero'],
       );
     }
@@ -953,7 +979,8 @@ class ChittiActionExecutor {
       case 'call':
         final phone =
             (args['phone'] as String?)?.replaceAll(RegExp(r'[^\d+]'), '') ?? '';
-        final uri = phone.isNotEmpty ? Uri.parse('tel:$phone') : Uri.parse('tel:');
+        final uri =
+            phone.isNotEmpty ? Uri.parse('tel:$phone') : Uri.parse('tel:');
         if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
           return const ChittiActionResult(text: 'Could not open the dialer.');
         }
@@ -1120,25 +1147,34 @@ class ChittiActionExecutor {
     return HeroMoment.idle;
   }
 
-  static Future<ChittiActionResult> _searchOrder(Map<String, dynamic> args) async {
+  static Future<ChittiActionResult> _searchOrder(
+      Map<String, dynamic> args) async {
     final query = (args['query'] as String? ?? '').trim();
     if (query.isEmpty) {
-      return const ChittiActionResult(text: "Please provide an order or ride ID to search.");
+      return const ChittiActionResult(
+          text: "Please provide an order or ride ID to search.");
     }
 
     try {
-      final reqDoc = await FirebaseFirestore.instance.collection('service_requests').doc(query).get();
+      final reqDoc = await FirebaseFirestore.instance
+          .collection('service_requests')
+          .doc(query)
+          .get();
       if (reqDoc.exists) {
         final data = reqDoc.data() as Map<String, dynamic>? ?? {};
-        final type = data['requestType'] as String? ?? data['request_type'] as String? ?? 'hero_booking';
+        final type = data['requestType'] as String? ??
+            data['request_type'] as String? ??
+            'hero_booking';
         return ChittiActionResult(
           text: "Found order $query ($type). Opening details page...",
-          openScreen: (ctx) => ServiceRequestTrackingScreen(requestId: query, requestType: type),
+          openScreen: (ctx) =>
+              ServiceRequestTrackingScreen(requestId: query, requestType: type),
           openScreenLabel: 'ServiceRequestTrackingScreen',
         );
       }
 
-      final rideDoc = await FirebaseFirestore.instance.collection('rides').doc(query).get();
+      final rideDoc =
+          await FirebaseFirestore.instance.collection('rides').doc(query).get();
       if (rideDoc.exists) {
         return ChittiActionResult(
           text: "Found ride $query. Opening details page...",
@@ -1155,10 +1191,13 @@ class ChittiActionExecutor {
       if (reqSearch.docs.isNotEmpty) {
         final id = reqSearch.docs.first.id;
         final data = reqSearch.docs.first.data() as Map<String, dynamic>? ?? {};
-        final type = data['requestType'] as String? ?? data['request_type'] as String? ?? 'hero_booking';
+        final type = data['requestType'] as String? ??
+            data['request_type'] as String? ??
+            'hero_booking';
         return ChittiActionResult(
           text: "Found order $id for customer $query. Opening details...",
-          openScreen: (ctx) => ServiceRequestTrackingScreen(requestId: id, requestType: type),
+          openScreen: (ctx) =>
+              ServiceRequestTrackingScreen(requestId: id, requestType: type),
           openScreenLabel: 'ServiceRequestTrackingScreen',
         );
       }
@@ -1178,7 +1217,8 @@ class ChittiActionExecutor {
       }
 
       return ChittiActionResult(
-        text: "Sorry boss, I couldn't find any order or ride matching '$query'.",
+        text:
+            "Sorry boss, I couldn't find any order or ride matching '$query'.",
       );
     } catch (e) {
       return ChittiActionResult(
@@ -1187,10 +1227,12 @@ class ChittiActionExecutor {
     }
   }
 
-  static Future<ChittiActionResult> _searchCustomer(Map<String, dynamic> args) async {
+  static Future<ChittiActionResult> _searchCustomer(
+      Map<String, dynamic> args) async {
     final query = (args['query'] as String? ?? '').trim();
     if (query.isEmpty) {
-      return const ChittiActionResult(text: "Please provide a customer name or phone to search.");
+      return const ChittiActionResult(
+          text: "Please provide a customer name or phone to search.");
     }
 
     try {
@@ -1215,14 +1257,15 @@ class ChittiActionExecutor {
             .where('name', isEqualTo: query)
             .limit(1)
             .get();
-        
+
         if (heroSnap.docs.isNotEmpty) {
           final h = heroSnap.docs.first.data() as Map<String, dynamic>? ?? {};
           final phone = h['phone'] ?? 'N/A';
           final city = h['city'] ?? 'Erode';
           final approval = h['approvalStatus'] ?? 'pending';
           return ChittiActionResult(
-            text: "Found Hero Captain: ${h['name']}\nPhone: $phone\nCity: $city\nStatus: $approval",
+            text:
+                "Found Hero Captain: ${h['name']}\nPhone: $phone\nCity: $city\nStatus: $approval",
             suggestions: const ['Hero approvals', 'Approved heroes'],
           );
         }
@@ -1240,7 +1283,8 @@ class ChittiActionExecutor {
       final role = u['role'] ?? 'customer';
 
       return ChittiActionResult(
-        text: "Found profile details:\nName: $name\nPhone: $phone\nCity: $city\nRole: $role\nWallet Balance: ₹$wallet",
+        text:
+            "Found profile details:\nName: $name\nPhone: $phone\nCity: $city\nRole: $role\nWallet Balance: ₹$wallet",
         suggestions: const ['Today\'s orders', 'New orders'],
       );
     } catch (e) {
@@ -1250,12 +1294,15 @@ class ChittiActionExecutor {
     }
   }
 
-  static Future<ChittiActionResult> _generateKycReport(Map<String, dynamic> args) async {
+  static Future<ChittiActionResult> _generateKycReport(
+      Map<String, dynamic> args) async {
     final type = args['type'] as String?;
     final targetUid = args['targetUid'] as String?;
     final result = switch (type) {
-      'seller' => await AdminAiAuditTools.generateSellerKycReport(targetUid: targetUid),
-      'sos' => await AdminAiAuditTools.generateSosKycReport(targetUid: targetUid),
+      'seller' =>
+        await AdminAiAuditTools.generateSellerKycReport(targetUid: targetUid),
+      'sos' =>
+        await AdminAiAuditTools.generateSosKycReport(targetUid: targetUid),
       _ => await AdminAiAuditTools.generateHeroKycReport(targetUid: targetUid),
     };
     if (result == null) {
@@ -1301,7 +1348,8 @@ class ChittiActionExecutor {
     );
   }
 
-  static Future<ChittiActionResult> _executeAdminWriteAction(Map<String, dynamic> args) async {
+  static Future<ChittiActionResult> _executeAdminWriteAction(
+      Map<String, dynamic> args) async {
     final actionType = (args['actionType'] as String?) ?? '';
     final isApprove = actionType.startsWith('approve');
     final uid = (args['targetUid'] as String?)?.trim();
@@ -1319,7 +1367,11 @@ class ChittiActionExecutor {
       return ChittiActionResult(
         text: 'Cannot complete $actionType without a target UID. '
             'Please generate a KYC report first so I can identify the specific registration.',
-        suggestions: const ['Generate KYC report', 'Hero approvals', 'Seller approvals'],
+        suggestions: const [
+          'Generate KYC report',
+          'Hero approvals',
+          'Seller approvals'
+        ],
       );
     }
 
@@ -1346,7 +1398,9 @@ class ChittiActionExecutor {
 
     try {
       final adminUid = FirebaseAuth.instance.currentUser?.uid;
-      await FirebaseFirestore.instance.collection('admin_ai_actions').add(<String, dynamic>{
+      await FirebaseFirestore.instance
+          .collection('admin_ai_actions')
+          .add(<String, dynamic>{
         'actionType': actionType,
         'targetLabel': targetLabel,
         'targetUid': uid,
@@ -1363,12 +1417,18 @@ class ChittiActionExecutor {
 
     if (writeResult?.success ?? false) {
       return ChittiActionResult(
-        text: '✅ Done — the $targetType document ($targetLabel, uid: $uid) has been ${isApprove ? 'approved' : 'rejected'}.',
-        suggestions: const ['Pending approvals', 'Generate KYC report', 'Admin Dashboard'],
+        text:
+            '✅ Done — the $targetType document ($targetLabel, uid: $uid) has been ${isApprove ? 'approved' : 'rejected'}.',
+        suggestions: const [
+          'Pending approvals',
+          'Generate KYC report',
+          'Admin Dashboard'
+        ],
       );
     } else {
       return ChittiActionResult(
-        text: '❌ Failed to apply $actionType: ${writeResult?.error ?? 'unknown error'}.',
+        text:
+            '❌ Failed to apply $actionType: ${writeResult?.error ?? 'unknown error'}.',
         suggestions: const ['Hero approvals', 'Seller approvals'],
       );
     }
@@ -1382,7 +1442,8 @@ class ChittiActionExecutor {
         text: 'Phone number and message content are required to send an SMS.',
       );
     }
-    final success = await ChittiAccessibilityBridge.instance.sendSms(phoneNumber, message);
+    final success =
+        await ChittiAccessibilityBridge.instance.sendSms(phoneNumber, message);
     if (success) {
       return ChittiActionResult(
         text: 'SMS successfully sent to $phoneNumber: "$message"',
@@ -1394,12 +1455,14 @@ class ChittiActionExecutor {
     } else {
       return ChittiActionResult(
         success: false,
-        text: 'Could not send SMS to $phoneNumber. Please check SMS permission or network connectivity.',
+        text:
+            'Could not send SMS to $phoneNumber. Please check SMS permission or network connectivity.',
       );
     }
   }
 
-  static Future<ChittiActionResult> _readRecentSms({bool isTamil = true}) async {
+  static Future<ChittiActionResult> _readRecentSms(
+      {bool isTamil = true}) async {
     final list = await ChittiAccessibilityBridge.instance.getRecentSms();
     if (list.isEmpty) {
       return ChittiActionResult(
@@ -1439,7 +1502,8 @@ class ChittiActionExecutor {
     );
   }
 
-  static Future<ChittiActionResult> _summarizeLastCall({bool isTamil = true}) async {
+  static Future<ChittiActionResult> _summarizeLastCall(
+      {bool isTamil = true}) async {
     try {
       final snap = await FirebaseFirestore.instance
           .collection('chitti_appointments')
@@ -1488,9 +1552,7 @@ class ChittiActionExecutor {
       }
       if (audioUrl != null && audioUrl.isNotEmpty) {
         buffer.writeln(
-          isTamil
-              ? '🎧 கிளவுட் லிங்க்: $audioUrl'
-              : '🎧 Cloud Link: $audioUrl',
+          isTamil ? '🎧 கிளவுட் லிங்க்: $audioUrl' : '🎧 Cloud Link: $audioUrl',
         );
       }
 
@@ -1647,7 +1709,8 @@ class ChittiActionExecutor {
     bool isTamil = true,
   }) async {
     final prNumber = (args['prNumber'] as num?)?.toInt();
-    final result = await ChittiDevMonitorService.fetchPullRequests(prNumber: prNumber);
+    final result =
+        await ChittiDevMonitorService.fetchPullRequests(prNumber: prNumber);
 
     if (result.error != null) {
       return ChittiActionResult(success: false, text: result.error!);
@@ -1667,14 +1730,16 @@ class ChittiActionExecutor {
           ? 'மெர்ஜ் ஆகிடுச்சு — லைவ்ல இருக்கும்.'
           : 'Merged — this change is live.';
     } else if (!pr.isOpen) {
-      statusLine = isTamil ? 'மூடப்பட்டுச்சு (மெர்ஜ் ஆகல).' : 'Closed without merging.';
+      statusLine =
+          isTamil ? 'மூடப்பட்டுச்சு (மெர்ஜ் ஆகல).' : 'Closed without merging.';
     } else if (pr.isDraft) {
-      statusLine = isTamil ? 'இன்னும் ட்ராஃப்ட் — ரெடி ஆகல.' : 'Still a draft — not ready yet.';
+      statusLine = isTamil
+          ? 'இன்னும் ட்ராஃப்ட் — ரெடி ஆகல.'
+          : 'Still a draft — not ready yet.';
     } else {
       statusLine = switch (pr.mergeableState) {
-        'clean' => isTamil
-            ? 'ரெடி — மெர்ஜ் பண்ணலாம்.'
-            : 'Ready to merge, no conflicts.',
+        'clean' =>
+          isTamil ? 'ரெடி — மெர்ஜ் பண்ணலாம்.' : 'Ready to merge, no conflicts.',
         'dirty' => isTamil
             ? 'கான்ஃப்ளிக்ட் இருக்கு, சரி பண்ணனும்.'
             : 'Has merge conflicts that need resolving.',
@@ -1693,6 +1758,55 @@ class ChittiActionExecutor {
     return ChittiActionResult(
       text: 'PR #${pr.number} "${pr.title}" — $statusLine\n${pr.url}',
       suggestions: const <String>["Today's activity", 'Create a new task'],
+    );
+  }
+
+  /// Drives the admin app's own embedded GitHub WebView on command and
+  /// reports whether it actually loaded.
+  ///
+  /// NEW (Sep 10 2026 — Nizam: "chitti ku full access power irukka
+  /// namma command ketutu chitti atha open pannuvana? success agitha
+  /// ilayanu namma app la chittti paathute irukanum"). Host-restricted
+  /// to the same github.com family GitHubEmbeddedScreen's own
+  /// navigation delegate already allows — that delegate only gates
+  /// link clicks WITHIN a loaded page, not this initial programmatic
+  /// load, so an unvalidated url here would let Chitti point the
+  /// WebView (unrestricted JS, GitHub's own cookies) at any site.
+  static Future<ChittiActionResult> _openAdminBrowser(
+    Map<String, dynamic> args, {
+    bool isTamil = true,
+  }) async {
+    final raw = (args['url'] as String?)?.trim();
+    final url = (raw == null || raw.isEmpty)
+        ? 'https://github.com/myallin1/Allin1/pulls'
+        : raw;
+
+    const allowedRoots = [
+      'github.com',
+      'githubusercontent.com',
+      'githubassets.com',
+      'githubcopilot.com',
+    ];
+    final host = Uri.tryParse(url)?.host ?? '';
+    final hostOk =
+        allowedRoots.any((root) => host == root || host.endsWith('.$root'));
+    if (!hostOk) {
+      return ChittiActionResult(
+        success: false,
+        text: isTamil
+            ? 'இது github.com URL இல்லை — திறக்க முடியாது.'
+            : 'That isn\'t a github.com URL — I can only open GitHub links here.',
+      );
+    }
+
+    final loaded = await openGitHubIssueInAdminTab(url);
+    return ChittiActionResult(
+      success: loaded,
+      text: loaded
+          ? (isTamil ? 'திறந்துடுச்சு.' : 'Opened it.')
+          : (isTamil
+              ? 'திறக்க முயற்சி பண்ணேன், ஆனா பக்கம் சரியா லோட் ஆகல.'
+              : 'I tried, but the page didn\'t load correctly.'),
     );
   }
 

@@ -146,23 +146,46 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     description:
         'Start booking a transport or delivery service for the customer.',
     keywords: [
-      'ride', 'book', 'bike', 'auto', 'cab', 'taxi', 'parcel', 'truck',
-      'lorry', 'drop', 'pickup', 'go to', 'sos', 'emergency', 'poganum',
-      'send', 'courier', 'shifting',
+      'ride',
+      'book',
+      'bike',
+      'auto',
+      'cab',
+      'taxi',
+      'parcel',
+      'truck',
+      'lorry',
+      'drop',
+      'pickup',
+      'go to',
+      'sos',
+      'emergency',
+      'poganum',
+      'send',
+      'courier',
+      'shifting',
     ],
     parameters: <String, dynamic>{
       'type': 'object',
       'properties': <String, dynamic>{
         'service': <String, dynamic>{
           'type': 'string',
-          'enum': ['bike', 'auto', 'cab', 'parcel', 'mini_truck', 'lorry', 'sos'],
+          'enum': [
+            'bike',
+            'auto',
+            'cab',
+            'parcel',
+            'mini_truck',
+            'lorry',
+            'sos'
+          ],
           'description': 'Which service the customer wants.',
         },
         'destination': <String, dynamic>{
           'type': 'string',
           'description':
               'Where the customer wants to go or send something, in their '
-              'own words. Omit for sos.',
+                  'own words. Omit for sos.',
         },
       },
       'required': ['service'],
@@ -182,8 +205,21 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'steps, just place it.',
     requiresConfirmation: true,
     keywords: [
-      'order', 'buy', 'get me', 'bring', 'food', 'biryani', 'meals', 'grocery',
-      'vegetables', 'errand', 'vaangi', 'venum', 'sapadu', 'hotel', 'deliver',
+      'order',
+      'buy',
+      'get me',
+      'bring',
+      'food',
+      'biryani',
+      'meals',
+      'grocery',
+      'vegetables',
+      'errand',
+      'vaangi',
+      'venum',
+      'sapadu',
+      'hotel',
+      'deliver',
     ],
     parameters: <String, dynamic>{
       'type': 'object',
@@ -196,8 +232,7 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
             'grocery_order',
             'custom_order',
           ],
-          'description':
-              'hero_booking = errand/help/pickup-drop task. '
+          'description': 'hero_booking = errand/help/pickup-drop task. '
               'custom_food_order = food from a hotel/restaurant. '
               'grocery_order = groceries/provisions. '
               'custom_order = anything else the customer wants bought/collected.',
@@ -206,19 +241,19 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
           'type': 'string',
           'description':
               'What the customer wants, in their own words, including '
-              'quantities if they said any.',
+                  'quantities if they said any.',
         },
         'vendor': <String, dynamic>{
           'type': 'string',
           'description':
               'Hotel/shop/store name if the customer named one. Omit if not '
-              'mentioned — never invent one.',
+                  'mentioned — never invent one.',
         },
         'address': <String, dynamic>{
           'type': 'string',
           'description':
               'Delivery or task address if the customer gave one. Omit if not '
-              'mentioned.',
+                  'mentioned.',
         },
         'note': <String, dynamic>{
           'type': 'string',
@@ -235,7 +270,16 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     description:
         'Add an item to the grocery list. Never executes a purchase — only '
         'notes the item for the existing grocery order form.',
-    keywords: ['add', 'list', 'grocery', 'milk', 'rice', 'onion', 'sugar', 'sernthu'],
+    keywords: [
+      'add',
+      'list',
+      'grocery',
+      'milk',
+      'rice',
+      'onion',
+      'sugar',
+      'sernthu'
+    ],
     parameters: <String, dynamic>{
       'type': 'object',
       'properties': <String, dynamic>{
@@ -247,7 +291,7 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
           'type': 'string',
           'description':
               'How much/many, in the customer own words, e.g. "2 packs" or '
-              '"1 kg". Omit if not stated.',
+                  '"1 kg". Omit if not stated.',
         },
       },
       'required': ['item'],
@@ -261,7 +305,14 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'Re-open the customer most recent order with the same items pre-filled, '
         'so they only have to confirm. Use for "same as last time", "order it '
         'again", "repeat my usual".',
-    keywords: ['again', 'repeat', 'same as last', 'usual', 'marupadiyum', 'rethaa'],
+    keywords: [
+      'again',
+      'repeat',
+      'same as last',
+      'usual',
+      'marupadiyum',
+      'rethaa'
+    ],
   ),
   ChittiTool(
     name: 'cancel_order',
@@ -293,8 +344,16 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     description: 'Open a specific section of the app.',
     needsSectionEnum: true,
     keywords: [
-      'open', 'show', 'where', 'go to', 'take me', 'kaatu', 'kaattu', 'page',
-      'screen', 'section',
+      'open',
+      'show',
+      'where',
+      'go to',
+      'take me',
+      'kaatu',
+      'kaattu',
+      'page',
+      'screen',
+      'section',
     ],
   ),
 
@@ -327,8 +386,15 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'food/grocery/hero orders. Read-only — never call this to create or '
         'change an order.',
     keywords: [
-      'where is', 'status', 'track', 'my hero', 'my ride', 'my order',
-      'reach', 'engaya', 'vandhutaanga',
+      'where is',
+      'status',
+      'track',
+      'my hero',
+      'my ride',
+      'my order',
+      'reach',
+      'engaya',
+      'vandhutaanga',
     ],
   ),
   ChittiTool(
@@ -339,7 +405,14 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'List the customer recent past orders and rides with their dates and '
         'amounts. Read-only. Use for "what did I order last week", "my past '
         'orders", "how much did I spend".',
-    keywords: ['past orders', 'history', 'last week', 'spent', 'previous', 'munnadi'],
+    keywords: [
+      'past orders',
+      'history',
+      'last week',
+      'spent',
+      'previous',
+      'munnadi'
+    ],
   ),
   ChittiTool(
     name: 'check_notifications',
@@ -356,7 +429,14 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     description:
         'Read back the customer saved name, phone, and default address, and '
         'whether SOS KYC is approved. Read-only.',
-    keywords: ['my address', 'my number', 'my name', 'profile', 'kyc', 'account details'],
+    keywords: [
+      'my address',
+      'my number',
+      'my name',
+      'profile',
+      'kyc',
+      'account details'
+    ],
   ),
   ChittiTool(
     name: 'set_app_language',
@@ -391,8 +471,17 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'Use this INSTEAD of only apologising. Ask at most one short question '
         'first if you do not know which screen, then call this.',
     keywords: [
-      'not working', 'broken', 'stuck', 'error', 'crash', 'blank', 'hang',
-      'bug', 'problem', 'velai seyyala', 'varala',
+      'not working',
+      'broken',
+      'stuck',
+      'error',
+      'crash',
+      'blank',
+      'hang',
+      'bug',
+      'problem',
+      'velai seyyala',
+      'varala',
     ],
     parameters: <String, dynamic>{
       'type': 'object',
@@ -405,7 +494,7 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
           'type': 'string',
           'description':
               'What happened, what they expected, and any error text. Use their '
-              'own words — do not invent details they did not say.',
+                  'own words — do not invent details they did not say.',
         },
         'screen': <String, dynamic>{
           'type': 'string',
@@ -417,7 +506,7 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
           'enum': ['low', 'medium', 'high'],
           'description':
               'high = cannot use the app or lost money; medium = a feature is '
-              'broken but there is a workaround; low = cosmetic or minor.',
+                  'broken but there is a workaround; low = cosmetic or minor.',
         },
       },
       'required': ['summary', 'details'],
@@ -463,15 +552,23 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     name: 'open_external_app',
     domain: ChittiDomain.support,
     variants: {'customer', 'hero', 'seller', 'admin'},
-    description:
-        'Open WhatsApp with a message pre-filled, Google Maps with '
+    description: 'Open WhatsApp with a message pre-filled, Google Maps with '
         'directions set, or the phone dialer with a number ready. Only '
         'OPENS the app for the user to review and send/call themselves — '
         'never sends a message or places a call on its own.',
     keywords: [
-      'whatsapp', 'message him', 'message her', 'text him', 'text her',
-      'directions', 'maps', 'navigate to', 'call him', 'call her',
-      'phone number', 'dial',
+      'whatsapp',
+      'message him',
+      'message her',
+      'text him',
+      'text her',
+      'directions',
+      'maps',
+      'navigate to',
+      'call him',
+      'call her',
+      'phone number',
+      'dial',
     ],
     parameters: <String, dynamic>{
       'type': 'object',
@@ -479,8 +576,7 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'target': <String, dynamic>{
           'type': 'string',
           'enum': ['whatsapp', 'maps', 'call'],
-          'description':
-              'whatsapp = open WhatsApp with a message pre-filled. '
+          'description': 'whatsapp = open WhatsApp with a message pre-filled. '
               'maps = open Google Maps with directions to a place. '
               'call = open the phone dialer with a number ready.',
         },
@@ -488,7 +584,7 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
           'type': 'string',
           'description':
               'Phone number for whatsapp/call, in the customer own words '
-              '(digits, may include +country code). Omit for maps.',
+                  '(digits, may include +country code). Omit for maps.',
         },
         'message': <String, dynamic>{
           'type': 'string',
@@ -497,8 +593,7 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         },
         'destination': <String, dynamic>{
           'type': 'string',
-          'description':
-              'Place name or address for Maps directions. Omit for '
+          'description': 'Place name or address for Maps directions. Omit for '
               'whatsapp/call.',
         },
       },
@@ -516,15 +611,23 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'they say they are starting work, going home, taking a break, or ask '
         'to go online/offline.',
     keywords: [
-      'online', 'offline', 'duty', 'start work', 'break', 'stop', 'going home',
-      'veetuku', 'velai',
+      'online',
+      'offline',
+      'duty',
+      'start work',
+      'break',
+      'stop',
+      'going home',
+      'veetuku',
+      'velai',
     ],
     parameters: <String, dynamic>{
       'type': 'object',
       'properties': <String, dynamic>{
         'online': <String, dynamic>{
           'type': 'boolean',
-          'description': 'true = go online and receive pings, false = go offline.',
+          'description':
+              'true = go online and receive pings, false = go offline.',
         },
       },
       'required': ['online'],
@@ -538,8 +641,14 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'Read the Hero earnings so far today — trips completed and amount '
         'earned. Read-only. Never invent a number.',
     keywords: [
-      'earned', 'earning', 'income', 'today', 'sambadhichen', 'sambalam',
-      'how much', 'evlo',
+      'earned',
+      'earning',
+      'income',
+      'today',
+      'sambadhichen',
+      'sambalam',
+      'how much',
+      'evlo',
     ],
   ),
   ChittiTool(
@@ -549,7 +658,14 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     description:
         'Read the Hero current accepted job — customer, pickup, drop, and '
         'stage. Read-only.',
-    keywords: ['current job', 'my ride', 'active', 'pickup', 'drop', 'customer'],
+    keywords: [
+      'current job',
+      'my ride',
+      'active',
+      'pickup',
+      'drop',
+      'customer'
+    ],
   ),
   ChittiTool(
     name: 'hero_wallet_balance',
@@ -605,7 +721,14 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     description:
         'Mark a menu item as available or sold out. Call when the seller says '
         'an item is finished, out of stock, or back on.',
-    keywords: ['sold out', 'stock', 'finished', 'available', 'theenthiduchu', 'item'],
+    keywords: [
+      'sold out',
+      'stock',
+      'finished',
+      'available',
+      'theenthiduchu',
+      'item'
+    ],
     parameters: <String, dynamic>{
       'type': 'object',
       'properties': <String, dynamic>{
@@ -635,12 +758,17 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     name: 'hero_pending_work',
     domain: ChittiDomain.hero,
     variants: {'hero'},
-    description:
-        'Read how many jobs are still open on this Hero. Read-only. '
+    description: 'Read how many jobs are still open on this Hero. Read-only. '
         'Never invent a number.',
     keywords: [
-      'pending', 'bakki', 'left', 'remaining', 'open job', 'unfinished',
-      'still', 'mudikala',
+      'pending',
+      'bakki',
+      'left',
+      'remaining',
+      'open job',
+      'unfinished',
+      'still',
+      'mudikala',
     ],
   ),
   ChittiTool(
@@ -651,7 +779,12 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'Read whether this shop is currently open or closed for orders. '
         'Read-only — does NOT change it.',
     keywords: [
-      'shop open', 'kadai', 'is my shop', 'open ah', 'closed', 'status',
+      'shop open',
+      'kadai',
+      'is my shop',
+      'open ah',
+      'closed',
+      'status',
       'shop status',
     ],
   ),
@@ -659,12 +792,17 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     name: 'admin_pending_approvals',
     domain: ChittiDomain.admin,
     variants: {'admin'},
-    description:
-        'Read how many heroes and sellers are waiting for approval. '
+    description: 'Read how many heroes and sellers are waiting for approval. '
         'Read-only. Never invent a number.',
     keywords: [
-      'approval', 'approve', 'pending', 'waiting', 'queue', 'new hero',
-      'new seller', 'signup',
+      'approval',
+      'approve',
+      'pending',
+      'waiting',
+      'queue',
+      'new hero',
+      'new seller',
+      'signup',
     ],
   ),
   ChittiTool(
@@ -675,19 +813,29 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         "Read today's order count across the platform and how many are "
         'still in progress. Read-only.',
     keywords: [
-      'today', 'orders today', 'business', 'how many order', 'innaiku',
-      'activity', 'sales today',
+      'today',
+      'orders today',
+      'business',
+      'how many order',
+      'innaiku',
+      'activity',
+      'sales today',
     ],
   ),
   ChittiTool(
     name: 'admin_open_bugs',
     domain: ChittiDomain.admin,
     variants: {'admin'},
-    description:
-        'Read how many bug reports are still unresolved, and how many '
+    description: 'Read how many bug reports are still unresolved, and how many '
         'are high severity. Read-only.',
     keywords: [
-      'bug', 'bugs', 'issue', 'crash', 'report', 'problem', 'unresolved',
+      'bug',
+      'bugs',
+      'issue',
+      'crash',
+      'report',
+      'problem',
+      'unresolved',
     ],
   ),
   ChittiTool(
@@ -698,8 +846,14 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'Read the customer price enquiries still waiting for an answer '
         'from NJ Tech. Read-only.',
     keywords: [
-      'enquiry', 'enquiries', 'inquiry', 'lead', 'price question',
-      'customer asking', 'rate kekuranga', 'quote',
+      'enquiry',
+      'enquiries',
+      'inquiry',
+      'lead',
+      'price question',
+      'customer asking',
+      'rate kekuranga',
+      'quote',
     ],
   ),
   ChittiTool(
@@ -711,24 +865,43 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'Used for voice control assistant commands to click elements, type text, '
         'scroll, go back, go home, read screen, or launch an app.',
     keywords: [
-      'click', 'type', 'scroll', 'go back', 'go home', 'home screen',
-      'launch app', 'open whatsapp', 'whatsapp reply', 'read screen', 'system control',
+      'click',
+      'type',
+      'scroll',
+      'go back',
+      'go home',
+      'home screen',
+      'launch app',
+      'open whatsapp',
+      'whatsapp reply',
+      'read screen',
+      'system control',
     ],
     parameters: <String, dynamic>{
       'type': 'object',
       'properties': <String, dynamic>{
         'actionType': <String, dynamic>{
           'type': 'string',
-          'enum': ['click', 'type', 'scroll', 'go_back', 'go_home', 'read_screen', 'launch_app'],
+          'enum': [
+            'click',
+            'type',
+            'scroll',
+            'go_back',
+            'go_home',
+            'read_screen',
+            'launch_app'
+          ],
           'description': 'The type of automation action to execute.',
         },
         'targetText': <String, dynamic>{
           'type': 'string',
-          'description': 'The label, text, button name, or app name to target (for click, type, launch_app).',
+          'description':
+              'The label, text, button name, or app name to target (for click, type, launch_app).',
         },
         'inputValue': <String, dynamic>{
           'type': 'string',
-          'description': 'The text value to type into the input field (for type).',
+          'description':
+              'The text value to type into the input field (for type).',
         },
         'scrollDirection': <String, dynamic>{
           'type': 'string',
@@ -745,10 +918,18 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     name: 'search_order',
     domain: ChittiDomain.admin,
     variants: {'admin'},
-    description: 'Search for a customer service request or taxi order by its ID or keyword in the Admin Panel.',
+    description:
+        'Search for a customer service request or taxi order by its ID or keyword in the Admin Panel.',
     keywords: [
-      'search order', 'find order', 'order search', 'order details', 'find ride',
-      'search ride', 'request search', 'request details', 'order pathu',
+      'search order',
+      'find order',
+      'order search',
+      'order details',
+      'find ride',
+      'search ride',
+      'request search',
+      'request details',
+      'order pathu',
     ],
     parameters: <String, dynamic>{
       'type': 'object',
@@ -765,17 +946,26 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     name: 'search_customer',
     domain: ChittiDomain.admin,
     variants: {'admin'},
-    description: 'Search for a customer or user profile by name, phone number, or ID in the Admin Panel.',
+    description:
+        'Search for a customer or user profile by name, phone number, or ID in the Admin Panel.',
     keywords: [
-      'search customer', 'find customer', 'customer details', 'search user', 'find user',
-      'user details', 'customer profile', 'user profile', 'customer pathu',
+      'search customer',
+      'find customer',
+      'customer details',
+      'search user',
+      'find user',
+      'user details',
+      'customer profile',
+      'user profile',
+      'customer pathu',
     ],
     parameters: <String, dynamic>{
       'type': 'object',
       'properties': <String, dynamic>{
         'query': <String, dynamic>{
           'type': 'string',
-          'description': 'The customer name, phone number, or user ID to search for.',
+          'description':
+              'The customer name, phone number, or user ID to search for.',
         },
       },
       'required': ['query'],
@@ -786,26 +976,36 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     name: 'audit_ui_sections',
     domain: ChittiDomain.admin,
     variants: {'admin'},
-    description:
-        'Read-only audit comparing what each admin UI screen shows '
+    description: 'Read-only audit comparing what each admin UI screen shows '
         'against the full database, to surface DB leakage, unused '
         'nodes, or storage wastage. No arguments.',
     keywords: [
-      'audit', 'db audit', 'leakage', 'unused node', 'database check',
-      'audit database', 'db check', 'wastage',
+      'audit',
+      'db audit',
+      'leakage',
+      'unused node',
+      'database check',
+      'audit database',
+      'db check',
+      'wastage',
     ],
   ),
   ChittiTool(
     name: 'generate_kyc_report',
     domain: ChittiDomain.admin,
     variants: {'admin'},
-    description:
-        'Read-only: fetch a pending Hero or Seller registration, '
+    description: 'Read-only: fetch a pending Hero or Seller registration, '
         'cross-verify their submitted details/photos with OCR & facial verification, '
         'and produce a concise KYC verification report with approve/reject recommendations.',
     keywords: [
-      'kyc report', 'verify hero', 'check kyc', 'check seller kyc',
-      'verify documents', 'kyc check', 'aadhaar check', 'pan check',
+      'kyc report',
+      'verify hero',
+      'check kyc',
+      'check seller kyc',
+      'verify documents',
+      'kyc check',
+      'aadhaar check',
+      'pan check',
     ],
     parameters: <String, dynamic>{
       'type': 'object',
@@ -813,12 +1013,12 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'type': <String, dynamic>{
           'type': 'string',
           'enum': ['hero', 'seller', 'sos'],
-          'description': 'Which registration type to check (hero, seller, or sos).',
+          'description':
+              'Which registration type to check (hero, seller, or sos).',
         },
         'targetUid': <String, dynamic>{
           'type': 'string',
-          'description':
-              'Optional specific uid to check. Omit to check the '
+          'description': 'Optional specific uid to check. Omit to check the '
               'oldest pending submission of that type.',
         },
       },
@@ -829,12 +1029,16 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     name: 'run_ux_audit',
     domain: ChittiDomain.admin,
     variants: {'admin'},
-    description:
-        'Read-only: fetch a short summary of the Synthetic QA test '
+    description: 'Read-only: fetch a short summary of the Synthetic QA test '
         "bot's most recent findings from the ux_audit_reports collection.",
     keywords: [
-      'ux audit', 'qa audit', 'test bot', 'qa report', 'test results',
-      'synthetic qa', 'bugs found by bot',
+      'ux audit',
+      'qa audit',
+      'test bot',
+      'qa report',
+      'test results',
+      'synthetic qa',
+      'bugs found by bot',
     ],
   ),
   ChittiTool(
@@ -846,8 +1050,14 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'Requires explicit human confirmation before updating the database.',
     requiresConfirmation: true,
     keywords: [
-      'approve hero', 'reject hero', 'approve seller', 'reject seller',
-      'approve kyc', 'reject kyc', 'approve', 'reject',
+      'approve hero',
+      'reject hero',
+      'approve seller',
+      'reject seller',
+      'approve kyc',
+      'reject kyc',
+      'approve',
+      'reject',
     ],
     parameters: <String, dynamic>{
       'type': 'object',
@@ -859,7 +1069,8 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         },
         'targetUid': <String, dynamic>{
           'type': 'string',
-          'description': 'The UID of the hero, seller, or user to approve/reject.',
+          'description':
+              'The UID of the hero, seller, or user to approve/reject.',
         },
         'targetType': <String, dynamic>{
           'type': 'string',
@@ -887,8 +1098,14 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'Requires explicit human confirmation before sending.',
     requiresConfirmation: true,
     keywords: [
-      'sms', 'send sms', 'text message', 'send message', 'sms anupu', 'message anupu',
-      'send text', 'text',
+      'sms',
+      'send sms',
+      'text message',
+      'send message',
+      'sms anupu',
+      'message anupu',
+      'send text',
+      'text',
     ],
     parameters: <String, dynamic>{
       'type': 'object',
@@ -913,7 +1130,13 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     description:
         'Read recent incoming SMS messages received on this device. Read-only.',
     keywords: [
-      'read sms', 'check sms', 'recent sms', 'incoming sms', 'sms paaru', 'messages', 'new sms',
+      'read sms',
+      'check sms',
+      'recent sms',
+      'incoming sms',
+      'sms paaru',
+      'messages',
+      'new sms',
     ],
   ),
   ChittiTool(
@@ -923,9 +1146,19 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     description:
         'Summarize the most recent customer phone call screened by Chitti and fetch the call recording link. Read-only.',
     keywords: [
-      'last call', 'kadasia vantha call', 'call summary', 'who called', 'screened call',
-      'call transcript', 'call audio', 'call recording', 'caller enna sonnanga', 'call enna sonnanga',
-      'recent call', 'கால் சம்மரி', 'கடைசி கால்',
+      'last call',
+      'kadasia vantha call',
+      'call summary',
+      'who called',
+      'screened call',
+      'call transcript',
+      'call audio',
+      'call recording',
+      'caller enna sonnanga',
+      'call enna sonnanga',
+      'recent call',
+      'கால் சம்மரி',
+      'கடைசி கால்',
     ],
   ),
 
@@ -947,9 +1180,18 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'Requires explicit human confirmation before creating.',
     requiresConfirmation: true,
     keywords: [
-      'develop', 'build feature', 'add feature', 'fix bug', 'code panu',
-      'feature venum', 'github issue', 'create task', 'dev task',
-      'claude panu', 'app la add pannu', 'new feature',
+      'develop',
+      'build feature',
+      'add feature',
+      'fix bug',
+      'code panu',
+      'feature venum',
+      'github issue',
+      'create task',
+      'dev task',
+      'claude panu',
+      'app la add pannu',
+      'new feature',
     ],
     parameters: <String, dynamic>{
       'type': 'object',
@@ -963,8 +1205,8 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
           'type': 'string',
           'description':
               "Detailed description of what's needed, in the admin's own "
-              'words — this becomes the GitHub issue body Claude Code '
-              'reads to do the work.',
+                  'words — this becomes the GitHub issue body Claude Code '
+                  'reads to do the work.',
         },
       },
       'required': ['title', 'description'],
@@ -988,18 +1230,66 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'state. Read-only. If no PR number is given, reports the most '
         'recently updated one.',
     keywords: [
-      'pr status', 'pr verify', 'check pr', 'pull request', 'pr ready ah',
-      'merge aachaa', 'pr eppadi irukku', 'claude code work mudinjacha',
-      'develop pannathu ready ah', 'code ready ah',
+      'pr status',
+      'pr verify',
+      'check pr',
+      'pull request',
+      'pr ready ah',
+      'merge aachaa',
+      'pr eppadi irukku',
+      'claude code work mudinjacha',
+      'develop pannathu ready ah',
+      'code ready ah',
     ],
     parameters: <String, dynamic>{
       'type': 'object',
       'properties': <String, dynamic>{
         'prNumber': <String, dynamic>{
           'type': 'integer',
-          'description':
-              'Specific PR number to check. Omit to get the most '
+          'description': 'Specific PR number to check. Omit to get the most '
               'recently updated pull request instead.',
+        },
+      },
+      'required': <String>[],
+    },
+  ),
+  // NEW (Sep 10 2026 — Nizam: "namma admin app la browser irukulla
+  // athu chitti ku full access power irukka namma command ketutu
+  // chitti atha open pannuvana? ... success agitha ilayanu namma app
+  // la chittti paathute irukanum"). Drives the SAME embedded GitHub
+  // WebView the Dev Monitor's own issue/PR tiles already open
+  // (openGitHubIssueInAdminTab) rather than a second browser surface.
+  // Read-only navigation, no confirmation needed — it cannot write
+  // anything, only bring a page to the front. Unlike a plain
+  // fire-and-forget open, GitHubEmbeddedScreen.open() now actually
+  // waits for the page to settle (or fail) before returning, so
+  // Chitti reports back what really happened instead of assuming the
+  // tap worked.
+  ChittiTool(
+    name: 'open_admin_browser',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description: 'Open a URL in the admin app\'s own embedded browser tab (the '
+        'same one the Dev Monitor uses for GitHub) and confirm whether '
+        'it actually loaded. Restricted to github.com and its asset '
+        'domains — same as the embedded browser\'s own navigation rules. '
+        'Read-only.',
+    keywords: [
+      'open github',
+      'open browser',
+      'open the pr',
+      'open that issue',
+      'kaatu github',
+      'browser open pannu',
+      'github ah open pannu',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'url': <String, dynamic>{
+          'type': 'string',
+          'description':
+              'The github.com URL to open. Omit to open the PR list.',
         },
       },
       'required': <String>[],
@@ -1012,9 +1302,20 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     description:
         'Perform a live Google AI Web Search to get up-to-date real-world facts, news, prices, weather, technical info, or general knowledge. Read-only.',
     keywords: [
-      'google search', 'search google', 'net la thedu', 'google la paaru',
-      'weather', 'petrol price', 'gold rate', 'market price', 'news', 'live search',
-      'கூகுள்', 'தேடு', 'கூகுள்ல பாரு', 'லைவ் சர்ச்',
+      'google search',
+      'search google',
+      'net la thedu',
+      'google la paaru',
+      'weather',
+      'petrol price',
+      'gold rate',
+      'market price',
+      'news',
+      'live search',
+      'கூகுள்',
+      'தேடு',
+      'கூகுள்ல பாரு',
+      'லைவ் சர்ச்',
     ],
     parameters: <String, dynamic>{
       'type': 'object',
@@ -1050,8 +1351,16 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
         'dedicated tool. Use for opening other apps, finding a setting, or '
         'navigating a page Chitti has no specific tool for.',
     keywords: [
-      'open gallery', 'open settings', 'open app', 'go to', 'find setting',
-      'phone la', 'screen la', 'navigate', 'take me to', 'thora',
+      'open gallery',
+      'open settings',
+      'open app',
+      'go to',
+      'find setting',
+      'phone la',
+      'screen la',
+      'navigate',
+      'take me to',
+      'thora',
     ],
     parameters: <String, dynamic>{
       'type': 'object',
@@ -1060,7 +1369,7 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
           'type': 'string',
           'description':
               "What the admin wants done, in their own words — e.g. 'open "
-              "the gallery and show recent photos'.",
+                  "the gallery and show recent photos'.",
         },
       },
       'required': ['goal'],
@@ -1080,25 +1389,39 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     name: 'explain_this_screen',
     domain: ChittiDomain.support,
     variants: {'customer', 'hero', 'seller', 'admin'},
-    description:
-        'Explain what the screen the user is currently looking at is '
+    description: 'Explain what the screen the user is currently looking at is '
         'for, and what they can do on it. Use when they ask what this '
         'page is, what to do here, or how something works.',
     keywords: [
-      'what is this', 'what can i do', 'how does this work', 'explain',
-      'guide me', 'help me here', 'this screen', 'this page',
-      'enna pannalam', 'idhu enna', 'eppadi', 'sollu',
-      'இது என்ன', 'என்ன பண்ணலாம்', 'எப்படி',
+      'what is this',
+      'what can i do',
+      'how does this work',
+      'explain',
+      'guide me',
+      'help me here',
+      'this screen',
+      'this page',
+      'enna pannalam',
+      'idhu enna',
+      'eppadi',
+      'sollu',
+      'இது என்ன',
+      'என்ன பண்ணலாம்',
+      'எப்படி',
     ],
   ),
-
 ];
 
 /// The groups a variant always falls back to when the router cannot
 /// tell what the user meant. Deliberately small — this is the bundle
 /// that gets sent on vague input, so it must stay cheap.
-const Map<String, List<ChittiDomain>> _coreDomains = <String, List<ChittiDomain>>{
-  'customer': [ChittiDomain.navigation, ChittiDomain.transport, ChittiDomain.ordering],
+const Map<String, List<ChittiDomain>> _coreDomains =
+    <String, List<ChittiDomain>>{
+  'customer': [
+    ChittiDomain.navigation,
+    ChittiDomain.transport,
+    ChittiDomain.ordering
+  ],
   'hero': [ChittiDomain.hero, ChittiDomain.navigation],
   'seller': [ChittiDomain.seller, ChittiDomain.navigation, ChittiDomain.admin],
   'admin': [ChittiDomain.admin, ChittiDomain.navigation, ChittiDomain.support],
@@ -1154,8 +1477,7 @@ class ChittiToolRegistry {
     if (text.trim().isEmpty) return core.toSet();
 
     final scores = <ChittiDomain, int>{};
-    void bump(ChittiDomain d, int by) =>
-        scores[d] = (scores[d] ?? 0) + by;
+    void bump(ChittiDomain d, int by) => scores[d] = (scores[d] ?? 0) + by;
 
     for (final tool in kChittiTools) {
       if (!tool.variants.contains(v)) continue;
@@ -1278,9 +1600,7 @@ class ChittiToolRegistry {
     // string rather than emitted as a JSON-schema `oneOf` — the enum
     // plus a compact legend costs roughly a third of the tokens and,
     // in practice, picks correctly at least as often.
-    final legend = sections
-        .map((s) => '${s.key}=${s.description}')
-        .join(' ');
+    final legend = sections.map((s) => '${s.key}=${s.description}').join(' ');
     return <String, dynamic>{
       'type': 'object',
       'properties': <String, dynamic>{

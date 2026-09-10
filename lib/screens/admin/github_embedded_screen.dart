@@ -127,10 +127,50 @@ class GitHubEmbeddedScreen extends StatefulWidget {
   // -- the exact pattern AdminWebBrowserScreen.open() already proved
   // for the browser segment (see its own header for the reasoning this
   // mirrors, including the audit fixes already applied there).
-  static Future<void> open(String url) async {
+  /// Opens `url` and waits to know whether it actually loaded.
+  ///
+  /// NEW (Sep 10 2026 — Nizam: "Chitti ku full access power irukka
+  /// namma command ketutu chitti atha open pannuvana ... success
+  /// agitha ilayanu namma app la chittti paathute irukanum"). This
+  /// used to be fire-and-forget — a caller had no way to know whether
+  /// the page actually loaded, only whether the loadRequest call
+  /// itself didn't throw. Chitti driving this on a spoken command
+  /// needs to actually confirm the page landed before reporting
+  /// success back to the admin, not just that it asked the WebView to
+  /// try. Resolves true on the next page-settle, false on a real load
+  /// error or a timeout (the WebView never got a chance to try at
+  /// all — no live screen instance yet).
+  static Future<bool> open(
+    String url, {
+    Duration timeout = const Duration(seconds: 12),
+  }) async {
     _pendingUrl = url;
+    _pendingResult = Completer<bool>();
     final live = _GitHubEmbeddedScreenState._live;
-    if (live != null && live.mounted) await live._consumePending();
+    if (live != null && live.mounted) {
+      await live._consumePending();
+    }
+    return _pendingResult!.future.timeout(
+      timeout,
+      onTimeout: () => false,
+    );
+  }
+
+  /// Resolved by the navigation delegate's onPageFinished/
+  /// onWebResourceError for whichever load [open] most recently
+  /// started — see [_GitHubEmbeddedScreenState._consumePending] and
+  /// its navigation delegate installation in initState.
+  static Completer<bool>? _pendingResult;
+
+  /// Completes [_pendingResult] exactly once and clears it, so a LATER
+  /// page load — the admin browsing normally after Chitti's navigation
+  /// already settled — never tries to complete an already-used (or
+  /// already-cleared) completer.
+  static void _completePending(bool success) {
+    final pending = _pendingResult;
+    if (pending == null || pending.isCompleted) return;
+    _pendingResult = null;
+    pending.complete(success);
   }
 
   /// The one link waiting to be shown, if any. Survives this screen not
@@ -231,6 +271,17 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
             // kill the process without ever calling dispose(), which is
             // exactly the case this is for.
             unawaited(_rememberUrl(url));
+            GitHubEmbeddedScreen._completePending(true);
+          },
+          onWebResourceError: (error) {
+            // Only the main frame failing means the requested page
+            // itself didn't load — a failed sub-resource (an avatar, a
+            // tracking pixel) is not "Chitti's navigation failed" and
+            // must not report false for a page that actually rendered.
+            if (error.isForMainFrame ?? true) {
+              if (mounted) setState(() => _loading = false);
+              GitHubEmbeddedScreen._completePending(false);
+            }
           },
           onNavigationRequest: (request) {
             // NEW (Sep 2026 — CTO review of PR #61): checked BEFORE the
@@ -323,6 +374,7 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
       await _controller.loadRequest(Uri.parse(url));
     } catch (e) {
       debugPrint('[GitHubEmbedded] could not open handed-off link: $e');
+      GitHubEmbeddedScreen._completePending(false);
     }
   }
 

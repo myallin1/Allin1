@@ -66,6 +66,7 @@ void main() {
     'read_recent_sms',
     'summarize_last_call',
     'check_pr_status',
+    'open_admin_browser',
   };
 
   /// Tools that legitimately need the model. Listed explicitly so that
@@ -114,40 +115,65 @@ void main() {
     // whole rework existed to remove.
     const phrases = <String, ({String text, String variant})>{
       'navigate_to_section': (text: 'open my orders', variant: 'customer'),
-      'book_transport': (text: 'book an auto to the bus stand', variant: 'customer'),
-      'check_wallet_balance': (text: 'what is my wallet balance', variant: 'customer'),
-      'check_rewards_balance': (text: 'how many coins do I have', variant: 'customer'),
+      'book_transport': (
+        text: 'book an auto to the bus stand',
+        variant: 'customer'
+      ),
+      'check_wallet_balance': (
+        text: 'what is my wallet balance',
+        variant: 'customer'
+      ),
+      'check_rewards_balance': (
+        text: 'how many coins do I have',
+        variant: 'customer'
+      ),
       'check_order_status': (text: 'where is my hero', variant: 'customer'),
       'list_recent_orders': (text: 'show my past orders', variant: 'customer'),
-      'check_notifications': (text: 'any notification for me', variant: 'customer'),
+      'check_notifications': (
+        text: 'any notification for me',
+        variant: 'customer'
+      ),
       'check_profile_summary': (text: 'show my profile', variant: 'customer'),
       'repeat_last_order': (text: 'order it again', variant: 'customer'),
       'cancel_order': (text: 'cancel my order', variant: 'customer'),
       'share_referral': (text: 'invite a friend', variant: 'customer'),
       'set_app_language': (text: 'speak in tamil', variant: 'customer'),
       'check_and_update_app': (text: 'update the app', variant: 'customer'),
-      'explain_this_screen':
-          (text: 'what can i do on this screen', variant: 'customer'),
+      'explain_this_screen': (
+        text: 'what can i do on this screen',
+        variant: 'customer'
+      ),
       'hero_set_online_status': (text: 'go online', variant: 'hero'),
-      'hero_today_earnings': (text: 'how much did i earn today', variant: 'hero'),
+      'hero_today_earnings': (
+        text: 'how much did i earn today',
+        variant: 'hero'
+      ),
       'hero_active_job_status': (text: 'my current job', variant: 'hero'),
       'hero_wallet_balance': (text: 'my wallet balance', variant: 'hero'),
       'seller_pending_orders': (text: 'pending orders', variant: 'seller'),
       'seller_today_earnings': (text: 'today sales', variant: 'seller'),
       'seller_set_shop_open': (text: 'close the shop', variant: 'seller'),
       'seller_shop_status': (text: 'is my shop open', variant: 'seller'),
-      'hero_pending_work': (text: 'how many jobs are still open', variant: 'hero'),
-      'admin_pending_approvals':
-          (text: 'how many are waiting for approval', variant: 'admin'),
+      'hero_pending_work': (
+        text: 'how many jobs are still open',
+        variant: 'hero'
+      ),
+      'admin_pending_approvals': (
+        text: 'how many are waiting for approval',
+        variant: 'admin'
+      ),
       'admin_today_activity': (text: 'how many orders today', variant: 'admin'),
       'admin_open_bugs': (text: 'any open bug reports', variant: 'admin'),
-      'admin_open_enquiries':
-          (text: 'any customer enquiries waiting', variant: 'admin'),
+      'admin_open_enquiries': (
+        text: 'any customer enquiries waiting',
+        variant: 'admin'
+      ),
       'audit_ui_sections': (text: 'audit the database', variant: 'admin'),
       'run_ux_audit': (text: 'show qa audit', variant: 'admin'),
       'read_recent_sms': (text: 'read my recent sms', variant: 'admin'),
       'summarize_last_call': (text: 'summarize last call', variant: 'admin'),
       'check_pr_status': (text: 'check pr status', variant: 'admin'),
+      'open_admin_browser': (text: 'open github', variant: 'admin'),
     };
 
     test('no offline-capable tool is left without a phrasing', () {
