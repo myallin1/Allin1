@@ -10,58 +10,59 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/admin_shell_nav.dart';
+import '../../services/admin_webview_power.dart';
 import '../../services/app_minimizer_service.dart';
+import '../../services/chitti/chitti_dev_monitor_service.dart';
+import '../../services/chitti/chitti_live_call_service.dart';
+import '../../services/chitti_overlay_service.dart';
 import '../../services/db_usage_tracker.dart';
+import '../../services/firestore_usage_tracking.dart';
+import '../../services/guru_overlay_service.dart';
+import '../../services/map_simulation_service.dart';
 import '../../services/pwa_cache_platform_stub.dart'
     if (dart.library.html) '../../services/pwa_cache_platform_web.dart';
 import '../../services/service_requests_listener.dart';
 import '../../services/sos_dispatch_service.dart';
 import '../../services/web_version_checker.dart';
-import '../../services/chitti_overlay_service.dart';
-import '../../services/guru_overlay_service.dart';
-import '../../services/chitti/chitti_dev_monitor_service.dart';
-import '../../services/map_simulation_service.dart';
+import '../../widgets/admin/admin_reorderable_tile_list.dart';
+import '../../widgets/admin_incoming_call_dialog.dart';
 import '../../widgets/download_app_banner.dart';
+import 'admin_affiliate_leads_screen.dart';
+import 'admin_affiliate_qr_screen.dart';
 import 'admin_ai_settings_screen.dart';
 import 'admin_app_versions_screen.dart';
 import 'admin_call_services_screen.dart';
-import 'admin_cloudinary_dashboard_screen.dart';
-import 'admin_dashboard_screen.dart';
 import 'admin_chitti_lens_screen.dart';
+import 'admin_cloudinary_dashboard_screen.dart';
 import 'admin_cm_presentation_screen.dart';
+import 'admin_dashboard_screen.dart';
 import 'admin_dialer_screen.dart';
-import 'admin_my_day_screen.dart';
-import 'admin_web_tabs_screen.dart';
-import 'clay_gallery_screen.dart';
-import '../../services/admin_shell_nav.dart';
-import '../../services/admin_webview_power.dart';
-import 'chitti_conversations_screen.dart';
-import 'chitti_debug_logs_screen.dart';
-import 'chitti_dev_monitor_screen.dart';
 import 'admin_food_orders_screen.dart';
 import 'admin_gift_coupons_screen.dart';
-import 'admin_orders_cleanup_screen.dart';
-import 'admin_affiliate_leads_screen.dart';
-import 'admin_affiliate_qr_screen.dart';
+import 'admin_home_banner_screen.dart';
 import 'admin_map_simulation_screen.dart';
+import 'admin_my_day_screen.dart';
+import 'admin_orders_cleanup_screen.dart';
+import 'admin_payment_reconciliation_screen.dart';
 import 'admin_qr_generator_screen.dart';
+import 'admin_seller_payouts_screen.dart';
 import 'admin_service_requests_screen.dart';
 import 'admin_sos_kyc_approvals_screen.dart';
 import 'admin_taxi_rides_screen.dart';
 import 'admin_ux_audit_screen.dart';
-import 'commission_settings_screen.dart';
-import 'customer_usage_tracking_screen.dart';
+import 'admin_web_tabs_screen.dart';
 import 'bug_reports_screen.dart';
+import 'chitti_conversations_screen.dart';
+import 'chitti_debug_logs_screen.dart';
+import 'chitti_dev_monitor_screen.dart';
+import 'clay_gallery_screen.dart';
+import 'commission_settings_screen.dart';
 import 'customer_demand_screen.dart';
-import 'admin_payment_reconciliation_screen.dart';
-import 'admin_seller_payouts_screen.dart';
+import 'customer_usage_tracking_screen.dart';
+import 'erode_offers_management_screen.dart';
 import 'payments_received_screen.dart';
 import 'usage_fee_ledger_screen.dart';
-import 'erode_offers_management_screen.dart';
-import 'admin_home_banner_screen.dart';
-import '../../services/chitti/chitti_live_call_service.dart';
-import '../../widgets/admin_incoming_call_dialog.dart';
-import '../../services/firestore_usage_tracking.dart';
 
 class SuperAdminHomeScreen extends StatefulWidget {
   const SuperAdminHomeScreen({super.key});
@@ -161,15 +162,15 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
           SosAlertStatus.active,
           SosAlertStatus.claimed,
           SosAlertStatus.escalated,
-        ])
+        ],)
         .trackedSnapshots();
 
     // DB usage monitor — side-channel count, shares the same
     // broadcast stream StreamBuilder already listens to, no extra reads.
     _waitingRequestsStream.listen((s) => DbUsageTracker.instance
-        .recordRead(s.docs.length, 'admin_home_waiting_requests'));
+        .recordRead(s.docs.length, 'admin_home_waiting_requests'),);
     _sosAlertsStream.listen((s) => DbUsageTracker.instance
-        .recordRead(s.docs.length, 'admin_home_sos_alerts'));
+        .recordRead(s.docs.length, 'admin_home_sos_alerts'),);
 
     // Live in-app Customer calling listener
     _liveIncomingCallsSub = ChittiLiveCallService.instance
@@ -367,7 +368,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
     if (_tabIndex == 4) {
       unawaited(AdminWebTabsScreen.goBackIfPossible().then((wentBack) {
         if (!wentBack && mounted) _goToTab(0);
-      }));
+      }),);
       return;
     }
     if (_tabIndex != 0) {
@@ -483,123 +484,149 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
         ),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
-          sliver: SliverList.list(
-            children: [
-              _AdminReviewBadgeWrapper(
-                waitingStream: _waitingRequestsStream,
-                child: _ManageTile(
-                  label: 'Hero Booking Status',
-                  subtitle: 'Every Hero Booking request',
-                  iconSvg: FluentEmojiFlat.man_superhero,
-                  color: _orange,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => const AdminServiceRequestsScreen(
-                        requestType: 'hero_booking',
-                        title: 'Hero Booking Status',
+          // NEW (Sep 16 2026 — drag-to-reorder like a phone homescreen):
+          // was a fixed SliverList.list — see
+          // admin_reorderable_tile_list.dart for the full why. Every
+          // tile below is byte-for-byte what used to be a direct list
+          // child; only the id + AdminReorderableTileList wrapper are
+          // new, no onTap/badge/stream logic changed.
+          sliver: SliverToBoxAdapter(
+            child: AdminReorderableTileList(
+              sectionKey: 'super_admin_home.services',
+              tiles: [
+                AdminHomeTile(
+                  id: 'hero_booking_status',
+                  child: _AdminReviewBadgeWrapper(
+                    waitingStream: _waitingRequestsStream,
+                    child: _ManageTile(
+                      label: 'Hero Booking Status',
+                      subtitle: 'Every Hero Booking request',
+                      iconSvg: FluentEmojiFlat.man_superhero,
+                      color: _orange,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AdminServiceRequestsScreen(
+                            requestType: 'hero_booking',
+                            title: 'Hero Booking Status',
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              _AdminReviewBadgeWrapper(
-                waitingStream: _waitingRequestsStream,
-                child: _ManageTile(
-                  label: 'Electronics Booking',
-                  subtitle: 'Every electronics enquiry',
-                  iconSvg: FluentEmojiFlat.mobile_phone,
-                  color: _orange,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => const AdminServiceRequestsScreen(
-                        requestType: 'electronics_service',
-                        title: 'Electronics Booking',
+                AdminHomeTile(
+                  id: 'electronics_booking',
+                  child: _AdminReviewBadgeWrapper(
+                    waitingStream: _waitingRequestsStream,
+                    child: _ManageTile(
+                      label: 'Electronics Booking',
+                      subtitle: 'Every electronics enquiry',
+                      iconSvg: FluentEmojiFlat.mobile_phone,
+                      color: _orange,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AdminServiceRequestsScreen(
+                            requestType: 'electronics_service',
+                            title: 'Electronics Booking',
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              // FIX (UI reorg, Aug 31 2026): was wrapped in
-              // _AdminReviewBadgeWrapper, which only counts docs with
-              // status=='admin_review' — but _sosKycWaitingStream
-              // already queries status=='pending' (see initState), so
-              // that wrapper's count was silently always 0 and this
-              // tile's badge could never show. _SosKycTile counts the
-              // stream's docs directly instead.
-              _SosKycTile(
-                waitingStream: _sosKycWaitingStream,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                    builder: (_) => const AdminSosKycApprovalsScreen(),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              _ManageTile(
-                label: 'Food Orders',
-                subtitle: 'Review and manage food orders',
-                iconSvg: FluentEmojiFlat.takeout_box,
-                color: _orange,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                    builder: (_) => const AdminFoodOrdersScreen(),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              _CallServicesTile(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                    builder: (_) => const AdminCallServicesScreen(),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              _AdminReviewBadgeWrapper(
-                waitingStream: _waitingRequestsStream,
-                child: _ManageTile(
-                  label: 'Custom Orders',
-                  subtitle: 'Review custom order requests',
-                  iconSvg: FluentEmojiFlat.shopping_bags,
-                  color: _orange,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => const AdminServiceRequestsScreen(
-                        requestType: 'custom_order',
-                        title: 'Custom Orders',
+                AdminHomeTile(
+                  id: 'sos_kyc',
+                  // FIX (UI reorg, Aug 31 2026): was wrapped in
+                  // _AdminReviewBadgeWrapper, which only counts docs
+                  // with status=='admin_review' — but
+                  // _sosKycWaitingStream already queries
+                  // status=='pending' (see initState), so that
+                  // wrapper's count was silently always 0 and this
+                  // tile's badge could never show. _SosKycTile counts
+                  // the stream's docs directly instead.
+                  child: _SosKycTile(
+                    waitingStream: _sosKycWaitingStream,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => const AdminSosKycApprovalsScreen(),
                       ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              _AdminReviewBadgeWrapper(
-                waitingStream: _waitingRequestsStream,
-                child: _ManageTile(
-                  label: 'Grocery Orders',
-                  subtitle: 'Review DMart cart screenshots, assign heroes',
-                  iconSvg: FluentEmojiFlat.shopping_cart,
-                  color: _orange,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => const AdminServiceRequestsScreen(
-                        requestType: 'grocery_order',
-                        title: 'Grocery Orders',
+                AdminHomeTile(
+                  id: 'food_orders',
+                  child: _ManageTile(
+                    label: 'Food Orders',
+                    subtitle: 'Review and manage food orders',
+                    iconSvg: FluentEmojiFlat.takeout_box,
+                    color: _orange,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => const AdminFoodOrdersScreen(),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+                AdminHomeTile(
+                  id: 'call_services',
+                  child: _CallServicesTile(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => const AdminCallServicesScreen(),
+                      ),
+                    ),
+                  ),
+                ),
+                AdminHomeTile(
+                  id: 'custom_orders',
+                  child: _AdminReviewBadgeWrapper(
+                    waitingStream: _waitingRequestsStream,
+                    child: _ManageTile(
+                      label: 'Custom Orders',
+                      subtitle: 'Review custom order requests',
+                      iconSvg: FluentEmojiFlat.shopping_bags,
+                      color: _orange,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AdminServiceRequestsScreen(
+                            requestType: 'custom_order',
+                            title: 'Custom Orders',
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                AdminHomeTile(
+                  id: 'grocery_orders',
+                  child: _AdminReviewBadgeWrapper(
+                    waitingStream: _waitingRequestsStream,
+                    child: _ManageTile(
+                      label: 'Grocery Orders',
+                      subtitle:
+                          'Review DMart cart screenshots, assign heroes',
+                      iconSvg: FluentEmojiFlat.shopping_cart,
+                      color: _orange,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AdminServiceRequestsScreen(
+                            requestType: 'grocery_order',
+                            title: 'Grocery Orders',
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -630,115 +657,147 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
         ),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
-          sliver: SliverList.list(
-            children: [
-              _ManageTile(
-                label: 'Development Monitor',
-                subtitle: 'Latest test APK, builds running, dev tasks',
-                iconSvg: FluentEmojiFlat.laptop,
-                color: _purple,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(builder: (_) => const ChittiDevMonitorScreen()),
+          // NEW (Sep 16 2026): drag-to-reorder, same as the Services
+          // tab above — see admin_reorderable_tile_list.dart.
+          sliver: SliverToBoxAdapter(
+            child: AdminReorderableTileList(
+              sectionKey: 'super_admin_home.development',
+              tiles: [
+                AdminHomeTile(
+                  id: 'dev_monitor',
+                  child: _ManageTile(
+                    label: 'Development Monitor',
+                    subtitle: 'Latest test APK, builds running, dev tasks',
+                    iconSvg: FluentEmojiFlat.laptop,
+                    color: _purple,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                          builder: (_) => const ChittiDevMonitorScreen(),),
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              // NEW (Sep 1 2026): the business-facing half of the call
-              // data — what the caller wanted, in plain words. Kept
-              // separate from Debug Logs below, which is the engineering
-              // view of the same calls and is not readable as business
-              // information.
-              _ManageTile(
-                label: 'Call Conversations',
-                subtitle: 'What each caller said, with a summary',
-                iconSvg: FluentEmojiFlat.speech_balloon,
-                color: _purple,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(builder: (_) => const ChittiConversationsScreen()),
+                AdminHomeTile(
+                  id: 'call_conversations',
+                  // NEW (Sep 1 2026): the business-facing half of the
+                  // call data — what the caller wanted, in plain words.
+                  // Kept separate from Debug Logs below, which is the
+                  // engineering view of the same calls and is not
+                  // readable as business information.
+                  child: _ManageTile(
+                    label: 'Call Conversations',
+                    subtitle: 'What each caller said, with a summary',
+                    iconSvg: FluentEmojiFlat.speech_balloon,
+                    color: _purple,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                          builder: (_) => const ChittiConversationsScreen(),),
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              _ManageTile(
-                label: 'Chitti Call Debug Logs',
-                subtitle: 'Step-by-step logs of each screened call',
-                iconSvg: FluentEmojiFlat.bug,
-                color: _orange,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(builder: (_) => const ChittiDebugLogsScreen()),
+                AdminHomeTile(
+                  id: 'call_debug_logs',
+                  child: _ManageTile(
+                    label: 'Chitti Call Debug Logs',
+                    subtitle: 'Step-by-step logs of each screened call',
+                    iconSvg: FluentEmojiFlat.bug,
+                    color: _orange,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                          builder: (_) => const ChittiDebugLogsScreen(),),
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              // Grouped here because it exists for the same reason the
-              // rest of this tab does — the app became the device's
-              // phone app, so it has to provide these controls itself.
-              _ManageTile(
-                label: 'Dialer',
-                subtitle: 'Make a call, see the live call, hang up',
-                iconSvg: FluentEmojiFlat.telephone,
-                color: _orange,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(builder: (_) => const AdminDialerScreen()),
+                AdminHomeTile(
+                  id: 'dialer',
+                  // Grouped here because it exists for the same reason
+                  // the rest of this tab does — the app became the
+                  // device's phone app, so it has to provide these
+                  // controls itself.
+                  child: _ManageTile(
+                    label: 'Dialer',
+                    subtitle: 'Make a call, see the live call, hang up',
+                    iconSvg: FluentEmojiFlat.telephone,
+                    color: _orange,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                          builder: (_) => const AdminDialerScreen(),),
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              // NEW (Sep 4 2026 — Nizam: "chittiku camara on pannuna
-              // udanede athu net la google lens open aguramari namma
-              // app kulla vachcharlam"). Admin-only on purpose: it
-              // spends a billable Vision API call per capture and is
-              // aimed at the boss's own meetings, not customers.
-              _ManageTile(
-                label: 'My Day',
-                subtitle: "What you said you'd do — Chitti follows up",
-                iconSvg: FluentEmojiFlat.spiral_calendar,
-                color: _purple,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(builder: (_) => const AdminMyDayScreen()),
+                AdminHomeTile(
+                  id: 'my_day',
+                  // NEW (Sep 4 2026 — Nizam: "chittiku camara on
+                  // pannuna udanede athu net la google lens open
+                  // aguramari namma app kulla vachcharlam"). Admin-only
+                  // on purpose: it spends a billable Vision API call
+                  // per capture and is aimed at the boss's own
+                  // meetings, not customers.
+                  child: _ManageTile(
+                    label: 'My Day',
+                    subtitle: "What you said you'd do — Chitti follows up",
+                    iconSvg: FluentEmojiFlat.spiral_calendar,
+                    color: _purple,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                          builder: (_) => const AdminMyDayScreen(),),
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              _ManageTile(
-                label: 'Clay icons gallery',
-                subtitle: 'All 3D clay icons in all 5 themes with live switcher',
-                iconSvg: FluentEmojiFlat.artist_palette,
-                color: _purple,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                      builder: (_) => const ClayGalleryScreen()),
+                AdminHomeTile(
+                  id: 'clay_icons_gallery',
+                  child: _ManageTile(
+                    label: 'Clay icons gallery',
+                    subtitle:
+                        'All 3D clay icons in all 5 themes with live switcher',
+                    iconSvg: FluentEmojiFlat.artist_palette,
+                    color: _purple,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                          builder: (_) => const ClayGalleryScreen(),),
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              _ManageTile(
-                label: 'Chitti Lens',
-                subtitle: 'Point the camera — Chitti looks it up and can greet them',
-                iconSvg: FluentEmojiFlat.camera,
-                color: _purple,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                      builder: (_) => const AdminChittiLensScreen()),
+                AdminHomeTile(
+                  id: 'chitti_lens',
+                  child: _ManageTile(
+                    label: 'Chitti Lens',
+                    subtitle:
+                        'Point the camera — Chitti looks it up and can greet them',
+                    iconSvg: FluentEmojiFlat.camera,
+                    color: _purple,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                          builder: (_) => const AdminChittiLensScreen(),),
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              // NEW (Sep 4 2026): the CM/ministers briefing. Kept next
-              // to Chitti Lens because they get used in the same room,
-              // minutes apart.
-              _ManageTile(
-                label: 'CM Presentation',
-                subtitle: 'Chitti introduces the app, asks permission, then briefs',
-                iconSvg: FluentEmojiFlat.microphone,
-                color: _orange,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                      builder: (_) => const AdminCmPresentationScreen()),
+                AdminHomeTile(
+                  id: 'cm_presentation',
+                  // NEW (Sep 4 2026): the CM/ministers briefing. Kept
+                  // next to Chitti Lens because they get used in the
+                  // same room, minutes apart.
+                  child: _ManageTile(
+                    label: 'CM Presentation',
+                    subtitle:
+                        'Chitti introduces the app, asks permission, then briefs',
+                    iconSvg: FluentEmojiFlat.microphone,
+                    color: _orange,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                          builder: (_) => const AdminCmPresentationScreen(),),
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],
@@ -1042,79 +1101,88 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          _AdminReviewBadgeWrapper(
-            waitingStream: _waitingRequestsStream,
-            child: _ManageTile(
-              label: 'Taxi & Transportation',
-              subtitle: 'Rides, customers, escalated orders',
-              iconSvg: FluentEmojiFlat.oncoming_taxi,
-              color: _orange,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) => const AdminDashboardScreen(),
-                ),
-              ),
-            ),
-          ),
-          // Hero Booking Status and Electronics Booking used to be tiles
-          // here too — they're now their own bottom-nav tabs (Hero /
-          // Electronics) so admins reach them with one tap instead of
-          // Overview -> tile -> pushed screen. Taxi stays a tile because
-          // AdminDashboardScreen owns its own full Scaffold/bottom-nav
-          // and is reached by push, not by swapping this screen's body.
-          // App Settings moved to the left drawer (see _buildDrawer) —
-          // this Manage section now holds only Taxi & Transportation.
-          const SizedBox(height: 10),
-          // NEW (per Nizam's request): a direct "Grocery Orders" entry
-          // point right on the Overview page, on top of the Grocery tile
-          // on the Services tab — this is the screen admins need most
-          // now that the DMart-screenshot workflow depends on them
-          // reviewing uploaded cart photos quickly, so it shouldn't
-          // require hunting through Services first.
-          // FIX (UI reorg, Aug 31 2026): was `_goToTab(6)`, jumping to a
-          // fixed IndexedStack slot that held the always-mounted Grocery
-          // tab. That slot no longer exists (bottom nav collapsed to 3
-          // tabs — Overview/Services/Chitti AI, see _buildBottomNav) so
-          // this would have thrown a RangeError the first time an admin
-          // tapped it. Pushes the same screen the Services tab's Grocery
-          // tile pushes instead.
-          _AdminReviewBadgeWrapper(
-            waitingStream: _waitingRequestsStream,
-            child: _ManageTile(
-              label: 'Grocery Orders',
-              subtitle: 'Review DMart cart screenshots, assign heroes',
-              iconSvg: FluentEmojiFlat.shopping_cart,
-              color: _orange,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) => const AdminServiceRequestsScreen(
-                    requestType: 'grocery_order',
-                    title: 'Grocery Orders',
+          // NEW (Sep 16 2026): drag-to-reorder, same as the Services/
+          // Development tabs — see admin_reorderable_tile_list.dart.
+          AdminReorderableTileList(
+            sectionKey: 'super_admin_home.manage',
+            tiles: [
+              AdminHomeTile(
+                id: 'taxi_transportation',
+                // Hero Booking Status and Electronics Booking used to
+                // be tiles here too — they're now their own bottom-nav
+                // tabs (Hero / Electronics) so admins reach them with
+                // one tap instead of Overview -> tile -> pushed screen.
+                // Taxi stays a tile because AdminDashboardScreen owns
+                // its own full Scaffold/bottom-nav and is reached by
+                // push, not by swapping this screen's body.
+                child: _AdminReviewBadgeWrapper(
+                  waitingStream: _waitingRequestsStream,
+                  child: _ManageTile(
+                    label: 'Taxi & Transportation',
+                    subtitle: 'Rides, customers, escalated orders',
+                    iconSvg: FluentEmojiFlat.oncoming_taxi,
+                    color: _orange,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => const AdminDashboardScreen(),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          // NEW (per Nizam's placement choice): Gift Coupons. A coupon
-          // is minted automatically every time a customer pays for a
-          // service (onServiceRequestUpdated), and stays sealed until
-          // an admin decides what's inside — so this is a queue that
-          // needs working daily, which is why it sits on Overview
-          // rather than being buried in the drawer.
-          _ManageTile(
-            label: 'Gift Coupons',
-            subtitle: 'Set the gift inside customers’ scratch cards',
-            iconSvg: FluentEmojiFlat.wrapped_gift,
-            color: const Color(0xFFFFC107),
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute<void>(
-                builder: (_) => const AdminGiftCouponsScreen(),
+              AdminHomeTile(
+                id: 'grocery_orders',
+                // NEW (per Nizam's request): a direct "Grocery Orders"
+                // entry point right on the Overview page, on top of the
+                // Grocery tile on the Services tab — this is the screen
+                // admins need most now that the DMart-screenshot
+                // workflow depends on them reviewing uploaded cart
+                // photos quickly, so it shouldn't require hunting
+                // through Services first.
+                child: _AdminReviewBadgeWrapper(
+                  waitingStream: _waitingRequestsStream,
+                  child: _ManageTile(
+                    label: 'Grocery Orders',
+                    subtitle:
+                        'Review DMart cart screenshots, assign heroes',
+                    iconSvg: FluentEmojiFlat.shopping_cart,
+                    color: _orange,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => const AdminServiceRequestsScreen(
+                          requestType: 'grocery_order',
+                          title: 'Grocery Orders',
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
+              AdminHomeTile(
+                id: 'gift_coupons',
+                // NEW (per Nizam's placement choice): Gift Coupons. A
+                // coupon is minted automatically every time a customer
+                // pays for a service (onServiceRequestUpdated), and
+                // stays sealed until an admin decides what's inside —
+                // so this is a queue that needs working daily, which is
+                // why it sits on Overview rather than being buried in
+                // the drawer.
+                child: _ManageTile(
+                  label: 'Gift Coupons',
+                  subtitle: 'Set the gift inside customers’ scratch cards',
+                  iconSvg: FluentEmojiFlat.wrapped_gift,
+                  color: const Color(0xFFFFC107),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AdminGiftCouponsScreen(),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1524,9 +1592,9 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
             ListTile(
               leading: const Icon(Icons.history_rounded, color: _purple),
               title: const Text('App Versions & Rollback',
-                  style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+                  style: TextStyle(color: _text, fontWeight: FontWeight.w600),),
               subtitle: Text('Switch to an older build if the latest has a problem',
-                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11)),
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
               onTap: () async {
                 Navigator.pop(context);
                 final messenger = ScaffoldMessenger.of(context);
@@ -1535,7 +1603,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 if (release == null) {
                   messenger.showSnackBar(
                     const SnackBar(
-                        content: Text('No published release found yet.')),
+                        content: Text('No published release found yet.'),),
                   );
                   return;
                 }
@@ -1555,7 +1623,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 final simMode = data?['simulation_mode'] as String? ?? 'off';
                 
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1585,9 +1653,9 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                           ButtonSegment(value: 'peak', label: Text('Peak', style: TextStyle(fontSize: 11))),
                         ],
                         selected: {simMode},
-                        onSelectionChanged: (Set<String> newSelection) {
+                        onSelectionChanged: (newSelection) {
                           FirebaseFirestore.instance.collection('system_settings').doc('app_status').set(
-                            {'simulation_mode': newSelection.first}, SetOptions(merge: true)
+                            {'simulation_mode': newSelection.first}, SetOptions(merge: true),
                           );
                         },
                       ),
@@ -1598,7 +1666,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
               },
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1626,7 +1694,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                     title: const Text('Live Map Simulation', style: TextStyle(color: _text, fontSize: 13, fontWeight: FontWeight.w600)),
                     subtitle: Text('Default traffic mode', style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11)),
                     onTap: () {
-                      MapSimulationService.instance.start(density: SimulationDensity.normal);
+                      MapSimulationService.instance.start();
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Simulation Started: Normal'), backgroundColor: Color(0xFF4CAF50)));
                     },
                   ),
