@@ -418,11 +418,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # No `path:` here on purpose: the artifact was uploaded with its
-      # files' original repo-relative paths preserved (build/web/**),
-      # so extracting it into the working directory (the default)
-      # reproduces build/web/ exactly. Giving path: build/web here
-      # would nest it twice (build/web/build/web/...).
+      # AUDIT FIX (Sep 16 2026 — run 35127344565 failed at "Serve the
+      # web build locally" with a 404 on every request). The original
+      # comment here assumed the artifact kept its full build/web/**
+      # path. Verified by actually downloading the artifact (`gh run
+      # download -n build-web`) and inspecting it: for a single-root
+      # glob like build/web/**, upload-artifact@v4 strips the leading
+      # `build/` and keeps the rest, so the artifact's real top level
+      # is `web/` (web/index.html, web/assets/..., not
+      # build/web/index.html). No `path:` override needed — the
+      # default extracts into the working directory, landing files at
+      # ./web/ — but the "Serve" step below must point at `web`, not
+      # `build/web`.
       - name: Download web build artifact
         uses: actions/download-artifact@v4
         with:
@@ -438,7 +445,7 @@ jobs:
 
       - name: Serve the web build locally
         run: |
-          python3 -m http.server 8080 --directory build/web &
+          python3 -m http.server 8080 --directory web &
           echo $! > /tmp/http_server.pid
           for i in $(seq 1 20); do
             if curl -sf http://localhost:8080/ > /dev/null; then
