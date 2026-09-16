@@ -14,23 +14,26 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/app_minimizer_service.dart';
 import '../../services/chitti/chitti_admin_briefing_service.dart';
 import '../../services/chitti/chitti_enquiry_service.dart';
-import '../../services/app_minimizer_service.dart';
-import '../../widgets/native_update_button.dart';
 import '../../services/db_usage_tracker.dart';
+import '../../services/firestore_usage_tracking.dart';
 import '../../services/service_requests_listener.dart';
 import '../../services/update_service.dart';
 import '../../services/usage_tracking_service.dart';
+import '../../widgets/admin/admin_reorderable_tile_list.dart';
 import '../../widgets/manual_refresh_header.dart';
+import '../../widgets/native_update_button.dart';
 import 'admin_detailed_reports_screen.dart';
 import 'admin_hero_dispatch_screen.dart';
+import 'admin_hero_earnings_screen.dart';
 import 'admin_new_orders_screen.dart';
 import 'admin_ride_tracking_screen.dart';
 import 'admin_seller_approval_screen.dart';
-import 'chitti_enquiries_screen.dart';
 import 'ads_management_screen.dart';
 import 'approved_heroes_screen.dart';
+import 'chitti_enquiries_screen.dart';
 import 'commission_settings_screen.dart';
 import 'credentials_admin_screen.dart';
 import 'customer_rides_screen.dart';
@@ -38,8 +41,6 @@ import 'fare_management_screen.dart';
 import 'hero_approvals_screen.dart';
 // NEW (Aug 11 2026): Service Flow Monitor sub-page — fetch-on-demand.
 import 'service_flow_monitor_screen.dart';
-import 'admin_hero_earnings_screen.dart';
-import '../../services/firestore_usage_tracking.dart';
 
 // ── Theme ──────────────────────────────────────────────────────
 const Color _bg = Color(0xFF0A0A1A);
@@ -194,12 +195,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     // streams — StreamBuilder above and this .listen() share the same
     // underlying query/watch). See lib/services/db_usage_tracker.dart.
     _pendingHeroApprovalsStream.listen((s) => DbUsageTracker.instance
-        .recordRead(s.docs.length, 'admin_dashboard_pending_hero_approvals'));
+        .recordRead(s.docs.length, 'admin_dashboard_pending_hero_approvals'),);
     _adminReviewCountStream.listen((s) => DbUsageTracker.instance.recordRead(
         s.docs.where((d) => d.data()['status'] == 'admin_review').length,
-        'admin_dashboard', 'review_count_listener'));
+        'admin_dashboard', 'review_count_listener',),);
     _pendingSellerApprovalsStream.listen((s) => DbUsageTracker.instance
-        .recordRead(s.docs.length, 'admin_dashboard_pending_seller_approvals'));
+        .recordRead(s.docs.length, 'admin_dashboard_pending_seller_approvals'),);
 
     unawaited(_fetchStatCards());
     unawaited(_fetchOnlineHeroes());
@@ -1892,153 +1893,202 @@ class _MoreSheet extends StatelessWidget {
               ),
             ),
             _sheetSectionLabel('HEROES'),
-            _sheetTile(
-              context,
-              icon: Icons.person_add_alt_1,
-              iconColor: _green,
-              label: 'Hero Approvals',
-              trailing: StreamBuilder<QuerySnapshot>(
-                stream: pendingHeroApprovalsStream,
-                builder: (context, snap) {
-                  final count = snap.data?.docs.length ?? 0;
-                  if (count == 0) return const SizedBox.shrink();
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: _red,
-                      borderRadius: BorderRadius.circular(999),
+            // NEW (Sep 16 2026 — Nizam: "AdminDashboardScreen-லயும் இதே
+            // setup பண்ணு", mirroring SuperAdminHomeScreen's
+            // AdminReorderableTileList). Long-press any tile below to
+            // drag it within its own section, same as a phone
+            // homescreen. Every tile's onTap/trailing badge stream is
+            // exactly what it was — only its position is now
+            // data-driven. Reordering is scoped PER SECTION (Heroes,
+            // Sellers, Money, Settings stay separate groups) since the
+            // section headers carry real meaning.
+            AdminReorderableTileList(
+              sectionKey: 'admin_dashboard.more_sheet.heroes',
+              tiles: [
+                AdminHomeTile(
+                  id: 'hero_approvals',
+                  child: _sheetTile(
+                    context,
+                    icon: Icons.person_add_alt_1,
+                    iconColor: _green,
+                    label: 'Hero Approvals',
+                    trailing: StreamBuilder<QuerySnapshot>(
+                      stream: pendingHeroApprovalsStream,
+                      builder: (context, snap) {
+                        final count = snap.data?.docs.length ?? 0;
+                        if (count == 0) return const SizedBox.shrink();
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: _red,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(count > 9 ? '9+' : '$count',
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),),
+                        );
+                      },
                     ),
-                    child: Text(count > 9 ? '9+' : '$count',
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),),
-                  );
-                },
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const HeroApprovalsScreen()));
-              },
-            ),
-            _sheetTile(
-              context,
-              icon: Icons.how_to_reg_outlined,
-              iconColor: _gold,
-              label: 'Approved Heroes',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const ApprovedHeroesScreen()));
-              },
-            ),
-            // NEW (Aug 17 2026 — Nizam: "adminala exact hero earning
-            // pakkamudila... hero voda uid vachu than kaatuthu hero name
-            // kaatala"). Resolves uid -> name/phone and gives
-            // Today/7-day/Month/All plus per-hero drill-down. One Fetch
-            // powers every filter — see the screen's own header for the
-            // read-cost reasoning.
-            _sheetTile(
-              context,
-              icon: Icons.payments_outlined,
-              iconColor: _green,
-              label: 'Hero Earnings',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                    builder: (_) => const AdminHeroEarningsScreen(),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const HeroApprovalsScreen()));
+                    },
                   ),
-                );
-              },
+                ),
+                AdminHomeTile(
+                  id: 'approved_heroes',
+                  child: _sheetTile(
+                    context,
+                    icon: Icons.how_to_reg_outlined,
+                    iconColor: _gold,
+                    label: 'Approved Heroes',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const ApprovedHeroesScreen()));
+                    },
+                  ),
+                ),
+                AdminHomeTile(
+                  id: 'hero_earnings',
+                  // NEW (Aug 17 2026 — Nizam: "adminala exact hero
+                  // earning pakkamudila... hero voda uid vachu than
+                  // kaatuthu hero name kaatala"). Resolves uid ->
+                  // name/phone and gives Today/7-day/Month/All plus
+                  // per-hero drill-down. One Fetch powers every filter
+                  // — see the screen's own header for the read-cost
+                  // reasoning.
+                  child: _sheetTile(
+                    context,
+                    icon: Icons.payments_outlined,
+                    iconColor: _green,
+                    label: 'Hero Earnings',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AdminHeroEarningsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             _sheetSectionLabel('SELLERS'),
-            _sheetTile(
-              context,
-              icon: Icons.storefront_outlined,
-              iconColor: _teal,
-              label: 'Seller Approvals',
-              trailing: StreamBuilder<QuerySnapshot>(
-                stream: pendingSellerApprovalsStream,
-                builder: (context, snap) {
-                  final count = snap.data?.docs.length ?? 0;
-                  if (count == 0) return const SizedBox.shrink();
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: _red,
-                      borderRadius: BorderRadius.circular(999),
+            AdminReorderableTileList(
+              sectionKey: 'admin_dashboard.more_sheet.sellers',
+              tiles: [
+                AdminHomeTile(
+                  id: 'seller_approvals',
+                  child: _sheetTile(
+                    context,
+                    icon: Icons.storefront_outlined,
+                    iconColor: _teal,
+                    label: 'Seller Approvals',
+                    trailing: StreamBuilder<QuerySnapshot>(
+                      stream: pendingSellerApprovalsStream,
+                      builder: (context, snap) {
+                        final count = snap.data?.docs.length ?? 0;
+                        if (count == 0) return const SizedBox.shrink();
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: _red,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(count > 9 ? '9+' : '$count',
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),),
+                        );
+                      },
                     ),
-                    child: Text(count > 9 ? '9+' : '$count',
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),),
-                  );
-                },
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const AdminSellerApprovalScreen()));
-              },
-            ),
-            _sheetTile(
-              context,
-              icon: Icons.forum_outlined,
-              iconColor: _teal,
-              // Reachable without Chitti on purpose. These are leads
-              // with a phone number and a shelf life — a rate question
-              // answered tomorrow has already been answered by
-              // somebody else's shop — so they must not depend on
-              // anyone thinking to ask the assistant.
-              label: 'Customer Enquiries',
-              trailing: StreamBuilder<List<ChittiEnquiry>>(
-                stream: openEnquiriesStream,
-                builder: (context, snap) {
-                  final count = snap.data?.length ?? 0;
-                  if (count == 0) return const SizedBox.shrink();
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: _red,
-                      borderRadius: BorderRadius.circular(999),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const AdminSellerApprovalScreen()));
+                    },
+                  ),
+                ),
+                AdminHomeTile(
+                  id: 'customer_enquiries',
+                  // Reachable without Chitti on purpose. These are
+                  // leads with a phone number and a shelf life — a rate
+                  // question answered tomorrow has already been
+                  // answered by somebody else's shop — so they must not
+                  // depend on anyone thinking to ask the assistant.
+                  child: _sheetTile(
+                    context,
+                    icon: Icons.forum_outlined,
+                    iconColor: _teal,
+                    label: 'Customer Enquiries',
+                    trailing: StreamBuilder<List<ChittiEnquiry>>(
+                      stream: openEnquiriesStream,
+                      builder: (context, snap) {
+                        final count = snap.data?.length ?? 0;
+                        if (count == 0) return const SizedBox.shrink();
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: _red,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(count > 9 ? '9+' : '$count',
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),),
+                        );
+                      },
                     ),
-                    child: Text(count > 9 ? '9+' : '$count',
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),),
-                  );
-                },
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const ChittiEnquiriesScreen()));
-              },
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const ChittiEnquiriesScreen()));
+                    },
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             _sheetSectionLabel('MONEY'),
-            _sheetTile(
-              context,
-              icon: Icons.settings_outlined,
-              iconColor: _muted,
-              label: 'Commission Settings',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const CommissionSettingsScreen()));
-              },
-            ),
-            _sheetTile(
-              context,
-              icon: Icons.price_check_outlined,
-              iconColor: _gold,
-              label: 'Fare Management',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const FareManagementScreen()));
-              },
-            ),
-            _sheetTile(
-              context,
-              icon: Icons.account_balance_wallet,
-              iconColor: _gold,
-              label: 'Top-Up Customer',
-              onTap: () {
-                Navigator.pop(context);
-                onTopUp();
-              },
+            AdminReorderableTileList(
+              sectionKey: 'admin_dashboard.more_sheet.money',
+              tiles: [
+                AdminHomeTile(
+                  id: 'commission_settings',
+                  child: _sheetTile(
+                    context,
+                    icon: Icons.settings_outlined,
+                    iconColor: _muted,
+                    label: 'Commission Settings',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const CommissionSettingsScreen()));
+                    },
+                  ),
+                ),
+                AdminHomeTile(
+                  id: 'fare_management',
+                  child: _sheetTile(
+                    context,
+                    icon: Icons.price_check_outlined,
+                    iconColor: _gold,
+                    label: 'Fare Management',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const FareManagementScreen()));
+                    },
+                  ),
+                ),
+                AdminHomeTile(
+                  id: 'topup_customer',
+                  child: _sheetTile(
+                    context,
+                    icon: Icons.account_balance_wallet,
+                    iconColor: _gold,
+                    label: 'Top-Up Customer',
+                    onTap: () {
+                      Navigator.pop(context);
+                      onTopUp();
+                    },
+                  ),
+                ),
+              ],
             ),
             // FIX: this used to be a separate "Detailed Reports" tile
             // here too — now a single entry point, moved to a visible
@@ -2047,45 +2097,62 @@ class _MoreSheet extends StatelessWidget {
             // request. Not duplicated here anymore.
             const SizedBox(height: 16),
             _sheetSectionLabel('SETTINGS'),
-            _sheetTile(
-              context,
-              icon: Icons.campaign_outlined,
-              iconColor: _muted,
-              label: 'Manage Ads',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const AdsManagementScreen()));
-              },
-            ),
-            _sheetTile(
-              context,
-              icon: Icons.badge_outlined,
-              iconColor: _muted,
-              label: 'Credentials',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const CredentialsAdminScreen()));
-              },
-            ),
-            _sheetTile(
-              context,
-              icon: Icons.task_alt,
-              iconColor: _green,
-              label: 'Task Approvals',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/admin/tasks');
-              },
-            ),
-            _sheetTile(
-              context,
-              icon: Icons.download_rounded,
-              iconColor: const Color(0xFFFF4FA3),
-              label: 'Download Latest App',
-              onTap: () {
-                Navigator.pop(context);
-                onDownloadApp();
-              },
+            AdminReorderableTileList(
+              sectionKey: 'admin_dashboard.more_sheet.settings',
+              tiles: [
+                AdminHomeTile(
+                  id: 'manage_ads',
+                  child: _sheetTile(
+                    context,
+                    icon: Icons.campaign_outlined,
+                    iconColor: _muted,
+                    label: 'Manage Ads',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const AdsManagementScreen()));
+                    },
+                  ),
+                ),
+                AdminHomeTile(
+                  id: 'credentials',
+                  child: _sheetTile(
+                    context,
+                    icon: Icons.badge_outlined,
+                    iconColor: _muted,
+                    label: 'Credentials',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const CredentialsAdminScreen()));
+                    },
+                  ),
+                ),
+                AdminHomeTile(
+                  id: 'task_approvals',
+                  child: _sheetTile(
+                    context,
+                    icon: Icons.task_alt,
+                    iconColor: _green,
+                    label: 'Task Approvals',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/admin/tasks');
+                    },
+                  ),
+                ),
+                AdminHomeTile(
+                  id: 'download_latest_app',
+                  child: _sheetTile(
+                    context,
+                    icon: Icons.download_rounded,
+                    iconColor: const Color(0xFFFF4FA3),
+                    label: 'Download Latest App',
+                    onTap: () {
+                      Navigator.pop(context);
+                      onDownloadApp();
+                    },
+                  ),
+                ),
+              ],
             ),
           ],
         ),
