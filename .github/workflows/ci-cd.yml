@@ -380,6 +380,118 @@ jobs:
           retention-days: 30
 
   # ============================================================
+  # Job 3b-2: Web Console Error Check
+  # ============================================================
+  # NEW (Sep 16 2026 — Nizam: "testinglam browserla ooti athoda
+  # console error paathu aavane agent ku report issue poduvana?").
+  # The last gap in the plan-then-execute pipeline (propose_dev_plan /
+  # approve_dev_plan in chitti_dev_task_service.dart): Claude's own PR
+  # never actually ran in a browser before this — it only ever
+  # compiled. This job loads the already-built web bundle in real
+  # headless Chrome (see .github/scripts/web_console_check.js) and, on
+  # a pull request, comments any uncaught JS exceptions or console
+  # errors back on the PR tagging @claude — closing the loop the same
+  # way a human would: build it, open it, look at devtools, report
+  # what's broken.
+  #
+  # Intentionally non-blocking (never fails the job/PR check): this
+  # CI environment has no real .env/Firebase config, so some startup
+  # noise is expected and not a genuine bug — see the script's own
+  # comment. This is a reporting aid, not a merge gate.
+  web_console_check:
+    name: Web Console Error Check
+    runs-on: ubuntu-latest
+    needs: build
+    # Deliberately NOT `if: needs.build.result == 'success'` — build
+    # is a matrix job (android/ios/web/windows) and its overall result
+    # is 'failure' whenever ANY leg fails, e.g. the pre-existing,
+    # unrelated iOS build issue. Gating on that would mean this job
+    # never runs at all while iOS stays broken. `always()` lets this
+    # attempt regardless of the other legs; the download-artifact step
+    # below fails on its own (correctly) if the web leg specifically
+    # didn't produce build-web.
+    if: always()
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # No `path:` here on purpose: the artifact was uploaded with its
+      # files' original repo-relative paths preserved (build/web/**),
+      # so extracting it into the working directory (the default)
+      # reproduces build/web/ exactly. Giving path: build/web here
+      # would nest it twice (build/web/build/web/...).
+      - name: Download web build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-web
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Puppeteer
+        run: npm install puppeteer@22 --no-save --silent
+
+      - name: Serve the web build locally
+        run: |
+          python3 -m http.server 8080 --directory build/web &
+          echo $! > /tmp/http_server.pid
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:8080/ > /dev/null; then
+              echo "Local web server is up."
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "::error::Local web server never came up."
+          exit 1
+
+      - name: Run the headless console check
+        run: node .github/scripts/web_console_check.js http://localhost:8080/ web-console-errors.json
+
+      - name: Stop the local web server
+        if: always()
+        run: kill "$(cat /tmp/http_server.pid)" 2>/dev/null || true
+
+      # Reports to the PR only — a push to main has no PR to comment
+      # on, and this check exists specifically to close the loop on
+      # Claude's own automated PRs.
+      - name: Report console errors on the PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = JSON.parse(fs.readFileSync('web-console-errors.json', 'utf8'));
+            if (!report.errors || report.errors.length === 0) {
+              console.log('No console errors found — nothing to report.');
+              return;
+            }
+            const lines = report.errors.slice(0, 20).map(
+              (e) => `- **${e.type}**: ${e.message}`.slice(0, 500)
+            );
+            const body = [
+              '@claude the web build for this PR produced browser console errors on load:',
+              '',
+              ...lines,
+              '',
+              `_(${report.errors.length} total${report.errors.length > 20 ? ', showing first 20' : ''}. ` +
+                'This CI environment has no real .env/Firebase config, so some startup ' +
+                'noise can be expected — please check whether these are genuine before ' +
+                'treating them as bugs to fix.)_',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+  # ============================================================
   # Job 3c: Customer Web — Preview then Promote
   # ============================================================
   # NEW (Sep 2 2026 — Nizam: "new build pandra customer app ah nan
