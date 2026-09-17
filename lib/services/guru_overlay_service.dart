@@ -33,10 +33,6 @@
 //     entry, exactly per the CTO's specified copy.
 import 'dart:async' show Timer, TimeoutException, unawaited;
 
-import 'chitti_chat_history_service.dart';
-import 'chitti_overlay_service.dart';
-import '../widgets/chitti_history_sheet.dart';
-import '../widgets/chitti_typewriter_text.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
@@ -56,11 +52,34 @@ import '../app_navigator.dart';
 // no longer means touching this file.
 // currentAppVariant — GlobalGuruFab gates Chitti's visibility on it.
 import '../config/app_variant.dart';
+import '../screens/chitti_call_screen.dart';
+import '../screens/mobiles/listing_video_player.dart';
+import '../widgets/ai_bot_avatar.dart';
+import '../widgets/chitti_companion.dart';
+import '../widgets/chitti_history_sheet.dart';
+import '../widgets/chitti_model_picker_sheet.dart';
+import '../widgets/chitti_typewriter_text.dart';
 import 'ai_activation_service.dart';
+import 'chitti/chitti_action_executor.dart';
+import 'chitti/chitti_buddy.dart';
+import 'chitti/chitti_chat_intents.dart';
+import 'chitti/chitti_conversation_controller.dart';
+import 'chitti/chitti_dev_task_service.dart' show ChittiDevEngineTag;
+import 'chitti/chitti_local_answer_service.dart';
+import 'chitti/chitti_local_intent_engine.dart';
+import 'chitti/chitti_screen_advisor.dart';
+import 'chitti/chitti_screen_tracker.dart';
+import 'chitti/chitti_screen_vision_helper.dart';
+import 'chitti/chitti_task_chain.dart';
+import 'chitti/chitti_tool_registry.dart';
+import 'chitti/chitti_video_service.dart';
+import 'chitti/chitti_voice_service.dart';
+import 'chitti_chat_history_service.dart';
+import 'chitti_overlay_service.dart';
 import 'guru_api_service.dart';
 import 'guru_suggestion_parser.dart';
-import 'permission_service.dart';
 import 'localization_service.dart';
+import 'permission_service.dart';
 // NEW (CTO mandate — Final Overlay Tool Wiring): same conditional
 // stub/web import used everywhere else in the codebase so the overlay's
 // own check_and_update_app execution reuses the exact one real
@@ -69,32 +88,9 @@ import 'pwa_cache_platform_stub.dart'
     if (dart.library.html) 'pwa_cache_platform_web.dart';
 import 'voice_booking_intent_service.dart';
 import 'web_version_checker.dart';
-import '../screens/mobiles/listing_video_player.dart';
-import '../widgets/ai_bot_avatar.dart';
-import '../widgets/chitti_companion.dart';
-import 'chitti/chitti_action_executor.dart';
-import 'chitti/chitti_screen_advisor.dart';
-import 'chitti/chitti_conversation_controller.dart';
-import 'chitti/chitti_task_chain.dart';
-import 'chitti/chitti_buddy.dart';
-import 'chitti/chitti_chat_intents.dart';
-import 'chitti/chitti_video_service.dart';
-import 'chitti/chitti_local_answer_service.dart';
-import 'chitti/chitti_local_intent_engine.dart';
-import 'chitti/chitti_screen_tracker.dart';
-import 'chitti/chitti_screen_vision_helper.dart';
-import 'chitti/chitti_voice_service.dart';
-import 'chitti/chitti_tool_registry.dart';
-import '../screens/chitti_call_screen.dart';
-import '../widgets/chitti_model_picker_sheet.dart';
-
-/// The floating panel's fixed size. Named because the positioning
-/// clamp has to agree with the actual box — they were two independent
-/// magic numbers before, which is how the clamp came to be wrong.
-const double _kPanelWidth = 320;
-const double _kPanelHeight = 420;
 
 class GuruChatTurn {
+
   const GuruChatTurn({
     required this.role,
     required this.text,
@@ -181,9 +177,8 @@ class GuruOverlayService extends ChangeNotifier {
   // Same store as the customer screen, so a conversation looks the
   // same wherever it is opened from and rides the Drive backup once.
 
-  bool _restoredThisSession = false;
-
   /// Whether the "continue or new?" prompt has already been answered.
+
   ///
   /// Deliberately separate from [_restoredThisSession]. They used to
   /// be one flag, and startNewChat() resets that one — which "Start
@@ -207,7 +202,7 @@ class GuruOverlayService extends ChangeNotifier {
                   'text': m.text,
                   'suggestions': m.suggestions,
                   if (m.videoId != null) 'videoId': m.videoId,
-                })
+                },)
             .toList(),
       ),
     );
@@ -220,7 +215,6 @@ class GuruOverlayService extends ChangeNotifier {
     messages
       ..clear()
       ..addAll(saved.map(_turnFromMap));
-    _restoredThisSession = true;
     notifyListeners();
   }
 
@@ -231,7 +225,6 @@ class GuruOverlayService extends ChangeNotifier {
     persist();
     await ChittiChatHistoryService.archiveCurrentAndStartNew();
     messages.clear();
-    _restoredThisSession = false;
     notifyListeners();
   }
 
@@ -542,7 +535,7 @@ class GuruOverlayService extends ChangeNotifier {
       ),
     );
 
-    if (resume == true) {
+    if (resume ?? false) {
       await restoreSavedChat();
     } else if (resume == false) {
       // "Start new" ARCHIVES, never deletes — the dialog above
@@ -570,28 +563,28 @@ class GuruOverlayService extends ChangeNotifier {
           title: Text(
             'Close Chitti AI?',
             style: GoogleFonts.outfit(
-                color: const Color(0xFF4A1236), fontWeight: FontWeight.w800),
+                color: const Color(0xFF4A1236), fontWeight: FontWeight.w800,),
           ),
           content: Text(
             'Are you sure you want to close Chitti AI?',
             style: GoogleFonts.outfit(
-                color: const Color(0xFF8A4E72), fontSize: 13.5),
+                color: const Color(0xFF8A4E72), fontSize: 13.5,),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogCtx).pop(false),
               child: const Text('Cancel',
-                  style: TextStyle(color: Color(0xFF8A4E72))),
+                  style: TextStyle(color: Color(0xFF8A4E72)),),
             ),
             TextButton(
               onPressed: () => Navigator.of(dialogCtx).pop(true),
               child: const Text('Close',
-                  style: TextStyle(color: Color(0xFFFF4FA3))),
+                  style: TextStyle(color: Color(0xFFFF4FA3)),),
             ),
           ],
         ),
       );
-      if (confirmed == true) {
+      if (confirmed ?? false) {
         _forceClose();
       }
     } finally {
@@ -682,7 +675,7 @@ class GuruOverlayService extends ChangeNotifier {
           action: pending['action'] as String?,
           args: pending,
           resolved: true,
-        ));
+        ),);
         await _executePendingAction(pending);
         _sending = false;
         notifyListeners();
@@ -694,10 +687,10 @@ class GuruOverlayService extends ChangeNotifier {
           action: pending['action'] as String?,
           args: pending,
           resolved: false,
-        ));
+        ),);
         messages.add(const GuruChatTurn(
             role: 'assistant',
-            text: 'Okay, cancelled — let me know if you need anything else.'));
+            text: 'Okay, cancelled — let me know if you need anything else.',),);
         _sending = false;
         notifyListeners();
         return;
@@ -1019,7 +1012,7 @@ class GuruOverlayService extends ChangeNotifier {
           eventType: 'intent_resolved',
           action: action,
           args: logArgs,
-          resolved: true));
+          resolved: true,),);
       await _executePendingAction(args);
       return true;
     }
@@ -1097,14 +1090,14 @@ class GuruOverlayService extends ChangeNotifier {
         final items = (args['items'] as String?)?.trim() ?? 'your request';
         final vendor = (args['vendor'] as String?)?.trim();
         final label = ChittiActionExecutor.requestTypeLabel(
-            args['request_type'] as String?);
+            args['request_type'] as String?,);
         return vendor != null && vendor.isNotEmpty
             ? 'I\'ll place a $label for "$items" from $vendor and send it to '
                 'nearby Heroes — should I proceed?'
             : 'I\'ll place a $label for "$items" and send it to nearby '
                 'Heroes — should I proceed?';
       case 'cancel_order':
-        return 'I\'ll cancel your current order — this cannot be undone. '
+        return "I'll cancel your current order — this cannot be undone. "
             'Should I go ahead?';
       case 'book_transport':
         final dest = (args['destination'] as String?)?.trim();
@@ -1123,9 +1116,33 @@ class GuruOverlayService extends ChangeNotifier {
       case 'create_dev_task':
         final title = (args['title'] as String?)?.trim() ?? '(untitled)';
         final desc = (args['description'] as String?)?.trim() ?? '';
-        return 'Here\'s the plan I\'ll send to Claude:\n\n'
+        // NEW (Sep 17 2026): engine now defaults to Claude but can be
+        // Gemini/Antigravity — say which one out loud so the admin is
+        // confirming who actually does the work, not assuming Claude.
+        final engineLabel =
+            ChittiDevEngineTag.fromName(args['engine'] as String?).label;
+        return "Here's the plan I'll send to $engineLabel:\n\n"
             '"$title"\n$desc\n\n'
             'Should I create this dev task?';
+      // NEW (Sep 16 2026): propose_dev_plan/approve_dev_plan are the two
+      // halves of the plan-first flow and both requiresConfirmation —
+      // without a case here they silently fell through to the generic
+      // 'Should I proceed?', which loses exactly the "confirm the real
+      // content, not a blind yes/no" property create_dev_task was fixed
+      // to have above.
+      case 'propose_dev_plan':
+        final title = (args['title'] as String?)?.trim() ?? '(untitled)';
+        final desc = (args['description'] as String?)?.trim() ?? '';
+        return "Here's what I'll ask Claude to audit and plan (no code "
+            'yet):\n\n"$title"\n$desc\n\n'
+            'Should I open this?';
+      case 'approve_dev_plan':
+        final note = (args['note'] as String?)?.trim();
+        return note != null && note.isNotEmpty
+            ? "I'll tell Claude to go ahead and build the approved plan, "
+                'with this extra note: "$note" — should I send it?'
+            : "I'll tell Claude to go ahead and build the approved plan — "
+                'should I send it?';
       default:
         return 'Should I proceed?';
     }
@@ -1234,7 +1251,8 @@ class GuruOverlayService extends ChangeNotifier {
   /// See guru_chat_screen.dart's twin for the full reasoning. Silent
   /// on null — most screens have nothing worth remarking on.
   Future<void> _offerScreenGuidanceAfterNavigation() async {
-    await Future.delayed(const Duration(milliseconds: 900));
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+
     final advice = await ChittiScreenAdvisor.adviseOnCurrentScreen();
     if (advice == null) return;
     messages.add(
@@ -1262,7 +1280,7 @@ class GuruOverlayService extends ChangeNotifier {
     }
 
     messages.add(const GuruChatTurn(
-        role: 'assistant', text: 'Checking for an update...'));
+        role: 'assistant', text: 'Checking for an update...',),);
     notifyListeners();
 
     try {
@@ -1273,7 +1291,7 @@ class GuruOverlayService extends ChangeNotifier {
 
     if (!WebVersionChecker.instance.isUpdateAvailable) {
       messages.add(const GuruChatTurn(
-          role: 'assistant', text: "You're already on the latest version!"));
+          role: 'assistant', text: "You're already on the latest version!",),);
       notifyListeners();
       return;
     }
@@ -1281,7 +1299,7 @@ class GuruOverlayService extends ChangeNotifier {
     messages.add(const GuruChatTurn(
         role: 'assistant',
         text:
-            'Found a new version — updating now, the app will refresh in a moment...'));
+            'Found a new version — updating now, the app will refresh in a moment...',),);
     notifyListeners();
 
     try {
@@ -1291,7 +1309,7 @@ class GuruOverlayService extends ChangeNotifier {
       messages.add(const GuruChatTurn(
           role: 'assistant',
           text:
-              "The update didn't go through — please try again from the side menu."));
+              "The update didn't go through — please try again from the side menu.",),);
       notifyListeners();
     }
   }
@@ -1495,7 +1513,7 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text(
-                    'Please grant microphone permission to speak with Chitti.'),
+                    'Please grant microphone permission to speak with Chitti.',),
                 backgroundColor: Color(0xFF4A1236),
               ),
             );
@@ -1515,7 +1533,7 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
         },
         onError: (error) {
           debugPrint('[GuruOverlayService] speech error: $error');
-          final msg = (error.errorMsg).toLowerCase();
+          final msg = error.errorMsg.toLowerCase();
           final isRecoverable = msg.contains('no_match') ||
               msg.contains('timeout') ||
               msg.contains('speech_timeout') ||
@@ -1524,7 +1542,7 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
               msg.contains('busy');
           if (isRecoverable && _voiceSessionActive && mounted) {
             debugPrint(
-                '[GuruOverlayService] transient speech error "$msg" — auto-recovering listening session');
+                '[GuruOverlayService] transient speech error "$msg" — auto-recovering listening session',);
             Future.delayed(const Duration(milliseconds: 400), () {
               if (_voiceSessionActive && mounted) {
                 unawaited(_startVoiceSegment(_conversationLocaleId));
@@ -1614,24 +1632,15 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
             unawaited(_startVoiceSegment(localeId));
           }
         },
-        localeId: localeId,
-        // onDevice: false is the default, stated explicitly because
-        // it is load-bearing — false means the NETWORKED Google
-        // recogniser, the same engine Gboard's mic uses. True would
-        // drop to the on-device model, which is worse at Tanglish.
         listenOptions: stt.SpeechListenOptions(
           partialResults: false,
           cancelOnError: true,
-          onDevice: false,
+          listenFor: const Duration(seconds: 12),
+          pauseFor: const Duration(seconds: 6),
         ),
-        // Short per-segment caps — see guru_chat_screen.dart's identical
-        // comment: we WANT the OS to hand control back quickly so we can
-        // restart; _voiceSilenceTimer is what enforces the real
-        // customer-facing silence threshold now.
-        listenFor: const Duration(seconds: 12),
-        pauseFor: const Duration(seconds: 6),
       ),
     );
+
   }
 
   void _resetVoiceSilenceTimer() {
@@ -1802,8 +1811,8 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
   /// against the actual screen size at drag time (see _onResizeDrag), not
   /// a fixed number, so the panel can never be dragged off a small phone
   /// screen.
-  static const double _minPanelWidth = 280.0;
-  static const double _minPanelHeight = 320.0;
+  static const double _minPanelWidth = 280;
+  static const double _minPanelHeight = 320;
 
   /// True only for the duration of an active corner drag. Suppresses the
   /// panel's normal resize animation so a drag frame lands exactly under
@@ -1925,7 +1934,7 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
                             onDragStart: () =>
                                 setState(() => _resizingByDrag = true),
                             onDragUpdate: (delta) => _onResizeDrag(
-                                delta, MediaQuery.sizeOf(context)),
+                                delta, MediaQuery.sizeOf(context),),
                             onDragEnd: () =>
                                 setState(() => _resizingByDrag = false),
                           ),
@@ -2055,7 +2064,7 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
           ),
           IconButton(
             icon: const Icon(Icons.history_rounded,
-                color: Colors.white, size: 16),
+                color: Colors.white, size: 16,),
             tooltip: 'Past chats',
             onPressed: () async {
               final picked = await showChittiHistorySheet(context);
@@ -2068,7 +2077,7 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
           ),
           IconButton(
             icon: const Icon(Icons.add_comment_outlined,
-                color: Colors.white, size: 16),
+                color: Colors.white, size: 16,),
             tooltip: 'New chat',
             onPressed: () => service.startNewChat(),
             padding: EdgeInsets.zero,
@@ -2285,7 +2294,7 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
                             label: Text(s,
                                 style: GoogleFonts.outfit(
                                     fontSize: 11,
-                                    color: const Color(0xFF4A1236))),
+                                    color: const Color(0xFF4A1236),),),
                             backgroundColor: const Color(0xFFFFF1F8),
                             side: const BorderSide(color: Color(0x33FF4FA3)),
                             onPressed: () => unawaited(service.sendMessage(s)),
@@ -2313,15 +2322,15 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
                 child: TextField(
                   controller: _controller,
                   style: GoogleFonts.outfit(
-                      color: const Color(0xFF2B0F1F), fontSize: 12.5),
+                      color: const Color(0xFF2B0F1F), fontSize: 12.5,),
                   decoration: InputDecoration(
                     hintText: 'Ask Chitti AI...',
                     hintStyle: GoogleFonts.outfit(
-                        color: Colors.white38, fontSize: 12.5),
+                        color: Colors.white38, fontSize: 12.5,),
                     filled: true,
                     fillColor: const Color(0xFFFFF1F8),
                     contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
+                        horizontal: 14, vertical: 10,),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(24),
                       borderSide: BorderSide.none,
@@ -2359,7 +2368,7 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: const BoxDecoration(
-                      color: Color(0xFFFF4FA3), shape: BoxShape.circle),
+                      color: Color(0xFFFF4FA3), shape: BoxShape.circle,),
                   child: const Icon(Icons.send, color: Colors.white, size: 16),
                 ),
               ),
@@ -2463,7 +2472,7 @@ class _GuruOverlayTypingBubbleState extends State<_GuruOverlayTypingBubble>
   void initState() {
     super.initState();
     _controller = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 900))
+        vsync: this, duration: const Duration(milliseconds: 900),)
       ..repeat();
   }
 

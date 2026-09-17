@@ -35,7 +35,7 @@ class GuruApiService {
   static const String systemPrompt =
       'You are Chitti AI, the official AI Manager and Guide for the Allin1 Super '
       'App, based in Erode, Tamil Nadu, run by NJ Tech. You help customers '
-      "navigate the app, troubleshoot issues via screenshots, and guide them "
+      'navigate the app, troubleshoot issues via screenshots, and guide them '
       'confidently on how to place orders across every category: Bike Taxi, '
       'Auto, Cab, Parcel, Mini Truck, Lorry, Groceries, Food, Electronics '
       'repair/service, and SOS emergency assistance. Be highly energetic, '
@@ -68,7 +68,7 @@ class GuruApiService {
       'Service (print documents/photos nearby), Skilled Services (home '
       'repairs — electrician, plumber, laptop/PC, TV, fridge, and AC '
       'service), eSeva (government/utility paperwork help), Live Rates '
-      '(today\'s gold, silver, and vegetable prices for Erode), Car '
+      "(today's gold, silver, and vegetable prices for Erode), Car "
       'Wash, Custom Hotel and Custom Food ordering (order from a '
       'hotel/menu outside the regular Food Genie list), the Play Zone '
       'mini-games (2048, Memory Match, Whack-a-Mole, and the daily Coin '
@@ -250,7 +250,7 @@ class GuruApiService {
       // the SAME turn — do not describe the steps they should take
       // manually instead of just doing it. Your visible reply text in
       // that case must be ONE short sentence (under 15 words) — e.g. '
-      "\"Opening Bike Taxi for you now!\" — never a multi-line explainer. "
+      '"Opening Bike Taxi for you now!" — never a multi-line explainer. '
       'Only fall back to a longer explanation when NO tool genuinely '
       'fits (general questions, troubleshooting, or you are unsure which '
       'option they mean — use the 3-suggestion-chip format for that last '
@@ -260,19 +260,28 @@ class GuruApiService {
     'GROQ_API_KEY',
     defaultValue: 'GROQ_API_KEY_HERE',
   );
-  static const String _savedApiKeyPrefsKey = 'personal_ai_api_key';
   static final Uri _endpoint =
+
       Uri.parse('https://api.groq.com/openai/v1/chat/completions');
 
   // NEW (Guru AI upgrade, Task 2 — Vision): text-only chat keeps using
   // the fast/cheap instant model; the moment a screenshot is attached
   // we switch to a vision-capable model for that single request only
   // (vision models are slower/pricier — no reason to pay that cost on
-  // every plain-text message). Confirmed current via Groq's own docs
-  // (console.groq.com/docs/model/...) at the time this was written —
-  // meta-llama/llama-4-maverick-17b-128e-instruct was deprecated
-  // Feb 2026, so Scout is the one to use.
-  static const String _visionModel = 'meta-llama/llama-4-scout-17b-16e-instruct';
+  // every plain-text message).
+  // FIX (Sep 17 2026 — Nizam: "gemini api irunthum image upload panna
+  // chitti-nala paakka mudila yen?"). Root cause: this pointed at
+  // meta-llama/llama-4-scout-17b-16e-instruct, which Groq decommissioned
+  // from the free/developer tier on 2026-06-17 (the same fate Maverick
+  // had in Feb 2026 — see console.groq.com/docs/deprecations). Every
+  // image sent through this class's sendMessage() (admin/customer
+  // Chitti chat attachments) has been silently failing at the Groq
+  // request since then. Groq's current docs (console.groq.com/docs/
+  // vision) list qwen/qwen3.6-27b as its vision model going forward.
+  // extractGroceryItemFromImage() below (the DMart "I Need This" photo
+  // flow) has no fallback provider — it's Groq-only — so this same dead
+  // model was silently breaking that feature too.
+  static const String _visionModel = 'qwen/qwen3.6-27b';
 
   final http.Client _client;
   final Duration _timeout;
@@ -366,7 +375,7 @@ class GuruApiService {
     final Object userContent;
     if (imageBytes != null) {
       final effectiveText = input.isEmpty
-          ? 'Here is a screenshot of an issue I\'m facing in the app. Please help me troubleshoot it.'
+          ? "Here is a screenshot of an issue I'm facing in the app. Please help me troubleshoot it."
           : input;
       userContent = <Map<String, dynamic>>[
         {'type': 'text', 'text': effectiveText},
@@ -812,7 +821,7 @@ class GuruApiService {
           ?.toString()
           .trim();
       if (content == null || content.isEmpty) return null;
-      final cleaned = content.replaceAll(RegExp(r'```json|```'), '').trim();
+      final cleaned = content.replaceAll(RegExp('```json|```'), '').trim();
       final parsed = jsonDecode(cleaned) as Map<String, dynamic>;
       final item = (parsed['item'] as String?)?.trim() ?? '';
       if (item.isEmpty) return null;
@@ -940,7 +949,6 @@ class GuruApiService {
   );
   static const String _anthropicKey = String.fromEnvironment(
     'ANTHROPIC_API_KEY',
-    defaultValue: '',
   );
   // AUDIT (Sep 2026): moved to chitti_model_provider.dart as
   // chittiRequestHeaders() so guru_admin_api_service.dart's multi-
@@ -1168,7 +1176,7 @@ class GuruApiService {
 
       // ── SELLER: manager + guide + order follow-up + accountant ───
       case 'seller':
-        return 'You are Chitti, the shop owner\'s right hand. Four '
+        return "You are Chitti, the shop owner's right hand. Four "
             'jobs:\n'
             '1. MANAGER — menu, stock, pricing, store profile, '
             'availability. Practical decisions that grow the shop.\n'
@@ -1326,13 +1334,42 @@ class GuruApiService {
             'ANYTHING THAT CHANGES DATA, LEAVES THE PHONE, OR TOUCHES '
             'THE PHONE ITSELF IS CONFIRMED FIRST. Approvals and '
             'rejections (propose_write_action), sending an SMS '
-            '(send_sms), creating a dev task (create_dev_task) and '
-            'phone control (system_perform_action) all stop and wait '
+            '(send_sms), creating a dev task (create_dev_task, '
+            'propose_dev_plan, approve_dev_plan) and phone control '
+            '(system_perform_action) all stop and wait '
             'for an explicit yes. State in ONE line exactly what you '
             'are about to do and to whom, then wait. Never bundle '
             'several of them behind a single yes, and never treat an '
             'earlier yes as covering a new action. Reads run '
             'immediately and need no confirmation.\n'
+            'BUILDING SOMETHING NEW IN THE APP — PLAN BEFORE YOU FILE. '
+            'When Nizam asks for a new feature or fix in the app itself, '
+            'do not immediately call create_dev_task or propose_dev_plan. '
+            'First have the conversation: ask any doubt you actually have '
+            'about what he wants, then state back your understanding of '
+            'the request in one or two lines so he can correct it before '
+            'anything is filed. Once he confirms that understanding, use '
+            'propose_dev_plan (not create_dev_task) to open the GitHub '
+            'issue — this asks Claude Code to audit the request and reply '
+            'with a plan first, without writing any code yet. When Nizam '
+            'later asks whether the plan is back, use check_dev_plan and '
+            "read Claude's reply to him plainly; discuss and let him ask "
+            'for changes if he wants them. Only once he explicitly '
+            'approves — "go ahead", "proceed", "build it" or similar — '
+            'call approve_dev_plan, which tells Claude to actually '
+            'implement it and open a pull request. create_dev_task (skip '
+            'the plan, implement immediately) still exists for the rare '
+            'case he explicitly says to skip the planning step.\n'
+            'WHICH ENGINE BUILDS IT. create_dev_task takes an optional '
+            '"engine" argument: claude (default — most reliable, use '
+            'unless told otherwise), gemini, or antigravity. Only set it '
+            'to gemini/antigravity when Nizam explicitly names that '
+            'engine. Both share one free-tier Gemini API quota that a '
+            'single real coding task can exhaust in under a minute — if '
+            'he asks which to pick, say so plainly rather than promising '
+            'it will work. propose_dev_plan/approve_dev_plan (the plan-'
+            'first flow) only ever go to Claude — Gemini and Antigravity '
+            'always implement immediately, they have no plan-only mode.\n'
             'PHONE CONTROL — GET THE SHAPE RIGHT. system_perform_action '
             'is ONE tool. What it does is chosen by its actionType: '
             'click, type, scroll, go_back, go_home, read_screen or '
@@ -1381,7 +1418,7 @@ class GuruApiService {
         // of only answering — the same shift chitti_buddy.dart's
         // comfortAfterSetback() makes offline, so the two do not
         // contradict each other.
-        return 'You are Chitti, the customer\'s slightly naughty, very '
+        return "You are Chitti, the customer's slightly naughty, very "
             'helpful friend from Erode — the friend who teases a little '
             'while getting the job done properly.\n'
             'Be playful, warm, a bit cheeky. Light Tamil-English banter '

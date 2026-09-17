@@ -177,7 +177,7 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
             'parcel',
             'mini_truck',
             'lorry',
-            'sos'
+            'sos',
           ],
           'description': 'Which service the customer wants.',
         },
@@ -278,7 +278,7 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
       'rice',
       'onion',
       'sugar',
-      'sernthu'
+      'sernthu',
     ],
     parameters: <String, dynamic>{
       'type': 'object',
@@ -311,7 +311,7 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
       'same as last',
       'usual',
       'marupadiyum',
-      'rethaa'
+      'rethaa',
     ],
   ),
   ChittiTool(
@@ -411,7 +411,7 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
       'last week',
       'spent',
       'previous',
-      'munnadi'
+      'munnadi',
     ],
   ),
   ChittiTool(
@@ -435,7 +435,7 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
       'my name',
       'profile',
       'kyc',
-      'account details'
+      'account details',
     ],
   ),
   ChittiTool(
@@ -664,7 +664,7 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
       'active',
       'pickup',
       'drop',
-      'customer'
+      'customer',
     ],
   ),
   ChittiTool(
@@ -727,7 +727,7 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
       'finished',
       'available',
       'theenthiduchu',
-      'item'
+      'item',
     ],
     parameters: <String, dynamic>{
       'type': 'object',
@@ -889,7 +889,7 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
             'go_back',
             'go_home',
             'read_screen',
-            'launch_app'
+            'launch_app',
           ],
           'description': 'The type of automation action to execute.',
         },
@@ -1175,9 +1175,9 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     variants: {'admin'},
     description:
         'Create a GitHub issue describing a new feature or bug fix, tagged '
-        'for Claude Code to pick up and implement automatically. Use when '
-        'the admin asks to build/add/fix something in the app itself. '
-        'Requires explicit human confirmation before creating.',
+        'for an AI coding engine to pick up and implement automatically. '
+        'Use when the admin asks to build/add/fix something in the app '
+        'itself. Requires explicit human confirmation before creating.',
     requiresConfirmation: true,
     keywords: [
       'develop',
@@ -1190,6 +1190,9 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
       'create task',
       'dev task',
       'claude panu',
+      'gemini panu',
+      'antigravity panu',
+      'agy panu',
       'app la add pannu',
       'new feature',
     ],
@@ -1205,11 +1208,153 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
           'type': 'string',
           'description':
               "Detailed description of what's needed, in the admin's own "
-                  'words — this becomes the GitHub issue body Claude Code '
-                  'reads to do the work.',
+                  'words — this becomes the GitHub issue body the coding '
+                  'engine reads to do the work.',
+        },
+        // NEW (Sep 17 2026 — Nizam: "admin app la enaku anti gravity and
+        // claude 2um namma app kulla varanum"). Which coding engine's
+        // GitHub Actions workflow should pick up the issue — see
+        // claude.yml (@claude), gemini_coder.yml (@gemini) and
+        // antigravity_coder.yml (@agy). Defaults to claude when the
+        // admin doesn't name one, matching existing behavior exactly.
+        'engine': <String, dynamic>{
+          'type': 'string',
+          'enum': ['claude', 'gemini', 'antigravity'],
+          'description':
+              'Which AI coding engine should implement this. "claude" '
+                  '(default) — most reliable, unlimited via Claude Pro. '
+                  '"gemini" or "antigravity" — only when the admin '
+                  'explicitly names one; both share a free-tier Gemini API '
+                  'quota that is easy to exhaust, so mention that '
+                  'tradeoff if asked which to use.',
         },
       },
       'required': ['title', 'description'],
+    },
+  ),
+
+  // NEW (Sep 16 2026 — Nizam: "chitti admin oda intent purinjukutu boss
+  // kita implementation plan sollitu... git la oru issue create pannum
+  // claude ku, apo claude namma soldra plan kaga oru audit panni report
+  // and plan chitti kitta solluvan, apo boss discuss pannitu execute
+  // panna solluvom"). Phase 1 of a two-step flow: instead of
+  // create_dev_task's "implement this now," this asks Claude Code to
+  // come back with an audit + plan FIRST and explicitly not touch code
+  // yet — see createPlanIssue's comment for the exact wording. Chitti
+  // should only call this after it has already talked the request
+  // through with the admin (clarified any doubts, summarized its own
+  // understanding of the intent) — this tool is what turns that
+  // *agreed* understanding into a GitHub issue, not a shortcut around
+  // the conversation.
+  ChittiTool(
+    name: 'propose_dev_plan',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        'Open a GitHub issue asking Claude Code to audit the request and '
+        'reply with an implementation plan ONLY — no code, no PR yet. Use '
+        'this instead of create_dev_task when the admin wants to see a '
+        'plan first before any building starts. Only call this after '
+        'clarifying the request with the admin and stating back your '
+        'understanding of it. Requires explicit human confirmation.',
+    requiresConfirmation: true,
+    keywords: [
+      'plan pannu',
+      'plan first',
+      'implementation plan',
+      'audit pannu claude',
+      'claude ah plan kelu',
+      'plan solu',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'title': <String, dynamic>{
+          'type': 'string',
+          'description': 'Short title summarizing the requested feature or fix.',
+        },
+        'description': <String, dynamic>{
+          'type': 'string',
+          'description':
+              "The agreed understanding of what is needed, in the admin's "
+                  'own words plus any clarification Chitti gathered — this '
+                  'becomes the GitHub issue body Claude Code audits.',
+        },
+      },
+      'required': ['title', 'description'],
+    },
+  ),
+
+  // NEW (Sep 16 2026): read-only half of propose_dev_plan — fetches
+  // whatever Claude posted back on that issue so Chitti can read the
+  // plan out to the admin instead of them opening GitHub themselves.
+  ChittiTool(
+    name: 'check_dev_plan',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        'Check whether Claude Code has replied with its audit/plan on the '
+        'most recent (or a given) plan issue, and read it back. Read-only.',
+    keywords: [
+      'plan vandhucha',
+      'claude plan sonnacha',
+      'check the plan',
+      'plan status',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'issueNumber': <String, dynamic>{
+          'type': 'integer',
+          'description':
+              'GitHub issue number to check. Omit to use the most recent '
+                  'plan issue Chitti created.',
+        },
+      },
+      'required': <String>[],
+    },
+  ),
+
+  // NEW (Sep 16 2026): phase 2 — after the admin has discussed the plan
+  // Claude posted and tells Chitti to go ahead, this comments
+  // "@claude proceed" on the same issue so Claude actually implements
+  // it and opens a PR. Kept as its own confirm-gated tool (not a flag
+  // on propose_dev_plan) so voice/text intent to "go build it now" is
+  // an explicit, separate command from "just plan it."
+  ChittiTool(
+    name: 'approve_dev_plan',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        'Tell Claude Code to go ahead and implement the plan it already '
+        'posted on a plan issue, opening a pull request. Use only after '
+        'the admin has reviewed the plan and explicitly approved it. '
+        'Requires explicit human confirmation.',
+    requiresConfirmation: true,
+    keywords: [
+      'plan ah execute pannu',
+      'proceed pannu',
+      'go ahead build it',
+      'implement the plan',
+      'approve the plan',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'issueNumber': <String, dynamic>{
+          'type': 'integer',
+          'description':
+              'GitHub issue number to approve. Omit to use the most recent '
+                  'plan issue Chitti created.',
+        },
+        'note': <String, dynamic>{
+          'type': 'string',
+          'description':
+              'Optional extra instruction from the admin to include, e.g. '
+                  'a tweak to the plan before Claude builds it.',
+        },
+      },
+      'required': <String>[],
     },
   ),
 
@@ -1269,10 +1414,10 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     name: 'open_admin_browser',
     domain: ChittiDomain.admin,
     variants: {'admin'},
-    description: 'Open a URL in the admin app\'s own embedded browser tab (the '
+    description: "Open a URL in the admin app's own embedded browser tab (the "
         'same one the Dev Monitor uses for GitHub) and confirm whether '
         'it actually loaded. Restricted to github.com and its asset '
-        'domains — same as the embedded browser\'s own navigation rules. '
+        "domains — same as the embedded browser's own navigation rules. "
         'Read-only.',
     keywords: [
       'open github',
@@ -1309,7 +1454,7 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     domain: ChittiDomain.admin,
     variants: {'admin'},
     description:
-        'Open any http(s) URL in the admin app\'s general-purpose browser '
+        "Open any http(s) URL in the admin app's general-purpose browser "
         'tab (next to the GitHub tab) and confirm whether it actually '
         'loaded. Not restricted to github.com — use open_admin_browser '
         'instead for GitHub links. Read-only.',
@@ -1457,7 +1602,7 @@ const Map<String, List<ChittiDomain>> _coreDomains =
   'customer': [
     ChittiDomain.navigation,
     ChittiDomain.transport,
-    ChittiDomain.ordering
+    ChittiDomain.ordering,
   ],
   'hero': [ChittiDomain.hero, ChittiDomain.navigation],
   'seller': [ChittiDomain.seller, ChittiDomain.navigation, ChittiDomain.admin],

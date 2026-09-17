@@ -103,9 +103,22 @@ const List<ChittiModel> kChittiModels = <ChittiModel>[
     label: 'Groq (fastest)',
     endpoint: 'https://api.groq.com/openai/v1/chat/completions',
     textModel: 'llama-3.3-70b-versatile',
-    // Maverick was deprecated Feb 2026; Scout is the current vision
-    // model — see the note in guru_api_service.dart.
-    visionModel: 'meta-llama/llama-4-scout-17b-16e-instruct',
+    // FIX (Sep 17 2026 — Nizam: "gemini api irunthum image upload panna
+    // chitti-nala paakka mudila yen?"). Root cause: Groq decommissioned
+    // llama-4-scout-17b-16e-instruct (the model this used to point to)
+    // from the free/developer tier on 2026-06-17 — the SAME thing that
+    // already happened to Maverick in Feb 2026 (see the comment this
+    // replaced). Since Groq is FIRST in kChittiModels and usable() only
+    // checks "does this model have a key", every vision request kept
+    // routing to Groq's now-dead model and failing before Gemini —
+    // which DOES have a live key and a live vision model — ever got a
+    // turn. Declared empty here, same honest "this provider has no
+    // working vision model" pattern DeepSeek already uses below, so
+    // resolveChittiModel() correctly skips Groq and falls through to
+    // Gemini for every image. Groq's suggested text replacements
+    // (openai/gpt-oss-120b, qwen/qwen3.6-27b) are not multimodal, so
+    // there is no real Groq vision model to point this at instead.
+    visionModel: '',
     envKeyName: 'GROQ_API_KEY',
     prefsKeyName: 'personal_ai_api_key',
     modelPrefsKeyName: 'personal_groq_model',

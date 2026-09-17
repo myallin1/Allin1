@@ -32,14 +32,12 @@
 //    utterances with no recognizable service keyword fall back to the
 //    normal AI text reply.
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter_tts/flutter_tts.dart';
@@ -49,32 +47,28 @@ import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../config/app_variant.dart';
 // GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
 import '../services/ai_activation_service.dart';
-import '../services/chitti_chat_history_service.dart';
 import '../services/chitti/chitti_action_executor.dart';
-import '../services/chitti/chitti_screen_advisor.dart';
-import '../services/chitti/chitti_conversation_controller.dart';
-import 'mobiles/listing_video_player.dart';
 import '../services/chitti/chitti_backup_service.dart';
 import '../services/chitti/chitti_buddy.dart';
 import '../services/chitti/chitti_chat_intents.dart';
-import '../services/chitti/chitti_video_service.dart';
+import '../services/chitti/chitti_conversation_controller.dart';
+import '../services/chitti/chitti_dev_task_service.dart' show ChittiDevEngineTag;
 import '../services/chitti/chitti_local_answer_service.dart';
 import '../services/chitti/chitti_local_intent_engine.dart';
+import '../services/chitti/chitti_screen_advisor.dart';
 import '../services/chitti/chitti_screen_tracker.dart';
-import '../services/chitti/chitti_voice_service.dart';
 import '../services/chitti/chitti_tool_registry.dart';
+import '../services/chitti/chitti_video_service.dart';
+import '../services/chitti/chitti_voice_service.dart';
+import '../services/chitti_chat_history_service.dart';
 import '../services/gemini_api_service.dart';
 import '../services/grocery_ai_notes_service.dart';
 import '../services/guru_api_service.dart';
 import '../services/guru_suggestion_parser.dart';
 import '../services/localization_service.dart';
-import '../config/app_variant.dart';
-import '../widgets/chitti_history_sheet.dart';
-import '../widgets/chitti_model_picker_sheet.dart';
-import '../widgets/chitti_typewriter_text.dart';
-import '../widgets/ai_loading_dialog.dart';
 // NEW (CTO mandate — AI Autonomous App Updating): reuses the exact same
 // web-only cache-clear-and-cache-busted-reload path dashboard_screen.dart's
 // update button already calls, via the same stub/web conditional-import
@@ -82,10 +76,15 @@ import '../widgets/ai_loading_dialog.dart';
 // update" in the codebase.
 import '../services/pwa_cache_platform_stub.dart'
     if (dart.library.html) '../services/pwa_cache_platform_web.dart';
+import '../services/theme_context_extensions.dart';
 import '../services/voice_booking_intent_service.dart';
 import '../services/web_version_checker.dart';
+import '../widgets/ai_loading_dialog.dart';
+import '../widgets/chitti_history_sheet.dart';
+import '../widgets/chitti_model_picker_sheet.dart';
+import '../widgets/chitti_typewriter_text.dart';
 import '../widgets/server_busy_dialog.dart' show kCallCenterNumberIntl;
-import '../services/theme_context_extensions.dart';
+import 'mobiles/listing_video_player.dart';
 
 // ---- FIX (CTO mandate — Batch 1 Theme Retrofit): this used to be a
 // fixed "Dark, glowing Super Hero palette" of top-level const Colors —
@@ -232,9 +231,9 @@ class _GuruChatScreenState extends State<GuruChatScreen>
                 'text': m.text,
                 'suggestions': m.suggestions,
                 if (m.videoId != null) 'videoId': m.videoId,
-              })
+              },)
           .toList(),
-    ));
+    ),);
   }
 
   /// Checked once, right after this screen's first frame. Only prompts
@@ -254,8 +253,8 @@ class _GuruChatScreenState extends State<GuruChatScreen>
       builder: (ctx) => AlertDialog(
         title: const Text('Continue your chat?'),
         content: const Text(
-          "You have a chat with Chitti AI from before you left the app. "
-          "Would you like to continue it, or start a new one?",
+          'You have a chat with Chitti AI from before you left the app. '
+          'Would you like to continue it, or start a new one?',
         ),
         actions: [
           TextButton(
@@ -271,7 +270,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
     );
     if (!mounted) return;
 
-    if (resume == true) {
+    if (resume ?? false) {
       final saved = await ChittiChatHistoryService.loadSavedChat();
       if (!mounted || saved.isEmpty) return;
       setState(() {
@@ -281,7 +280,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
               suggestions:
                   (m['suggestions'] as List?)?.cast<String>() ?? const [],
               videoId: m['videoId'] as String?,
-            )));
+            ),),);
       });
       _scrollToBottom();
     } else {
@@ -427,7 +426,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
 
     setState(() {
       _messages.add(
-          _GuruMessage(role: 'user', text: input, imageBytes: pendingImage));
+          _GuruMessage(role: 'user', text: input, imageBytes: pendingImage),);
       _isTyping = true;
       _inputController.clear();
       _pendingImageBytes = null;
@@ -467,7 +466,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
           action: pending['action'] as String?,
           args: pending,
           resolved: true,
-        ));
+        ),);
         await _executePendingAction(pending);
         if (mounted) setState(() => _isTyping = false);
         return;
@@ -478,13 +477,13 @@ class _GuruChatScreenState extends State<GuruChatScreen>
           action: pending['action'] as String?,
           args: pending,
           resolved: false,
-        ));
+        ),);
         if (!mounted) return;
         setState(() {
           _messages.add(const _GuruMessage(
               role: 'assistant',
               text:
-                  'Okay, cancelled — let me know if you need anything else.'));
+                  'Okay, cancelled — let me know if you need anything else.',),);
           _isTyping = false;
         });
         _scrollToBottom();
@@ -840,7 +839,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
     setState(() {
       _messages.add(const _GuruMessage(
           role: 'assistant',
-          text: 'Let me take a closer look at that photo...'));
+          text: 'Let me take a closer look at that photo...',),);
     });
     _scrollToBottom();
 
@@ -858,7 +857,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
           text:
               "I couldn't clearly identify a product in that photo — please try a "
               'clearer photo, or just type the item into the chat.',
-        ));
+        ),);
       });
       _scrollToBottom();
       return;
@@ -872,7 +871,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
       if (item.isEmpty) continue;
       final quantity = entry['quantity'];
       GroceryAiNotesService.instance.addItem(item,
-          quantity: (quantity?.isEmpty ?? true) ? null : quantity);
+          quantity: (quantity?.isEmpty ?? true) ? null : quantity,);
     }
 
     final numbered = items.asMap().entries.map((e) {
@@ -890,12 +889,12 @@ class _GuruChatScreenState extends State<GuruChatScreen>
         text:
             'Found these in your photo and added them to your grocery list:\n$numbered\n\n'
             'Open Grocery Order to review and submit.',
-      ));
+      ),);
     });
     _scrollToBottom();
     unawaited(_speak(
         'I found ${items.length} item${items.length == 1 ? '' : 's'} in your photo and added '
-        '${items.length == 1 ? 'it' : 'them'} to your grocery list.'));
+        '${items.length == 1 ? 'it' : 'them'} to your grocery list.'),);
   }
 
   // NEW (CTO mandate — Co-work Style Confirmation): a customer tapping
@@ -937,7 +936,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
               content:
-                  Text('Could not open the screenshot. Please try again.')),
+                  Text('Could not open the screenshot. Please try again.'),),
         );
       }
     } finally {
@@ -1038,7 +1037,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
               suggestions:
                   (m['suggestions'] as List?)?.cast<String>() ?? const [],
               videoId: m['videoId'] as String?,
-            )));
+            ),),);
     });
     _scrollToBottom();
   }
@@ -1121,7 +1120,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
         },
         onError: (error) {
           debugPrint('[GuruChatScreen] speech error: $error');
-          final msg = (error.errorMsg).toLowerCase();
+          final msg = error.errorMsg.toLowerCase();
           final isRecoverable = msg.contains('no_match') ||
               msg.contains('timeout') ||
               msg.contains('speech_timeout') ||
@@ -1130,7 +1129,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
               msg.contains('busy');
           if (isRecoverable && _voiceSessionActive && mounted) {
             debugPrint(
-                '[GuruChatScreen] transient speech error "$msg" — auto-recovering listening session');
+                '[GuruChatScreen] transient speech error "$msg" — auto-recovering listening session',);
             Future.delayed(const Duration(milliseconds: 400), () {
               if (_voiceSessionActive && mounted) {
                 unawaited(_startVoiceSegment(_conversationLocaleId));
@@ -1311,12 +1310,6 @@ class _GuruChatScreenState extends State<GuruChatScreen>
         listenOptions: stt.SpeechListenOptions(
           partialResults: false,
           cancelOnError: true,
-          // Stated explicitly (it is already the default) because it is
-          // load-bearing and easy to flip by accident: false means the
-          // NETWORKED Google recogniser — the same engine Gboard's mic
-          // uses. Setting it true would drop us to the on-device model,
-          // which is genuinely worse at Tanglish.
-          onDevice: false,
         ),
         // Short PER-SEGMENT caps on purpose — we WANT the OS to hand
         // control back to us quickly so we can restart and keep the
@@ -1659,7 +1652,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
         action: action,
         args: <String, dynamic>{...resolvedArgs, 'source': source},
         resolved: true,
-      ));
+      ),);
       return true;
     }
 
@@ -1690,7 +1683,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
         action: action,
         args: <String, dynamic>{...resolvedArgs, 'source': source},
         resolved: true,
-      ));
+      ),);
       await _executePendingAction(resolvedArgs);
       return true;
     }
@@ -1740,7 +1733,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
             : 'I\'ll place a $label for "$items" and send it to nearby '
                 'Heroes — should I proceed?';
       case 'cancel_order':
-        return 'I\'ll cancel your current order — this cannot be undone. '
+        return "I'll cancel your current order — this cannot be undone. "
             'Should I go ahead?';
       case 'book_transport':
         final dest = (args['destination'] as String?)?.trim();
@@ -1754,9 +1747,26 @@ class _GuruChatScreenState extends State<GuruChatScreen>
       case 'create_dev_task':
         final title = (args['title'] as String?)?.trim() ?? '(untitled)';
         final desc = (args['description'] as String?)?.trim() ?? '';
-        return 'Here\'s the plan I\'ll send to Claude:\n\n'
+        final engineLabel =
+            ChittiDevEngineTag.fromName(args['engine'] as String?).label;
+        return "Here's the plan I'll send to $engineLabel:\n\n"
             '"$title"\n$desc\n\n'
             'Should I create this dev task?';
+      // NEW (Sep 16 2026): mirrors guru_overlay_service.dart's own fix —
+      // see that file for the full why.
+      case 'propose_dev_plan':
+        final title = (args['title'] as String?)?.trim() ?? '(untitled)';
+        final desc = (args['description'] as String?)?.trim() ?? '';
+        return "Here's what I'll ask Claude to audit and plan (no code "
+            'yet):\n\n"$title"\n$desc\n\n'
+            'Should I open this?';
+      case 'approve_dev_plan':
+        final note = (args['note'] as String?)?.trim();
+        return note != null && note.isNotEmpty
+            ? "I'll tell Claude to go ahead and build the approved plan, "
+                'with this extra note: "$note" — should I send it?'
+            : "I'll tell Claude to go ahead and build the approved plan — "
+                'should I send it?';
       default:
         return 'Should I proceed?';
     }
@@ -1787,7 +1797,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
     setState(() {
       _messages.add(
         const _GuruMessage(
-            role: 'assistant', text: 'Checking for an update...'),
+            role: 'assistant', text: 'Checking for an update...',),
       );
     });
     _scrollToBottom();
@@ -2096,7 +2106,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
               alignment: WrapAlignment.center,
               children: _suggestedPrompts
                   .map((p) => _PromptChip(
-                      label: p, onTap: () => unawaited(_sendMessage(p))))
+                      label: p, onTap: () => unawaited(_sendMessage(p)),),)
                   .toList(),
             ),
           ],
@@ -2158,7 +2168,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
                         child: Container(
                           padding: const EdgeInsets.all(3),
                           decoration: BoxDecoration(
-                              color: surfaceElevated, shape: BoxShape.circle),
+                              color: surfaceElevated, shape: BoxShape.circle,),
                           child:
                               Icon(Icons.close_rounded, color: muted, size: 16),
                         ),
@@ -2181,7 +2191,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: muted),
+                              strokeWidth: 2, color: muted,),
                         )
                       : Icon(Icons.attach_file_rounded, color: muted),
                 ),
@@ -2214,16 +2224,16 @@ class _GuruChatScreenState extends State<GuruChatScreen>
                       style: GoogleFonts.notoSansTamil(
                           color: ink,
                           fontWeight: FontWeight.w500,
-                          fontSize: 14.5),
+                          fontSize: 14.5,),
                       decoration: InputDecoration(
                         hintText: _isListening
                             ? 'Listening...'
                             : 'Message your Super Hero...',
                         hintStyle: GoogleFonts.outfit(
-                            color: muted, fontWeight: FontWeight.w500),
+                            color: muted, fontWeight: FontWeight.w500,),
                         border: InputBorder.none,
                         contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 18, vertical: 13),
+                            horizontal: 18, vertical: 13,),
                       ),
                     ),
                   ),
@@ -2241,7 +2251,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
                       onPressed:
                           _isTyping ? null : () => unawaited(_sendMessage()),
                       icon: const Icon(Icons.arrow_upward_rounded,
-                          color: Colors.white, size: 20),
+                          color: Colors.white, size: 20,),
                       padding: EdgeInsets.zero,
                     ),
                   ),
@@ -2287,7 +2297,7 @@ class _SuperHeroActivationScreen extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text(
-                'Could not open WhatsApp. Please call Admin Support directly.')),
+                'Could not open WhatsApp. Please call Admin Support directly.',),),
       );
     }
   }
@@ -2354,7 +2364,7 @@ class _SuperHeroActivationScreen extends StatelessWidget {
                           'plus every other service in the app.',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.outfit(
-                              color: muted, fontSize: 14, height: 1.5),
+                              color: muted, fontSize: 14, height: 1.5,),
                         ),
                         const SizedBox(height: 26),
                         Wrap(
@@ -2383,13 +2393,13 @@ class _SuperHeroActivationScreen extends StatelessWidget {
                                     padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
                                       gradient: LinearGradient(
-                                          colors: [accentA, accentC]),
+                                          colors: [accentA, accentC],),
                                       borderRadius:
-                                          BorderRadius.all(Radius.circular(14)),
+                                          const BorderRadius.all(Radius.circular(14)),
                                     ),
                                     child: const Icon(
                                         Icons.support_agent_rounded,
-                                        color: Colors.white),
+                                        color: Colors.white,),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
@@ -2414,13 +2424,13 @@ class _SuperHeroActivationScreen extends StatelessWidget {
                                       onPressed: () =>
                                           unawaited(_callAdmin(context)),
                                       icon: const Icon(Icons.call_rounded,
-                                          size: 18),
+                                          size: 18,),
                                       label: const Text('Call'),
                                       style: OutlinedButton.styleFrom(
                                         foregroundColor: ink,
                                         side: BorderSide(color: border),
                                         padding: const EdgeInsets.symmetric(
-                                            vertical: 14),
+                                            vertical: 14,),
                                         shape: RoundedRectangleBorder(
                                           borderRadius:
                                               BorderRadius.circular(16),
@@ -2434,14 +2444,14 @@ class _SuperHeroActivationScreen extends StatelessWidget {
                                       onPressed: () =>
                                           unawaited(_contactAdmin(context)),
                                       icon: const Icon(Icons.chat_rounded,
-                                          size: 18),
+                                          size: 18,),
                                       label: const Text('WhatsApp'),
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor:
                                             const Color(0xFF25D366),
                                         foregroundColor: Colors.white,
                                         padding: const EdgeInsets.symmetric(
-                                            vertical: 14),
+                                            vertical: 14,),
                                         shape: RoundedRectangleBorder(
                                           borderRadius:
                                               BorderRadius.circular(16),
@@ -2533,12 +2543,12 @@ class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
               'Voice Mode',
               textAlign: TextAlign.center,
               style: GoogleFonts.outfit(
-                  color: ink, fontSize: 19, fontWeight: FontWeight.w800),
+                  color: ink, fontSize: 19, fontWeight: FontWeight.w800,),
             ),
             const SizedBox(height: 8),
             Text(
               'Speak your booking — "Book an auto to the railway station" — and '
-              'let Super Hero understand and place it for you. It\'s completely '
+              "let Super Hero understand and place it for you. It's completely "
               'free, one tap away.',
               textAlign: TextAlign.center,
               style:
@@ -2556,7 +2566,7 @@ class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
                 style: GoogleFonts.outfit(
                     color: accentC,
                     fontWeight: FontWeight.w800,
-                    fontSize: 12.5),
+                    fontSize: 12.5,),
               ),
             ),
             const SizedBox(height: 20),
@@ -2569,7 +2579,7 @@ class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
+                            strokeWidth: 2, color: Colors.white,),
                       )
                     : const Icon(Icons.mic_rounded),
                 label: const Text('Claim My Free Voice Access'),
@@ -2578,7 +2588,7 @@ class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 15),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18)),
+                      borderRadius: BorderRadius.circular(18),),
                 ),
               ),
             ),
@@ -2587,7 +2597,7 @@ class _VoiceClaimSheetState extends State<_VoiceClaimSheet> {
               onPressed: () => Navigator.of(context).maybePop(),
               child: Text('Maybe later',
                   style: GoogleFonts.outfit(
-                      color: muted, fontWeight: FontWeight.w600)),
+                      color: muted, fontWeight: FontWeight.w600,),),
             ),
           ],
         ),
@@ -2631,7 +2641,7 @@ class _CapabilityChip extends StatelessWidget {
           Text(
             capability.label,
             style: GoogleFonts.outfit(
-                color: ink, fontSize: 12.5, fontWeight: FontWeight.w700),
+                color: ink, fontSize: 12.5, fontWeight: FontWeight.w700,),
           ),
         ],
       ),
@@ -2667,7 +2677,7 @@ class _PromptChip extends StatelessWidget {
         ),
         child: Text(label,
             style: GoogleFonts.outfit(
-                color: ink, fontSize: 13, fontWeight: FontWeight.w600)),
+                color: ink, fontSize: 13, fontWeight: FontWeight.w600,),),
       ),
     );
   }
@@ -2771,7 +2781,7 @@ class _VoiceMicButtonState extends State<_VoiceMicButton>
                   right: 2,
                   top: 2,
                   child: Icon(Icons.workspace_premium_rounded,
-                      size: 11, color: accentB),
+                      size: 11, color: accentB,),
                 ),
             ],
           ),
@@ -2786,8 +2796,7 @@ class _VoiceMicButtonState extends State<_VoiceMicButton>
 // new dark backdrop.
 class _GuruMessageBubble extends StatelessWidget {
   const _GuruMessageBubble({
-    super.key,
-    required this.message,
+    required this.message, super.key,
     this.onSuggestionTap,
     this.animateReveal = false,
   });
@@ -2942,10 +2951,10 @@ class _GuruMessageBubble extends StatelessWidget {
                           (s) => ActionChip(
                             label: Text(s,
                                 style: GoogleFonts.outfit(
-                                    fontSize: 13, fontWeight: FontWeight.w600)),
+                                    fontSize: 13, fontWeight: FontWeight.w600,),),
                             backgroundColor: surfaceElevated,
                             side: BorderSide(
-                                color: border.withValues(alpha: 0.6)),
+                                color: border.withValues(alpha: 0.6),),
                             labelStyle: TextStyle(color: ink),
                             // Softer pill + a real touch target: these
                             // are tapped one-handed, often in motion.
@@ -2994,7 +3003,7 @@ class _GuruTypingIndicatorState extends State<_GuruTypingIndicator>
   void initState() {
     super.initState();
     _controller = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 900))
+        vsync: this, duration: const Duration(milliseconds: 900),)
       ..repeat();
   }
 
@@ -3068,16 +3077,16 @@ class _GuruAvatar extends StatelessWidget {
                 BoxShadow(
                     color: accentA.withValues(alpha: 0.45),
                     blurRadius: 34,
-                    spreadRadius: 4),
+                    spreadRadius: 4,),
                 BoxShadow(
                     color: accentB.withValues(alpha: 0.3),
                     blurRadius: 18,
-                    spreadRadius: 1),
+                    spreadRadius: 1,),
               ]
             : null,
       ),
       child: Icon(Icons.auto_awesome_rounded,
-          color: Colors.white, size: size * 0.5),
+          color: Colors.white, size: size * 0.5,),
     );
   }
 
@@ -3191,7 +3200,7 @@ class _GlowBackdropState extends State<_GlowBackdrop>
 
 class _GlowOrb extends StatelessWidget {
   const _GlowOrb(
-      {required this.color, required this.size, required this.opacity});
+      {required this.color, required this.size, required this.opacity,});
 
   final Color color;
   final double size;
@@ -3207,7 +3216,7 @@ class _GlowOrb extends StatelessWidget {
         gradient: RadialGradient(
           colors: [
             color.withValues(alpha: opacity),
-            color.withValues(alpha: 0)
+            color.withValues(alpha: 0),
           ],
         ),
       ),
@@ -3243,7 +3252,7 @@ class _ChittiVideoCard extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
-        child: Container(
+        child: DecoratedBox(
           decoration: BoxDecoration(
             border: Border.all(color: border),
             borderRadius: BorderRadius.circular(14),
