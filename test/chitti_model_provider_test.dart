@@ -8,10 +8,9 @@
 // _resolveBackend reads on every real request. A bug in either would
 // look, from the admin's chair, exactly like tapping a model in the
 // picker and having Chitti silently keep using the old one.
+import 'package:erode_superapp/services/chitti/chitti_model_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:erode_superapp/services/chitti/chitti_model_provider.dart';
 
 void main() {
   group('chittiModelById', () {
@@ -30,7 +29,21 @@ void main() {
 
   group('chittiModelSupportsVision', () {
     test('true for a model with a vision model configured', () {
-      expect(chittiModelSupportsVision(chittiModelById('groq')), isTrue);
+      expect(chittiModelSupportsVision(chittiModelById('gemini')), isTrue);
+    });
+
+    // FIX (Sep 17 2026 — root-caused "Gemini API is configured but
+    // Chitti can't see an uploaded image"): Groq's declared vision
+    // model (meta-llama/llama-4-scout-17b-16e-instruct) was
+    // decommissioned by Groq on 2026-06-17, so chitti_model_provider
+    // .dart now declares Groq's visionModel empty — same honest
+    // "no working vision model" signal DeepSeek already gave. This
+    // assertion used to expect true; asserting it here now is what
+    // makes resolveChittiModel() correctly skip Groq and fall through
+    // to Gemini for every image, instead of routing to a dead model
+    // and failing silently before Gemini ever got a turn.
+    test('false for Groq, whose vision model Groq decommissioned', () {
+      expect(chittiModelSupportsVision(chittiModelById('groq')), isFalse);
     });
 
     test('false for DeepSeek, which is text-only', () {
