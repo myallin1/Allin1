@@ -2336,6 +2336,36 @@ List<_SearchTarget> _buildSearchTargets({
       color: kGold,
       onTap: () => onTileTap('repairs'),
     ),
+    _SearchTarget(
+      label: 'Delivery',
+      keywords: const ['delivery', 'parcel', 'courier'],
+      icon: Icons.local_shipping_rounded,
+      color: kTeal,
+      onTap: () => onTileTap('delivery'),
+    ),
+    // ── Direct-push mega cards (not part of _tap()'s switch — same
+    // Navigator.push target their own mega-card GestureDetector uses) ─
+    _SearchTarget(
+      label: 'eSeva',
+      keywords: const ['eseva', 'government', 'certificate', 'aadhar'],
+      icon: Icons.account_balance_rounded,
+      color: kBlue,
+      onTap: () => onNavigateTool(const EsevaServiceScreen()),
+    ),
+    _SearchTarget(
+      label: 'Printing',
+      keywords: const ['printing', 'print', 'xerox', 'photocopy'],
+      icon: Icons.print_rounded,
+      color: kPurple,
+      onTap: () => onNavigateTool(const PrintingServiceScreen()),
+    ),
+    _SearchTarget(
+      label: 'Home Cleaning',
+      keywords: const ['cleaning', 'home cleaning', 'clean'],
+      icon: Icons.cleaning_services_rounded,
+      color: kTeal,
+      onTap: () => onNavigateTool(const ComingSoonScreen(role: 'Home Cleaning')),
+    ),
     // ── Tools (same screens the drawer already links to) ────────
     _SearchTarget(
       label: 'My Orders',
