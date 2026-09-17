@@ -73,34 +73,48 @@ jobs:
           ISSUE_BODY: ${{ github.event.issue.body }}
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
+          cat > /tmp/agy_prompt.txt <<'PROMPT_EOF'
+          You are a careful Flutter engineer working on the Allin1 super app (NJ Tech, Erode). Read GEMINI.md and AGENTS.md first and follow every rule there.
+
+          THE REQUEST:
+          __ISSUE_BODY__
+          __COMMENT_BODY__
+
+          HOW TO WORK — THIS PART IS NOT OPTIONAL
+          This repo has over 27,000 files. You must NOT read broadly. Work search-first, exactly as an engineer would on an unfamiliar codebase:
+            1. Use grep/glob to LOCATE the relevant code. Search for the specific symbol, string, screen name or error text the request mentions.
+            2. Read ONLY the files that matched, and only the regions around the matches.
+            3. Do not open a file "to understand the project". The two markdown files above are the project context.
+            4. Aim to touch 1-3 files. If your change needs more than 5, stop and say so in the PR body instead of pushing a sprawling diff.
+
+          WHAT TO CHANGE
+          Make the SMALLEST change that genuinely fixes or implements what was asked. Match the surrounding code's style and comment density. Explain WHY in a comment where the reason is not obvious from the code.
+
+          HARD RULES — never break these
+            - Never touch payments, wallets, PhonePe, authentication, KYC, or firestore.rules.
+            - Never change or remove existing working behaviour that the request did not ask about.
+            - Never invent a feature, screen or API that you have not verified exists by grepping for it.
+            - If the request is ambiguous or you are unsure it is safe, open the PR as a DRAFT and say what you were unsure about.
+
+          FINISH BY
+          Creating a branch named agy/issue-<number>-<short-slug>, committing with a clear message ending in 'Co-Authored-By: Antigravity <noreply@google.com>', and opening a pull request TARGETING main using the gh CLI (already authenticated as GITHUB_TOKEN in this environment). In the PR body: what you changed, which files you grepped to find it, and anything you deliberately did not do.
+          PROMPT_EOF
+
+          # __ISSUE_BODY__/__COMMENT_BODY__ substituted via a real file
+          # write (not shell interpolation) so nothing in the issue text
+          # — quotes, backticks, $(...) — can be interpreted as shell.
+          python3 - "$ISSUE_BODY" "$COMMENT_BODY" <<'PY_EOF'
+          import sys, pathlib
+          p = pathlib.Path('/tmp/agy_prompt.txt')
+          text = p.read_text().replace('__ISSUE_BODY__', sys.argv[1]).replace('__COMMENT_BODY__', sys.argv[2] or '')
+          p.write_text(text)
+          PY_EOF
+
           "$HOME/.local/bin/agy" \
             --dangerously-skip-permissions \
             --output-format json \
             --print-timeout 15m \
-            -p "You are a careful Flutter engineer working on the Allin1 super app (NJ Tech, Erode). Read GEMINI.md and AGENTS.md first and follow every rule there.
-
-THE REQUEST:
-$ISSUE_BODY
-$COMMENT_BODY
-
-HOW TO WORK — THIS PART IS NOT OPTIONAL
-This repo has over 27,000 files. You must NOT read broadly. Work search-first, exactly as an engineer would on an unfamiliar codebase:
-  1. Use grep/glob to LOCATE the relevant code. Search for the specific symbol, string, screen name or error text the request mentions.
-  2. Read ONLY the files that matched, and only the regions around the matches.
-  3. Do not open a file \"to understand the project\". The two markdown files above are the project context.
-  4. Aim to touch 1-3 files. If your change needs more than 5, stop and say so in the PR body instead of pushing a sprawling diff.
-
-WHAT TO CHANGE
-Make the SMALLEST change that genuinely fixes or implements what was asked. Match the surrounding code's style and comment density. Explain WHY in a comment where the reason is not obvious from the code.
-
-HARD RULES — never break these
-  - Never touch payments, wallets, PhonePe, authentication, KYC, or firestore.rules.
-  - Never change or remove existing working behaviour that the request did not ask about.
-  - Never invent a feature, screen or API that you have not verified exists by grepping for it.
-  - If the request is ambiguous or you are unsure it is safe, open the PR as a DRAFT and say what you were unsure about.
-
-FINISH BY
-Creating a branch named agy/issue-<number>-<short-slug>, committing with a clear message ending in 'Co-Authored-By: Antigravity <noreply@google.com>', and opening a pull request TARGETING main using the gh CLI (already authenticated as GITHUB_TOKEN in this environment). In the PR body: what you changed, which files you grepped to find it, and anything you deliberately did not do." \
+            -p "$(cat /tmp/agy_prompt.txt)" \
             | tee agy-result.json
 
       - name: Setup Flutter
