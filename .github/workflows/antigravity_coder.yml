@@ -117,7 +117,7 @@ jobs:
           # quota, so pin to it explicitly rather than agy's default.
           "$HOME/.local/bin/agy" \
             --dangerously-skip-permissions \
-            --model gemini-3.6-flash-medium \
+            --model gemini-3.6-flash-low \
             --output-format json \
             --print-timeout 15m \
             -p "$(cat /tmp/agy_prompt.txt)" \
