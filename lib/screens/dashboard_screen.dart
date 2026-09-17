@@ -20,74 +20,73 @@ import 'package:scratcher/scratcher.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config/city_config.dart';
+import '../models/mobile_models.dart' show youtubeVideoId;
 import '../services/app_minimizer_service.dart';
 import '../services/app_update_checker.dart';
 // GUEST MODE (Aug 11 2026): the 30s deferred sign-in nudge.
 import '../services/auth_prompt_service.dart';
-import '../services/city_service.dart';
-import '../services/hive_cache.dart';
-import '../services/local_sync_service.dart';
-import '../services/localization_service.dart';
 import '../services/chitti/chitti_screen_tracker.dart';
 import '../services/chitti_nudge_service.dart';
 import '../services/chitti_order_memory_service.dart';
 import '../services/chitti_overlay_service.dart';
+import '../services/city_service.dart';
+import '../services/daily_quote_service.dart';
+import '../services/firestore_usage_tracking.dart';
+import '../services/guru_overlay_service.dart';
+import '../services/hive_cache.dart';
+import '../services/local_sync_service.dart';
+import '../services/localization_service.dart';
+import '../services/location_service.dart';
+import '../services/migration_gate_service.dart';
+import '../services/prefs_cache.dart';
+import '../services/pwa_cache_platform_stub.dart'
+    if (dart.library.html) '../services/pwa_cache_platform_web.dart';
+import '../services/route_breadcrumb_observer.dart' show isRouteSafeToRestore;
+import '../services/theme_service.dart';
+import '../services/update_service.dart';
+import '../services/usage_tracking_service.dart';
+import '../services/web_version_checker.dart';
+import '../utils/daily_boost_messages.dart';
+import '../widgets/ai_bot_avatar.dart';
+import '../widgets/auto_image_slider.dart';
+import '../widgets/auto_widget_slider.dart';
+import '../widgets/banner_slider.dart';
+import '../widgets/cached_cloud_image.dart';
+import '../widgets/chitti_companion.dart';
+import '../widgets/coach_mark_overlay.dart';
 // Real embedded browser view — WebView on native, <iframe> on the PWA.
 // Named for DMart (its first use, in Grocery) but URL-generic; the
 // Internet/Broadband page now renders through the exact same widget so
 // the two pages genuinely look and behave identically.
 import '../widgets/dmart_embedded_view_web.dart'
     if (dart.library.io) '../widgets/dmart_embedded_view_native.dart';
-import '../services/daily_quote_service.dart';
-import '../widgets/chitti_companion.dart';
-import '../services/location_service.dart';
-import '../services/prefs_cache.dart';
-import '../services/route_breadcrumb_observer.dart' show isRouteSafeToRestore;
-import '../services/pwa_cache_platform_stub.dart'
-    if (dart.library.html) '../services/pwa_cache_platform_web.dart';
-import '../services/theme_service.dart';
-import '../services/update_service.dart';
-import '../services/usage_tracking_service.dart';
-import '../services/web_version_checker.dart';
-import '../utils/daily_boost_messages.dart';
-import '../widgets/auto_image_slider.dart';
-import '../widgets/auto_widget_slider.dart';
-import '../widgets/ai_bot_avatar.dart';
-import '../widgets/cached_cloud_image.dart';
-import '../services/migration_gate_service.dart';
-import 'mobiles/listing_video_player.dart' show showPremiumVideoModal;
-import '../models/mobile_models.dart' show youtubeVideoId;
-
-import '../widgets/banner_slider.dart';
-import '../widgets/coach_mark_overlay.dart';
 import '../widgets/download_app_banner.dart';
+import '../widgets/economic_vision_banner.dart';
 import '../widgets/promo_overlay.dart';
 import 'bike_taxi/bike_booking_screen.dart';
 import 'car_wash_screen.dart';
 import 'coming_soon_screen.dart';
 import 'construction_screen.dart';
-import 'eseva_service_screen.dart';
 import 'custom_food_order_screen.dart';
+import 'eseva_service_screen.dart';
 import 'grocery_order_screen.dart';
-import '../services/guru_overlay_service.dart';
 import 'guru_chat_screen.dart';
 import 'hero_booking_screen.dart';
+import 'hero_promo_screen.dart';
+import 'invite_friends_screen.dart';
+import 'mobiles/listing_video_player.dart' show showPremiumVideoModal;
 import 'mobiles/mobile_hub_screen.dart';
 import 'my_orders_screen.dart';
 import 'nj_tech_service_screen.dart';
-import 'skilled_services_screen.dart';
 import 'nj_tech_store_screen.dart';
 import 'play_zone_screen.dart';
 import 'printing_service_screen.dart';
 import 'profile_screen.dart';
 import 'rewards_screen.dart';
 import 'ride_history_screen.dart';
-import '../widgets/economic_vision_banner.dart';
-import 'hero_promo_screen.dart';
-import 'invite_friends_screen.dart';
 import 'settings_screen.dart';
+import 'skilled_services_screen.dart';
 import 'sos_screen.dart';
-import '../services/firestore_usage_tracking.dart';
 
 // ── Brand Colors ─────────────────────────────────────────────────
 // NOTE: these used to be `const` — hardcoded to the pink&white palette no
@@ -232,7 +231,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               (data?['phone'] as String?) ??
               user.phoneNumber ??
               '',
-        }));
+        }),);
       } else if (cachedName == null || cachedName.isEmpty) {
         // Nothing in Firestore either — fall back to whatever Auth has,
         // so a genuinely name-less guest still doesn't get stuck with
@@ -355,7 +354,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     final summary = entry['summary'] as String? ?? 'your last order';
     unawaited(ChittiOverlayService.instance.showNudge(
       'Should I get your usual $service — $summary?',
-    ));
+    ),);
   }
 
   @override
@@ -373,7 +372,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (!handled && mounted) {
         unawaited(_restoreLastTab());
       }
-    }));
+    }),);
     if (!kIsWeb) {
       unawaited(_initNativeDeepLinks());
     }
@@ -432,7 +431,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     unawaited(Future<void>.delayed(const Duration(seconds: 5), () {
       if (!mounted) return;
       unawaited(_maybeNudgeReorderUsual());
-    }));
+    }),);
 
     // NEW (Aug 12 2026 — Nizam's "daily boost" request): one small,
     // non-blocking motivational SnackBar per app cold-boot, right under
@@ -623,7 +622,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         }
       }, onError: (e) {
         debugPrint('[Dashboard] uriLinkStream error: $e');
-      });
+      },);
     } catch (e) {
       debugPrint('[Dashboard] native deep link init failed: $e');
     }
@@ -853,17 +852,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                 height: 4,
                 decoration: BoxDecoration(
                     color: kMuted.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2))),
+                    borderRadius: BorderRadius.circular(2),),),
             const SizedBox(height: 16),
             Text(t('select_city_title'),
                 style: GoogleFonts.outfit(
-                    fontWeight: FontWeight.w800, fontSize: 16, color: kText)),
+                    fontWeight: FontWeight.w800, fontSize: 16, color: kText,),),
             const SizedBox(height: 8),
             ListTile(
               leading: Icon(Icons.my_location_rounded, color: kPink),
               title: Text(t('use_current_location_label'),
                   style: GoogleFonts.outfit(
-                      fontWeight: FontWeight.w600, fontSize: 14)),
+                      fontWeight: FontWeight.w600, fontSize: 14,),),
               onTap: () => Navigator.pop(ctx, '__auto__'),
             ),
             const Divider(height: 1),
@@ -877,7 +876,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
                 title: Text(city.label,
                     style: GoogleFonts.outfit(
-                        fontWeight: FontWeight.w600, fontSize: 14)),
+                        fontWeight: FontWeight.w600, fontSize: 14,),),
                 onTap: () => Navigator.pop(ctx, city.slug),
               ),
             const SizedBox(height: 12),
@@ -935,7 +934,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         ttl: const Duration(hours: 48),
       );
       debugPrint(
-          '[Dashboard] Silent backup completed: ${currentCoins.toStringAsFixed(0)} coins');
+          '[Dashboard] Silent backup completed: ${currentCoins.toStringAsFixed(0)} coins',);
     } catch (e) {
       debugPrint('[Dashboard] Silent backup failed: $e');
     }
@@ -999,14 +998,14 @@ class _DashboardScreenState extends State<DashboardScreen>
             context,
             MaterialPageRoute<void>(
                 builder: (_) =>
-                    const HeroBookingScreen(initialCategory: 'puncture')));
+                    const HeroBookingScreen(initialCategory: 'puncture'),),);
         break;
       case 'electrician':
         Navigator.push<void>(
             context,
             MaterialPageRoute<void>(
                 builder: (_) =>
-                    const HeroBookingScreen(initialCategory: 'electrician')));
+                    const HeroBookingScreen(initialCategory: 'electrician'),),);
         break;
       case 'construction':
         _navigate(const ConstructionScreen());
@@ -1103,6 +1102,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                 KeepAliveTab(
                   child: _HomeTab(
                     onTileTap: _tap,
+                    onNavigateTool: _navigate,
+                    onGoTab: _goTab,
                     user: _user,
                     userStream: const Stream.empty(),
                   ),
@@ -1169,7 +1170,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
-                  fontSize: 13),
+                  fontSize: 13,),
             ),
           ),
           const SizedBox(width: 8),
@@ -1191,7 +1192,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   // is what shifts the eye from "who am I" to "what's
                   // today". Same total header height either way.
                   style: GoogleFonts.outfit(
-                      color: kText, fontWeight: FontWeight.w700, fontSize: 13),
+                      color: kText, fontWeight: FontWeight.w700, fontSize: 13,),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1235,11 +1236,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                             color: kMuted,
                             fontSize: 9,
                             letterSpacing: 0.5,
-                            fontWeight: FontWeight.w700),
+                            fontWeight: FontWeight.w700,),
                       ),
                       const SizedBox(width: 2),
                       Icon(Icons.keyboard_arrow_down_rounded,
-                          size: 12, color: kMuted),
+                          size: 12, color: kMuted,),
                     ],
                   ),
                 ),
@@ -1275,7 +1276,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               Text(
                 '₹0',
                 style: TextStyle(
-                    color: kPink, fontWeight: FontWeight.w700, fontSize: 13),
+                    color: kPink, fontWeight: FontWeight.w700, fontSize: 13,),
               ),
             ],
           ),
@@ -1355,7 +1356,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                             cacheWidth: 72,
                             fit: BoxFit.contain,
                             errorBuilder: (_, __, ___) => Icon(icon,
-                                color: active ? kPink : kMuted, size: 24),
+                                color: active ? kPink : kMuted, size: 24,),
                           ),
                         )
                       else if (icon != null)
@@ -1482,7 +1483,7 @@ class _FloatingGuruBotState extends State<_FloatingGuruBot> {
             // companion isn't supported (PWA), so the web build keeps a
             // working button rather than a hole.
             if (ChittiCompanion.isSupported)
-              const ChittiCompanion(mood: ChittiMood.idle, size: 60)
+              const ChittiCompanion(size: 60)
             else
               Container(
                 width: 60,
@@ -1491,7 +1492,7 @@ class _FloatingGuruBotState extends State<_FloatingGuruBot> {
                   color: kBg,
                   shape: BoxShape.circle,
                   border: Border.all(
-                      color: kPink.withValues(alpha: 0.35), width: 2),
+                      color: kPink.withValues(alpha: 0.35), width: 2,),
                   boxShadow: [
                     BoxShadow(
                       color: kPink.withValues(alpha: 0.25),
@@ -1692,14 +1693,14 @@ class _HomeBannerOffersSectionState extends State<_HomeBannerOffersSection> {
 
     if (versionChanged && raw != null) {
       await HiveCache.put(_versionCacheKey, liveVersion,
-          ttl: const Duration(days: 365));
+          ttl: const Duration(days: 365),);
     }
 
     if (raw == null) return null;
 
     final records = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList()
       ..sort((a, b) => ((b['__createdAtMs'] as int?) ?? 0)
-          .compareTo((a['__createdAtMs'] as int?) ?? 0));
+          .compareTo((a['__createdAtMs'] as int?) ?? 0),);
 
     return records
         .map((m) => _BannerOfferRecord(
@@ -1707,7 +1708,7 @@ class _HomeBannerOffersSectionState extends State<_HomeBannerOffersSection> {
               data: Map<String, dynamic>.from(m)
                 ..remove('__id')
                 ..remove('__createdAtMs'),
-            ))
+            ),)
         .toList();
   }
 
@@ -1784,7 +1785,7 @@ class _HomeBannerCard extends StatelessWidget {
             // an admin-uploaded banner of any aspect ratio is shown whole,
             // never cropped. Neutral backing so letterbox bars read as a
             // deliberate frame rather than a gap.
-            Container(
+            ColoredBox(
               color: const Color(0xFFF3E7EF),
               child: imageUrl.isNotEmpty
                   ? CachedCloudImage(
@@ -1815,13 +1816,13 @@ class _HomeBannerCard extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.play_circle_fill_rounded,
-                            color: Colors.white, size: 16),
+                            color: Colors.white, size: 16,),
                         SizedBox(width: 4),
                         Text('WATCH',
                             style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 10,
-                                fontWeight: FontWeight.w800)),
+                                fontWeight: FontWeight.w800,),),
                       ],
                     ),
                   ),
@@ -1864,7 +1865,7 @@ class _HomeBannerDetailScreen extends StatelessWidget {
         elevation: 0,
         iconTheme: const IconThemeData(color: ink),
         title: Text('Offer Details',
-            style: GoogleFonts.outfit(color: ink, fontWeight: FontWeight.w800)),
+            style: GoogleFonts.outfit(color: ink, fontWeight: FontWeight.w800),),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -1877,7 +1878,7 @@ class _HomeBannerDetailScreen extends StatelessWidget {
                 child: Container(
                   width: double.infinity,
                   constraints: BoxConstraints(
-                      maxHeight: MediaQuery.of(context).size.height * 0.62),
+                      maxHeight: MediaQuery.of(context).size.height * 0.62,),
                   color: const Color(0xFFF3E7EF),
                   child: CachedCloudImage(
                     imageUrl,
@@ -1902,7 +1903,7 @@ class _HomeBannerDetailScreen extends StatelessWidget {
                       style: GoogleFonts.outfit(
                           color: Colors.white,
                           fontSize: 21,
-                          fontWeight: FontWeight.w900)),
+                          fontWeight: FontWeight.w900,),),
                   if (description.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     Text(description,
@@ -1910,7 +1911,7 @@ class _HomeBannerDetailScreen extends StatelessWidget {
                             color: Colors.white.withValues(alpha: 0.9),
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,
-                            height: 1.4)),
+                            height: 1.4,),),
                   ],
                 ],
               ),
@@ -1928,7 +1929,7 @@ class _HomeBannerDetailScreen extends StatelessWidget {
                 child: Row(
                   children: [
                     const Icon(Icons.location_on_rounded,
-                        color: pink, size: 22),
+                        color: pink, size: 22,),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -1938,13 +1939,13 @@ class _HomeBannerDetailScreen extends StatelessWidget {
                               style: GoogleFonts.outfit(
                                   color: muted,
                                   fontSize: 9,
-                                  fontWeight: FontWeight.w700)),
+                                  fontWeight: FontWeight.w700,),),
                           const SizedBox(height: 3),
                           Text(address,
                               style: GoogleFonts.outfit(
                                   color: ink,
                                   fontSize: 11.5,
-                                  fontWeight: FontWeight.w700)),
+                                  fontWeight: FontWeight.w700,),),
                         ],
                       ),
                     ),
@@ -1963,19 +1964,19 @@ class _HomeBannerDetailScreen extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                        colors: [Color(0xFF00C853), Color(0xFF00A843)]),
+                        colors: [Color(0xFF00C853), Color(0xFF00A843)],),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Column(
                     children: [
                       const Icon(Icons.call_rounded,
-                          color: Colors.white, size: 22),
+                          color: Colors.white, size: 22,),
                       const SizedBox(height: 6),
                       Text('Call Shop',
                           style: GoogleFonts.outfit(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
-                              fontSize: 10)),
+                              fontSize: 10,),),
                     ],
                   ),
                 ),
@@ -2191,15 +2192,441 @@ const Map<String, String> kSlotPhotoUrl = {
 };
 
 // ================================================================
+// HOME SEARCH (Phase 1 — local nav/router search, Sep 17 2026)
+// ================================================================
+// NEW (Nizam: "search box vaikanum customer athula yepdi venalum search
+// panniklam... backend disturb agama"). Deliberately NOT a Firestore/
+// Algolia search — Firestore has no native full-text search, and
+// standing up a real search index is its own project once shops are
+// onboarded. This is a 100% local, 0-cost filter over the same fixed
+// list of services/tools every home-tab tile and drawer item already
+// links to — it never reads or writes anything, so it cannot add a
+// single Firestore read no matter how many customers use it.
+class _SearchTarget {
+  final String label;
+  final List<String> keywords;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _SearchTarget({
+    required this.label,
+    required this.keywords,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  bool matches(String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return false;
+    return label.toLowerCase().contains(q) ||
+        keywords.any((k) => k.toLowerCase().contains(q));
+  }
+}
+
+/// Builds the fixed search-target list from the SAME callbacks the home
+/// tiles and drawer already use ([onTileTap] → `_tap()`'s switch,
+/// [onNavigateTool] → `_navigate()`, [onGoTab] → the bottom-nav index).
+/// A search result therefore always opens the exact screen a manual tap
+/// would — there is no second, parallel routing table to drift out of
+/// sync.
+List<_SearchTarget> _buildSearchTargets({
+  required void Function(String) onTileTap,
+  required void Function(Widget) onNavigateTool,
+  required void Function(int) onGoTab,
+}) {
+  return [
+    // ── Services (same ids _tap() already switches on) ──────────
+    _SearchTarget(
+      label: 'Bike Taxi',
+      keywords: const ['taxi', 'bike', 'ride', 'auto'],
+      icon: Icons.two_wheeler_rounded,
+      color: kPink,
+      onTap: () => onTileTap('taxi'),
+    ),
+    _SearchTarget(
+      label: 'Broadband / Internet',
+      keywords: const ['broadband', 'internet', 'wifi'],
+      icon: Icons.wifi_rounded,
+      color: kBlue,
+      onTap: () => onTileTap('broadband'),
+    ),
+    _SearchTarget(
+      label: 'Food Order',
+      keywords: const ['food', 'restaurant', 'eat', 'hotel'],
+      icon: Icons.restaurant_rounded,
+      color: kGold,
+      onTap: () => onTileTap('food'),
+    ),
+    _SearchTarget(
+      label: 'Grocery Order',
+      keywords: const ['grocery', 'dmart', 'supermarket', 'kirana'],
+      icon: Icons.shopping_cart_rounded,
+      color: kGreen,
+      onTap: () => onTileTap('grocery'),
+    ),
+    _SearchTarget(
+      label: 'NJ Tech Store',
+      keywords: const ['njtech', 'electronics', 'store', 'shop'],
+      icon: Icons.storefront_rounded,
+      color: kPurple,
+      onTap: () => onTileTap('njtech'),
+    ),
+    _SearchTarget(
+      label: 'Car Wash',
+      keywords: const ['carwash', 'car wash', 'wash', 'car'],
+      icon: Icons.local_car_wash_rounded,
+      color: kTeal,
+      onTap: () => onTileTap('carwash'),
+    ),
+    _SearchTarget(
+      label: 'Puncture / Tyre',
+      keywords: const ['puncture', 'tyre', 'tire', 'flat'],
+      icon: Icons.tire_repair_rounded,
+      color: kRed,
+      onTap: () => onTileTap('puncture'),
+    ),
+    _SearchTarget(
+      label: 'Electrician',
+      keywords: const ['electrician', 'electric', 'wiring'],
+      icon: Icons.electrical_services_rounded,
+      color: kGold,
+      onTap: () => onTileTap('electrician'),
+    ),
+    _SearchTarget(
+      label: 'Construction',
+      keywords: const ['construction', 'building', 'mason', 'civil'],
+      icon: Icons.construction_rounded,
+      color: kMuted,
+      onTap: () => onTileTap('construction'),
+    ),
+    _SearchTarget(
+      label: 'Home Services',
+      keywords: const ['home services', 'skilled', 'plumber', 'carpenter'],
+      icon: Icons.home_repair_service_rounded,
+      color: kTeal,
+      onTap: () => onTileTap('homeservices'),
+    ),
+    _SearchTarget(
+      label: 'Custom Order',
+      keywords: const ['custom', 'custom order', 'anything'],
+      icon: Icons.edit_note_rounded,
+      color: kPink,
+      onTap: () => onTileTap('custom'),
+    ),
+    _SearchTarget(
+      label: 'Mobile Hub',
+      keywords: const ['mobile', 'phone', 'recharge'],
+      icon: Icons.smartphone_rounded,
+      color: kBlue,
+      onTap: () => onTileTap('mobile'),
+    ),
+    _SearchTarget(
+      label: 'Spares',
+      keywords: const ['spares', 'spare parts'],
+      icon: Icons.settings_input_component_rounded,
+      color: kMuted,
+      onTap: () => onTileTap('spares'),
+    ),
+    _SearchTarget(
+      label: 'Repairs',
+      keywords: const ['repairs', 'repair', 'fix', 'service center'],
+      icon: Icons.build_rounded,
+      color: kGold,
+      onTap: () => onTileTap('repairs'),
+    ),
+    // ── Tools (same screens the drawer already links to) ────────
+    _SearchTarget(
+      label: 'My Orders',
+      keywords: const ['my orders', 'orders', 'order status'],
+      icon: Icons.receipt_long_rounded,
+      color: kPink,
+      onTap: () => onNavigateTool(const MyOrdersScreen()),
+    ),
+    _SearchTarget(
+      label: 'Activity',
+      keywords: const ['activity', 'history', 'ride history', 'past rides'],
+      icon: Icons.local_activity_outlined,
+      color: kPurple,
+      onTap: () => onNavigateTool(const RideHistoryScreen()),
+    ),
+    _SearchTarget(
+      label: 'My Profile',
+      keywords: const ['profile', 'account', 'my details'],
+      icon: Icons.person_outline_rounded,
+      color: kTeal,
+      onTap: () => onNavigateTool(const ProfileScreen()),
+    ),
+    _SearchTarget(
+      label: 'Settings',
+      keywords: const ['settings', 'language', 'theme', 'preferences'],
+      icon: Icons.settings_outlined,
+      color: kMuted,
+      onTap: () => onNavigateTool(const SettingsScreen()),
+    ),
+    // ── Bottom-nav tabs (same indices _goTab() already switches on) ─
+    _SearchTarget(
+      label: 'Rewards',
+      keywords: const ['rewards', 'offers', 'coupons', 'scratch card'],
+      icon: Icons.card_giftcard_rounded,
+      color: kGold,
+      onTap: () => onGoTab(1),
+    ),
+    _SearchTarget(
+      label: 'Play Zone',
+      keywords: const ['play zone', 'game', 'quiz', 'fun'],
+      icon: Icons.sports_esports_rounded,
+      color: kPurple,
+      onTap: () => onGoTab(2),
+    ),
+    _SearchTarget(
+      label: 'Chitti AI',
+      keywords: const ['chitti', 'ai', 'chat', 'assistant', 'guru'],
+      icon: Icons.smart_toy_rounded,
+      color: kBlue,
+      onTap: () => onGoTab(3),
+    ),
+    _SearchTarget(
+      label: 'SOS',
+      keywords: const ['sos', 'emergency', 'help', 'safety'],
+      icon: Icons.emergency_share_rounded,
+      color: kRed,
+      onTap: () => onGoTab(4),
+    ),
+  ];
+}
+
+/// The tappable pill on the home screen (does not itself filter
+/// anything — tapping it opens [_HomeSearchScreen], which owns the
+/// text field and the live filtering).
+class _HomeSearchBar extends StatelessWidget {
+  final void Function(String) onTileTap;
+  final void Function(Widget) onNavigateTool;
+  final void Function(int) onGoTab;
+
+  const _HomeSearchBar({
+    required this.onTileTap,
+    required this.onNavigateTool,
+    required this.onGoTab,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.watch<LocalizationService>().t;
+    return GestureDetector(
+      onTap: () {
+        Navigator.push<void>(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => _HomeSearchScreen(
+              onTileTap: onTileTap,
+              onNavigateTool: onNavigateTool,
+              onGoTab: onGoTab,
+            ),
+          ),
+        );
+      },
+      child: Container(
+        height: 46,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: kSurface,
+          borderRadius: BorderRadius.circular(23),
+          border: Border.all(color: kBorder),
+          // Soft clay/3D shadow — matches the mega-card + clay-icon look
+          // used everywhere else on this home screen, per Nizam's "3D
+          // Claymorphism / Hot Pink theme" request.
+          boxShadow: [
+            BoxShadow(
+              color: kPink.withValues(alpha: 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.search_rounded, color: kMuted, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                t('search_hint'),
+                style: GoogleFonts.outfit(
+                  color: kMuted,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeSearchScreen extends StatefulWidget {
+  final void Function(String) onTileTap;
+  final void Function(Widget) onNavigateTool;
+  final void Function(int) onGoTab;
+
+  const _HomeSearchScreen({
+    required this.onTileTap,
+    required this.onNavigateTool,
+    required this.onGoTab,
+  });
+
+  @override
+  State<_HomeSearchScreen> createState() => _HomeSearchScreenState();
+}
+
+class _HomeSearchScreenState extends State<_HomeSearchScreen> {
+  final _controller = TextEditingController();
+  late final List<_SearchTarget> _targets = _buildSearchTargets(
+    onTileTap: widget.onTileTap,
+    onNavigateTool: widget.onNavigateTool,
+    onGoTab: widget.onGoTab,
+  );
+  String _query = '';
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _select(_SearchTarget target) {
+    Navigator.pop(context);
+    target.onTap();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.watch<LocalizationService>().t;
+    final results =
+        _query.isEmpty ? _targets : _targets.where((s) => s.matches(_query)).toList();
+    return Scaffold(
+      backgroundColor: kBg,
+      appBar: AppBar(
+        backgroundColor: kBg,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        titleSpacing: 0,
+        title: Container(
+          height: 42,
+          margin: const EdgeInsets.only(right: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: kSurface,
+            borderRadius: BorderRadius.circular(21),
+            border: Border.all(color: kBorder),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.search_rounded, color: kMuted, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  autofocus: true,
+                  style: GoogleFonts.outfit(color: kText, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: t('search_hint'),
+                    hintStyle: GoogleFonts.outfit(color: kMuted, fontSize: 14),
+                    border: InputBorder.none,
+                    isDense: true,
+                  ),
+                  onChanged: (v) => setState(() => _query = v),
+                ),
+              ),
+              if (_query.isNotEmpty)
+                GestureDetector(
+                  onTap: () => setState(() {
+                    _controller.clear();
+                    _query = '';
+                  }),
+                  child: Icon(Icons.close_rounded, color: kMuted, size: 18),
+                ),
+            ],
+          ),
+        ),
+      ),
+      body: _query.isEmpty
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  t('search_prompt'),
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.outfit(color: kMuted, fontSize: 13),
+                ),
+              ),
+            )
+          : results.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      t('search_no_results'),
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.outfit(color: kMuted, fontSize: 13),
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: results.length,
+                  itemBuilder: (context, i) {
+                    final target = results[i];
+                    return ListTile(
+                      leading: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: target.color.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(target.icon, color: target.color, size: 20),
+                      ),
+                      title: Text(
+                        target.label,
+                        style: GoogleFonts.outfit(
+                          color: kText,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                      trailing: Icon(Icons.chevron_right_rounded,
+                          color: kMuted, size: 18,),
+                      onTap: () => _select(target),
+                    );
+                  },
+                ),
+    );
+  }
+}
+
+// ================================================================
 // HOME TAB (Redesigned with Mega Cards)
 // ================================================================
 class _HomeTab extends StatelessWidget {
   final void Function(String) onTileTap;
+  // NEW (Sep 17 2026 — Nizam: "search box vaikanum... app oda end-to-end
+  // search"). Phase 1 (approved scope): a local, 0-cost nav/router
+  // search — no backend query, no new Firestore reads. Reuses the exact
+  // same navigation callbacks the drawer/mega-cards already call, so a
+  // search result opens the identical screen a manual tap would; nothing
+  // about existing routing/logic changes.
+  final void Function(Widget) onNavigateTool;
+  final void Function(int) onGoTab;
   final User? user;
   final Stream<DocumentSnapshot> userStream;
 
   const _HomeTab({
     required this.onTileTap,
+    required this.onNavigateTool,
+    required this.onGoTab,
     required this.user,
     required this.userStream,
   });
@@ -2212,6 +2639,15 @@ class _HomeTab extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _HomeSearchBar(
+              onTileTap: onTileTap,
+              onNavigateTool: onNavigateTool,
+              onGoTab: onGoTab,
+            ),
+          ),
+          const SizedBox(height: 14),
           // NEW (Aug 13 2026 — Erode "₹50,000 கோடி பொருளாதாரப் புரட்சி"
           // campaign). Deliberately its OWN static card rather than a slide
           // inside _CategorySlidingBanner below: that carousel auto-rotates
@@ -2303,13 +2739,12 @@ class _HomeTab extends StatelessWidget {
                 title: 'Taxi & Transport 🚖',
                 subtitle:
                     'Bike, auto, car, parcel & more — book a ride in seconds',
-                gradient: const [Color(0xFFFF4FA3), Color(0xFF7B2FF7)],
                 icon: Icons.local_taxi_rounded,
                 onTap: () => onTileTap('taxi'),
               ),
               BannerTextSlide(
-                title: 'Food from KFC, A2B, Subway, Domino\'s & Taj 🍽️',
-                subtitle: 'Erode\'s favourite restaurants, one tap away',
+                title: "Food from KFC, A2B, Subway, Domino's & Taj 🍽️",
+                subtitle: "Erode's favourite restaurants, one tap away",
                 gradient: const [Color(0xFFFF7A45), Color(0xFFFF4FA3)],
                 icon: Icons.restaurant_rounded,
                 onTap: () => onTileTap('food'),
@@ -2376,7 +2811,7 @@ class _HomeTab extends StatelessWidget {
                 onTap: () => Navigator.push<void>(
                   context,
                   MaterialPageRoute(
-                      builder: (_) => const PrintingServiceScreen()),
+                      builder: (_) => const PrintingServiceScreen(),),
                 ),
               ),
               BannerTextSlide(
@@ -2387,7 +2822,7 @@ class _HomeTab extends StatelessWidget {
                 onTap: () => Navigator.push<void>(
                   context,
                   MaterialPageRoute(
-                      builder: (_) => const ComingSoonScreen(role: 'E-Seva')),
+                      builder: (_) => const ComingSoonScreen(role: 'E-Seva'),),
                 ),
               ),
             ],
@@ -2413,7 +2848,7 @@ class _HomeTab extends StatelessWidget {
             onTap: () => Navigator.push<void>(
               context,
               MaterialPageRoute<void>(
-                  builder: (_) => const BikeBookingScreen()),
+                  builder: (_) => const BikeBookingScreen(),),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2429,7 +2864,7 @@ class _HomeTab extends StatelessWidget {
                               'taxi',
                               '3',
                               SvgPicture.string(FluentEmojiFlat.taxi,
-                                  width: 20, height: 20)),
+                                  width: 20, height: 20,),),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text.rich(
@@ -2441,7 +2876,7 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kText,
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w800),
+                                      fontWeight: FontWeight.w800,),
                                 ),
                                 TextSpan(
                                   text:
@@ -2449,9 +2884,9 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kMuted,
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w500),
+                                      fontWeight: FontWeight.w500,),
                                 ),
-                              ]),
+                              ],),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -2473,7 +2908,7 @@ class _HomeTab extends StatelessWidget {
             onTap: () => Navigator.push<void>(
               context,
               MaterialPageRoute<void>(
-                  builder: (_) => const BikeBookingScreen()),
+                  builder: (_) => const BikeBookingScreen(),),
             ),
             child: Container(
               width: double.infinity,
@@ -2544,74 +2979,73 @@ class _HomeTab extends StatelessWidget {
                       'taxi',
                       1,
                       const Duration(seconds: 3),
-                      ClipOval(
+                      const ClipOval(
                           child: AutoImageSlider(
-                              imagePaths: const [
+                              imagePaths: [
                             'assets/images/taxi_slides/motorcycle.png',
-                            'assets/images/top_bike.png'
+                            'assets/images/top_bike.png',
                           ],
                               width: 44,
                               height: 44,
-                              fit: BoxFit.contain,
-                              duration: const Duration(seconds: 3)))),
+                              fit: BoxFit.contain,),),),
                   _themedSlot(
                       context,
                       'taxi',
                       2,
                       const Duration(milliseconds: 3200),
-                      ClipOval(
+                      const ClipOval(
                           child: AutoImageSlider(
-                              imagePaths: const ['assets/images/top_auto.png'],
+                              imagePaths: ['assets/images/top_auto.png'],
                               width: 44,
                               height: 44,
                               fit: BoxFit.contain,
-                              duration: const Duration(milliseconds: 3200)))),
+                              duration: Duration(milliseconds: 3200),),),),
                   _themedSlot(
                       context,
                       'taxi',
                       3,
                       const Duration(milliseconds: 2800),
-                      ClipOval(
+                      const ClipOval(
                           child: AutoImageSlider(
-                              imagePaths: const [
+                              imagePaths: [
                             'assets/images/taxi_slides/yellow_car.png',
                             'assets/images/taxi_slides/white_car.png',
-                            'assets/images/top_cab.png'
+                            'assets/images/top_cab.png',
                           ],
                               width: 44,
                               height: 44,
                               fit: BoxFit.contain,
-                              duration: const Duration(milliseconds: 2800)))),
+                              duration: Duration(milliseconds: 2800),),),),
                   _themedSlot(
                       context,
                       'taxi',
                       4,
                       const Duration(milliseconds: 3500),
-                      ClipOval(
+                      const ClipOval(
                           child: AutoImageSlider(
-                              imagePaths: const [
+                              imagePaths: [
                             'assets/images/taxi_slides/parcel.png',
-                            'assets/images/top_parcel.png'
+                            'assets/images/top_parcel.png',
                           ],
                               width: 44,
                               height: 44,
                               fit: BoxFit.contain,
-                              duration: const Duration(milliseconds: 3500)))),
+                              duration: Duration(milliseconds: 3500),),),),
                   _themedSlot(
                       context,
                       'taxi',
                       5,
                       const Duration(milliseconds: 3100),
-                      ClipOval(
+                      const ClipOval(
                           child: AutoImageSlider(
-                              imagePaths: const [
+                              imagePaths: [
                             'assets/images/top_mini_truck.png',
-                            'assets/images/top_lorry.png'
+                            'assets/images/top_lorry.png',
                           ],
                               width: 44,
                               height: 44,
                               fit: BoxFit.contain,
-                              duration: const Duration(milliseconds: 3100)))),
+                              duration: Duration(milliseconds: 3100),),),),
                 ],
               ),
             ),
@@ -2647,7 +3081,7 @@ class _HomeTab extends StatelessWidget {
           : 56.0;
 
   Widget _themedHeaderIcon(
-      BuildContext context, String category, String slot, Widget defaultIcon) {
+      BuildContext context, String category, String slot, Widget defaultIcon,) {
     final iconTheme = context.watch<ThemeService>().iconThemeKey;
     // CHANGED (Nizam: "catogory name ku munnadi irukka image ah remove
     // pannitu anga text iruntha screen la namaku konjam space kidaikkum")
@@ -2677,7 +3111,7 @@ class _HomeTab extends StatelessWidget {
 
   Widget _themedSlot(BuildContext context, String category, int slot,
       Duration duration, Widget defaultSlot,
-      {bool hasThirdFrame = false}) {
+      {bool hasThirdFrame = false,}) {
     final iconTheme = context.watch<ThemeService>().iconThemeKey;
     final slotPhoto = kSlotPhotoUrl['${category}_$slot'];
     if (iconTheme == 'photo_realistic' && slotPhoto != null) {
@@ -2711,7 +3145,7 @@ class _HomeTab extends StatelessWidget {
             BoxShadow(
                 color: Colors.black.withValues(alpha: 0.18),
                 blurRadius: 6,
-                offset: const Offset(0, 3)),
+                offset: const Offset(0, 3),),
           ],
         ),
         child: ClipRRect(
@@ -2720,7 +3154,6 @@ class _HomeTab extends StatelessWidget {
             slotPhoto,
             width: 58,
             height: 58,
-            fit: BoxFit.cover,
             cacheWidth: 232,
             errorWidget: defaultSlot,
           ),
@@ -2779,7 +3212,7 @@ class _HomeTab extends StatelessWidget {
                               'food',
                               '5',
                               SvgPicture.string(FluentEmojiFlat.hamburger,
-                                  width: 20, height: 20)),
+                                  width: 20, height: 20,),),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text.rich(
@@ -2791,7 +3224,7 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kText,
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w800),
+                                      fontWeight: FontWeight.w800,),
                                 ),
                                 TextSpan(
                                   text:
@@ -2799,9 +3232,9 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kMuted,
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w500),
+                                      fontWeight: FontWeight.w500,),
                                 ),
-                              ]),
+                              ],),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -2839,71 +3272,70 @@ class _HomeTab extends StatelessWidget {
                       'food',
                       1,
                       const Duration(seconds: 3),
-                      ClipOval(
+                      const ClipOval(
                           child: AutoImageSlider(
-                              imagePaths: const [
+                              imagePaths: [
                             'assets/images/food_slides/slide1.png',
-                            'assets/images/food_slides/slide6.png'
+                            'assets/images/food_slides/slide6.png',
                           ],
                               width: 34,
-                              height: 34,
-                              duration: const Duration(seconds: 3)))),
+                              height: 34,),),),
                   _themedSlot(
                       context,
                       'food',
                       2,
                       const Duration(milliseconds: 3200),
-                      ClipOval(
+                      const ClipOval(
                           child: AutoImageSlider(
-                              imagePaths: const [
+                              imagePaths: [
                             'assets/images/food_slides/slide2.png',
-                            'assets/images/food_slides/slide7.png'
+                            'assets/images/food_slides/slide7.png',
                           ],
                               width: 34,
                               height: 34,
-                              duration: const Duration(milliseconds: 3200)))),
+                              duration: Duration(milliseconds: 3200),),),),
                   _themedSlot(
                       context,
                       'food',
                       3,
                       const Duration(milliseconds: 2800),
-                      ClipOval(
+                      const ClipOval(
                           child: AutoImageSlider(
-                              imagePaths: const [
+                              imagePaths: [
                             'assets/images/food_slides/slide3.png',
-                            'assets/images/food_slides/slide8.jpg'
+                            'assets/images/food_slides/slide8.jpg',
                           ],
                               width: 34,
                               height: 34,
-                              duration: const Duration(milliseconds: 2800)))),
+                              duration: Duration(milliseconds: 2800),),),),
                   _themedSlot(
                       context,
                       'food',
                       4,
                       const Duration(milliseconds: 3500),
-                      ClipOval(
+                      const ClipOval(
                           child: AutoImageSlider(
-                              imagePaths: const [
+                              imagePaths: [
                             'assets/images/food_slides/slide4.jpg',
-                            'assets/images/food_slides/slide1.png'
+                            'assets/images/food_slides/slide1.png',
                           ],
                               width: 34,
                               height: 34,
-                              duration: const Duration(milliseconds: 3500)))),
+                              duration: Duration(milliseconds: 3500),),),),
                   _themedSlot(
                       context,
                       'food',
                       5,
                       const Duration(milliseconds: 3100),
-                      ClipOval(
+                      const ClipOval(
                           child: AutoImageSlider(
-                              imagePaths: const [
+                              imagePaths: [
                             'assets/images/food_slides/slide5.jpg',
-                            'assets/images/food_slides/slide2.png'
+                            'assets/images/food_slides/slide2.png',
                           ],
                               width: 34,
                               height: 34,
-                              duration: const Duration(milliseconds: 3100)))),
+                              duration: Duration(milliseconds: 3100),),),),
                 ],
               ),
             ),
@@ -2924,7 +3356,7 @@ class _HomeTab extends StatelessWidget {
             onTap: () => Navigator.push<void>(
               context,
               MaterialPageRoute<void>(
-                  builder: (_) => const GroceryOrderScreen()),
+                  builder: (_) => const GroceryOrderScreen(),),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2940,7 +3372,7 @@ class _HomeTab extends StatelessWidget {
                               'grocery',
                               '1',
                               SvgPicture.string(FluentEmojiFlat.shopping_cart,
-                                  width: 20, height: 20)),
+                                  width: 20, height: 20,),),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text.rich(
@@ -2952,7 +3384,7 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kText,
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w800),
+                                      fontWeight: FontWeight.w800,),
                                 ),
                                 TextSpan(
                                   text:
@@ -2960,9 +3392,9 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kMuted,
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w500),
+                                      fontWeight: FontWeight.w500,),
                                 ),
-                              ]),
+                              ],),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -2981,7 +3413,7 @@ class _HomeTab extends StatelessWidget {
             onTap: () => Navigator.push<void>(
               context,
               MaterialPageRoute<void>(
-                  builder: (_) => const GroceryOrderScreen()),
+                  builder: (_) => const GroceryOrderScreen(),),
             ),
             child: Container(
               width: double.infinity,
@@ -3005,11 +3437,10 @@ class _HomeTab extends StatelessWidget {
                           child: AutoWidgetSlider(
                               width: 34,
                               height: 34,
-                              duration: const Duration(seconds: 3),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.leafy_green),
-                            SvgPicture.string(FluentEmojiFlat.broccoli)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.broccoli),
+                          ],),),),
                   _themedSlot(
                       context,
                       'grocery',
@@ -3022,8 +3453,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3200),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.red_apple),
-                            SvgPicture.string(FluentEmojiFlat.banana)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.banana),
+                          ],),),),
                   _themedSlot(
                       context,
                       'grocery',
@@ -3036,8 +3467,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 2800),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.carrot),
-                            SvgPicture.string(FluentEmojiFlat.potato)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.potato),
+                          ],),),),
                   _themedSlot(
                       context,
                       'grocery',
@@ -3050,9 +3481,9 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3500),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.onion),
-                            SvgPicture.string(FluentEmojiFlat.garlic)
-                          ])),
-                      hasThirdFrame: true),
+                            SvgPicture.string(FluentEmojiFlat.garlic),
+                          ],),),
+                      hasThirdFrame: true,),
                   _themedSlot(
                       context,
                       'grocery',
@@ -3065,9 +3496,9 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3100),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.shopping_cart),
-                            SvgPicture.string(FluentEmojiFlat.shopping_bags)
-                          ])),
-                      hasThirdFrame: true),
+                            SvgPicture.string(FluentEmojiFlat.shopping_bags),
+                          ],),),
+                      hasThirdFrame: true,),
                 ],
               ),
             ),
@@ -3120,7 +3551,7 @@ class _HomeTab extends StatelessWidget {
                               'mobile',
                               '1',
                               SvgPicture.string(FluentEmojiFlat.mobile_phone,
-                                  width: 20, height: 20)),
+                                  width: 20, height: 20,),),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text.rich(
@@ -3132,7 +3563,7 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kText,
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w800),
+                                      fontWeight: FontWeight.w800,),
                                 ),
                                 TextSpan(
                                   text:
@@ -3140,9 +3571,9 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kMuted,
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w500),
+                                      fontWeight: FontWeight.w500,),
                                 ),
-                              ]),
+                              ],),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -3180,11 +3611,10 @@ class _HomeTab extends StatelessWidget {
                           child: AutoWidgetSlider(
                               width: 34,
                               height: 34,
-                              duration: const Duration(seconds: 3),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.mobile_phone),
-                            SvgPicture.string(FluentEmojiFlat.laptop)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.laptop),
+                          ],),),),
                   _themedSlot(
                       context,
                       'mobile',
@@ -3197,8 +3627,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3200),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.battery),
-                            SvgPicture.string(FluentEmojiFlat.electric_plug)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.electric_plug),
+                          ],),),),
                   _themedSlot(
                       context,
                       'mobile',
@@ -3211,9 +3641,9 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 2800),
                               children: [
                             SvgPicture.string(
-                                FluentEmojiFlat.hammer_and_wrench),
-                            SvgPicture.string(FluentEmojiFlat.gear)
-                          ]))),
+                                FluentEmojiFlat.hammer_and_wrench,),
+                            SvgPicture.string(FluentEmojiFlat.gear),
+                          ],),),),
                   _themedSlot(
                       context,
                       'mobile',
@@ -3226,8 +3656,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3500),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.shopping_bags),
-                            SvgPicture.string(FluentEmojiFlat.shopping_cart)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.shopping_cart),
+                          ],),),),
                   _themedSlot(
                       context,
                       'mobile',
@@ -3240,8 +3670,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3100),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.label),
-                            SvgPicture.string(FluentEmojiFlat.receipt)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.receipt),
+                          ],),),),
                 ],
               ),
             ),
@@ -3276,7 +3706,7 @@ class _HomeTab extends StatelessWidget {
                               'electronics',
                               '2',
                               SvgPicture.string(FluentEmojiFlat.mobile_phone,
-                                  width: 20, height: 20)),
+                                  width: 20, height: 20,),),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text.rich(
@@ -3288,7 +3718,7 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kText,
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w800),
+                                      fontWeight: FontWeight.w800,),
                                 ),
                                 TextSpan(
                                   text:
@@ -3296,9 +3726,9 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kMuted,
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w500),
+                                      fontWeight: FontWeight.w500,),
                                 ),
-                              ]),
+                              ],),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -3339,11 +3769,10 @@ class _HomeTab extends StatelessWidget {
                           child: AutoWidgetSlider(
                               width: 44,
                               height: 44,
-                              duration: const Duration(seconds: 3),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.mobile_phone),
-                            SvgPicture.string(FluentEmojiFlat.battery)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.battery),
+                          ],),),),
                   _themedSlot(
                       context,
                       'electronics',
@@ -3356,8 +3785,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3200),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.laptop),
-                            SvgPicture.string(FluentEmojiFlat.desktop_computer)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.desktop_computer),
+                          ],),),),
                   _themedSlot(
                       context,
                       'electronics',
@@ -3370,8 +3799,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 2800),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.desktop_computer),
-                            SvgPicture.string(FluentEmojiFlat.floppy_disk)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.floppy_disk),
+                          ],),),),
                   _themedSlot(
                       context,
                       'electronics',
@@ -3384,8 +3813,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3500),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.video_camera),
-                            SvgPicture.string(FluentEmojiFlat.camera)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.camera),
+                          ],),),),
                   _themedSlot(
                       context,
                       'electronics',
@@ -3398,8 +3827,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3100),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.television),
-                            SvgPicture.string(FluentEmojiFlat.radio)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.radio),
+                          ],),),),
                 ],
               ),
             ),
@@ -3435,7 +3864,7 @@ class _HomeTab extends StatelessWidget {
                               'carwash',
                               '1',
                               SvgPicture.string(FluentEmojiFlat.oncoming_taxi,
-                                  width: 20, height: 20)),
+                                  width: 20, height: 20,),),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text.rich(
@@ -3447,7 +3876,7 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kText,
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w800),
+                                      fontWeight: FontWeight.w800,),
                                 ),
                                 TextSpan(
                                   text:
@@ -3455,9 +3884,9 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kMuted,
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w500),
+                                      fontWeight: FontWeight.w500,),
                                 ),
-                              ]),
+                              ],),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -3498,12 +3927,11 @@ class _HomeTab extends StatelessWidget {
                           child: AutoWidgetSlider(
                               width: 34,
                               height: 34,
-                              duration: const Duration(seconds: 3),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.oncoming_taxi),
                             SvgPicture.string(
-                                FluentEmojiFlat.sport_utility_vehicle)
-                          ]))),
+                                FluentEmojiFlat.sport_utility_vehicle,),
+                          ],),),),
                   _themedSlot(
                       context,
                       'carwash',
@@ -3516,8 +3944,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3200),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.sweat_droplets),
-                            SvgPicture.string(FluentEmojiFlat.sponge)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.sponge),
+                          ],),),),
                   _themedSlot(
                       context,
                       'carwash',
@@ -3530,8 +3958,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 2800),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.gear),
-                            SvgPicture.string(FluentEmojiFlat.nut_and_bolt)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.nut_and_bolt),
+                          ],),),),
                   _themedSlot(
                       context,
                       'carwash',
@@ -3544,9 +3972,9 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3500),
                               children: [
                             SvgPicture.string(
-                                FluentEmojiFlat.hammer_and_wrench),
-                            SvgPicture.string(FluentEmojiFlat.wrench)
-                          ]))),
+                                FluentEmojiFlat.hammer_and_wrench,),
+                            SvgPicture.string(FluentEmojiFlat.wrench),
+                          ],),),),
                   _themedSlot(
                       context,
                       'carwash',
@@ -3559,10 +3987,10 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3100),
                               children: [
                             SvgPicture.string(
-                                FluentEmojiFlat.sport_utility_vehicle),
+                                FluentEmojiFlat.sport_utility_vehicle,),
                             SvgPicture.string(
-                                FluentEmojiFlat.oncoming_automobile)
-                          ]))),
+                                FluentEmojiFlat.oncoming_automobile,),
+                          ],),),),
                 ],
               ),
             ),
@@ -3588,7 +4016,7 @@ class _HomeTab extends StatelessWidget {
                 context,
                 MaterialPageRoute<void>(
                     builder: (_) => const HeroBookingScreen(
-                        initialCategory: 'electrician'))),
+                        initialCategory: 'electrician',),),),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -3603,7 +4031,7 @@ class _HomeTab extends StatelessWidget {
                               'electrician',
                               '1',
                               SvgPicture.string(FluentEmojiFlat.high_voltage,
-                                  width: 20, height: 20)),
+                                  width: 20, height: 20,),),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text.rich(
@@ -3615,7 +4043,7 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kText,
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w800),
+                                      fontWeight: FontWeight.w800,),
                                 ),
                                 TextSpan(
                                   text:
@@ -3623,9 +4051,9 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kMuted,
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w500),
+                                      fontWeight: FontWeight.w500,),
                                 ),
-                              ]),
+                              ],),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -3644,7 +4072,7 @@ class _HomeTab extends StatelessWidget {
                 context,
                 MaterialPageRoute<void>(
                     builder: (_) => const HeroBookingScreen(
-                        initialCategory: 'electrician'))),
+                        initialCategory: 'electrician',),),),
             child: Container(
               width: double.infinity,
               height: _rowHeight(context),
@@ -3667,11 +4095,10 @@ class _HomeTab extends StatelessWidget {
                           child: AutoWidgetSlider(
                               width: 34,
                               height: 34,
-                              duration: const Duration(seconds: 3),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.high_voltage),
-                            SvgPicture.string(FluentEmojiFlat.electric_plug)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.electric_plug),
+                          ],),),),
                   _themedSlot(
                       context,
                       'electrician',
@@ -3684,8 +4111,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3200),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.light_bulb),
-                            SvgPicture.string(FluentEmojiFlat.electric_plug)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.electric_plug),
+                          ],),),),
                   _themedSlot(
                       context,
                       'electrician',
@@ -3698,8 +4125,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 2800),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.gear),
-                            SvgPicture.string(FluentEmojiFlat.nut_and_bolt)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.nut_and_bolt),
+                          ],),),),
                   _themedSlot(
                       context,
                       'electrician',
@@ -3712,9 +4139,9 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3500),
                               children: [
                             SvgPicture.string(
-                                FluentEmojiFlat.hammer_and_wrench),
-                            SvgPicture.string(FluentEmojiFlat.wrench)
-                          ]))),
+                                FluentEmojiFlat.hammer_and_wrench,),
+                            SvgPicture.string(FluentEmojiFlat.wrench),
+                          ],),),),
                   _themedSlot(
                       context,
                       'electrician',
@@ -3727,8 +4154,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3100),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.high_voltage),
-                            SvgPicture.string(FluentEmojiFlat.light_bulb)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.light_bulb),
+                          ],),),),
                 ],
               ),
             ),
@@ -3750,7 +4177,7 @@ class _HomeTab extends StatelessWidget {
                 context,
                 MaterialPageRoute<void>(
                     builder: (_) =>
-                        const HeroBookingScreen(initialCategory: 'puncture'))),
+                        const HeroBookingScreen(initialCategory: 'puncture'),),),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -3765,7 +4192,7 @@ class _HomeTab extends StatelessWidget {
                               'puncture',
                               '1',
                               SvgPicture.string(FluentEmojiFlat.motorcycle,
-                                  width: 20, height: 20)),
+                                  width: 20, height: 20,),),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text.rich(
@@ -3777,7 +4204,7 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kText,
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w800),
+                                      fontWeight: FontWeight.w800,),
                                 ),
                                 TextSpan(
                                   text:
@@ -3785,9 +4212,9 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kMuted,
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w500),
+                                      fontWeight: FontWeight.w500,),
                                 ),
-                              ]),
+                              ],),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -3806,7 +4233,7 @@ class _HomeTab extends StatelessWidget {
                 context,
                 MaterialPageRoute<void>(
                     builder: (_) =>
-                        const HeroBookingScreen(initialCategory: 'puncture'))),
+                        const HeroBookingScreen(initialCategory: 'puncture'),),),
             child: Container(
               width: double.infinity,
               height: _rowHeight(context),
@@ -3829,11 +4256,10 @@ class _HomeTab extends StatelessWidget {
                           child: AutoWidgetSlider(
                               width: 34,
                               height: 34,
-                              duration: const Duration(seconds: 3),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.motorcycle),
-                            SvgPicture.string(FluentEmojiFlat.wrench)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.wrench),
+                          ],),),),
                   _themedSlot(
                       context,
                       'puncture',
@@ -3846,8 +4272,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3200),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.gear),
-                            SvgPicture.string(FluentEmojiFlat.nut_and_bolt)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.nut_and_bolt),
+                          ],),),),
                   _themedSlot(
                       context,
                       'puncture',
@@ -3860,9 +4286,9 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 2800),
                               children: [
                             SvgPicture.string(
-                                FluentEmojiFlat.hammer_and_wrench),
-                            SvgPicture.string(FluentEmojiFlat.wrench)
-                          ]))),
+                                FluentEmojiFlat.hammer_and_wrench,),
+                            SvgPicture.string(FluentEmojiFlat.wrench),
+                          ],),),),
                   _themedSlot(
                       context,
                       'puncture',
@@ -3875,9 +4301,9 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3500),
                               children: [
                             SvgPicture.string(
-                                FluentEmojiFlat.oncoming_automobile),
-                            SvgPicture.string(FluentEmojiFlat.motorcycle)
-                          ]))),
+                                FluentEmojiFlat.oncoming_automobile,),
+                            SvgPicture.string(FluentEmojiFlat.motorcycle),
+                          ],),),),
                   _themedSlot(
                       context,
                       'puncture',
@@ -3890,8 +4316,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3100),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.motorcycle),
-                            SvgPicture.string(FluentEmojiFlat.gear)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.gear),
+                          ],),),),
                 ],
               ),
             ),
@@ -3912,7 +4338,7 @@ class _HomeTab extends StatelessWidget {
             onTap: () => Navigator.push<void>(
               context,
               MaterialPageRoute<void>(
-                  builder: (_) => const NjTechBroadbandWebView()),
+                  builder: (_) => const NjTechBroadbandWebView(),),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -3928,7 +4354,7 @@ class _HomeTab extends StatelessWidget {
                               'internet',
                               '1',
                               SvgPicture.string(FluentEmojiFlat.antenna_bars,
-                                  width: 20, height: 20)),
+                                  width: 20, height: 20,),),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text.rich(
@@ -3940,7 +4366,7 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kText,
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w800),
+                                      fontWeight: FontWeight.w800,),
                                 ),
                                 TextSpan(
                                   text:
@@ -3948,9 +4374,9 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kMuted,
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w500),
+                                      fontWeight: FontWeight.w500,),
                                 ),
-                              ]),
+                              ],),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -3968,7 +4394,7 @@ class _HomeTab extends StatelessWidget {
             onTap: () => Navigator.push<void>(
               context,
               MaterialPageRoute<void>(
-                  builder: (_) => const NjTechBroadbandWebView()),
+                  builder: (_) => const NjTechBroadbandWebView(),),
             ),
             child: Container(
               width: double.infinity,
@@ -3992,11 +4418,10 @@ class _HomeTab extends StatelessWidget {
                           child: AutoWidgetSlider(
                               width: 34,
                               height: 34,
-                              duration: const Duration(seconds: 3),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.antenna_bars),
-                            SvgPicture.string(FluentEmojiFlat.satellite_antenna)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.satellite_antenna),
+                          ],),),),
                   _themedSlot(
                       context,
                       'internet',
@@ -4009,9 +4434,9 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3200),
                               children: [
                             SvgPicture.string(
-                                FluentEmojiFlat.globe_with_meridians),
-                            SvgPicture.string(FluentEmojiFlat.satellite)
-                          ]))),
+                                FluentEmojiFlat.globe_with_meridians,),
+                            SvgPicture.string(FluentEmojiFlat.satellite),
+                          ],),),),
                   _themedSlot(
                       context,
                       'internet',
@@ -4024,9 +4449,9 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 2800),
                               children: [
                             SvgPicture.string(
-                                FluentEmojiFlat.satellite_antenna),
-                            SvgPicture.string(FluentEmojiFlat.antenna_bars)
-                          ]))),
+                                FluentEmojiFlat.satellite_antenna,),
+                            SvgPicture.string(FluentEmojiFlat.antenna_bars),
+                          ],),),),
                   _themedSlot(
                       context,
                       'internet',
@@ -4039,9 +4464,9 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3500),
                               children: [
                             SvgPicture.string(
-                                FluentEmojiFlat.globe_with_meridians),
-                            SvgPicture.string(FluentEmojiFlat.antenna_bars)
-                          ]))),
+                                FluentEmojiFlat.globe_with_meridians,),
+                            SvgPicture.string(FluentEmojiFlat.antenna_bars),
+                          ],),),),
                   _themedSlot(
                       context,
                       'internet',
@@ -4055,8 +4480,8 @@ class _HomeTab extends StatelessWidget {
                               children: [
                             SvgPicture.string(FluentEmojiFlat.satellite),
                             SvgPicture.string(
-                                FluentEmojiFlat.globe_with_meridians)
-                          ]))),
+                                FluentEmojiFlat.globe_with_meridians,),
+                          ],),),),
                 ],
               ),
             ),
@@ -4077,7 +4502,7 @@ class _HomeTab extends StatelessWidget {
             onTap: () => Navigator.push<void>(
               context,
               MaterialPageRoute<void>(
-                  builder: (_) => const ConstructionScreen()),
+                  builder: (_) => const ConstructionScreen(),),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -4095,7 +4520,7 @@ class _HomeTab extends StatelessWidget {
                               SvgPicture.string(
                                   FluentEmojiFlat.building_construction,
                                   width: 20,
-                                  height: 20)),
+                                  height: 20,),),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text.rich(
@@ -4107,7 +4532,7 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kText,
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w800),
+                                      fontWeight: FontWeight.w800,),
                                 ),
                                 TextSpan(
                                   text:
@@ -4115,9 +4540,9 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kMuted,
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w500),
+                                      fontWeight: FontWeight.w500,),
                                 ),
-                              ]),
+                              ],),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -4135,7 +4560,7 @@ class _HomeTab extends StatelessWidget {
             onTap: () => Navigator.push<void>(
               context,
               MaterialPageRoute<void>(
-                  builder: (_) => const ConstructionScreen()),
+                  builder: (_) => const ConstructionScreen(),),
             ),
             child: Container(
               width: double.infinity,
@@ -4159,12 +4584,11 @@ class _HomeTab extends StatelessWidget {
                           child: AutoWidgetSlider(
                               width: 34,
                               height: 34,
-                              duration: const Duration(seconds: 3),
                               children: [
                             SvgPicture.string(
-                                FluentEmojiFlat.building_construction),
-                            SvgPicture.string(FluentEmojiFlat.house)
-                          ]))),
+                                FluentEmojiFlat.building_construction,),
+                            SvgPicture.string(FluentEmojiFlat.house),
+                          ],),),),
                   _themedSlot(
                       context,
                       'construction',
@@ -4177,8 +4601,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3200),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.brick),
-                            SvgPicture.string(FluentEmojiFlat.wood)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.wood),
+                          ],),),),
                   _themedSlot(
                       context,
                       'construction',
@@ -4191,10 +4615,10 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 2800),
                               children: [
                             SvgPicture.string(
-                                FluentEmojiFlat.construction_worker),
+                                FluentEmojiFlat.construction_worker,),
                             SvgPicture.string(
-                                FluentEmojiFlat.man_construction_worker)
-                          ]))),
+                                FluentEmojiFlat.man_construction_worker,),
+                          ],),),),
                   _themedSlot(
                       context,
                       'construction',
@@ -4207,8 +4631,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3500),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.triangular_ruler),
-                            SvgPicture.string(FluentEmojiFlat.straight_ruler)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.straight_ruler),
+                          ],),),),
                   _themedSlot(
                       context,
                       'construction',
@@ -4222,8 +4646,8 @@ class _HomeTab extends StatelessWidget {
                               children: [
                             SvgPicture.string(FluentEmojiFlat.office_building),
                             SvgPicture.string(
-                                FluentEmojiFlat.classical_building)
-                          ]))),
+                                FluentEmojiFlat.classical_building,),
+                          ],),),),
                 ],
               ),
             ),
@@ -4259,7 +4683,7 @@ class _HomeTab extends StatelessWidget {
                               'hero',
                               '1',
                               SvgPicture.string(FluentEmojiFlat.man_superhero,
-                                  width: 20, height: 20)),
+                                  width: 20, height: 20,),),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text.rich(
@@ -4271,7 +4695,7 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kText,
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w800),
+                                      fontWeight: FontWeight.w800,),
                                 ),
                                 TextSpan(
                                   text:
@@ -4279,9 +4703,9 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kMuted,
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w500),
+                                      fontWeight: FontWeight.w500,),
                                 ),
-                              ]),
+                              ],),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -4349,17 +4773,16 @@ class _HomeTab extends StatelessWidget {
                       'hero',
                       1,
                       const Duration(seconds: 3),
-                      ClipOval(
+                      const ClipOval(
                           child: AutoImageSlider(
-                              imagePaths: const [
+                              imagePaths: [
                             'assets/gifs/superman_hero.webp',
                             'assets/images/hero_slides/delivery_man_blue.png',
-                            'assets/images/erode_delivery_hero.png'
+                            'assets/images/erode_delivery_hero.png',
                           ],
                               width: 44,
                               height: 44,
-                              fit: BoxFit.contain,
-                              duration: const Duration(seconds: 3)))),
+                              fit: BoxFit.contain,),),),
                   _themedSlot(
                       context,
                       'hero',
@@ -4372,23 +4795,23 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3200),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.high_voltage),
-                            SvgPicture.string(FluentEmojiFlat.collision)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.collision),
+                          ],),),),
                   _themedSlot(
                       context,
                       'hero',
                       2,
                       const Duration(milliseconds: 2800),
-                      ClipOval(
+                      const ClipOval(
                           child: AutoImageSlider(
-                              imagePaths: const [
+                              imagePaths: [
                             'assets/images/top_parcel.png',
-                            'assets/taxi/parcel.png'
+                            'assets/taxi/parcel.png',
                           ],
                               width: 44,
                               height: 44,
                               fit: BoxFit.contain,
-                              duration: const Duration(milliseconds: 2800)))),
+                              duration: Duration(milliseconds: 2800),),),),
                   _themedSlot(
                       context,
                       'hero',
@@ -4401,24 +4824,24 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3500),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.shopping_bags),
-                            SvgPicture.string(FluentEmojiFlat.shopping_cart)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.shopping_cart),
+                          ],),),),
                   _themedSlot(
                       context,
                       'hero',
                       3,
                       const Duration(milliseconds: 3100),
-                      ClipOval(
+                      const ClipOval(
                           child: AutoImageSlider(
-                              imagePaths: const [
+                              imagePaths: [
                             'assets/images/hero_slides/delivery_man_green.png',
                             'assets/images/erode_delivery_hero.png',
-                            'assets/gifs/superman_hero.webp'
+                            'assets/gifs/superman_hero.webp',
                           ],
                               width: 44,
                               height: 44,
                               fit: BoxFit.contain,
-                              duration: const Duration(milliseconds: 3100)))),
+                              duration: Duration(milliseconds: 3100),),),),
                 ],
               ),
             ),
@@ -4440,7 +4863,7 @@ class _HomeTab extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                    builder: (_) => const PrintingServiceScreen()),
+                    builder: (_) => const PrintingServiceScreen(),),
               );
             },
             child: Row(
@@ -4457,7 +4880,7 @@ class _HomeTab extends StatelessWidget {
                               'printing',
                               '1',
                               SvgPicture.string(FluentEmojiFlat.printer,
-                                  width: 20, height: 20)),
+                                  width: 20, height: 20,),),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text.rich(
@@ -4469,7 +4892,7 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kText,
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w800),
+                                      fontWeight: FontWeight.w800,),
                                 ),
                                 TextSpan(
                                   text:
@@ -4477,9 +4900,9 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kMuted,
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w500),
+                                      fontWeight: FontWeight.w500,),
                                 ),
-                              ]),
+                              ],),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -4498,7 +4921,7 @@ class _HomeTab extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                    builder: (_) => const PrintingServiceScreen()),
+                    builder: (_) => const PrintingServiceScreen(),),
               );
             },
             child: Container(
@@ -4523,11 +4946,10 @@ class _HomeTab extends StatelessWidget {
                           child: AutoWidgetSlider(
                               width: 34,
                               height: 34,
-                              duration: const Duration(seconds: 3),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.card_index),
-                            SvgPicture.string(FluentEmojiFlat.card_file_box)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.card_file_box),
+                          ],),),),
                   _themedSlot(
                       context,
                       'printing',
@@ -4540,8 +4962,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3200),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.scroll),
-                            SvgPicture.string(FluentEmojiFlat.page_facing_up)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.page_facing_up),
+                          ],),),),
                   _themedSlot(
                       context,
                       'printing',
@@ -4554,8 +4976,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 2800),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.framed_picture),
-                            SvgPicture.string(FluentEmojiFlat.artist_palette)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.artist_palette),
+                          ],),),),
                   _themedSlot(
                       context,
                       'printing',
@@ -4568,8 +4990,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3500),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.label),
-                            SvgPicture.string(FluentEmojiFlat.bookmark)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.bookmark),
+                          ],),),),
                   _themedSlot(
                       context,
                       'printing',
@@ -4582,8 +5004,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3100),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.printer),
-                            SvgPicture.string(FluentEmojiFlat.camera)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.camera),
+                          ],),),),
                 ],
               ),
             ),
@@ -4627,7 +5049,7 @@ class _HomeTab extends StatelessWidget {
                               'eseva',
                               '1',
                               SvgPicture.string(FluentEmojiFlat.scroll,
-                                  width: 20, height: 20)),
+                                  width: 20, height: 20,),),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text.rich(
@@ -4639,7 +5061,7 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kText,
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w800),
+                                      fontWeight: FontWeight.w800,),
                                 ),
                                 TextSpan(
                                   text:
@@ -4647,9 +5069,9 @@ class _HomeTab extends StatelessWidget {
                                   style: GoogleFonts.outfit(
                                       color: kMuted,
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w500),
+                                      fontWeight: FontWeight.w500,),
                                 ),
-                              ]),
+                              ],),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -4692,12 +5114,11 @@ class _HomeTab extends StatelessWidget {
                           child: AutoWidgetSlider(
                               width: 34,
                               height: 34,
-                              duration: const Duration(seconds: 3),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.card_index),
                             SvgPicture.string(
-                                FluentEmojiFlat.identification_card)
-                          ]))),
+                                FluentEmojiFlat.identification_card,),
+                          ],),),),
                   _themedSlot(
                       context,
                       'eseva',
@@ -4711,8 +5132,8 @@ class _HomeTab extends StatelessWidget {
                               children: [
                             SvgPicture.string(FluentEmojiFlat.scroll),
                             SvgPicture.string(
-                                FluentEmojiFlat.rolled_up_newspaper)
-                          ]))),
+                                FluentEmojiFlat.rolled_up_newspaper,),
+                          ],),),),
                   _themedSlot(
                       context,
                       'eseva',
@@ -4725,8 +5146,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 2800),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.label),
-                            SvgPicture.string(FluentEmojiFlat.receipt)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.receipt),
+                          ],),),),
                   _themedSlot(
                       context,
                       'eseva',
@@ -4739,8 +5160,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3500),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.office_building),
-                            SvgPicture.string(FluentEmojiFlat.bank)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.bank),
+                          ],),),),
                   _themedSlot(
                       context,
                       'eseva',
@@ -4753,8 +5174,8 @@ class _HomeTab extends StatelessWidget {
                               duration: const Duration(milliseconds: 3100),
                               children: [
                             SvgPicture.string(FluentEmojiFlat.printer),
-                            SvgPicture.string(FluentEmojiFlat.fax_machine)
-                          ]))),
+                            SvgPicture.string(FluentEmojiFlat.fax_machine),
+                          ],),),),
                 ],
               ),
             ),
@@ -4785,7 +5206,7 @@ class _HomeTab extends StatelessWidget {
                             'other_services',
                             '1',
                             SvgPicture.string(FluentEmojiFlat.hammer_and_wrench,
-                                width: 20, height: 20)),
+                                width: 20, height: 20,),),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text.rich(
@@ -4797,7 +5218,7 @@ class _HomeTab extends StatelessWidget {
                                 style: GoogleFonts.outfit(
                                     color: kText,
                                     fontSize: 13,
-                                    fontWeight: FontWeight.w800),
+                                    fontWeight: FontWeight.w800,),
                               ),
                               TextSpan(
                                 text:
@@ -4805,9 +5226,9 @@ class _HomeTab extends StatelessWidget {
                                 style: GoogleFonts.outfit(
                                     color: kMuted,
                                     fontSize: 11,
-                                    fontWeight: FontWeight.w500),
+                                    fontWeight: FontWeight.w500,),
                               ),
-                            ]),
+                            ],),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -4847,9 +5268,9 @@ class _HomeTab extends StatelessWidget {
                         context,
                         MaterialPageRoute(
                             builder: (_) =>
-                                const ComingSoonScreen(role: 'Home Cleaning'))),
+                                const ComingSoonScreen(role: 'Home Cleaning'),),),
                     photoUrl:
-                        'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=200&q=80'),
+                        'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=200&q=80',),
               ],
             ),
           ),
@@ -4860,7 +5281,7 @@ class _HomeTab extends StatelessWidget {
 
   Widget _buildSmallActionTile(
       BuildContext context, String iconSvg, String label, VoidCallback onTap,
-      {String? photoUrl}) {
+      {String? photoUrl,}) {
     final iconTheme = context.watch<ThemeService>().iconThemeKey;
     final usePhoto = iconTheme == 'photo_realistic' && photoUrl != null;
     return GestureDetector(
@@ -4878,7 +5299,7 @@ class _HomeTab extends StatelessWidget {
                 BoxShadow(
                     color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 8,
-                    offset: const Offset(0, 3)),
+                    offset: const Offset(0, 3),),
               ],
             ),
             child: usePhoto
@@ -4887,30 +5308,29 @@ class _HomeTab extends StatelessWidget {
                 // used app-wide now (the outer Container already gives the
                 // drop shadow here).
                 ? ClipOval(
-                    child: Container(
+                    child: DecoratedBox(
                       decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 1.5)),
+                          border: Border.all(color: Colors.white, width: 1.5),),
                       child: CachedCloudImage(
                         photoUrl,
                         width: 48,
                         height: 48,
-                        fit: BoxFit.cover,
                         cacheWidth: 192,
                         errorWidget: Center(
                             child: SvgPicture.string(iconSvg,
-                                width: 28, height: 28)),
+                                width: 28, height: 28,),),
                       ),
                     ),
                   )
                 : Center(
-                    child: SvgPicture.string(iconSvg, width: 28, height: 28)),
+                    child: SvgPicture.string(iconSvg, width: 28, height: 28),),
           ),
           const SizedBox(height: 6),
           Text(
             label,
             style: GoogleFonts.outfit(
-                color: kText, fontSize: 10, fontWeight: FontWeight.w600),
+                color: kText, fontSize: 10, fontWeight: FontWeight.w600,),
           ),
         ],
       ),
@@ -4952,7 +5372,7 @@ class _HomeTab extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
               ),
               child: const Center(
-                  child: Text('🥬', style: TextStyle(fontSize: 26))),
+                  child: Text('🥬', style: TextStyle(fontSize: 26)),),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -4972,7 +5392,7 @@ class _HomeTab extends StatelessWidget {
                       const Spacer(),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 2),
+                            horizontal: 7, vertical: 2,),
                         decoration: BoxDecoration(
                           color: kGreen,
                           borderRadius: BorderRadius.circular(6),
@@ -5067,7 +5487,7 @@ class _HomeTab extends StatelessWidget {
                               color: kPurple.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
-                                  color: kPurple.withValues(alpha: 0.4)),
+                                  color: kPurple.withValues(alpha: 0.4),),
                             ),
                             child: Text(
                               t('promo_guru_badge'),
@@ -5101,10 +5521,10 @@ class _HomeTab extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(
-        ObjectFlagProperty<void Function(String)>.has('onTileTap', onTileTap));
+        ObjectFlagProperty<void Function(String)>.has('onTileTap', onTileTap),);
     properties.add(DiagnosticsProperty<User?>('user', user));
     properties.add(DiagnosticsProperty<Stream<DocumentSnapshot<Object?>>>(
-        'userStream', userStream));
+        'userStream', userStream,),);
   }
 }
 
@@ -5283,7 +5703,7 @@ class _ProfileDrawer extends StatelessWidget {
                     'Share App via WhatsApp',
                     () => onNavigate(InviteFriendsScreen(
                       displayName: resolvedName ?? user?.displayName,
-                    )),
+                    ),),
                   ),
 
                   _drawerItem(
@@ -5292,16 +5712,16 @@ class _ProfileDrawer extends StatelessWidget {
                     'My Invite QR',
                     () => onNavigate(InviteFriendsScreen(
                       displayName: resolvedName ?? user?.displayName,
-                    )),
+                    ),),
                   ),
 
                   _drawerItem(context, Icons.support_agent_rounded,
                       t('drawer_help_whatsapp'), () async {
                     final url = Uri.parse(
-                        "https://wa.me/918681869091?text=${Uri.encodeComponent('Hi NJ Tech! I need some help from the app.')}");
+                        "https://wa.me/918681869091?text=${Uri.encodeComponent('Hi NJ Tech! I need some help from the app.')}",);
                     if (await canLaunchUrl(url)) {
                       await launchUrl(url,
-                          mode: LaunchMode.externalApplication);
+                          mode: LaunchMode.externalApplication,);
                     }
                   }),
 
@@ -5374,7 +5794,7 @@ class _ProfileDrawer extends StatelessWidget {
                 style: TextStyle(
                     color: kMuted.withValues(alpha: 0.5),
                     fontSize: 10,
-                    fontWeight: FontWeight.bold),
+                    fontWeight: FontWeight.bold,),
               ),
             ),
           ],
@@ -5420,7 +5840,7 @@ class _ProfileDrawer extends StatelessWidget {
   }
 
   Widget _buildJoinHeroButton(
-      BuildContext context, void Function(Widget) onNavigate) {
+      BuildContext context, void Function(Widget) onNavigate,) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: GestureDetector(
@@ -5438,7 +5858,7 @@ class _ProfileDrawer extends StatelessWidget {
           child: Row(
             children: [
               SvgPicture.string(FluentEmojiFlat.man_superhero,
-                  width: 24, height: 24),
+                  width: 24, height: 24,),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -5449,7 +5869,7 @@ class _ProfileDrawer extends StatelessWidget {
                       style: GoogleFonts.outfit(
                           color: kText,
                           fontSize: 14,
-                          fontWeight: FontWeight.w800),
+                          fontWeight: FontWeight.w800,),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -5472,7 +5892,7 @@ class _ProfileDrawer extends StatelessWidget {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<User?>('user', user));
     properties.add(ObjectFlagProperty<void Function(Widget)>.has(
-        'onNavigate', onNavigate));
+        'onNavigate', onNavigate,),);
   }
 }
 
@@ -5821,7 +6241,7 @@ void _showDownloadFailedDialog(BuildContext context, String url) {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Text(t('download_failed_title'),
           style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.w700)),
+              color: Colors.white, fontWeight: FontWeight.w700,),),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -5832,7 +6252,7 @@ void _showDownloadFailedDialog(BuildContext context, String url) {
           ),
           const SizedBox(height: 12),
           SelectableText(url,
-              style: const TextStyle(color: Colors.white, fontSize: 12)),
+              style: const TextStyle(color: Colors.white, fontSize: 12),),
         ],
       ),
       actions: [
@@ -5846,12 +6266,12 @@ void _showDownloadFailedDialog(BuildContext context, String url) {
             }
           },
           child: Text(t('copy_link_label'),
-              style: const TextStyle(color: Colors.white70)),
+              style: const TextStyle(color: Colors.white70),),
         ),
         TextButton(
           onPressed: () => Navigator.pop(ctx),
           child: Text(t('close_label'),
-              style: const TextStyle(color: Colors.white38)),
+              style: const TextStyle(color: Colors.white38),),
         ),
       ],
     ),
@@ -6056,11 +6476,12 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
     // any more. The brief _loading flash is kept so the AppBar doesn't
     // pop in against an empty white frame on a slow connection.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _loading = false;
           _launched = true;
         });
+      }
     });
   }
 
@@ -6078,11 +6499,12 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
       _reloadToken++;
     });
     await Future<void>.delayed(const Duration(milliseconds: 120));
-    if (mounted)
+    if (mounted) {
       setState(() {
         _loading = false;
         _launched = true;
       });
+    }
   }
 
   Future<void> _openInBrowser() async {
@@ -6092,7 +6514,7 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content:
-                Text('Could not open Erode Fiber. Check your connection.')),
+                Text('Could not open Erode Fiber. Check your connection.'),),
       );
     }
   }
@@ -6142,7 +6564,7 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
         actions: [
           IconButton(
             icon: const Icon(Icons.open_in_new_rounded,
-                color: Colors.white70, size: 20),
+                color: Colors.white70, size: 20,),
             tooltip: 'Open in browser',
             onPressed: _openInBrowser,
           ),
@@ -6182,7 +6604,7 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Icon(Icons.open_in_new_rounded,
-                            color: Colors.white38, size: 56),
+                            color: Colors.white38, size: 56,),
                         const SizedBox(height: 16),
                         Text(
                           'Opened Erode Fiber in a new tab',
@@ -6195,7 +6617,7 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'This site can\'t be shown inside the app on web — tap below if the tab didn\'t open.',
+                          "This site can't be shown inside the app on web — tap below if the tab didn't open.",
                           textAlign: TextAlign.center,
                           style: GoogleFonts.outfit(
                             color: Colors.white54,
@@ -6207,7 +6629,7 @@ class _NjTechBroadbandWebViewState extends State<NjTechBroadbandWebView> {
                           onTap: _openInBrowser,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 28, vertical: 12),
+                                horizontal: 28, vertical: 12,),
                             decoration: BoxDecoration(
                               color: kPink,
                               borderRadius: BorderRadius.circular(12),
@@ -6382,7 +6804,7 @@ class _PersonalizeModal extends StatelessWidget {
             BoxShadow(
                 color: Colors.black.withValues(alpha: 0.15),
                 blurRadius: 24,
-                offset: const Offset(0, 8)),
+                offset: const Offset(0, 8),),
           ],
         ),
         child: Column(
@@ -6391,18 +6813,18 @@ class _PersonalizeModal extends StatelessWidget {
           children: [
             Text('Personalize your Allin1 ✨',
                 style: GoogleFonts.outfit(
-                    fontSize: 18, fontWeight: FontWeight.w800, color: kText)),
+                    fontSize: 18, fontWeight: FontWeight.w800, color: kText,),),
             const SizedBox(height: 4),
             Text(
                 'Pick your favourite look — you can always change this later in Settings.',
-                style: GoogleFonts.outfit(fontSize: 12, color: kMuted)),
+                style: GoogleFonts.outfit(fontSize: 12, color: kMuted),),
             const SizedBox(height: 18),
             Text('APP THEME',
                 style: GoogleFonts.outfit(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: kMuted,
-                    letterSpacing: 0.5)),
+                    letterSpacing: 0.5,),),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -6421,7 +6843,7 @@ class _PersonalizeModal extends StatelessWidget {
                           : Colors.grey.withValues(alpha: 0.06),
                       border: Border.all(
                           color: selected ? kPink : Colors.transparent,
-                          width: 1.5),
+                          width: 1.5,),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -6440,7 +6862,7 @@ class _PersonalizeModal extends StatelessWidget {
                             style: GoogleFonts.outfit(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
-                                color: selected ? kPink : kText)),
+                                color: selected ? kPink : kText,),),
                       ],
                     ),
                   ),
@@ -6453,7 +6875,7 @@ class _PersonalizeModal extends StatelessWidget {
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: kMuted,
-                    letterSpacing: 0.5)),
+                    letterSpacing: 0.5,),),
             const SizedBox(height: 8),
             ..._kPersonalizeIconThemeOptions.map((opt) {
               final selected = themeService.iconThemeKey == opt.key;
@@ -6470,12 +6892,12 @@ class _PersonalizeModal extends StatelessWidget {
                         : Colors.grey.withValues(alpha: 0.06),
                     border: Border.all(
                         color: selected ? kPink : Colors.transparent,
-                        width: 1.5),
+                        width: 1.5,),
                   ),
                   child: Row(
                     children: [
                       Icon(opt.icon,
-                          color: selected ? kPink : kMuted, size: 22),
+                          color: selected ? kPink : kMuted, size: 22,),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -6485,16 +6907,16 @@ class _PersonalizeModal extends StatelessWidget {
                                 style: GoogleFonts.outfit(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
-                                    color: selected ? kPink : kText)),
+                                    color: selected ? kPink : kText,),),
                             Text(opt.hint,
                                 style: GoogleFonts.outfit(
-                                    fontSize: 11, color: kMuted)),
+                                    fontSize: 11, color: kMuted,),),
                           ],
                         ),
                       ),
                       if (selected)
                         Icon(Icons.check_circle_rounded,
-                            color: kPink, size: 20),
+                            color: kPink, size: 20,),
                     ],
                   ),
                 ),
@@ -6513,11 +6935,11 @@ class _PersonalizeModal extends StatelessWidget {
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                      borderRadius: BorderRadius.circular(14),),
                 ),
                 child: Text('Continue',
                     style: GoogleFonts.outfit(
-                        fontSize: 15, fontWeight: FontWeight.w800)),
+                        fontSize: 15, fontWeight: FontWeight.w800,),),
               ),
             ),
           ],
@@ -6610,13 +7032,13 @@ class _ScratchCardModalState extends State<_ScratchCardModal>
               const Color(0xFFFFE3F2),
               kPinkDark,
               const Color(0xFFFFE3F2),
-              kPink
+              kPink,
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
         ),
-        child: Container(
+        child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(28.5),
             gradient: LinearGradient(
@@ -6634,15 +7056,13 @@ class _ScratchCardModalState extends State<_ScratchCardModal>
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
+                          horizontal: 10, vertical: 6,),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
                             kPink.withValues(alpha: 0.16),
-                            kPinkDark.withValues(alpha: 0.10)
+                            kPinkDark.withValues(alpha: 0.10),
                           ],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
                         ),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: kPink.withValues(alpha: 0.4)),
@@ -6651,7 +7071,7 @@ class _ScratchCardModalState extends State<_ScratchCardModal>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.auto_awesome_rounded,
-                              color: kPinkDark, size: 11),
+                              color: kPinkDark, size: 11,),
                           const SizedBox(width: 4),
                           Text(
                             t('daily_scratch_badge'),
@@ -6801,8 +7221,6 @@ class _ScratchCardModalState extends State<_ScratchCardModal>
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [kPink, kPinkDark],
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
                           ),
                           borderRadius: BorderRadius.circular(30),
                           boxShadow: [
@@ -6817,7 +7235,7 @@ class _ScratchCardModalState extends State<_ScratchCardModal>
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const Icon(Icons.call_rounded,
-                                color: Colors.white, size: 16),
+                                color: Colors.white, size: 16,),
                             const SizedBox(width: 8),
                             Text(
                               t('call_to_claim_label'),
@@ -6868,7 +7286,7 @@ class _GlowingUpdateButtonState extends State<_GlowingUpdateButton>
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 800))
+        vsync: this, duration: const Duration(milliseconds: 800),)
       ..repeat(reverse: true);
     _glow = Tween<double>(begin: 2, end: 8).animate(_ctrl);
   }
@@ -6897,20 +7315,20 @@ class _GlowingUpdateButtonState extends State<_GlowingUpdateButton>
                 BoxShadow(
                     color: kGold.withValues(alpha: 0.6),
                     blurRadius: _glow.value,
-                    spreadRadius: _glow.value / 2),
+                    spreadRadius: _glow.value / 2,),
               ],
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(Icons.system_update_alt_rounded,
-                    color: Colors.black, size: 12),
+                    color: Colors.black, size: 12,),
                 const SizedBox(width: 4),
                 Text(t('update_badge_label'),
                     style: GoogleFonts.outfit(
                         color: Colors.black,
                         fontSize: 10,
-                        fontWeight: FontWeight.w900)),
+                        fontWeight: FontWeight.w900,),),
               ],
             ),
           ),
@@ -6969,7 +7387,7 @@ class _CategorySlidingBanner extends StatefulWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(
-        ObjectFlagProperty<void Function(String)>.has('onTileTap', onTileTap));
+        ObjectFlagProperty<void Function(String)>.has('onTileTap', onTileTap),);
   }
 }
 
@@ -6991,7 +7409,7 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
     'Car Service & Polish 🚗',
     'Book a Hero 🦸',
     'Grocery Delivered 🛒',
-    'Food from KFC, A2B, Subway, Domino\'s & Taj 🍽️',
+    "Food from KFC, A2B, Subway, Domino's & Taj 🍽️",
     'Taxi & Transport 🚖',
   ];
 
@@ -7087,48 +7505,48 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
     [
       'Aadhaar, PAN & ID services',
       'Govt certificates online',
-      'No queue, doorstep help'
+      'No queue, doorstep help',
     ],
     [
       'Flex, sticker & photo printing',
       'Business cards same day',
-      'Bulk order discounts'
+      'Bulk order discounts',
     ],
     [
       'Genuine parts guaranteed',
       'Doorstep pickup & drop',
-      'Same-day repair service'
+      'Same-day repair service',
     ],
     [
       'High-speed connections',
       'Mobile & laptop setup help',
-      'Best plan comparison'
+      'Best plan comparison',
     ],
     [
       'Verified contractors',
       'Design to build support',
-      'Transparent material costs'
+      'Transparent material costs',
     ],
     ['Foam wash & polish', 'SUV & sedan service', 'Doorstep car service'],
     [
       'Any errand, any time',
       'Verified local heroes',
-      'Live tracking & support'
+      'Live tracking & support',
     ],
     [
       'Order from any local shop',
       'Fresh veggies & fruits',
-      'Fast doorstep delivery'
+      'Fast doorstep delivery',
     ],
     [
       'Order from any shop in Erode',
       'Hot & fresh delivery',
-      'Real onboarded partners'
+      'Real onboarded partners',
     ],
     [
       'Bike, Auto, Cab & more',
       'Transparent fare pricing',
-      'Live driver tracking'
+      'Live driver tracking',
     ],
   ];
 
@@ -7184,19 +7602,19 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
     switch (tapId) {
       case 'route:eseva':
         Navigator.push<void>(context,
-            MaterialPageRoute(builder: (_) => const EsevaServiceScreen()));
+            MaterialPageRoute(builder: (_) => const EsevaServiceScreen()),);
         break;
       case 'route:printing':
         Navigator.push<void>(context,
-            MaterialPageRoute(builder: (_) => const PrintingServiceScreen()));
+            MaterialPageRoute(builder: (_) => const PrintingServiceScreen()),);
         break;
       case 'route:electronics':
         Navigator.push<void>(context,
-            MaterialPageRoute(builder: (_) => const NJTechStoreScreen()));
+            MaterialPageRoute(builder: (_) => const NJTechStoreScreen()),);
         break;
       case 'route:hero':
         Navigator.push<void>(context,
-            MaterialPageRoute(builder: (_) => const HeroBookingScreen()));
+            MaterialPageRoute(builder: (_) => const HeroBookingScreen()),);
         break;
       default:
         widget.onTileTap(tapId);
@@ -7211,7 +7629,7 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
         final nextPage = (_currentIndex + 1) % _slideCount;
         _pageController.animateToPage(nextPage,
             duration: const Duration(milliseconds: 600),
-            curve: Curves.easeInOut);
+            curve: Curves.easeInOut,);
       }
     });
   }
@@ -7245,7 +7663,7 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
                     gradient: LinearGradient(
                       colors: [
                         kPink.withValues(alpha: 0.15),
-                        kPink.withValues(alpha: 0.05)
+                        kPink.withValues(alpha: 0.05),
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -7271,7 +7689,6 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
                         ? kCategoryPhotoUrl[slide.pinkCategory]
                         : null;
                     return Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         SizedBox(
                           width: 56,
@@ -7282,29 +7699,28 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
                               // shadow+ring treatment as the mega-card slot
                               // photos, so the carousel's photo matches the
                               // "elevated card" look instead of a flat image.
-                              ? Container(
+                              ? DecoratedBox(
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
-                                        color: Colors.white, width: 1.5),
+                                        color: Colors.white, width: 1.5,),
                                     boxShadow: [
                                       BoxShadow(
                                           color: Colors.black
                                               .withValues(alpha: 0.18),
                                           blurRadius: 6,
-                                          offset: const Offset(0, 3)),
+                                          offset: const Offset(0, 3),),
                                     ],
                                   ),
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(12.5),
                                     child: CachedCloudImage(
                                       photoUrl,
-                                      fit: BoxFit.cover,
                                       cacheWidth: 112,
                                       errorWidget: SvgPicture.string(
                                           slide.icons.first,
                                           width: 44,
-                                          height: 44),
+                                          height: 44,),
                                     ),
                                   ),
                                 )
@@ -7314,13 +7730,13 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
                                       fit: BoxFit.contain,
                                       errorBuilder: (_, __, ___) =>
                                           SvgPicture.string(slide.icons.first,
-                                              width: 44, height: 44),
+                                              width: 44, height: 44,),
                                     )
                                   : Center(
                                       child: SvgPicture.string(
                                           slide.icons.first,
                                           width: 44,
-                                          height: 44)),
+                                          height: 44,),),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -7332,7 +7748,7 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
                                   style: GoogleFonts.outfit(
                                       color: kText,
                                       fontSize: 15,
-                                      fontWeight: FontWeight.w800)),
+                                      fontWeight: FontWeight.w800,),),
                               const SizedBox(height: 6),
                               ...slide.benefits.map(
                                 (point) => Padding(
@@ -7342,14 +7758,14 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Icon(Icons.check_circle_rounded,
-                                          color: kPink, size: 12),
+                                          color: kPink, size: 12,),
                                       const SizedBox(width: 5),
                                       Expanded(
                                         child: Text(point,
                                             style: GoogleFonts.outfit(
                                                 color: kMuted,
                                                 fontSize: 10.5,
-                                                fontWeight: FontWeight.w500)),
+                                                fontWeight: FontWeight.w500,),),
                                       ),
                                     ],
                                   ),
@@ -7360,7 +7776,7 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
                         ),
                       ],
                     );
-                  }),
+                  },),
                 ),
               );
             },
@@ -7460,7 +7876,7 @@ class _IconMarqueeState extends State<_IconMarquee>
       itemCount: doubled.length,
       itemBuilder: (_, i) => Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: SvgPicture.string(doubled[i], width: 36, height: 36)),
+          child: SvgPicture.string(doubled[i], width: 36, height: 36),),
     );
   }
 }
