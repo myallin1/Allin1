@@ -4,12 +4,17 @@
 // ================================================================
 // NEW (CTO mandate — Phase 1.5). Takes a screenshot the QA bot already
 // captured in integration_test/qa_five_screens_test.dart and asks the
-// SAME Groq vision model the rest of this app's AI features already
-// use (meta-llama/llama-4-scout-17b-16e-instruct, see
-// admin_kyc_vision_service.dart / guru_api_service.dart) whether
+// SAME Groq vision model the rest of this app's AI features already use
+// (see admin_kyc_vision_service.dart / guru_api_service.dart) whether
 // anything looks visually broken — overlapping text, cut-off buttons,
 // blank/empty states that shouldn't be empty, obviously misaligned
 // layout, etc.
+//
+// FIX (Sep 17 2026 — found while root-causing "Gemini API is configured
+// but Chitti can't see an uploaded image"): this used to point at
+// meta-llama/llama-4-scout-17b-16e-instruct, which Groq decommissioned
+// on 2026-06-17. Updated to Groq's current vision model alongside the
+// same fix in admin_kyc_vision_service.dart and guru_api_service.dart.
 //
 // Deliberately a standalone file rather than reusing
 // AdminKycVisionService: that file's job is KYC document/face
@@ -39,7 +44,7 @@ class QaVisionService {
   QaVisionService._();
 
   static const String _endpoint = 'https://api.groq.com/openai/v1/chat/completions';
-  static const String _visionModel = 'meta-llama/llama-4-scout-17b-16e-instruct';
+  static const String _visionModel = 'qwen/qwen3.6-27b';
 
   /// Returns null when the screenshot looks fine, or a short
   /// human-readable description of the visual problem when it doesn't.
@@ -103,7 +108,7 @@ class QaVisionService {
       if (choices.isEmpty) return null;
       final msg = (choices.first as Map<String, dynamic>)['message'] as Map<String, dynamic>?;
       final raw = (msg?['content'] as String?)?.trim() ?? '';
-      final cleaned = raw.replaceAll(RegExp(r'```json|```'), '').trim();
+      final cleaned = raw.replaceAll(RegExp('```json|```'), '').trim();
       final parsed = jsonDecode(cleaned) as Map<String, dynamic>?;
       final hasIssue = parsed?['hasIssue'] as bool? ?? false;
       final description = (parsed?['description'] as String?)?.trim() ?? '';

@@ -5,10 +5,18 @@
 // NEW (CTO mandate — Advanced KYC & Facial Verification). Routes both
 // checks through the SAME Groq vision model the customer app already
 // uses for screenshot troubleshooting (guru_api_service.dart's
-// `_visionModel`, meta-llama/llama-4-scout-17b-16e-instruct) —
-// deliberately not introducing a second vision provider/model just for
-// this, and reusing a model already proven to work against this app's
-// Groq account.
+// `_visionModel`) — deliberately not introducing a second vision
+// provider/model just for this, and reusing a model already proven to
+// work against this app's Groq account.
+//
+// FIX (Sep 17 2026 — found while root-causing "Gemini API is configured
+// but Chitti can't see an uploaded image"): this used to point at
+// meta-llama/llama-4-scout-17b-16e-instruct, which Groq decommissioned
+// from the free/developer tier on 2026-06-17. Every KYC cross-check
+// since then has been silently failing at the Groq request and falling
+// back to a plain "note in the report" — the admin never saw an error,
+// just an OCR/face-match result that quietly never happened. Updated to
+// Groq's current vision model (console.groq.com/docs/vision).
 //
 // IMPORTANT — read before trusting this output as a final decision:
 //   - This is a general-purpose vision-LANGUAGE model doing OCR and a
@@ -54,7 +62,7 @@ class AdminKycVisionService {
   AdminKycVisionService._();
 
   static const String _endpoint = 'https://api.groq.com/openai/v1/chat/completions';
-  static const String _visionModel = 'meta-llama/llama-4-scout-17b-16e-instruct';
+  static const String _visionModel = 'qwen/qwen3.6-27b';
 
   /// Cross-checks every doc number that has BOTH a typed value and a
   /// photo (Aadhaar/PAN/License, whichever are present), then — if a
@@ -127,7 +135,7 @@ class AdminKycVisionService {
         numberResults.add(matches);
         notes.add(matches
             ? '${doc.label} number MATCHES: typed "$number" vs. document reads "$extracted".'
-            : '${doc.label} number MISMATCH: typed "$number" vs. document reads "$extracted".');
+            : '${doc.label} number MISMATCH: typed "$number" vs. document reads "$extracted".',);
       } catch (e) {
         notes.add('${doc.label} OCR check failed: $e');
         debugPrint('[AdminKycVisionService] OCR failed for ${doc.label}: $e');
@@ -159,11 +167,11 @@ class AdminKycVisionService {
           final parsed = _tryParseJson(raw);
           faceMatches = parsed?['sameFace'] as bool?;
           final confidence = parsed?['confidence'] as String? ?? 'unknown';
-          notes.add(faceMatches == true
+          notes.add(faceMatches ?? false
               ? 'Facial comparison: appears to be the SAME person (confidence: $confidence).'
               : faceMatches == false
                   ? 'Facial comparison: face does NOT appear to match (confidence: $confidence).'
-                  : 'Facial comparison was inconclusive.');
+                  : 'Facial comparison was inconclusive.',);
         }
       } catch (e) {
         notes.add('Facial comparison failed: $e');
@@ -181,7 +189,7 @@ class AdminKycVisionService {
     // (e.g. no selfie yet) — "needs review" is the safe default, never
     // "approve" by omission.
     final allNumbersOk = numberResults.isNotEmpty && numberResults.every((m) => m);
-    final strict = (allNumbersOk && faceMatches == true)
+    final strict = (allNumbersOk && (faceMatches ?? false))
         ? 'All proofs and face match perfectly. Recommended for Approval.'
         : 'Mismatch detected in KYC. Manual CTO verification required.';
 
@@ -243,7 +251,7 @@ class AdminKycVisionService {
 
   static Map<String, dynamic>? _tryParseJson(String raw) {
     try {
-      final cleaned = raw.replaceAll(RegExp(r'```json|```'), '').trim();
+      final cleaned = raw.replaceAll(RegExp('```json|```'), '').trim();
       return jsonDecode(cleaned) as Map<String, dynamic>;
     } catch (_) {
       return null;
