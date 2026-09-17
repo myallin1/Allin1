@@ -110,12 +110,29 @@ jobs:
           p.write_text(text)
           PY_EOF
 
+          # gemini-3.1-pro (agy's default) has a 0 free-tier quota on
+          # this API key (confirmed by a live 429 RESOURCE_EXHAUSTED
+          # run) — same key, same free tier gemini_coder.yml already
+          # uses successfully with a Flash model. Flash has real free
+          # quota, so pin to it explicitly rather than agy's default.
           "$HOME/.local/bin/agy" \
             --dangerously-skip-permissions \
+            --model gemini-3.6-flash-medium \
             --output-format json \
             --print-timeout 15m \
             -p "$(cat /tmp/agy_prompt.txt)" \
             | tee agy-result.json
+
+          # `tee` above means bash's own exit code is cat's/tee's, not
+          # agy's — a quota/auth/tool error inside agy would otherwise
+          # print but still leave this step (and the whole job) green.
+          # Fail loudly instead so a broken run is never mistaken for a
+          # working pipeline.
+          STATUS="$(python3 -c "import json; print(json.load(open('agy-result.json')).get('status',''))" 2>/dev/null || echo 'PARSE_ERROR')"
+          if [ "$STATUS" != "SUCCESS" ]; then
+            echo "::error::agy did not report SUCCESS (status: $STATUS) — see agy-result.json above for the real error."
+            exit 1
+          fi
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
