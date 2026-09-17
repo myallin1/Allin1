@@ -1,0 +1,128 @@
+name: Antigravity Coder
+
+# NEW (Sep 17 2026 — Nizam: "namma admin app la enaku anti gravity and
+# claude 2um namma app kulla varanum, namma chitti itha vachu namma
+# solddrathayum vachu app develop pannanum"). A THIRD coding engine
+# alongside claude.yml (@claude) and gemini_coder.yml (@gemini) — same
+# "issue -> agent -> PR" shape, different backend: Google's Antigravity
+# CLI (`agy`), which is a full multi-agent coding harness (plan, execute,
+# browser-verify), not just a single LLM call the way gemini_coder.yml's
+# run-gemini-cli action is.
+#
+# WHY IT REUSES THE GEMINI_API_KEY SECRET
+# agy's documented headless/CI auth path (antigravity.google/docs/cli/
+# install) is: set modelProvider":"gemini" in its settings.json, then
+# export GEMINI_API_KEY. That is the exact same Google AI Studio key
+# already sitting in this repo's secrets for gemini_coder.yml — no new
+# credential to create or store. agy's own OAuth/keyring login (used
+# interactively on Nizam's PC) is NOT usable here: it is bound to a
+# human browser session and cannot run on a headless GitHub runner.
+#
+# WHY A SEPARATE TAG (@agy, not @gemini)
+# Keeps every engine deliberately aimable, same reasoning gemini_coder
+# .yml already documents for coexisting with claude.yml: whichever tag
+# Chitti/Nizam types is the one that runs. No engine races another onto
+# the same issue.
+on:
+  issues:
+    types: [opened, labeled]
+  issue_comment:
+    types: [created]
+
+jobs:
+  antigravity-coder:
+    if: |
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@agy') || contains(github.event.issue.title, '@agy'))) ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@agy'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Install Antigravity CLI
+        run: |
+          curl -fsSL https://antigravity.google/cli/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Configure Gemini API key auth
+        run: |
+          mkdir -p "$HOME/.gemini/antigravity-cli"
+          echo '{"modelProvider":"gemini"}' > "$HOME/.gemini/antigravity-cli/settings.json"
+
+      # agy is a raw CLI here (not the purpose-built run-gemini-cli
+      # action gemini_coder.yml uses), so — unlike that workflow — it
+      # gets nothing preconfigured for git/gh. Both are needed before
+      # the agent's own `git commit` / `gh pr create` calls will work.
+      - name: Configure git identity for the agent's commits
+        run: |
+          git config --global user.name "antigravity-coder[bot]"
+          git config --global user.email "antigravity-coder[bot]@users.noreply.github.com"
+
+      - name: Run Antigravity as the coder
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          "$HOME/.local/bin/agy" \
+            --dangerously-skip-permissions \
+            --output-format json \
+            --print-timeout 15m \
+            -p "You are a careful Flutter engineer working on the Allin1 super app (NJ Tech, Erode). Read GEMINI.md and AGENTS.md first and follow every rule there.
+
+THE REQUEST:
+$ISSUE_BODY
+$COMMENT_BODY
+
+HOW TO WORK — THIS PART IS NOT OPTIONAL
+This repo has over 27,000 files. You must NOT read broadly. Work search-first, exactly as an engineer would on an unfamiliar codebase:
+  1. Use grep/glob to LOCATE the relevant code. Search for the specific symbol, string, screen name or error text the request mentions.
+  2. Read ONLY the files that matched, and only the regions around the matches.
+  3. Do not open a file \"to understand the project\". The two markdown files above are the project context.
+  4. Aim to touch 1-3 files. If your change needs more than 5, stop and say so in the PR body instead of pushing a sprawling diff.
+
+WHAT TO CHANGE
+Make the SMALLEST change that genuinely fixes or implements what was asked. Match the surrounding code's style and comment density. Explain WHY in a comment where the reason is not obvious from the code.
+
+HARD RULES — never break these
+  - Never touch payments, wallets, PhonePe, authentication, KYC, or firestore.rules.
+  - Never change or remove existing working behaviour that the request did not ask about.
+  - Never invent a feature, screen or API that you have not verified exists by grepping for it.
+  - If the request is ambiguous or you are unsure it is safe, open the PR as a DRAFT and say what you were unsure about.
+
+FINISH BY
+Creating a branch named agy/issue-<number>-<short-slug>, committing with a clear message ending in 'Co-Authored-By: Antigravity <noreply@google.com>', and opening a pull request TARGETING main using the gh CLI (already authenticated as GITHUB_TOKEN in this environment). In the PR body: what you changed, which files you grepped to find it, and anything you deliberately did not do." \
+            | tee agy-result.json
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.2'
+          channel: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      # Same reasoning as gemini_coder.yml's identical step: scoped to
+      # what THIS change touched, non-blocking (report for the human
+      # reviewing the PR, not a merge gate).
+      - name: Analyze only the changed files
+        continue-on-error: true
+        run: |
+          CHANGED="$(git diff --name-only origin/main...HEAD -- '*.dart' | tr '\n' ' ')"
+          if [ -z "$CHANGED" ]; then
+            echo "No Dart files changed — nothing to analyze."
+            exit 0
+          fi
+          echo "Analyzing: $CHANGED"
+          flutter analyze $CHANGED
