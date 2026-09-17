@@ -1790,6 +1790,16 @@ class ChittiActionExecutor {
   }) async {
     final issueNumber = (args['issueNumber'] as num?)?.toInt();
     final note = (args['note'] as String?)?.trim();
+    // NEW (Sep 17 2026): postApprovalComment is engine-aware (it posts
+    // "@gemini proceed" / "@agy proceed" under a plan that engine
+    // drafted, not always "@claude proceed") — read the same value here
+    // so this response text never names the wrong engine. Currently
+    // this always resolves to Claude in practice (propose_dev_plan has
+    // no engine param yet, so every plan issue is a Claude one), but
+    // hardcoding "Claude" here would silently start lying the moment
+    // that changes, while the actual @mention posted was already
+    // correct — read live instead of assuming.
+    final engineLabel = (await ChittiDevTaskService.readLastPlanEngine()).label;
     final result = await ChittiDevTaskService.postApprovalComment(
       issueNumber: issueNumber,
       extraNote: note,
@@ -1798,18 +1808,18 @@ class ChittiActionExecutor {
     if (result.success) {
       return ChittiActionResult(
         text: isTamil
-            ? 'சரி பாஸ் — Claude கிட்ட சொல்லிட்டேன், இப்போ implement பண்ணி '
-                'PR போடுவான். ரெடி ஆனதும் சொல்றேன்.'
-            : "Told Claude to go ahead — it'll implement the plan and open "
-                'a PR. I will let you know once it is ready.',
+            ? 'சரி பாஸ் — $engineLabel கிட்ட சொல்லிட்டேன், இப்போ implement '
+                'பண்ணி PR போடுவான். ரெடி ஆனதும் சொல்றேன்.'
+            : "Told $engineLabel to go ahead — it'll implement the plan and "
+                'open a PR. I will let you know once it is ready.',
         suggestions: const <String>['Check PR status', "Today's activity"],
       );
     }
     return ChittiActionResult(
       success: false,
       text: isTamil
-          ? 'Claude கிட்ட சொல்ல முடியல: ${result.error}'
-          : "Couldn't tell Claude to proceed: ${result.error}",
+          ? '$engineLabel கிட்ட சொல்ல முடியல: ${result.error}'
+          : "Couldn't tell $engineLabel to proceed: ${result.error}",
     );
   }
 
