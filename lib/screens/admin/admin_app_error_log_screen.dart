@@ -217,12 +217,20 @@ class _AdminAppErrorLogScreenState extends State<AdminAppErrorLogScreen> {
     );
 
     final title = 'Fix: ${entry.errorMessage} on ${entry.screen}';
+    final authLines = [
+      if (entry.authEmail != null) '- **Auth Email**: `${entry.authEmail}`',
+      if (entry.authUid != null) '- **Auth UID**: `${entry.authUid}`',
+      if (entry.hasAdminClaim != null)
+        '- **Admin Claim**: `${(entry.hasAdminClaim ?? false) ? 'Yes' : 'No'}`',
+    ].join('\n');
+
     final description =
         'Automated bug report from Allin1 In-App Error Monitor:\n\n'
         '- **Screen**: `${entry.screen}`\n'
         '- **Severity**: `${entry.severity}`\n'
         '- **App Version**: `${entry.appVersion}`\n'
-        '- **Occurred at**: `${entry.timestamp}` (Repeated: ${entry.repeatCount}x)\n\n'
+        '- **Occurred at**: `${entry.timestamp}` (Repeated: ${entry.repeatCount}x)\n'
+        '${authLines.isNotEmpty ? '$authLines\n' : ''}\n'
         '### Error Message\n```\n${entry.errorMessage}\n```\n\n'
         '### Stack Trace\n```\n${entry.stackTrace}\n```';
 
@@ -578,6 +586,34 @@ class _AdminAppErrorLogScreenState extends State<AdminAppErrorLogScreen> {
               ],
             ),
           ),
+          if (entry.authUid != null || entry.authEmail != null) ...[
+            const SizedBox(height: 3),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.account_circle_outlined,
+                    size: 13,
+                    color: _muted,
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      'User: ${entry.authEmail ?? entry.authUid ?? 'Anonymous'}'
+                      ' · Admin Claim: ${(entry.hasAdminClaim ?? false) ? 'Yes' : (entry.hasAdminClaim == null ? 'Unknown' : 'No')}'
+                      '${entry.authEmail != null && entry.authUid != null ? ' · UID: ${entry.authUid}' : ''}',
+                      style: GoogleFonts.outfit(
+                        color: _muted,
+                        fontSize: 10.5,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 6),
           // Error message
           Padding(

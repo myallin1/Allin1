@@ -7,6 +7,7 @@
 // same screen.
 import 'dart:math';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -25,6 +26,9 @@ class AppErrorLogEntry {
     required this.appVersion,
     required this.lastSeenAt,
     this.repeatCount = 1,
+    this.authUid,
+    this.authEmail,
+    this.hasAdminClaim,
   });
 
   final String id;
@@ -37,6 +41,9 @@ class AppErrorLogEntry {
   final String appVersion;
   int repeatCount;
   String lastSeenAt;
+  final String? authUid;
+  final String? authEmail;
+  final bool? hasAdminClaim;
 
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -49,6 +56,9 @@ class AppErrorLogEntry {
         'appVersion': appVersion,
         'repeatCount': repeatCount,
         'lastSeenAt': lastSeenAt,
+        'authUid': authUid,
+        'authEmail': authEmail,
+        'hasAdminClaim': hasAdminClaim,
       };
 
   factory AppErrorLogEntry.fromMap(Map<dynamic, dynamic> map) =>
@@ -64,6 +74,9 @@ class AppErrorLogEntry {
         repeatCount: (map['repeatCount'] as num?)?.toInt() ?? 1,
         lastSeenAt: map['lastSeenAt'] as String? ??
             (map['timestamp'] as String? ?? ''),
+        authUid: map['authUid'] as String?,
+        authEmail: map['authEmail'] as String?,
+        hasAdminClaim: map['hasAdminClaim'] as bool?,
       );
 }
 
@@ -129,6 +142,9 @@ class AppErrorLogService {
     String? stack,
     String severity = 'ERROR',
     String? screen,
+    String? authUid,
+    String? authEmail,
+    bool? hasAdminClaim,
   }) async {
     try {
       final box = await _openBox();
@@ -141,6 +157,27 @@ class AppErrorLogService {
       final cleanMessage = message.trim();
       final cleanStack = _truncate(stack?.trim(), maxStackTraceChars);
       final version = await _getAppVersion();
+
+      // Best-effort auth context resolution
+      String? resolvedUid = authUid;
+      String? resolvedEmail = authEmail;
+      bool? resolvedAdminClaim = hasAdminClaim;
+
+      if (resolvedUid == null &&
+          resolvedEmail == null &&
+          resolvedAdminClaim == null) {
+        try {
+          final user = FirebaseAuth.instance.currentUser;
+          if (user != null) {
+            resolvedUid = user.uid;
+            resolvedEmail = user.email;
+            try {
+              final idToken = await user.getIdTokenResult();
+              resolvedAdminClaim = idToken.claims?['admin'] as bool?;
+            } catch (_) {}
+          }
+        } catch (_) {}
+      }
 
       // Deduplication check within dedupWindow:
       // Scan recent entries to see if the same error occurred on the same screen.
@@ -188,6 +225,9 @@ class AppErrorLogService {
         stackTrace: cleanStack,
         appVersion: version,
         lastSeenAt: now.toIso8601String(),
+        authUid: resolvedUid,
+        authEmail: resolvedEmail,
+        hasAdminClaim: resolvedAdminClaim,
       );
 
       await box.put(id, newEntry.toMap());

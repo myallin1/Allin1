@@ -35,7 +35,6 @@ void main() {
       final entry = await AppErrorLogService.logError(
         message: 'Null check operator used on null',
         stack: 'package:erode_superapp/billing_screen.dart:42',
-        severity: 'ERROR',
         screen: 'Billing Screen',
       );
 
@@ -55,7 +54,6 @@ void main() {
       final first = await AppErrorLogService.logError(
         message: 'Network timeout during checkout',
         screen: 'Order Screen',
-        severity: 'ERROR',
       );
       expect(first, isNotNull);
       expect(first!.repeatCount, 1);
@@ -64,7 +62,6 @@ void main() {
       final second = await AppErrorLogService.logError(
         message: 'Network timeout during checkout',
         screen: 'Order Screen',
-        severity: 'ERROR',
       );
 
       expect(second, isNotNull);
@@ -108,8 +105,10 @@ void main() {
       );
 
       expect(entry, isNotNull);
-      expect(entry!.stackTrace.length,
-          lessThanOrEqualTo(AppErrorLogService.maxStackTraceChars + 30));
+      expect(
+        entry!.stackTrace.length,
+        lessThanOrEqualTo(AppErrorLogService.maxStackTraceChars + 30),
+      );
       expect(entry.stackTrace, contains('[truncated]'));
     });
 
@@ -162,12 +161,10 @@ void main() {
       );
       await AppErrorLogService.logError(
         message: 'Timeout error',
-        severity: 'ERROR',
         screen: 'Orders',
       );
       await AppErrorLogService.logError(
         message: 'Timeout error',
-        severity: 'ERROR',
         screen: 'Orders',
       ); // Will dedupe to 2x
       await AppErrorLogService.logError(
@@ -226,6 +223,68 @@ void main() {
           await AppErrorLogService.getLogsForDate('2026-09-17');
       expect(yesterdayLogs.length, 1);
       expect(yesterdayLogs.first.id, 'yesterday_1');
+    });
+  });
+
+  group('Auth context tracking', () {
+    test('AppErrorLogEntry serializes and deserializes auth fields', () {
+      final entry = AppErrorLogEntry(
+        id: 'test_auth_1',
+        date: '2026-09-19',
+        timestamp: '2026-09-19T00:00:00.000',
+        severity: 'ERROR',
+        screen: 'Admin Screen',
+        errorMessage: 'Permission denied',
+        stackTrace: '',
+        appVersion: '1.0.9+284',
+        lastSeenAt: '2026-09-19T00:00:00.000',
+        authUid: 'admin_uid_123',
+        authEmail: 'admin@allin1.com',
+        hasAdminClaim: true,
+      );
+
+      final map = entry.toMap();
+      expect(map['authUid'], 'admin_uid_123');
+      expect(map['authEmail'], 'admin@allin1.com');
+      expect(map['hasAdminClaim'], true);
+
+      final reconstructed = AppErrorLogEntry.fromMap(map);
+      expect(reconstructed.authUid, 'admin_uid_123');
+      expect(reconstructed.authEmail, 'admin@allin1.com');
+      expect(reconstructed.hasAdminClaim, true);
+    });
+
+    test('logError records auth fields into Hive and retrieves them', () async {
+      final entry = await AppErrorLogService.logError(
+        message: 'Permission denied in dispatch',
+        screen: 'Hero Dispatch',
+        authUid: 'admin_xyz',
+        authEmail: 'admin_xyz@allin1.com',
+        hasAdminClaim: false,
+      );
+
+      expect(entry, isNotNull);
+      expect(entry!.authUid, 'admin_xyz');
+      expect(entry.authEmail, 'admin_xyz@allin1.com');
+      expect(entry.hasAdminClaim, false);
+
+      final stored = await AppErrorLogService.getLogById(entry.id);
+      expect(stored, isNotNull);
+      expect(stored!.authUid, 'admin_xyz');
+      expect(stored.authEmail, 'admin_xyz@allin1.com');
+      expect(stored.hasAdminClaim, false);
+    });
+
+    test('logError defaults auth fields to null without failing when unauthenticated/uninitialized', () async {
+      final entry = await AppErrorLogService.logError(
+        message: 'Generic unauthenticated error',
+        screen: 'Splash',
+      );
+
+      expect(entry, isNotNull);
+      expect(entry!.authUid, isNull);
+      expect(entry.authEmail, isNull);
+      expect(entry.hasAdminClaim, isNull);
     });
   });
 }

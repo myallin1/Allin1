@@ -24,14 +24,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/chitti/chitti_dev_monitor_service.dart';
 import '../../services/chitti/chitti_dev_task_service.dart';
 import '../../widgets/admin_apk_download_progress_sheet.dart';
 import 'admin_app_error_log_screen.dart';
 import 'admin_app_versions_screen.dart';
-import 'admin_web_tabs_screen.dart';
+import 'admin_tabbed_browser_screen.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _card = Color(0xFF141420);
@@ -83,13 +82,6 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
     });
   }
 
-  Future<void> _open(String url) async {
-    if (url.isEmpty) return;
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
   Future<void> _confirmAndPromote(DevRelease release) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -138,12 +130,12 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
     );
   }
 
-  Future<void> _openInApp(BuildContext context, String url) async {
+  Future<void> _openInApp(
+    BuildContext context,
+    String url, {
+    String? title,
+  }) async {
     if (url.isEmpty) return;
-    // AUDIT FIX (Sep 2026 — CTO review of PR #61, requirement 3): this
-    // used to hand a .apk straight to an external browser. Same in-app
-    // download+install flow the WebViews now use, so tapping a build
-    // link here behaves identically to tapping one inside GitHub itself.
     if (isApkDownloadUrl(url)) {
       if (!context.mounted) return;
       await showApkDownloadProgressSheet(
@@ -153,16 +145,12 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
       );
       return;
     }
-    // AUDIT FIX (Sep 2026 — Nizam: "dev la github issue list la irunthu
-    // link tap pannuna admin app github blank aguthu"). Used to push a
-    // SECOND GitHubEmbeddedScreen instance on top, sharing the same
-    // static controller as whichever instance already lives Offstage
-    // inside AdminWebTabsScreen's Web tab — two WebViewWidgets bound to
-    // one native WebView at once, which rendered blank until an app
-    // background/foreground forced a full surface rebuild. Routes to
-    // the existing Web tab instead now; see openGitHubIssueInAdminTab's
-    // own header for the full explanation.
-    await openGitHubIssueInAdminTab(url);
+    if (!context.mounted) return;
+    await AdminTabbedBrowserScreen.openInNewTab(
+      context,
+      url,
+      title: title,
+    );
   }
 
   @override
@@ -211,15 +199,12 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.open_in_new_rounded, color: _text),
-            tooltip: 'Open GitHub in-app',
-            // AUDIT FIX (Sep 2026): used to push a SECOND
-            // GitHubEmbeddedScreen instance, same as the issue tiles
-            // below — see openGitHubIssueInAdminTab's header for why
-            // that produced a blank WebView instead of a working one.
-            // Routes to the existing Web tab now, same as an issue tap.
+            tooltip: 'Open in-app browser',
             onPressed: () => unawaited(
-              openGitHubIssueInAdminTab(
+              AdminTabbedBrowserScreen.openInNewTab(
+                context,
                 'https://github.com/myallin1/Allin1/pulls',
+                title: 'GitHub PRs',
               ),
             ),
           ),
@@ -480,7 +465,8 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
                     ),
                   ),
                   TextButton.icon(
-                    onPressed: () => _open(build.apkUrls[entry.key]!),
+                    onPressed: () =>
+                        _openInApp(context, build.apkUrls[entry.key]!),
                     icon: const Icon(Icons.download_rounded, size: 15),
                     label: const Text('Download'),
                     style: TextButton.styleFrom(foregroundColor: _green),
@@ -535,7 +521,7 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () => _open(release.apkUrl!),
+                onPressed: () => _openInApp(context, release.apkUrl!),
                 icon: const Icon(Icons.download_rounded, size: 18),
                 label: const Text('Download APK & Test'),
                 style: ElevatedButton.styleFrom(
@@ -654,7 +640,7 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
                   );
 
     return _rowCard(
-      onTap: () => _openInApp(context, run.url),
+      onTap: () => _openInApp(context, run.url, title: run.name),
       leading: Icon(icon, color: color, size: 17),
       title: run.name,
       subtitleWidgets: [
@@ -674,7 +660,11 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
   Widget _issueTile(DevTaskIssue issue) {
     final isOpen = issue.state == 'open';
     return _rowCard(
-      onTap: () => _openInApp(context, issue.url),
+      onTap: () => _openInApp(
+        context,
+        issue.url,
+        title: '#${issue.number} ${issue.title}',
+      ),
       leading: Icon(
         isOpen
             ? Icons.radio_button_unchecked_rounded
