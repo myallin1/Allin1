@@ -715,4 +715,46 @@ minute ago.
 3. Remove stale or contradictory text from documentation.
 4. Ensure branch naming, versioning, and CHANGELOG updates are complete if applicable.
 
+## 16. Mandatory Self-Audit Before Reporting Done (Sep 18 2026)
+
+Nizam's standing rule, binding on every agent (Claude, Gemini, Antigravity,
+or any future engine) working in this repo:
+
+> "work mudichutu un work la iruka gapes,bugs neeye agin check panni
+> finish pannu but irukura yentha feauture um disturb agakudathu"
+> (After finishing the work, YOU check your own work for gaps/bugs
+> again and finish it off — but no existing feature may be disturbed.)
+
+This is not optional and not a one-time instruction — it applies to
+**every** task, from every agent, every time:
+
+- **Never report a task as done straight after the last code edit.**
+  Before replying, re-read your own diff and ask: did I leave a stale
+  test, a sibling file with the same bug, a hardcoded value that should
+  have moved with the rest of the change, a doc comment that now lies?
+  This session's own history is the proof this matters — the
+  Groq-vision-model fix alone needed 3 audit passes to catch a stale
+  test and two more files with the identical dead-model bug that the
+  first pass missed.
+- **Zero-disturbance is the hard constraint on the audit itself.** The
+  self-check may find and fix genuine gaps in the SAME change you just
+  made — it must never turn into an opportunity to refactor, rename, or
+  "improve" a working, unrelated feature. If an audit finds something
+  outside the current task's scope, report it; do not fix it
+  unprompted (see Section 3, Surgical Strikes Only).
+- **Verify claims, don't just re-read your own diff.** When a fix
+  depends on an external fact (a model ID being live, a package
+  version, a deprecation date), confirm it against the authoritative
+  source before calling the fix correct — this session found and
+  discarded one false alarm (a model wrongly reported deprecated) and
+  confirmed one real bug (a model actually shut down) this exact way.
+- **Run the relevant tests after the audit, not just after the first
+  edit.** A fix applied during self-audit is still a code change and
+  needs the same `flutter analyze` / `flutter test` verification as the
+  original change before you report back.
+- **Reply only after this loop closes.** The expected shape of a
+  finished task's reply is: what was built/fixed, what the self-audit
+  found (even if "nothing"), and confirmation that analyze/tests still
+  pass — not just the first-pass result.
+
 
