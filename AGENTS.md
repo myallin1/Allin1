@@ -720,10 +720,9 @@ minute ago.
 Nizam's standing rule, binding on every agent (Claude, Gemini, Antigravity,
 or any future engine) working in this repo:
 
-> "work mudichutu un work la iruka gapes,bugs neeye agin check panni
-> finish pannu but irukura yentha feauture um disturb agakudathu"
-> (After finishing the work, YOU check your own work for gaps/bugs
-> again and finish it off — but no existing feature may be disturbed.)
+> After finishing the work, YOU must check your own work again for
+> gaps and bugs and finish it off yourself — but no existing feature
+> may be disturbed in the process.
 
 This is not optional and not a one-time instruction — it applies to
 **every** task, from every agent, every time:
