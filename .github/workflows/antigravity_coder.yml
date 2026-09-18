@@ -76,6 +76,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           COMMENT_BODY: ${{ github.event.comment.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           cat > /tmp/agy_prompt.txt <<'PROMPT_EOF'
           You are a careful Flutter engineer working on the Allin1 super app (NJ Tech, Erode). Read GEMINI.md and AGENTS.md first and follow every rule there.
@@ -112,19 +113,36 @@ jobs:
           # agent between "open a PR" and "audit + comment only" instead
           # of always finishing by opening a PR regardless of what the
           # issue actually asked for.
-          python3 - "$ISSUE_BODY" "$COMMENT_BODY" <<'PY_EOF'
+          python3 - "$ISSUE_BODY" "$COMMENT_BODY" "$ISSUE_NUMBER" <<'PY_EOF'
           import sys, pathlib
           p = pathlib.Path('/tmp/agy_prompt.txt')
           issue_body = sys.argv[1]
-          plan_only = 'Do not open a pull request or write any code yet' in issue_body
+          comment_body = sys.argv[2] or ''
+          issue_number = sys.argv[3] or '?'
+          # FIX (Sep 18 2026 — Gemini-engine audit, round 3): the plan
+          # issue's OWN body never changes, so checking only issue_body
+          # for the "Do not open a pull request" marker meant the
+          # APPROVAL comment (postApprovalComment's "@agy proceed with
+          # the plan above...") re-triggered this same workflow on the
+          # same issue and got trapped back into plan-only mode forever
+          # -- approve_dev_plan could never actually get a PR opened.
+          # The approval comment has its own distinct marker text; a
+          # comment event carrying it always means "build it now",
+          # regardless of what the original issue body said.
+          is_approval_comment = 'proceed with the plan above' in comment_body
+          plan_only = (
+              'Do not open a pull request or write any code yet' in issue_body
+              and not is_approval_comment
+          )
           mode = (
-              "PLAN-ONLY MODE -- this issue explicitly asked for an audit and a "
+              f"PLAN-ONLY MODE -- this issue explicitly asked for an audit and a "
               "plan, not code. Do NOT create a branch, do NOT write any code, "
-              "and do NOT open a pull request. Instead, post ONE comment on "
-              "this issue (use the gh CLI, already authenticated as "
-              "GITHUB_TOKEN) containing your audit findings and a concrete "
-              "implementation plan: approach, files likely to be touched, "
-              "risks/tradeoffs. Stop after posting that comment."
+              "and do NOT open a pull request. Instead, run "
+              f"`gh issue comment {issue_number} --body \"...\"` (already "
+              "authenticated as GITHUB_TOKEN) with ONE comment containing your "
+              "audit findings and a concrete implementation plan: approach, "
+              "files likely to be touched, risks/tradeoffs. Stop after posting "
+              "that comment."
               if plan_only else
               "FINISH BY creating a branch named agy/issue-<number>-<short-slug>, "
               "committing with a clear message ending in 'Co-Authored-By: "
