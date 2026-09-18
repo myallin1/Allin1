@@ -756,4 +756,33 @@ This is not optional and not a one-time instruction — it applies to
   found (even if "nothing"), and confirmation that analyze/tests still
   pass — not just the first-pass result.
 
+## 17. Verify Claims With `grep`, Not By Re-Reading a Summary (Sep 19 2026)
+
+Nizam's standing rule: whenever one agent's report claims another
+agent's work is correct/complete/fixed, the verifying agent MUST use
+`grep` (or an equivalent direct source read — `git show`, `git diff`,
+opening the actual file) against the CURRENT state of the repo before
+agreeing with that claim. This is not optional and applies to every
+cross-agent audit round in this project (Claude auditing Gemini,
+Gemini auditing Claude, either auditing Antigravity).
+
+- **Never confirm a finding by re-reading the reporting agent's own
+  prose.** A report saying "confirmed correct" is a claim, not
+  evidence — grep the actual line/file it references and read what is
+  really there.
+- **Always check which commit is actually at HEAD first** (`git log
+  --oneline -1`) before verifying against a specific commit hash a
+  report names — this session hit a real case where a re-audit
+  verified an OLD commit because a newer one wasn't checked for first,
+  and repeated stale findings that were already fixed.
+- **A grep that finds nothing is itself a finding.** If a report
+  claims a wiring change exists in file X and grep for it comes back
+  empty, that is real evidence the claim is wrong — report it as a
+  mismatch, do not assume the grep pattern was just wrong and move on
+  silently.
+- **This applies to yourself too.** Before replying "done" on your own
+  work, grep for the pattern you just added/changed to confirm it
+  landed exactly where and how you intended, not just that the tool
+  call reported success.
+
 
