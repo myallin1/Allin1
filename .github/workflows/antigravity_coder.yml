@@ -31,9 +31,13 @@ on:
 
 jobs:
   antigravity-coder:
+    # Chitti only ever emits '@agy' (see ChittiDevEngineTag.mention), but
+    # a human filing an issue directly on GitHub is more likely to type
+    # '@antigravity' out in full — accept both so a manually-tagged
+    # issue isn't silently ignored by every workflow.
     if: |
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@agy') || contains(github.event.issue.title, '@agy'))) ||
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@agy'))
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@agy') || contains(github.event.issue.title, '@agy') || contains(github.event.issue.body, '@antigravity') || contains(github.event.issue.title, '@antigravity'))) ||
+      (github.event_name == 'issue_comment' && (contains(github.event.comment.body, '@agy') || contains(github.event.comment.body, '@antigravity')))
     runs-on: ubuntu-latest
     permissions:
       contents: write

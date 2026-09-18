@@ -1278,7 +1278,20 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
           'description':
               "The agreed understanding of what is needed, in the admin's "
                   'own words plus any clarification Chitti gathered — this '
-                  'becomes the GitHub issue body Claude Code audits.',
+                  'becomes the GitHub issue body the coding engine audits.',
+        },
+        // Mirrors create_dev_task's 'engine' param (see that schema's
+        // comment above) — without this, a plan request has no way to
+        // reach Gemini/Antigravity and silently defaults to Claude even
+        // when the admin explicitly names another engine.
+        'engine': <String, dynamic>{
+          'type': 'string',
+          'enum': ['claude', 'gemini', 'antigravity'],
+          'description':
+              'Which AI coding engine should audit this and propose a '
+                  'plan. "claude" (default) — most reliable, unlimited via '
+                  'Claude Pro. "gemini" or "antigravity" — only when the '
+                  'admin explicitly names one.',
         },
       },
       'required': ['title', 'description'],

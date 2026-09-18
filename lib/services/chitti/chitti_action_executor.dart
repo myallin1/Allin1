@@ -1726,23 +1726,26 @@ class ChittiActionExecutor {
       );
     }
 
+    final engine = ChittiDevEngineTag.fromName(args['engine'] as String?);
     final result = await ChittiDevTaskService.createPlanIssue(
       title: title,
       description: description,
+      engine: engine,
     );
 
     if (result.success) {
       return ChittiActionResult(
         text: isTamil
             ? 'சரி பாஸ் — "${result.issueTitle}" issue create பண்ணிட்டேன். '
-                'Claude அதை audit பண்ணி ஒரு plan போடுவான், அது வந்ததும் '
-                'உங்ககிட்ட சொல்றேன். நீங்க plan ஓகே ஆனா, "plan ah proceed '
-                'pannu" னு சொன்னா Claude கட்ட ஆரம்பிக்கும்.'
+                '${engine.label} அதை audit பண்ணி ஒரு plan போடுவான், அது '
+                'வந்ததும் உங்ககிட்ட சொல்றேன். நீங்க plan ஓகே ஆனா, "plan ah '
+                'proceed pannu" னு சொன்னா ${engine.label} கட்ட ஆரம்பிக்கும்.'
                 '${result.issueUrl != null ? '\n${result.issueUrl}' : ''}'
-            : 'Done — created "${result.issueTitle}" and asked Claude to '
-                'audit it and post a plan (no code yet). I will let you '
-                'know once the plan is in — once you approve it, tell me '
-                '"proceed with the plan" and Claude will build it.'
+            : 'Done — created "${result.issueTitle}" and asked '
+                '${engine.label} to audit it and post a plan (no code '
+                'yet). I will let you know once the plan is in — once you '
+                'approve it, tell me "proceed with the plan" and '
+                '${engine.label} will build it.'
                 '${result.issueUrl != null ? '\n${result.issueUrl}' : ''}',
         suggestions: const <String>['Check the plan', "Today's activity"],
       );

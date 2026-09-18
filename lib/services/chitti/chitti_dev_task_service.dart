@@ -456,7 +456,8 @@ class ChittiDevTaskService {
   }
 
   /// Reads back the most recent comment on the plan issue that looks
-  /// like it came from the Claude Code bot, so Chitti can relay the
+  /// like it came from whichever coding engine's bot picked it up
+  /// (Claude, Gemini or Antigravity), so Chitti can relay the
   /// audit/plan to the admin in-app instead of them having to open
   /// GitHub themselves.
   static Future<ChittiDevPlanReport> fetchLatestPlanReport({
@@ -508,7 +509,22 @@ class ChittiDevTaskService {
         final login =
             (comment['user'] as Map<String, dynamic>?)?['login'] as String? ??
                 '';
-        if (login.toLowerCase().contains('claude')) {
+        // FIX (Sep 18 2026 — Gemini-engine audit): this used to check
+        // only .contains('claude'). claude-code-action posts under a
+        // GitHub App identity whose login genuinely contains "claude",
+        // but gemini_coder.yml and antigravity_coder.yml both post via
+        // the plain GITHUB_TOKEN, whose login is always
+        // "github-actions[bot]" regardless of which engine ran — so
+        // every Gemini/Antigravity plan comment was invisible here and
+        // check_dev_plan always reported "no plan yet" for those two
+        // engines, even after they had genuinely posted one.
+        final loginLower = login.toLowerCase();
+        final looksLikeAnEngineBot = loginLower.contains('claude') ||
+            loginLower.contains('gemini') ||
+            loginLower.contains('antigravity') ||
+            loginLower.contains('agy') ||
+            loginLower == 'github-actions[bot]';
+        if (looksLikeAnEngineBot) {
           return ChittiDevPlanReport(
             found: true,
             body: comment['body'] as String?,
@@ -521,8 +537,8 @@ class ChittiDevTaskService {
       }
       return const ChittiDevPlanReport(
         found: false,
-        error: "Claude hasn't replied on that issue yet — try again in a "
-            'bit.',
+        error: "The coding engine hasn't replied on that issue yet — try "
+            'again in a bit.',
       );
     } catch (e) {
       debugPrint('[ChittiDevTaskService] fetchLatestPlanReport failed: $e');

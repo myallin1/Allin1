@@ -1757,16 +1757,23 @@ class _GuruChatScreenState extends State<GuruChatScreen>
       case 'propose_dev_plan':
         final title = (args['title'] as String?)?.trim() ?? '(untitled)';
         final desc = (args['description'] as String?)?.trim() ?? '';
-        return "Here's what I'll ask Claude to audit and plan (no code "
-            'yet):\n\n"$title"\n$desc\n\n'
+        final planEngineLabel =
+            ChittiDevEngineTag.fromName(args['engine'] as String?).label;
+        return "Here's what I'll ask $planEngineLabel to audit and plan "
+            '(no code yet):\n\n"$title"\n$desc\n\n'
             'Should I open this?';
       case 'approve_dev_plan':
         final note = (args['note'] as String?)?.trim();
+        // approve_dev_plan resolves the actual engine asynchronously via
+        // readLastPlanEngine() at execution time — stays engine-neutral
+        // here rather than guessing wrong the way a hardcoded "Claude"
+        // did before.
         return note != null && note.isNotEmpty
-            ? "I'll tell Claude to go ahead and build the approved plan, "
-                'with this extra note: "$note" — should I send it?'
-            : "I'll tell Claude to go ahead and build the approved plan — "
-                'should I send it?';
+            ? "I'll tell the assigned engine to go ahead and build the "
+                'approved plan, with this extra note: "$note" — should I '
+                'send it?'
+            : "I'll tell the assigned engine to go ahead and build the "
+                'approved plan — should I send it?';
       default:
         return 'Should I proceed?';
     }
