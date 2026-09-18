@@ -112,12 +112,15 @@ const List<ChittiModel> kChittiModels = <ChittiModel>[
     // checks "does this model have a key", every vision request kept
     // routing to Groq's now-dead model and failing before Gemini —
     // which DOES have a live key and a live vision model — ever got a
-    // turn. Declared empty here, same honest "this provider has no
-    // working vision model" pattern DeepSeek already uses below, so
-    // resolveChittiModel() correctly skips Groq and falls through to
-    // Gemini for every image. Groq's suggested text replacements
-    // (openai/gpt-oss-120b, qwen/qwen3.6-27b) are not multimodal, so
-    // there is no real Groq vision model to point this at instead.
+    // turn. Declared empty here so resolveChittiModel() skips Groq and falls
+    // through to Gemini for every in-chat image request. Note: Groq DOES
+    // have a live vision model (qwen/qwen3.6-27b, used by
+    // admin_kyc_vision_service.dart / qa_vision_service.dart /
+    // guru_api_service.dart for their own direct Groq calls). This empty
+    // string is an ARCHITECTURAL choice, not a capability gap: those
+    // three services own their Groq vision path directly; Chitti's picker
+    // falls back to Gemini, which keeps the picker's fallback contract
+    // simple and avoids a second admin preference for Groq's vision model.
     visionModel: '',
     envKeyName: 'GROQ_API_KEY',
     prefsKeyName: 'personal_ai_api_key',

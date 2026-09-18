@@ -4,11 +4,11 @@
 // NEW (Aug 28 2026 — Nizam: admin Chitti as an end-to-end P.A., three
 // models the admin can pick between, and Tamil screen guidance on
 // demand).
-import 'package:flutter_test/flutter_test.dart';
 import 'package:erode_superapp/services/chitti/chitti_model_provider.dart';
 import 'package:erode_superapp/services/chitti/chitti_screen_guide.dart';
 import 'package:erode_superapp/services/chitti/chitti_tool_registry.dart';
 import 'package:erode_superapp/services/tamil_transliteration.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('the model picker', () {
@@ -24,15 +24,14 @@ void main() {
       expect(chittiModelById(null), defaultChittiModel);
     });
 
-    test('DeepSeek is honest about not seeing images', () {
+    test('DeepSeek and Groq are honest about not seeing images', () {
       // Declared rather than pointed at a model that would 400 on an
       // image, so callers can route that one request elsewhere.
-      final ds = chittiModelById('deepseek');
-      expect(chittiModelSupportsVision(ds), isFalse);
+      expect(chittiModelSupportsVision(chittiModelById('deepseek')), isFalse);
+      expect(chittiModelSupportsVision(chittiModelById('groq')), isFalse);
     });
 
-    test('Groq and Gemini can see images', () {
-      expect(chittiModelSupportsVision(chittiModelById('groq')), isTrue);
+    test('Gemini can see images', () {
       expect(chittiModelSupportsVision(chittiModelById('gemini')), isTrue);
     });
 
