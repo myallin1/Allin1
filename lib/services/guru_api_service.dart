@@ -409,7 +409,10 @@ class GuruApiService {
         'model': textModelId,
         'system': _buildSystemPrompt(languageLabel),
         'messages': anthropicMessages,
-        'max_tokens': 600,
+        // NEW (Sep 18 2026 — Nizam: replies felt shallow/underpowered):
+        // 600 -> 1000, same reasoning as guru_admin_api_service.dart's
+        // identical bump.
+        'max_tokens': 1000,
       };
     } else {
       requestPayload = <String, dynamic>{
@@ -430,7 +433,11 @@ class GuruApiService {
           },
         ],
         'temperature': 0.55,
-        'max_tokens': 450,
+        // NEW (Sep 18 2026 — Nizam: replies felt shallow/underpowered):
+        // 450 -> 1000. Was tight enough that longer answers (a
+        // multi-step how-to, a detailed troubleshooting reply) got cut
+        // off mid-sentence before finishing.
+        'max_tokens': 1000,
       };
     }
 

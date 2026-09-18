@@ -73,7 +73,7 @@ class GuruAdminApiService {
       'You are the Allin1 Admin AI Co-Pilot, an autonomous support agent '
       'for the CTO of Allin1 (Erode, Tamil Nadu super-app, run by NJ '
       'Tech). You assist with three responsibilities:\n'
-      '1. DATABASE AUDIT — you may read across the entire Firestore/'
+      '1. DATABASE AUDIT — you may read across the entire Firestore / '
       'Realtime Database structure to look for leakage (data readable '
       'that should not be), unused/orphaned nodes, and storage wastage '
       '(duplicated, stale, or oversized data). You report findings '
@@ -227,7 +227,11 @@ class GuruAdminApiService {
             'model': textModel,
             'system': systemPrompt,
             'messages': _anthropicMessages(history, input),
-            'max_tokens': 500,
+            // NEW (Sep 18 2026 — Nizam: replies were getting cut off
+            // mid-explanation): 500 -> 1000. Was tight enough that
+            // longer admin answers (a multi-step how-to, a read with
+            // several numbers to relay) truncated before finishing.
+            'max_tokens': 1000,
           }
         : <String, dynamic>{
             'model': textModel,
@@ -237,7 +241,7 @@ class GuruAdminApiService {
               {'role': 'user', 'content': input},
             ],
             'temperature': 0.4,
-            'max_tokens': 500,
+            'max_tokens': 1000,
           };
 
     try {
@@ -261,7 +265,7 @@ class GuruAdminApiService {
         final text = contents
             .where((c) => (c as Map<String, dynamic>)['type'] == 'text')
             .map((c) =>
-                (c as Map<String, dynamic>)['text']?.toString().trim() ?? '')
+                (c as Map<String, dynamic>)['text']?.toString().trim() ?? '',)
             .where((t) => t.isNotEmpty)
             .join('\n');
         return text.isEmpty
@@ -292,11 +296,11 @@ class GuruAdminApiService {
   /// Gemini's compat endpoint, DeepSeek) — extracted so sendMessage and
   /// extractAgentAction never disagree on what counts as valid history.
   List<Map<String, dynamic>> _openAiHistory(
-          List<Map<String, String>> history) =>
+          List<Map<String, String>> history,) =>
       history
           .where((entry) =>
               (entry['role'] == 'user' || entry['role'] == 'assistant') &&
-              (entry['content']?.trim().isNotEmpty ?? false))
+              (entry['content']?.trim().isNotEmpty ?? false),)
           .toList();
 
   /// Same shaping for Anthropic's messages array, which has no system
@@ -474,7 +478,7 @@ class GuruAdminApiService {
   /// working the same way regardless of provider is that it is told the
   /// same thing regardless of provider.
   static const String _agentActionSystemPrompt =
-      'You are the CTO\'s admin co-pilot. Your default behavior is to '
+      "You are the CTO's admin co-pilot. Your default behavior is to "
       'ACT by calling one of your five tools, not to reply with '
       'step-by-step instructions telling the CTO what to click '
       'themselves — if a request matches a tool even loosely, call '
@@ -553,7 +557,7 @@ class GuruAdminApiService {
     final isAnthropic = model.id == 'anthropic';
     if (isAnthropic) {
       return _extractAgentActionAnthropic(
-          model: model, apiKey: backend.key, input: input);
+          model: model, apiKey: backend.key, input: input,);
     }
 
     final apiKey = backend.key;
@@ -578,7 +582,7 @@ class GuruAdminApiService {
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         debugPrint(
-            'Admin AI agent-action extraction failed: ${response.statusCode} ${response.body}');
+            'Admin AI agent-action extraction failed: ${response.statusCode} ${response.body}',);
         return null;
       }
 
@@ -677,7 +681,7 @@ class GuruAdminApiService {
       return {'action': functionName, ...args};
     } catch (error) {
       debugPrint(
-          '[GuruAdminApiService] extractAgentAction (anthropic) error: $error');
+          '[GuruAdminApiService] extractAgentAction (anthropic) error: $error',);
       return null;
     }
   }
@@ -692,7 +696,7 @@ class GuruAdminApiService {
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString(_savedApiKeyPrefsKey)?.trim() ?? '';
     debugPrint(
-        '[GuruAdminApiService] resolved Groq key length: ${stored.length}');
+        '[GuruAdminApiService] resolved Groq key length: ${stored.length}',);
     return stored;
   }
 
@@ -721,7 +725,7 @@ class GuruAdminApiService {
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString(_savedGeminiApiKeyPrefsKey)?.trim() ?? '';
     debugPrint(
-        '[GuruAdminApiService] resolved Gemini key length: ${stored.length}');
+        '[GuruAdminApiService] resolved Gemini key length: ${stored.length}',);
     return stored;
   }
 
