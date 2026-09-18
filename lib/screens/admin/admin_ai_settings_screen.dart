@@ -19,23 +19,24 @@
 //
 // Purely additive: a new screen + one new drawer entry in
 // super_admin_home_screen.dart. Nothing else was touched.
-import 'package:flutter_tts/flutter_tts.dart';
-
-import '../../services/chitti/chitti_model_provider.dart';
-import '../../services/chitti/chitti_voice_service.dart';
 import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import '../../services/chitti/chitti_accessibility_bridge.dart';
-import 'chitti_debug_logs_screen.dart';
-import 'chitti_dev_monitor_screen.dart';
+import '../../services/chitti/chitti_model_provider.dart';
 import '../../services/chitti/chitti_summarizer.dart';
+import '../../services/chitti/chitti_voice_service.dart';
 import '../../services/cloudinary_upload_service.dart';
 import '../../services/firestore_usage_tracking.dart';
+import 'chitti_debug_logs_screen.dart';
+import 'chitti_dev_monitor_screen.dart';
 
 const String _kGroqKeyPrefsKey = 'personal_ai_api_key';
 const String _kGeminiKeyPrefsKey = 'personal_gemini_api_key';
@@ -69,12 +70,17 @@ const List<String> _kGroqModels = [
   'gemma2-9b-it',
   'mixtral-8x7b-32768',
 ];
+// FIX (Sep 18 2026): gemini-2.0-flash / -001 and gemini-1.5-flash / -pro
+// are all shut down by Google now — kept mirroring
+// gemini_api_service.dart's _modelCandidates fallback list, updated the
+// same way. gemini-3.8-flash first so picking the dropdown's default
+// actually works on the first try instead of falling through dead IDs.
 const List<String> _kGeminiModels = [
+  'gemini-3.8-flash',
+  'gemini-flash-latest',
   'gemini-2.0-flash',
   'gemini-2.0-flash-001',
   'gemini-1.5-flash',
-  'gemini-1.5-pro',
-  'gemini-flash-latest',
 ];
 const List<String> _kDeepSeekModels = [
   'deepseek-v4-flash',
@@ -244,9 +250,8 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              "✅ Chitti is now the default Phone app — real speaker control is active."),
+              '✅ Chitti is now the default Phone app — real speaker control is active.',),
           backgroundColor: Colors.green,
-          duration: Duration(seconds: 4),
         ),
       );
     }
@@ -262,9 +267,8 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              "✅ Accessibility enabled — Chitti will now follow you across apps!"),
+              '✅ Accessibility enabled — Chitti will now follow you across apps!',),
           backgroundColor: Colors.green,
-          duration: Duration(seconds: 4),
         ),
       );
     }
@@ -336,10 +340,10 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
         await ChittiAccessibilityBridge.instance.checkOverlayPermission();
     if (mounted) {
       setState(() {
-        _hasCallPermission = (statuses['readPhone'] == true) &&
-            (statuses['answerCalls'] == true) &&
-            (statuses['readCallLog'] == true);
-        _hasMicPermission = statuses['recordAudio'] == true;
+        _hasCallPermission = (statuses['readPhone'] ?? false) &&
+            (statuses['answerCalls'] ?? false) &&
+            (statuses['readCallLog'] ?? false);
+        _hasMicPermission = statuses['recordAudio'] ?? false;
         _hasOverlayPermission = hasOverlay;
       });
     }
@@ -400,7 +404,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Admin AI Co-Pilot keys saved on this device.')),
+            content: Text('Admin AI Co-Pilot keys saved on this device.'),),
       );
     } catch (e) {
       if (mounted) {
@@ -432,13 +436,13 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
         prefixIcon: Icon(Icons.smart_toy_rounded, color: accent, size: 20),
         border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide.none),
+            borderSide: BorderSide.none,),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       ),
       items: options
           .map((m) => DropdownMenuItem<String>(
-              value: m, child: Text(m, overflow: TextOverflow.ellipsis)))
+              value: m, child: Text(m, overflow: TextOverflow.ellipsis),),)
           .toList(),
       onChanged: (v) {
         if (v != null) onChanged(v);
@@ -470,13 +474,13 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
         Text(
           "Chitti's Voice",
           style: GoogleFonts.outfit(
-              color: _text, fontWeight: FontWeight.w700, fontSize: 13),
+              color: _text, fontWeight: FontWeight.w700, fontSize: 13,),
         ),
         const SizedBox(height: 4),
         Text(
           "If your phone's own TTS settings already have a male voice, "
-          "pick it below by name rather than relying on Chitti to guess "
-          "it from the raw voice list.",
+          'pick it below by name rather than relying on Chitti to guess '
+          'it from the raw voice list.',
           style:
               GoogleFonts.outfit(color: _muted, fontSize: 11.5, height: 1.35),
         ),
@@ -566,7 +570,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-              "No male voice showed up above? Some phones (often "
+              'No male voice showed up above? Some phones (often '
               'Samsung) ship a TTS engine with a smaller voice set. Go '
               'to Settings → General management → Text-to-speech → '
               'Preferred engine, switch it to "Google Text-to-speech", '
@@ -595,10 +599,10 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
         await ChittiAccessibilityBridge.instance.checkOverlayPermission();
     if (mounted) {
       setState(() {
-        _hasCallPermission = (statuses['readPhone'] == true) &&
-            (statuses['answerCalls'] == true) &&
-            (statuses['readCallLog'] == true);
-        _hasMicPermission = statuses['recordAudio'] == true;
+        _hasCallPermission = (statuses['readPhone'] ?? false) &&
+            (statuses['answerCalls'] ?? false) &&
+            (statuses['readCallLog'] ?? false);
+        _hasMicPermission = statuses['recordAudio'] ?? false;
         _hasOverlayPermission = hasOverlay;
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -623,33 +627,33 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
             const Icon(Icons.call_rounded, color: _red, size: 20),
             const SizedBox(width: 8),
             Text(
-              "Chitti AI Call Assistant",
+              'Chitti AI Call Assistant',
               style: GoogleFonts.outfit(
-                  color: _text, fontWeight: FontWeight.w700, fontSize: 13),
+                  color: _text, fontWeight: FontWeight.w700, fontSize: 13,),
             ),
           ],
         ),
         const SizedBox(height: 6),
         Text(
-          "Auto-answers incoming calls when you are busy, talks to the customer using warm Tamil/English, and takes messages or schedules appointments.",
+          'Auto-answers incoming calls when you are busy, talks to the customer using warm Tamil/English, and takes messages or schedules appointments.',
           style:
               GoogleFonts.outfit(color: _muted, fontSize: 11.5, height: 1.35),
         ),
         const SizedBox(height: 12),
         SwitchListTile(
           title: Text(
-            "Enable Call Assistant",
+            'Enable Call Assistant',
             style: GoogleFonts.outfit(
-                color: _text, fontSize: 13.5, fontWeight: FontWeight.w600),
+                color: _text, fontSize: 13.5, fontWeight: FontWeight.w600,),
           ),
           subtitle: Text(
-            _callAssistantEnabled ? "Active (Auto-answers calls)" : "Inactive",
+            _callAssistantEnabled ? 'Active (Auto-answers calls)' : 'Inactive',
             style: GoogleFonts.outfit(
                 color: _callAssistantEnabled ? Colors.green : _muted,
-                fontSize: 11),
+                fontSize: 11,),
           ),
           value: _callAssistantEnabled,
-          activeColor: _red,
+          activeThumbColor: _red,
           activeTrackColor: _red.withValues(alpha: 0.3),
           inactiveThumbColor: _muted,
           contentPadding: EdgeInsets.zero,
@@ -694,12 +698,12 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                   Expanded(
                     child: Text(
                       _isDefaultDialer
-                          ? "Chitti is the default Phone app — real speaker control is active"
-                          : "Real speaker control needs Chitti to be the default Phone app",
+                          ? 'Chitti is the default Phone app — real speaker control is active'
+                          : 'Real speaker control needs Chitti to be the default Phone app',
                       style: GoogleFonts.outfit(
                           color: _text,
                           fontSize: 12.5,
-                          fontWeight: FontWeight.w700),
+                          fontWeight: FontWeight.w700,),
                     ),
                   ),
                 ],
@@ -707,11 +711,11 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
               const SizedBox(height: 6),
               Text(
                 "Without this, Chitti's greeting only plays through the earpiece — "
-                "the caller never hears it (confirmed on both Oppo and Lenovo). "
+                'the caller never hears it (confirmed on both Oppo and Lenovo). '
                 "This replaces this phone's calling app with Chitti so it can "
-                "switch a real call to the speaker.",
+                'switch a real call to the speaker.',
                 style: GoogleFonts.outfit(
-                    color: _muted, fontSize: 11, height: 1.3),
+                    color: _muted, fontSize: 11, height: 1.3,),
               ),
               if (!_isDefaultDialer) ...[
                 const SizedBox(height: 10),
@@ -725,7 +729,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                             content: Text(outcome),
-                            duration: const Duration(seconds: 5)),
+                            duration: const Duration(seconds: 5),),
                       );
                     },
                     style: OutlinedButton.styleFrom(
@@ -745,9 +749,9 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
         // answering mode ChittiCallScreeningService.startScreening()
         // uses for the next call.
         Text(
-          "How Chitti answers a screened call",
+          'How Chitti answers a screened call',
           style: GoogleFonts.outfit(
-              color: _text, fontSize: 13.5, fontWeight: FontWeight.w600),
+              color: _text, fontSize: 13.5, fontWeight: FontWeight.w600,),
         ),
         const SizedBox(height: 8),
         _AnsweringModeOption(
@@ -787,9 +791,9 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
         // the SPEAKER ROUTE debug line reports which route really got
         // used (including "requested=X, not available").
         Text(
-          "Call audio route (acoustic bridge tests)",
+          'Call audio route (acoustic bridge tests)',
           style: GoogleFonts.outfit(
-              color: _text, fontSize: 13.5, fontWeight: FontWeight.w600),
+              color: _text, fontSize: 13.5, fontWeight: FontWeight.w600,),
         ),
         const SizedBox(height: 8),
         _AnsweringModeOption(
@@ -825,7 +829,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
           title: Text(
             'Record screened calls',
             style: GoogleFonts.outfit(
-                color: _text, fontSize: 13, fontWeight: FontWeight.w600),
+                color: _text, fontSize: 13, fontWeight: FontWeight.w600,),
           ),
           subtitle: Text(
             _callRecordingEnabled
@@ -837,7 +841,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
             ),
           ),
           value: _callRecordingEnabled,
-          activeColor: _red,
+          activeThumbColor: _red,
           activeTrackColor: _red.withValues(alpha: 0.3),
           inactiveThumbColor: _muted,
           contentPadding: EdgeInsets.zero,
@@ -850,20 +854,20 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
         const SizedBox(height: 12),
         SwitchListTile(
           title: Text(
-            "Enable Morning Briefing",
+            'Enable Morning Briefing',
             style: GoogleFonts.outfit(
-                color: _text, fontSize: 13.5, fontWeight: FontWeight.w600),
+                color: _text, fontSize: 13.5, fontWeight: FontWeight.w600,),
           ),
           subtitle: Text(
             _morningBriefingEnabled
-                ? "Active (Vocal summary at launch)"
-                : "Inactive",
+                ? 'Active (Vocal summary at launch)'
+                : 'Inactive',
             style: GoogleFonts.outfit(
                 color: _morningBriefingEnabled ? Colors.green : _muted,
-                fontSize: 11),
+                fontSize: 11,),
           ),
           value: _morningBriefingEnabled,
-          activeColor: _red,
+          activeThumbColor: _red,
           activeTrackColor: _red.withValues(alpha: 0.3),
           inactiveThumbColor: _muted,
           inactiveTrackColor: _bg,
@@ -883,35 +887,34 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
           ),
           child: Column(
             children: [
-              _permissionStatusRow("Answer Phone Calls", _hasCallPermission),
+              _permissionStatusRow('Answer Phone Calls', _hasCallPermission),
               const SizedBox(height: 8),
-              _permissionStatusRow("Record Call Audio", _hasMicPermission),
+              _permissionStatusRow('Record Call Audio', _hasMicPermission),
               const SizedBox(height: 8),
               _permissionStatusRow(
-                  "Appear on Top (Overlay)", _hasOverlayPermission),
+                  'Appear on Top (Overlay)', _hasOverlayPermission,),
               const SizedBox(height: 8),
-              _permissionStatusRow("Follow You Across Apps (Accessibility)",
-                  _accessibilityServiceEnabled),
+              _permissionStatusRow('Follow You Across Apps (Accessibility)',
+                  _accessibilityServiceEnabled,),
               if (!_accessibilityServiceEnabled) ...[
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () =>
-                        ChittiAccessibilityBridge.instance.openSettings(),
+                    onPressed: ChittiAccessibilityBridge.instance.openSettings,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _red.withValues(alpha: 0.15),
                       side: const BorderSide(color: _red),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
+                          borderRadius: BorderRadius.circular(10),),
                       padding: const EdgeInsets.symmetric(vertical: 8),
                     ),
                     child: Text(
-                      "Enable Accessibility",
+                      'Enable Accessibility',
                       style: GoogleFonts.outfit(
                           color: _red,
                           fontWeight: FontWeight.w600,
-                          fontSize: 12),
+                          fontSize: 12,),
                     ),
                   ),
                 ),
@@ -920,7 +923,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                   child: Text(
                     "Opens system Settings — find Chitti in the list and turn it on. Come back here and you'll see a confirmation.",
                     style: GoogleFonts.outfit(
-                        color: _muted, fontSize: 10.5, height: 1.3),
+                        color: _muted, fontSize: 10.5, height: 1.3,),
                   ),
                 ),
               ],
@@ -936,15 +939,15 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                       backgroundColor: _purple.withValues(alpha: 0.2),
                       side: const BorderSide(color: _purple),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
+                          borderRadius: BorderRadius.circular(10),),
                       padding: const EdgeInsets.symmetric(vertical: 8),
                     ),
                     child: Text(
-                      "Request Call Permissions",
+                      'Request Call Permissions',
                       style: GoogleFonts.outfit(
                           color: _purple,
                           fontWeight: FontWeight.w600,
-                          fontSize: 12),
+                          fontSize: 12,),
                     ),
                   ),
                 )
@@ -953,14 +956,14 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Icon(Icons.check_circle_rounded,
-                        color: Colors.green, size: 16),
+                        color: Colors.green, size: 16,),
                     const SizedBox(width: 6),
                     Text(
-                      "Permissions configured successfully",
+                      'Permissions configured successfully',
                       style: GoogleFonts.outfit(
                           color: Colors.green,
                           fontSize: 12,
-                          fontWeight: FontWeight.w600),
+                          fontWeight: FontWeight.w600,),
                     ),
                   ],
                 ),
@@ -975,19 +978,19 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
           child: OutlinedButton.icon(
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
-                  builder: (_) => const ChittiDebugLogsScreen()),
+                  builder: (_) => const ChittiDebugLogsScreen(),),
             ),
             icon: const Icon(Icons.bug_report_rounded, color: _red, size: 18),
             label: Text(
               'View Call Debug Logs',
               style: GoogleFonts.outfit(
-                  color: _red, fontWeight: FontWeight.w600, fontSize: 12.5),
+                  color: _red, fontWeight: FontWeight.w600, fontSize: 12.5,),
             ),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: _red),
               padding: const EdgeInsets.symmetric(vertical: 10),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                  borderRadius: BorderRadius.circular(12),),
             ),
           ),
         ),
@@ -1002,28 +1005,28 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
           child: OutlinedButton.icon(
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
-                  builder: (_) => const ChittiDevMonitorScreen()),
+                  builder: (_) => const ChittiDevMonitorScreen(),),
             ),
             icon: const Icon(Icons.monitor_heart_rounded,
-                color: _purple, size: 18),
+                color: _purple, size: 18,),
             label: Text(
               'Development Monitor (builds & test APK)',
               style: GoogleFonts.outfit(
-                  color: _purple, fontWeight: FontWeight.w600, fontSize: 12.5),
+                  color: _purple, fontWeight: FontWeight.w600, fontSize: 12.5,),
             ),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: _purple),
               padding: const EdgeInsets.symmetric(vertical: 10),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                  borderRadius: BorderRadius.circular(12),),
             ),
           ),
         ),
         const SizedBox(height: 20),
         Text(
-          "AI-Recorded Appointments",
+          'AI-Recorded Appointments',
           style: GoogleFonts.outfit(
-              color: _text, fontWeight: FontWeight.w700, fontSize: 12.5),
+              color: _text, fontWeight: FontWeight.w700, fontSize: 12.5,),
         ),
         const SizedBox(height: 8),
         _buildAppointmentsList(),
@@ -1042,11 +1045,11 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
         Row(
           children: [
             Text(
-              isGranted ? "Granted" : "Denied",
+              isGranted ? 'Granted' : 'Denied',
               style: GoogleFonts.outfit(
                   color: isGranted ? Colors.green : _red,
                   fontSize: 12,
-                  fontWeight: FontWeight.w600),
+                  fontWeight: FontWeight.w600,),
             ),
             const SizedBox(width: 6),
             Icon(
@@ -1074,7 +1077,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Text(
-              "Error loading appointments: ${snapshot.error}",
+              'Error loading appointments: ${snapshot.error}',
               style: GoogleFonts.outfit(color: _red, fontSize: 12),
             ),
           );
@@ -1106,7 +1109,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                 const Icon(Icons.event_busy_rounded, color: _muted, size: 36),
                 const SizedBox(height: 8),
                 Text(
-                  "No appointments recorded yet",
+                  'No appointments recorded yet',
                   style: GoogleFonts.outfit(color: _muted, fontSize: 12.5),
                 ),
               ],
@@ -1119,7 +1122,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
           itemCount: docs.length,
           separatorBuilder: (context, index) => const SizedBox(height: 10),
           itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
+            final data = docs[index].data()! as Map<String, dynamic>;
             final docId = docs[index].id;
             final phone = data['phone'] as String? ?? 'Unknown Caller';
             final name = data['name'] as String? ?? 'New Customer';
@@ -1130,12 +1133,11 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
             final ts = data['timestamp'] as Timestamp?;
             final dateStr = ts != null
                 ? "${ts.toDate().day}/${ts.toDate().month} ${ts.toDate().hour.toString().padLeft(2, '0')}:${ts.toDate().minute.toString().padLeft(2, '0')}"
-                : "Just now";
+                : 'Just now';
 
             final oneLineSummary = ChittiSummarizer.heuristicSummary(
               sender: phone,
               message: summary,
-              isTamil: true,
             );
 
             return Container(
@@ -1156,7 +1158,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                         style: GoogleFonts.outfit(
                             color: _text,
                             fontWeight: FontWeight.w700,
-                            fontSize: 13),
+                            fontSize: 13,),
                       ),
                       Text(
                         dateStr,
@@ -1172,13 +1174,13 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                         style: GoogleFonts.outfit(
                             color: _red,
                             fontSize: 11.5,
-                            fontWeight: FontWeight.w600),
+                            fontWeight: FontWeight.w600,),
                       ),
                       const Spacer(),
                       if (localAudioPath != null)
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                              horizontal: 6, vertical: 2,),
                           decoration: BoxDecoration(
                             color: Colors.green.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(6),
@@ -1186,14 +1188,14 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                           child: Row(
                             children: [
                               const Icon(Icons.mic_rounded,
-                                  color: Colors.green, size: 12),
+                                  color: Colors.green, size: 12,),
                               const SizedBox(width: 3),
                               Text(
-                                "Recorded",
+                                'Recorded',
                                 style: GoogleFonts.outfit(
                                     color: Colors.green,
                                     fontSize: 10,
-                                    fontWeight: FontWeight.w600),
+                                    fontWeight: FontWeight.w600,),
                               ),
                             ],
                           ),
@@ -1212,7 +1214,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                       style: GoogleFonts.outfit(
                           color: _text,
                           fontSize: 12,
-                          fontWeight: FontWeight.w500),
+                          fontWeight: FontWeight.w500,),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -1223,7 +1225,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                         IconButton(
                           tooltip: 'Play / Share Voice Recording',
                           icon: const Icon(Icons.play_circle_fill_rounded,
-                              color: Colors.green, size: 22),
+                              color: Colors.green, size: 22,),
                           onPressed: () async {
                             final file = File(localAudioPath);
                             if (await file.exists()) {
@@ -1237,7 +1239,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                               final uri = Uri.parse(audioUrl);
                               if (await canLaunchUrl(uri)) {
                                 await launchUrl(uri,
-                                    mode: LaunchMode.externalApplication);
+                                    mode: LaunchMode.externalApplication,);
                               }
                             }
                           },
@@ -1246,7 +1248,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                         IconButton(
                           tooltip: 'Share Transcript',
                           icon: const Icon(Icons.description_rounded,
-                              color: Colors.orange, size: 20),
+                              color: Colors.orange, size: 20,),
                           onPressed: () async {
                             final file = File(localTranscriptPath);
                             if (await file.exists()) {
@@ -1263,21 +1265,20 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                         IconButton(
                           tooltip: 'Backup audio to Cloud',
                           icon: const Icon(Icons.cloud_upload_rounded,
-                              color: Colors.blue, size: 20),
+                              color: Colors.blue, size: 20,),
                           onPressed: () async {
                             try {
                               final file = File(localAudioPath);
                               if (await file.exists()) {
                                 final bytes = await file.readAsBytes();
                                 final cleanNumber =
-                                    phone.replaceAll(RegExp(r'[^0-9+]'), '');
+                                    phone.replaceAll(RegExp('[^0-9+]'), '');
                                 final fileName =
                                     'call_${cleanNumber}_${DateTime.now().millisecondsSinceEpoch}.m4a';
                                 final url = await CloudinaryUploadService()
                                     .uploadAudioBytes(
                                   bytes,
                                   fileName: fileName,
-                                  folder: 'call_recordings',
                                 );
                                 await FirebaseFirestore.instance
                                     .collection('chitti_appointments')
@@ -1287,7 +1288,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
                                         content: Text(
-                                            'Audio successfully backed up to Cloud!')),
+                                            'Audio successfully backed up to Cloud!',),),
                                   );
                                 }
                               }
@@ -1303,7 +1304,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                       IconButton(
                         tooltip: 'Send SMS',
                         icon: const Icon(Icons.sms_rounded,
-                            color: _purple, size: 18),
+                            color: _purple, size: 18,),
                         onPressed: () async {
                           final uri = Uri.parse('sms:$phone');
                           if (await canLaunchUrl(uri)) {
@@ -1314,7 +1315,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                       IconButton(
                         tooltip: 'Call Back',
                         icon: const Icon(Icons.phone_in_talk_rounded,
-                            color: Colors.green, size: 18),
+                            color: Colors.green, size: 18,),
                         onPressed: () async {
                           final uri = Uri.parse('tel:$phone');
                           if (await canLaunchUrl(uri)) {
@@ -1342,7 +1343,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
         elevation: 0,
         title: Text('Admin AI Configuration',
             style: GoogleFonts.outfit(
-                color: _text, fontWeight: FontWeight.w700, fontSize: 16)),
+                color: _text, fontWeight: FontWeight.w700, fontSize: 16,),),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _red))
@@ -1361,15 +1362,15 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                     Row(
                       children: [
                         const Icon(Icons.support_agent_rounded,
-                            color: _red, size: 26),
+                            color: _red, size: 26,),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'These keys power the Quick Task chatbox\'s three agents — Groq, Gemini, and DeepSeek. '
+                            "These keys power the Quick Task chatbox's three agents — Groq, Gemini, and DeepSeek. "
                             'Pick a model under each key; whichever agent is active in Quick Task uses that model as '
                             'your full admin assistant.',
                             style: GoogleFonts.outfit(
-                                color: _muted, fontSize: 12.5, height: 1.4),
+                                color: _muted, fontSize: 12.5, height: 1.4,),
                           ),
                         ),
                       ],
@@ -1431,7 +1432,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                             style: GoogleFonts.outfit(
                                 color: _text,
                                 fontWeight: FontWeight.w700,
-                                fontSize: 13)),
+                                fontSize: 13,),),
                         const SizedBox(width: 8),
                         _AdminKeyStatusChip(controller: _groqCtrl),
                       ],
@@ -1449,7 +1450,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                         fillColor: _bg,
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none),
+                            borderSide: BorderSide.none,),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -1466,7 +1467,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                             style: GoogleFonts.outfit(
                                 color: _text,
                                 fontWeight: FontWeight.w700,
-                                fontSize: 13)),
+                                fontSize: 13,),),
                         const SizedBox(width: 8),
                         _AdminKeyStatusChip(controller: _geminiCtrl),
                       ],
@@ -1480,12 +1481,12 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                         hintText: 'Paste your Gemini API key',
                         hintStyle: const TextStyle(color: _muted),
                         prefixIcon: const Icon(Icons.auto_awesome_rounded,
-                            color: _purple),
+                            color: _purple,),
                         filled: true,
                         fillColor: _bg,
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none),
+                            borderSide: BorderSide.none,),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -1504,7 +1505,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                             style: GoogleFonts.outfit(
                                 color: _text,
                                 fontWeight: FontWeight.w700,
-                                fontSize: 13)),
+                                fontSize: 13,),),
                         const SizedBox(width: 8),
                         _AdminKeyStatusChip(controller: _deepseekCtrl),
                       ],
@@ -1523,7 +1524,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                         fillColor: _bg,
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none),
+                            borderSide: BorderSide.none,),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -1542,7 +1543,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                               style: GoogleFonts.outfit(
                                   color: _text,
                                   fontWeight: FontWeight.w700,
-                                  fontSize: 13)),
+                                  fontSize: 13,),),
                         ),
                         const SizedBox(width: 8),
                         _AdminKeyStatusChip(controller: _anthropicCtrl),
@@ -1557,12 +1558,12 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                         hintText: 'Paste your Anthropic API key (sk-ant-...)',
                         hintStyle: const TextStyle(color: _muted),
                         prefixIcon: const Icon(Icons.psychology_rounded,
-                            color: Colors.deepOrangeAccent),
+                            color: Colors.deepOrangeAccent,),
                         filled: true,
                         fillColor: _bg,
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none),
+                            borderSide: BorderSide.none,),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -1582,20 +1583,20 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                                 width: 16,
                                 height: 16,
                                 child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white),
+                                    strokeWidth: 2, color: Colors.white,),
                               )
                             : const Icon(Icons.save_rounded,
-                                color: Colors.white),
+                                color: Colors.white,),
                         label: Text(
                           _saving ? 'Saving...' : 'Save Keys',
                           style: const TextStyle(
-                              color: Colors.white, fontWeight: FontWeight.w700),
+                              color: Colors.white, fontWeight: FontWeight.w700,),
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: _red,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
+                              borderRadius: BorderRadius.circular(14),),
                         ),
                       ),
                     ),
@@ -1658,13 +1659,13 @@ class _AnsweringModeOption extends StatelessWidget {
                     style: GoogleFonts.outfit(
                         color: _text,
                         fontSize: 13,
-                        fontWeight: FontWeight.w700),
+                        fontWeight: FontWeight.w700,),
                   ),
                   const SizedBox(height: 3),
                   Text(
                     subtitle,
                     style: GoogleFonts.outfit(
-                        color: _muted, fontSize: 11, height: 1.3),
+                        color: _muted, fontSize: 11, height: 1.3,),
                   ),
                 ],
               ),

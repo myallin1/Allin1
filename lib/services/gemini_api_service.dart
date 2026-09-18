@@ -51,11 +51,24 @@ class GeminiApiService {
   // the real cause was invisible. Now we try a small ordered list of
   // known-good IDs and use the first that responds, which survives Google
   // renaming the current one out from under us.
+  // FIX (Sep 18 2026 — Nizam: "gemini model select agi vision proper ah
+  // work agutha paru"): gemini-2.0-flash and gemini-2.0-flash-001 are
+  // both shut down by Google now (ai.google.dev/gemini-api/docs/models
+  // lists them under "Previous models (Shut down)"), and gemini-1.5-flash
+  // is further behind that same retirement curve. The fallback loop
+  // below still means a request eventually succeeds via
+  // gemini-flash-latest, but only after burning 2-3 dead 404 round
+  // trips first — on a slow connection that is tens of seconds of
+  // silence before Chitti answers. Leading with the current model name
+  // means the common case succeeds on the first try; the old IDs stay
+  // in the list as a safety net in case Google renames the current one
+  // out from under this file again before anyone notices.
   static const List<String> _modelCandidates = <String>[
+    'gemini-3.8-flash',
+    'gemini-flash-latest',
     'gemini-2.0-flash',
     'gemini-2.0-flash-001',
     'gemini-1.5-flash',
-    'gemini-flash-latest',
   ];
 
   /// Remembers which candidate actually worked, so we pay the fallback
@@ -210,7 +223,7 @@ class GeminiApiService {
       );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         debugPrint(
-            '[GeminiApiService] sendMessage failed: ${response.statusCode} ${response.body}');
+            '[GeminiApiService] sendMessage failed: ${response.statusCode} ${response.body}',);
         // Surface the REAL reason instead of a generic string — see
         // _explainFailure. This is what makes the problem diagnosable.
         return _explainFailure(response);
@@ -272,7 +285,7 @@ class GeminiApiService {
       });
       if (response.statusCode < 200 || response.statusCode >= 300) {
         debugPrint(
-            '[GeminiApiService] extractAgentAction failed: ${response.statusCode} ${response.body}');
+            '[GeminiApiService] extractAgentAction failed: ${response.statusCode} ${response.body}',);
         return null;
       }
       final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -340,12 +353,12 @@ class GeminiApiService {
       });
       if (response.statusCode < 200 || response.statusCode >= 300) {
         debugPrint(
-            '[GeminiApiService] vision analysis failed: ${response.statusCode} ${response.body}');
+            '[GeminiApiService] vision analysis failed: ${response.statusCode} ${response.body}',);
         return null;
       }
       final text = _extractText(response.body);
       if (text == null || text.isEmpty) return null;
-      final cleaned = text.replaceAll(RegExp(r'```json|```'), '').trim();
+      final cleaned = text.replaceAll(RegExp('```json|```'), '').trim();
       final parsed = jsonDecode(cleaned) as Map<String, dynamic>;
       final rawItems = parsed['items'] as List<dynamic>? ?? const [];
       final items = <Map<String, String>>[];
@@ -355,7 +368,7 @@ class GeminiApiService {
         if (item.isEmpty) continue;
         items.add({
           'item': item,
-          'quantity': (raw['quantity'] as String?)?.trim() ?? ''
+          'quantity': (raw['quantity'] as String?)?.trim() ?? '',
         });
       }
       return items;
@@ -395,7 +408,7 @@ class GeminiApiService {
               {
                 'text': 'This is a screenshot of a screen inside the Allin1 '
                     'admin app (a Flutter super-app for NJ Tech, Erode). '
-                    'The admin just asked, but Chitti (the app\'s AI '
+                    "The admin just asked, but Chitti (the app's AI "
                     'assistant) could not resolve their question from the '
                     'words alone: "$question"\n\n'
                     'Look at exactly what is on screen — the visible '
@@ -420,7 +433,7 @@ class GeminiApiService {
       });
       if (response.statusCode < 200 || response.statusCode >= 300) {
         debugPrint(
-            '[GeminiApiService] describeScreen failed: ${response.statusCode} ${response.body}');
+            '[GeminiApiService] describeScreen failed: ${response.statusCode} ${response.body}',);
         return null;
       }
       final text = _extractText(response.body)?.trim();

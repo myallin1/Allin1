@@ -130,8 +130,21 @@ const List<ChittiModel> kChittiModels = <ChittiModel>[
     // builder works unchanged.
     endpoint:
         'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
-    textModel: 'gemini-2.0-flash',
-    visionModel: 'gemini-2.0-flash',
+    // FIX (Sep 18 2026 — found while verifying "gemini vision select
+    // properly work agutha paru, wiring pipeline sariya irukanu
+    // paathu sollu"): gemini-2.0-flash is shut down by Google
+    // (ai.google.dev/gemini-api/docs/models lists it under "Previous
+    // models (Shut down)"). This was silent for the SAME reason the
+    // Groq fix above was — nothing here throws a clean "model
+    // retired" error the UI surfaces, every call to it just failed.
+    // Gemini was Chitti's fallback vision provider after the Groq fix,
+    // so this meant vision was STILL broken end-to-end even after that
+    // fix landed, just one hop further down the fallback chain.
+    // Confirmed current via ai.google.dev/gemini-api/docs/openai
+    // (OpenAI-compat endpoint's own docs use this exact model string
+    // for image_url vision requests).
+    textModel: 'gemini-3.8-flash',
+    visionModel: 'gemini-3.8-flash',
     envKeyName: 'GEMINI_API_KEY',
     prefsKeyName: 'personal_gemini_api_key',
     modelPrefsKeyName: 'personal_gemini_model',
