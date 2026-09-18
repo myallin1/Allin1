@@ -183,6 +183,15 @@ class ChittiDevTaskService {
   // "@gemini proceed" / "@agy proceed" — not always "@claude proceed" —
   // without the caller having to remember which engine drafted the plan.
   static const String _lastPlanEngineKey = 'chitti_last_plan_issue_engine';
+  // FIX (Sep 18 2026 — Gemini-engine audit, round 2): _lastPlanEngineKey
+  // alone only remembers the MOST RECENT plan's engine. If the admin
+  // drafts plan #10 with Claude, then later drafts plan #12 with
+  // Antigravity, then says "approve plan #10", postApprovalComment used
+  // to still post "@agy proceed" on issue #10 — the wrong engine for
+  // that specific issue. This map keeps every plan issue's own engine,
+  // keyed by issue number, so an explicit issueNumber always resolves
+  // to the engine that actually drafted THAT plan.
+  static const String _planEngineByIssueKey = 'chitti_plan_issue_engine_map';
 
   static Future<void> _rememberPlanIssue(
     int number, {
@@ -191,6 +200,21 @@ class ChittiDevTaskService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_lastPlanIssueKey, number);
     await prefs.setString(_lastPlanEngineKey, engine.name);
+    final map = await _readPlanEngineMap(prefs);
+    map[number.toString()] = engine.name;
+    await prefs.setString(_planEngineByIssueKey, jsonEncode(map));
+  }
+
+  static Future<Map<String, dynamic>> _readPlanEngineMap(
+    SharedPreferences prefs,
+  ) async {
+    final raw = prefs.getString(_planEngineByIssueKey);
+    if (raw == null || raw.isEmpty) return <String, dynamic>{};
+    try {
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      return <String, dynamic>{};
+    }
   }
 
   static Future<int?> readLastPlanIssueNumber() async {
@@ -200,6 +224,20 @@ class ChittiDevTaskService {
 
   static Future<ChittiDevEngine> readLastPlanEngine() async {
     final prefs = await SharedPreferences.getInstance();
+    return ChittiDevEngineTag.fromName(prefs.getString(_lastPlanEngineKey));
+  }
+
+  /// The engine that drafted [issueNumber]'s own plan, if known — falls
+  /// back to the most recent plan's engine (the old global behavior)
+  /// when that specific issue was never recorded, e.g. a plan created
+  /// before this per-issue map existed.
+  static Future<ChittiDevEngine> readEngineForIssue(int? issueNumber) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (issueNumber != null) {
+      final map = await _readPlanEngineMap(prefs);
+      final stored = map[issueNumber.toString()] as String?;
+      if (stored != null) return ChittiDevEngineTag.fromName(stored);
+    }
     return ChittiDevEngineTag.fromName(prefs.getString(_lastPlanEngineKey));
   }
 
@@ -411,7 +449,7 @@ class ChittiDevTaskService {
             'draft the plan first.',
       );
     }
-    final mention = (engine ?? await readLastPlanEngine()).mention;
+    final mention = (engine ?? await readEngineForIssue(number)).mention;
 
     final body = '$mention proceed with the plan above — the admin has '
         'reviewed and approved it. Please implement it now and open a '
@@ -524,7 +562,16 @@ class ChittiDevTaskService {
             loginLower.contains('antigravity') ||
             loginLower.contains('agy') ||
             loginLower == 'github-actions[bot]';
-        if (looksLikeAnEngineBot) {
+        // FIX (Sep 18 2026 — Gemini-engine audit, round 2): claude.yml's
+        // own failure-fallback step posts "@gemini please implement
+        // this instead" via plain GITHUB_TOKEN too, so it also matches
+        // 'github-actions[bot]' above. Without this exclusion that
+        // routing notification — not a plan — would be shown to the
+        // admin as "here's what Gemini posted."
+        final body = comment['body'] as String? ?? '';
+        final isEngineHandoffNotice =
+            body.contains('the Claude engine failed on this task');
+        if (looksLikeAnEngineBot && !isEngineHandoffNotice) {
           return ChittiDevPlanReport(
             found: true,
             body: comment['body'] as String?,

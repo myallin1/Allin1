@@ -117,12 +117,7 @@ jobs:
                 safe, open the PR as a DRAFT and say what you were
                 unsure about.
 
-            FINISH BY
-            Creating a branch named gemini/issue-<number>-<short-slug>,
-            committing with a clear message, and opening a pull request
-            TARGETING main. In the PR body: what you changed, which
-            files you grepped to find it, and anything you deliberately
-            did not do.
+            ${{ contains(github.event.issue.body, 'Do not open a pull request or write any code yet') && 'PLAN-ONLY MODE -- this issue explicitly asked for an audit and a plan, not code. Do NOT create a branch, do NOT write any code, and do NOT open a pull request. Instead, post ONE comment on this issue (use the gh CLI, already authenticated as GITHUB_TOKEN) containing your audit findings and a concrete implementation plan: approach, files likely to be touched, risks/tradeoffs. Stop after posting that comment.' || 'FINISH BY creating a branch named gemini/issue-<number>-<short-slug>, committing with a clear message, and opening a pull request TARGETING main. In the PR body: what you changed, which files you grepped to find it, and anything you deliberately did not do.' }}
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2

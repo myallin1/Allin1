@@ -1776,13 +1776,21 @@ class ChittiActionExecutor {
       );
     }
 
+    // NEW (Sep 18 2026 — Gemini-engine audit): this used to hardcode
+    // "Claude" the same way propose_dev_plan's confirmation text once
+    // did. readEngineForIssue(issueNumber) is the same per-issue source
+    // postApprovalComment now trusts for the actual "@gemini proceed"
+    // mention, so this can never disagree with what approving THIS
+    // specific plan will actually do.
+    final engineLabel =
+        (await ChittiDevTaskService.readEngineForIssue(issueNumber)).label;
     return ChittiActionResult(
       text: isTamil
-          ? 'Claude போட்ட plan இது:\n\n${report.body}'
-          : "Here's what Claude posted:\n\n${report.body}",
-      suggestions: const <String>[
+          ? '$engineLabel போட்ட plan இது:\n\n${report.body}'
+          : "Here's what $engineLabel posted:\n\n${report.body}",
+      suggestions: <String>[
         'Proceed with the plan',
-        'Ask Claude to revise the plan',
+        'Ask $engineLabel to revise the plan',
       ],
     );
   }
@@ -1793,16 +1801,16 @@ class ChittiActionExecutor {
   }) async {
     final issueNumber = (args['issueNumber'] as num?)?.toInt();
     final note = (args['note'] as String?)?.trim();
-    // NEW (Sep 17 2026): postApprovalComment is engine-aware (it posts
-    // "@gemini proceed" / "@agy proceed" under a plan that engine
-    // drafted, not always "@claude proceed") — read the same value here
-    // so this response text never names the wrong engine. Currently
-    // this always resolves to Claude in practice (propose_dev_plan has
-    // no engine param yet, so every plan issue is a Claude one), but
-    // hardcoding "Claude" here would silently start lying the moment
-    // that changes, while the actual @mention posted was already
-    // correct — read live instead of assuming.
-    final engineLabel = (await ChittiDevTaskService.readLastPlanEngine()).label;
+    // NEW (Sep 17 2026, broadened Sep 18 2026): postApprovalComment is
+    // engine-aware (it posts "@gemini proceed" / "@agy proceed" under a
+    // plan that engine drafted, not always "@claude proceed") — read
+    // the SAME per-issue-number value here, via readEngineForIssue, so
+    // this response text can never name a different engine than the one
+    // postApprovalComment actually @-mentions for this exact issue,
+    // even when a different, more recent plan issue used another
+    // engine.
+    final engineLabel =
+        (await ChittiDevTaskService.readEngineForIssue(issueNumber)).label;
     final result = await ChittiDevTaskService.postApprovalComment(
       issueNumber: issueNumber,
       extraNote: note,
