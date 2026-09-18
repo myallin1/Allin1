@@ -510,7 +510,7 @@ class ChittiLocalIntentEngine {
       phrases: [
         'speak in malayalam',
         'change to malayalam',
-        'malayalam please'
+        'malayalam please',
       ],
     ),
 
@@ -755,6 +755,38 @@ class ChittiLocalIntentEngine {
         'pr eppadi irukku',
         'claude code work mudinjacha',
         'develop pannathu ready ah',
+      ],
+    ),
+    // NEW (Sep 16 2026 — check_dev_plan): only the plain no-argument
+    // phrasing resolves locally, matching the tool's own optional
+    // issueNumber (defaults to the most recent plan issue).
+    _IntentRule(
+      action: 'check_dev_plan',
+      variants: {'admin'},
+      phrases: [
+        'check the plan',
+        'plan vandhucha',
+        'claude plan sonnacha',
+        'plan status',
+        'plan ready ah',
+      ],
+    ),
+    // NEW (Sep 18 2026 — On-Device Error Log): reads today's (or recent)
+    // error logs from local Hive store on-device with zero network calls.
+    _IntentRule(
+      action: 'get_app_error_logs',
+      variants: {'admin'},
+      phrases: [
+        'check error log',
+        'error log',
+        'app errors',
+        'any errors today',
+        'crash log',
+        'app crash reports',
+        'error vandhucha',
+        'app la error irukka',
+        'எரர் லாக்',
+        'இன்னைக்கு எரர் வந்ததா',
       ],
     ),
     // NEW (Sep 10 2026 — open_admin_browser): only the plain "open

@@ -2,9 +2,9 @@
 // Allin1 — ADMIN Panel Entry Point
 // HIDDEN — Not for public!
 
-import 'package:app_links/app_links.dart';
 import 'dart:async';
 
+import 'package:app_links/app_links.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -20,13 +20,13 @@ import 'app_navigator.dart';
 import 'config/app_variant.dart';
 import 'config/web_push_config.dart';
 import 'firebase_options.dart';
-import 'screens/admin/admin_web_tabs_screen.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 import 'screens/admin/admin_dialer_screen.dart';
+import 'screens/admin/admin_in_call_screen.dart';
 import 'screens/admin/admin_incoming_call_screen.dart';
 import 'screens/admin/admin_post_call_sheet.dart';
+import 'screens/admin/admin_web_tabs_screen.dart';
 import 'screens/admin/admin_whats_new_sheet.dart';
-import 'screens/admin/admin_in_call_screen.dart';
 import 'screens/admin/ads_management_screen.dart';
 import 'screens/admin/credentials_admin_screen.dart';
 import 'screens/admin/fare_management_screen.dart';
@@ -36,15 +36,16 @@ import 'screens/login_screen.dart';
 import 'services/admin_alert_notification_service.dart';
 import 'services/admin_foreground_service.dart';
 import 'services/admin_live_alert_service.dart';
-import 'services/guru_overlay_service.dart';
-import 'services/db_usage_tracker.dart';
-import 'services/localization_service.dart';
-import 'services/migration_gate_service.dart';
+import 'services/app_error_log_service.dart';
 import 'services/chitti/chitti_accessibility_bridge.dart';
 import 'services/chitti/chitti_commitment_alarms.dart';
 import 'services/chitti/chitti_followup_service.dart';
 import 'services/chitti/chitti_screen_tracker.dart';
 import 'services/chitti/chitti_screen_vision_helper.dart';
+import 'services/db_usage_tracker.dart';
+import 'services/guru_overlay_service.dart';
+import 'services/localization_service.dart';
+import 'services/migration_gate_service.dart';
 import 'services/session_service.dart';
 import 'services/theme_service.dart';
 import 'widgets/branded_loading_screen.dart';
@@ -61,7 +62,7 @@ import 'widgets/migration_notice_overlay.dart';
 // background messaging pipeline at all).
 @pragma('vm:entry-point')
 Future<void> _adminFirebaseMessagingBackgroundHandler(
-    RemoteMessage message) async {
+    RemoteMessage message,) async {
   debugPrint('[main_admin] Background push received: ${message.messageId}');
 }
 
@@ -85,7 +86,7 @@ Future<void> _syncFcmTokenForAdmin(String uid) async {
       await FirebaseFirestore.instance.collection('admins').doc(uid).set({
         'fcmToken': token,
         'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true),);
       debugPrint('[FCM] Token synced for admin $uid');
     }
   } catch (e) {
@@ -99,13 +100,13 @@ Future<void> _syncFcmTokenForAdmin(String uid) async {
       FirebaseFirestore.instance.collection('admins').doc(uid).set({
         'fcmToken': newToken,
         'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true)).catchError((Object e) {
+      }, SetOptions(merge: true),).catchError((Object e) {
         debugPrint('[FCM] Token refresh write failed for admin $uid: $e');
       }),
     );
   }, onError: (Object e) {
     debugPrint('[FCM] onTokenRefresh listener error: $e');
-  });
+  },);
 }
 
 void _initAdminFcmAuthListener() {
@@ -233,8 +234,11 @@ class _BootLoadingAppState extends State<_BootLoadingApp> {
 }
 
 void main() {
+  final previousFlutterOnError = FlutterError.onError;
   FlutterError.onError = (details) {
     debugPrint('[main_admin] Flutter error: ${details.exceptionAsString()}');
+    AppErrorLogService.recordFlutterError(details);
+    previousFlutterOnError?.call(details);
   };
 
   // NOTE for whoever reads this next: this used to be a manual
@@ -256,6 +260,12 @@ void main() {
     },
     appRunner: () async {
       WidgetsFlutterBinding.ensureInitialized();
+      final previousPlatformOnError = PlatformDispatcher.instance.onError;
+      PlatformDispatcher.instance.onError = (error, stack) {
+        debugPrint('[main_admin] PlatformDispatcher error: $error');
+        AppErrorLogService.recordPlatformError(error, stack);
+        return previousPlatformOnError?.call(error, stack) ?? false;
+      };
       // FIX (audit finding — notifications_screen.dart hardcoded
       // 'customer' fallback): see lib/config/app_variant.dart.
       currentAppVariant = 'admin';
@@ -279,7 +289,7 @@ void main() {
       if (!hasSeenSplashVideoEver) {
         runApp(_BootLoadingApp(onVideoFinished: () {
           if (!videoDone.isCompleted) videoDone.complete();
-        }));
+        },),);
       } else {
         videoDone.complete();
       }
@@ -302,7 +312,7 @@ void main() {
       } else {
         unawaited(Hive.initFlutter().catchError((Object e) {
           debugPrint('[main_admin] Background Hive.initFlutter() error: $e');
-        }));
+        }),);
       }
 
       try {
@@ -313,7 +323,7 @@ void main() {
             );
           } catch (initErr) {
             debugPrint(
-                '[main_admin] Options init error: $initErr, attempting native fallback');
+                '[main_admin] Options init error: $initErr, attempting native fallback',);
             if (Firebase.apps.isEmpty) {
               await Firebase.initializeApp();
             }
@@ -344,7 +354,7 @@ void main() {
           debugPrint('[main_admin] Firebase init failed: $e\n$stack');
           if (Firebase.apps.isEmpty) {
             runApp(_InitErrorApp(
-                '[BUILD-FINGERPRINT-31AUG-1348] Firebase initialization failed:\n$e\n\nSTACK:\n$stack'));
+                '[BUILD-FINGERPRINT-31AUG-1348] Firebase initialization failed:\n$e\n\nSTACK:\n$stack',),);
             return;
           }
         }
@@ -352,7 +362,7 @@ void main() {
         debugPrint('[main_admin] Firebase init failed: $e\n$stack');
         if (Firebase.apps.isEmpty) {
           runApp(_InitErrorApp(
-              '[BUILD-FINGERPRINT-31AUG-1348] Firebase initialization failed:\n$e\n\nSTACK:\n$stack'));
+              '[BUILD-FINGERPRINT-31AUG-1348] Firebase initialization failed:\n$e\n\nSTACK:\n$stack',),);
           return;
         }
       }
@@ -365,7 +375,7 @@ void main() {
       // signed in (works for both a fresh login and an already-warm
       // session restored from disk).
       FirebaseMessaging.onBackgroundMessage(
-          _adminFirebaseMessagingBackgroundHandler);
+          _adminFirebaseMessagingBackgroundHandler,);
       // FIX (Aug 10 2026 — rocket-speed repeat opens): same treatment as
       // Hive.initFlutter() above — first-ever launch still awaits these
       // (unchanged timing, hidden behind the video), a repeat launch fires
@@ -399,7 +409,7 @@ void main() {
         if (nav == null) return;
         nav.push(MaterialPageRoute<void>(
           builder: (_) => const AdminInCallScreen(),
-        ));
+        ),);
       };
       // NEW (Sep 2 2026 — launcher "Dialer" shortcut): long-pressing the
       // app icon and tapping "Dialer" jumps straight here instead of
@@ -409,7 +419,7 @@ void main() {
         if (nav == null) return;
         nav.push(MaterialPageRoute<void>(
           builder: (_) => const AdminDialerScreen(),
-        ));
+        ),);
       };
       // NEW (Sep 2 2026 — Nizam: "incoming call vantha attend panna
       // screen ila"). Fires as soon as a call starts ringing (see
@@ -420,7 +430,7 @@ void main() {
         if (nav == null) return;
         nav.push(MaterialPageRoute<void>(
           builder: (_) => AdminIncomingCallScreen(number: number),
-        ));
+        ),);
       };
       // NEW (Sep 3 2026 — Nizam: "call atten pannitu line cut anathum 3
       // popup shortcuts....1.messege, 2.redial to same person,
@@ -473,16 +483,12 @@ void main() {
       unawaited(ChittiCommitmentAlarms.instance.rescheduleAll());
       if (!hasSeenSplashVideoEver) {
         await FirebaseMessaging.instance.requestPermission(
-          alert: true,
-          badge: true,
-          sound: true,
+          
         );
       } else {
         unawaited(FirebaseMessaging.instance.requestPermission(
-          alert: true,
-          badge: true,
-          sound: true,
-        ));
+          
+        ),);
       }
       _initAdminFcmAuthListener();
       // NEW (Sep 1 2026 — automation pipeline notification): CI sends a
@@ -492,7 +498,7 @@ void main() {
       // to find out. Uses the SAME foreground-alert path as every other
       // admin notification above/below — no new UI needed.
       unawaited(
-          FirebaseMessaging.instance.subscribeToTopic('chitti_dev_builds'));
+          FirebaseMessaging.instance.subscribeToTopic('chitti_dev_builds'),);
       // NEW (Sep 5 2026 — Nizam: a GitHub password-reset link tapped in
       // Gmail offered Chrome and the system browser, not this app.)
       //
@@ -512,7 +518,7 @@ void main() {
           title: notification.title ?? 'Allin1 Admin',
           body: notification.body ?? 'New activity',
           payloadId: message.messageId ?? DateTime.now().toIso8601String(),
-        ));
+        ),);
       });
 
       // Gate the real-app swap on the video having finished playing (it

@@ -857,6 +857,71 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     ],
   ),
   ChittiTool(
+    name: 'get_app_error_logs',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        "Read today's (or a specific date's) app error logs and crash "
+        'diagnostics from the on-device error monitor. Read-only.',
+    keywords: [
+      'error log',
+      'app errors',
+      'crash log',
+      'today errors',
+      'recent errors',
+      'error vandhucha',
+      'app crash',
+      'exceptions',
+      'check error log',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'date': <String, dynamic>{
+          'type': 'string',
+          'description':
+              "Date in YYYY-MM-DD format. Omit to read today's errors.",
+        },
+      },
+      'required': <String>[],
+    },
+  ),
+  ChittiTool(
+    name: 'create_dev_task_from_error',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        'Take an on-device error log and create a GitHub plan issue with its '
+        'stack trace and screen context for Claude, Gemini, or Antigravity to '
+        'propose a fix. Requires explicit human confirmation.',
+    requiresConfirmation: true,
+    keywords: [
+      'fix error',
+      'fix crash',
+      'create fix pr',
+      'error ah fix pannu',
+      'fix this bug',
+      'error pr',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'errorId': <String, dynamic>{
+          'type': 'string',
+          'description':
+              'ID of the logged error entry. Omit to use the most recent error.',
+        },
+        'engine': <String, dynamic>{
+          'type': 'string',
+          'enum': ['claude', 'gemini', 'antigravity'],
+          'description':
+              'Which AI coding engine should audit and propose the fix. Defaults to claude.',
+        },
+      },
+      'required': <String>[],
+    },
+  ),
+  ChittiTool(
     name: 'system_perform_action',
     domain: ChittiDomain.admin,
     variants: {'admin'},

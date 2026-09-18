@@ -1154,6 +1154,11 @@ class GuruOverlayService extends ChangeNotifier {
                 'send it?'
             : "I'll tell the assigned engine to go ahead and build the "
                 'approved plan — should I send it?';
+      case 'create_dev_task_from_error':
+        final errorEngineLabel =
+            ChittiDevEngineTag.fromName(args['engine'] as String?).label;
+        return "I found the on-device error log. Shall I ask $errorEngineLabel "
+            'to audit this error and propose a fix on GitHub (no code yet)?';
       default:
         return 'Should I proceed?';
     }

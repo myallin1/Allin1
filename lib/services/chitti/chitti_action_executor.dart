@@ -50,6 +50,7 @@ import '../../screens/sos_screen.dart';
 import '../admin_ai_audit_tools.dart';
 import '../admin_kyc_vision_service.dart';
 import '../admin_kyc_write_service.dart';
+import '../app_error_log_service.dart';
 import '../auth_prompt_service.dart';
 import '../auth_service.dart';
 import '../chitti_memory_service.dart';
@@ -432,6 +433,10 @@ class ChittiActionExecutor {
           return await _approveDevPlan(args, isTamil: languageCode == 'ta');
         case 'check_pr_status':
           return await _checkPrStatus(args, isTamil: languageCode == 'ta');
+        case 'get_app_error_logs':
+          return await _getAppErrorLogs(args, isTamil: languageCode == 'ta');
+        case 'create_dev_task_from_error':
+          return await _createDevTaskFromError(args, isTamil: languageCode == 'ta');
         case 'open_admin_browser':
           return await _openAdminBrowser(args, isTamil: languageCode == 'ta');
         case 'browse_admin_url':
@@ -1831,6 +1836,150 @@ class ChittiActionExecutor {
       text: isTamil
           ? '$engineLabel கிட்ட சொல்ல முடியல: ${result.error}'
           : "Couldn't tell $engineLabel to proceed: ${result.error}",
+    );
+  }
+
+  static Future<ChittiActionResult> _getAppErrorLogs(
+    Map<String, dynamic> args, {
+    required bool isTamil,
+  }) async {
+    final now = DateTime.now();
+    final todayStr =
+        "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    final dateStr = (args['date'] as String?)?.trim() ?? todayStr;
+
+    final summary = await AppErrorLogService.getDailySummary(dateStr);
+
+    if (summary.total == 0) {
+      return ChittiActionResult(
+        text: isTamil
+            ? '$dateStr-ல எந்த எரரும் பதிவாகல பாஸ், ஆப் நல்லபடியா ஓடுது!'
+            : 'Zero errors logged for $dateStr, boss. Everything has been running smoothly!',
+        suggestions: const <String>[
+          "Today's activity",
+          'Open bug reports',
+          'Check PR status',
+        ],
+      );
+    }
+
+    final buffer = StringBuffer();
+    if (isTamil) {
+      buffer.writeln('$dateStr-ல மொத்தம் ${summary.total} எரர்(கள்) வந்திருக்கு:');
+      if (summary.criticalCount > 0) {
+        buffer.writeln('• Critical: ${summary.criticalCount}');
+      }
+      if (summary.errorCount > 0) {
+        buffer.writeln('• Error: ${summary.errorCount}');
+      }
+      if (summary.warningCount > 0) {
+        buffer.writeln('• Warning: ${summary.warningCount}');
+      }
+      buffer.writeln('\nபாதிக்கப்பட்ட திரைகள்:');
+      summary.screenCounts.forEach((screen, errCount) {
+        buffer.writeln('• $screen ($errCount முறை)');
+      });
+      if (summary.topErrors.isNotEmpty) {
+        buffer.writeln('\nகடைசி எரர்:');
+        buffer.writeln('"${summary.topErrors.first.errorMessage}"');
+      }
+      buffer.writeln('\n"Fix this error" னு சொன்னா GitHub-ல fix plan போடவா?');
+    } else {
+      buffer.writeln('Found ${summary.total} error(s) logged for $dateStr:');
+      if (summary.criticalCount > 0) {
+        buffer.writeln('• Critical: ${summary.criticalCount}');
+      }
+      if (summary.errorCount > 0) {
+        buffer.writeln('• Error: ${summary.errorCount}');
+      }
+      if (summary.warningCount > 0) {
+        buffer.writeln('• Warning: ${summary.warningCount}');
+      }
+      buffer.writeln('\nAffected screens:');
+      summary.screenCounts.forEach((screen, errCount) {
+        buffer.writeln('• $screen ($errCount times)');
+      });
+      if (summary.topErrors.isNotEmpty) {
+        buffer.writeln('\nMost recent:');
+        buffer.writeln('"${summary.topErrors.first.errorMessage}"');
+      }
+      buffer.writeln('\nTell me "fix this error" to create a plan on GitHub.');
+    }
+
+    return ChittiActionResult(
+      text: buffer.toString().trim(),
+      suggestions: const <String>[
+        'Fix this error',
+        'Open error log',
+        'Check open bugs',
+      ],
+    );
+  }
+
+  static Future<ChittiActionResult> _createDevTaskFromError(
+    Map<String, dynamic> args, {
+    required bool isTamil,
+  }) async {
+    final errorId = (args['errorId'] as String?)?.trim();
+    AppErrorLogEntry? entry;
+
+    if (errorId != null && errorId.isNotEmpty) {
+      entry = await AppErrorLogService.getLogById(errorId);
+    }
+
+    if (entry == null) {
+      final recent = await AppErrorLogService.getRecentLogs(limit: 1);
+      if (recent.isNotEmpty) {
+        entry = recent.first;
+      }
+    }
+
+    if (entry == null) {
+      return ChittiActionResult(
+        success: false,
+        text: isTamil
+            ? 'சரிசெய்ய எந்த எரர் லாகும் கிடைக்கல பாஸ்.'
+            : 'No error log found to fix.',
+      );
+    }
+
+    final engine = ChittiDevEngineTag.fromName(args['engine'] as String?);
+    final title = 'Fix: ${entry.errorMessage} on ${entry.screen}';
+    final description =
+        'Automated bug report from Allin1 In-App Error Monitor:\n\n'
+        '- **Screen**: `${entry.screen}`\n'
+        '- **Severity**: `${entry.severity}`\n'
+        '- **App Version**: `${entry.appVersion}`\n'
+        '- **Occurred at**: `${entry.timestamp}` (Repeated: ${entry.repeatCount}x)\n\n'
+        '### Error Message\n```\n${entry.errorMessage}\n```\n\n'
+        '### Stack Trace\n```\n${entry.stackTrace}\n```';
+
+    final result = await ChittiDevTaskService.createPlanIssue(
+      title: title,
+      description: description,
+      engine: engine,
+    );
+
+    if (result.success) {
+      return ChittiActionResult(
+        text: isTamil
+            ? 'சரி பாஸ் — "${entry.errorMessage}" எரரை சரிசெய்ய ${engine.label}-கிட்ட '
+                '#${result.issueNumber} plan issue போட்டுட்டேன். ${engine.label} audit பண்ணி '
+                'plan கொடுத்ததும் சொல்றேன்.'
+                '${result.issueUrl != null ? '\n${result.issueUrl}' : ''}'
+            : 'Done — created plan issue #${result.issueNumber} for ${engine.label} '
+                'to audit and propose a fix for "${entry.errorMessage}". '
+                'I will notify you once the plan is ready.'
+                '${result.issueUrl != null ? '\n${result.issueUrl}' : ''}',
+        suggestions: const <String>['Check the plan', "Today's activity"],
+      );
+    }
+
+    return ChittiActionResult(
+      success: false,
+      text: isTamil
+          ? 'GitHub-ல எரர் plan issue போட முடியல: ${result.error}'
+          : 'Could not create the error plan issue: ${result.error}',
     );
   }
 

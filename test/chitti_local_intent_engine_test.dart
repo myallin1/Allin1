@@ -11,11 +11,10 @@
 // expensive one, so most of these tests are about the engine keeping
 // quiet when it should — particularly on questions, which read as
 // commands to a naive keyword matcher.
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:erode_superapp/config/app_variant.dart';
-import 'package:erode_superapp/services/chitti_memory_service.dart';
 import 'package:erode_superapp/services/chitti/chitti_local_intent_engine.dart';
+import 'package:erode_superapp/services/chitti_memory_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   final original = currentAppVariant;
@@ -112,10 +111,10 @@ void main() {
 
   group('variant scoping holds', () {
     test('a customer cannot trigger hero or seller tools', () {
-      expect(actionFor('go online', variant: 'customer'),
-          isNot('hero_set_online_status'));
-      expect(actionFor('close the shop', variant: 'customer'),
-          isNot('seller_set_shop_open'));
+      expect(actionFor('go online'),
+          isNot('hero_set_online_status'),);
+      expect(actionFor('close the shop'),
+          isNot('seller_set_shop_open'),);
     });
 
     test('a hero can, and gets the right slot', () {
@@ -138,7 +137,7 @@ void main() {
 
     test('a hero asking about earnings hits the hero read', () {
       expect(actionFor('how much did i earn today', variant: 'hero'),
-          'hero_today_earnings');
+          'hero_today_earnings',);
     });
   });
 

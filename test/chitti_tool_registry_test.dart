@@ -14,11 +14,10 @@
 // tool is reachable by the router, that variant scoping actually holds,
 // and that the confirmation gate covers exactly the destructive tools
 // and nothing else.
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:erode_superapp/config/app_variant.dart';
 import 'package:erode_superapp/services/chitti/chitti_section_registry.dart';
 import 'package:erode_superapp/services/chitti/chitti_tool_registry.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   final originalVariant = currentAppVariant;
@@ -61,6 +60,9 @@ void main() {
         'propose_write_action',
         'send_sms',
         'create_dev_task',
+        'propose_dev_plan',
+        'approve_dev_plan',
+        'create_dev_task_from_error',
       });
     });
   });
