@@ -60,9 +60,34 @@
       // Latching the flag on `window` from <head> means the event can
       // never be missed, no matter how fast Flutter paints.
       window.__a1FirstFrame = false;
-      window.addEventListener('flutter-first-frame', function () {
+      window.flutterHasPainted = function () {
+        return window.__a1FirstFrame === true ||
+          !!document.querySelector('flutter-view, flt-glass-pane, flt-scene-host');
+      };
+
+      window.__a1DismissSplash = function () {
         window.__a1FirstFrame = true;
+        if (window.__a1Updating) return;
+        var splash = document.querySelector('.splash-screen');
+        if (splash) {
+          splash.classList.add('instant-hide');
+          splash.classList.remove('visible', 'resolving');
+          splash.style.display = 'none';
+        }
+      };
+
+      window.addEventListener('flutter-first-frame', function () {
+        window.__a1DismissSplash();
       });
+
+      // Periodic check: dismiss splash the moment Flutter canvas/view is attached
+      var splashPoll = setInterval(function () {
+        if (window.flutterHasPainted()) {
+          window.__a1DismissSplash();
+          clearInterval(splashPoll);
+        }
+      }, 150);
+      setTimeout(function () { clearInterval(splashPoll); }, 8000);
     })();
   </script>
 
@@ -1338,54 +1363,24 @@
       }, 800);
 
       // Hide splash when Flutter is ready
-      window.addEventListener('flutter-first-frame', function () {
+      function onFlutterReady() {
         firstFrameFired = true;
         window.__a1FirstFrame = true;
-        clearInterval(statusInterval);
-
-        // FIX (Aug 28 2026): clear the auto-retry latch on a SUCCESSFUL
-        // boot. It was set before a recovery reload and then never
-        // removed, so one slow boot permanently disabled the watchdog's
-        // reload for the rest of the PWA session — every later stuck
-        // boot in that session just sat on "Network is very slow" with
-        // no recovery at all. Cleared here, the self-heal is available
-        // again the next time it is genuinely needed.
+        if (statusInterval) clearInterval(statusInterval);
         try { sessionStorage.removeItem('autoRetried'); } catch (e) {}
-
-        // FIX (Aug 20 2026 — version-update flow): if an update was
-        // detected in <head>'s version-check block, window.__a1Updating
-        // is true and a page reload is already queued. Keep the splash
-        // visible (it's showing "Updating Allin1...") so the user sees
-        // the update message rather than a flash of the old app UI.
-        if (window.__a1Updating) {
-          return; // reload will happen in ~800ms; leave splash in place
+        if (typeof window.__a1DismissSplash === 'function') {
+          window.__a1DismissSplash();
+        } else if (splash) {
+          splash.classList.add('instant-hide');
+          splash.style.display = 'none';
         }
+      }
 
-        // HARDENED (Aug 11 2026): on a REPEAT visit tear the splash down
-        // synchronously — no fade, no 400ms transition, no extra frame.
-        // The splash exists on repeat boots only to cover main.dart.js
-        // parse; the instant that's done it must be gone, not gracefully
-        // dissolving. Returning early also skips the 400ms setTimeout
-        // below entirely.
-        if (isRepeatVisit) {
-          if (splash) {
-            splash.classList.add('instant-hide');
-            splash.style.display = 'none';
-          }
-          return;
-        }
-
-        // Cold boot only: let the shuffle settle rather than being cut
-        // mid-animation.
-        if (splash) splash.classList.add('resolving');
-        if (splash) {
-          splash.classList.add('hidden');
-          splash.classList.remove('visible');
-          setTimeout(function () {
-            splash.style.display = 'none';
-          }, 400);
-        }
-      }, { once: true });
+      if (window.__a1FirstFrame === true || (typeof window.flutterHasPainted === 'function' && window.flutterHasPainted())) {
+        onFlutterReady();
+      } else {
+        window.addEventListener('flutter-first-frame', onFlutterReady, { once: true });
+      }
 
       // FIX (black/white-screen-stuck audit, per Nizam's request): this
       // used to unconditionally HIDE the splash after 8 seconds no

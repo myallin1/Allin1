@@ -11,6 +11,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -237,7 +238,7 @@ void main() {
   final previousFlutterOnError = FlutterError.onError;
   FlutterError.onError = (details) {
     debugPrint('[main_admin] Flutter error: ${details.exceptionAsString()}');
-    AppErrorLogService.recordFlutterError(details);
+    AppErrorLogService.recordFlutterError(details, appVariant: 'admin');
     previousFlutterOnError?.call(details);
   };
 
@@ -263,58 +264,45 @@ void main() {
       final previousPlatformOnError = PlatformDispatcher.instance.onError;
       PlatformDispatcher.instance.onError = (error, stack) {
         debugPrint('[main_admin] PlatformDispatcher error: $error');
-        AppErrorLogService.recordPlatformError(error, stack);
-        return previousPlatformOnError?.call(error, stack) ?? false;
+        AppErrorLogService.recordPlatformError(
+          error,
+          stack,
+          appVariant: 'admin',
+        );
+        try {
+          previousPlatformOnError?.call(error, stack);
+        } catch (_) {}
+        return true;
       };
-      // FIX (audit finding — notifications_screen.dart hardcoded
-      // 'customer' fallback): see lib/config/app_variant.dart.
+
+      ErrorWidget.builder = (details) {
+        return const Material(
+          color: Colors.transparent,
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.all(12),
+              child: Text(
+                'Temporarily unavailable',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ),
+          ),
+        );
+      };
+      if (kIsWeb) {
+        usePathUrlStrategy();
+      }
+      PaintingBinding.instance.imageCache.maximumSizeBytes = 100 << 20;
       currentAppVariant = 'admin';
 
-      // videoDone completes when app_splash.mp4 finishes playing; the
-      // second runApp() below (AdminApp) awaits it so the video is never
-      // cut short by a fast Hive/Firebase init.
-      //
-      // FIX (Aug 10 2026 — first-launch-only video, "rocket speed" repeat
-      // opens): a SharedPreferences read (fast, local, no network) decides
-      // right here whether this device has ever seen the video before.
-      // First-ever launch: unchanged behavior — _BootLoadingApp (video)
-      // paints immediately. Every later launch: videoDone is marked
-      // complete immediately (nothing to wait for) and _BootLoadingApp is
-      // never even built.
-      final earlyPrefs = await SharedPreferences.getInstance();
-      final hasSeenSplashVideoEver =
-          earlyPrefs.getBool(_kSplashVideoSeenEverKey) ?? false;
-
-      final videoDone = Completer<void>();
-      if (!hasSeenSplashVideoEver) {
-        runApp(_BootLoadingApp(onVideoFinished: () {
-          if (!videoDone.isCompleted) videoDone.complete();
-        },),);
-      } else {
-        videoDone.complete();
-      }
-
-      // SessionService.saveSession() opens a Hive box directly (not via
-      // HiveCache's guarded wrapper), which throws "You need to
-      // initialize Hive..." if nothing primed it first. main_customer.dart
-      // calls this eagerly at startup; admin never did, so Google
-      // Sign-In's post-auth saveSession() call was crashing here.
-      //
-      // FIX (Aug 10 2026 — rocket-speed repeat opens): first-ever launch
-      // still awaits this (unchanged timing, still finishes long before
-      // the video does); a repeat launch has no video to hide behind, so
-      // this now runs unawaited in the background instead — nothing on
-      // the very first AdminApp frame reads Hive directly, only
-      // SessionService.saveSession() does, and that only fires later, on
-      // an actual login action.
-      if (!hasSeenSplashVideoEver) {
+      // Initialize Hive
+      try {
         await Hive.initFlutter();
-      } else {
-        unawaited(Hive.initFlutter().catchError((Object e) {
-          debugPrint('[main_admin] Background Hive.initFlutter() error: $e');
-        }),);
+      } catch (e) {
+        debugPrint('[main_admin] Hive.initFlutter error: $e');
       }
 
+      // Initialize Firebase with resilience
       try {
         if (Firebase.apps.isEmpty) {
           try {
@@ -329,18 +317,16 @@ void main() {
             }
           }
         }
-        // Enable Firestore offline persistence on web (PWA). Mobile
-        // (Android/iOS) already has persistence on by default, so this
-        // is guarded to web only; a capped 50MB cache (CTO-specified)
-        // keeps browser storage bounded instead of unlimited.
         if (kIsWeb) {
-          FirebaseFirestore.instance.settings = const Settings(
-            persistenceEnabled: true,
-            cacheSizeBytes: 52428800, // 50MB
-            webExperimentalForceLongPolling: true,
-          );
-        }
-        if (kIsWeb) {
+          try {
+            FirebaseFirestore.instance.settings = const Settings(
+              persistenceEnabled: true,
+              cacheSizeBytes: 52428800, // 50MB
+              webExperimentalForceLongPolling: true,
+            );
+          } catch (e) {
+            debugPrint('[main_admin] Firestore settings setup: $e');
+          }
           try {
             await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
           } catch (e) {
@@ -368,22 +354,10 @@ void main() {
       }
       DbUsageTracker.instance.init('admin');
 
-      // NEW (per Nizam's request — Admin "WhatsApp model" closed-app
-      // alerts): registers the background handler + local-notification
-      // channel BEFORE runApp, same ordering main_hero.dart uses, and
-      // starts syncing this admin's FCM token the moment they're
-      // signed in (works for both a fresh login and an already-warm
-      // session restored from disk).
-      FirebaseMessaging.onBackgroundMessage(
-          _adminFirebaseMessagingBackgroundHandler,);
-      // FIX (Aug 10 2026 — rocket-speed repeat opens): same treatment as
-      // Hive.initFlutter() above — first-ever launch still awaits these
-      // (unchanged timing, hidden behind the video), a repeat launch fires
-      // them unawaited so notification-channel setup doesn't stand between
-      // "app opens" and runApp(AdminApp()) below.
-      if (!hasSeenSplashVideoEver) {
-        await AdminAlertNotificationService.initialize();
-      } else {
+      // Native-only notification channels & background message registration
+      if (!kIsWeb) {
+        FirebaseMessaging.onBackgroundMessage(
+            _adminFirebaseMessagingBackgroundHandler,);
         unawaited(AdminAlertNotificationService.initialize());
       }
       AdminForegroundService.initialize();
@@ -394,16 +368,9 @@ void main() {
         }
         unawaited(GuruOverlayService.instance.sendMessage(command));
       };
-      // Assistant-gesture path (power button / home swipe, ChittiVoiceInteractionSession) —
-      // no spoken text yet, just open the panel with the mic already
-      // listening, same as tapping the FAB with voice intent.
       ChittiAccessibilityBridge.instance.onAssistTriggered = () {
         GuruOverlayService.instance.show(autoStartMic: true);
       };
-      // NEW (Sep 1 2026 — in-call screen): tapping the ongoing-call
-      // notification opens the live call UI. Routed through the shared
-      // navigatorKey because this fires from a native intent, with no
-      // BuildContext of its own.
       ChittiAccessibilityBridge.instance.onOpenInCallScreen = () {
         final nav = navigatorKey.currentState;
         if (nav == null) return;
@@ -411,9 +378,6 @@ void main() {
           builder: (_) => const AdminInCallScreen(),
         ),);
       };
-      // NEW (Sep 2 2026 — launcher "Dialer" shortcut): long-pressing the
-      // app icon and tapping "Dialer" jumps straight here instead of
-      // the app's normal home screen first.
       ChittiAccessibilityBridge.instance.onOpenDialerScreen = () {
         final nav = navigatorKey.currentState;
         if (nav == null) return;
@@ -421,10 +385,6 @@ void main() {
           builder: (_) => const AdminDialerScreen(),
         ),);
       };
-      // NEW (Sep 2 2026 — Nizam: "incoming call vantha attend panna
-      // screen ila"). Fires as soon as a call starts ringing (see
-      // PhoneCallService.onCallRinging), including a cold start where
-      // the ringing call itself launched this app.
       ChittiAccessibilityBridge.instance.onIncomingCallRinging = (number) {
         final nav = navigatorKey.currentState;
         if (nav == null) return;
@@ -432,85 +392,32 @@ void main() {
           builder: (_) => AdminIncomingCallScreen(number: number),
         ),);
       };
-      // NEW (Sep 3 2026 — Nizam: "call atten pannitu line cut anathum 3
-      // popup shortcuts....1.messege, 2.redial to same person,
-      // 3.whatsapp button"). Only fires when the admin app has a live
-      // navigator context (i.e. it is in the foreground) — see
-      // admin_post_call_sheet.dart's header for why this is not a
-      // system-wide overlay.
       ChittiAccessibilityBridge.instance.onCallEndedWithNumber = (number) {
         final ctx = navigatorKey.currentContext;
         if (ctx == null) return;
         showAdminPostCallSheet(ctx, number);
       };
-      // NEW (Sep 4 2026 — Nizam: "admin app open pannumbothe antha app
-      // la Yenna feauture add pannirukonu admin ku pop kaatanum app main
-      // page open anathum"). Self-checking: shows nothing unless this
-      // build's changelog hasn't been acknowledged yet, so it is safe to
-      // fire on every start.
-      //
-      // Deferred to after the first frame — a modal sheet needs a
-      // mounted navigator, and this runs during startup wiring where
-      // there isn't one yet.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final ctx = navigatorKey.currentContext;
         if (ctx != null) unawaited(maybeShowWhatsNew(ctx));
       });
-      // NEW (Sep 4 2026 — Nizam: "itha mudichutingla boss athu
-      // mudichutingla boss nu kekekanum enkita"). Fires on app open,
-      // which is the one moment he is definitely looking at the phone
-      // and not mid-call or mid-conversation.
-      //
-      // Self-silencing by design: it asks about at most ONE overdue
-      // commitment, and only if ChittiNudgeService's shared budget (6
-      // proactive messages a day, 3 minutes apart, global mute) allows
-      // it. Most opens will say nothing at all, which is the point.
       Future<void>.delayed(const Duration(seconds: 4), () {
         unawaited(ChittiFollowUpService.instance.maybeAskOne());
       });
-      // NEW (Sep 4 2026 — Nizam: "I need Chitti to proactively ring an
-      // alarm ... even if the Admin app is completely closed, killed, or
-      // running in the background").
-      //
-      // Android drops every pending alarm on reboot, and can drop them
-      // again when an app is force-stopped or its process is killed for
-      // memory. The manifest's boot receiver restores what the plugin
-      // still has on disk; this re-arms from OUR OWN store, which is the
-      // only copy that is definitely still correct. Idempotent — ids are
-      // derived from the commitment id, so it replaces rather than
-      // stacks — and cheap enough to just run on every start rather than
-      // trying to detect when it is needed.
       unawaited(ChittiCommitmentAlarms.instance.rescheduleAll());
-      if (!hasSeenSplashVideoEver) {
-        await FirebaseMessaging.instance.requestPermission(
-          
-        );
-      } else {
-        unawaited(FirebaseMessaging.instance.requestPermission(
-          
-        ),);
-      }
+      unawaited(() async {
+        try {
+          await FirebaseMessaging.instance.requestPermission();
+        } catch (e) {
+          debugPrint('[main_admin] FCM requestPermission: $e');
+        }
+      }());
       _initAdminFcmAuthListener();
-      // NEW (Sep 1 2026 — automation pipeline notification): CI sends a
-      // push to this topic when a new test APK finishes building
-      // (.github/workflows/ci-cd.yml's publish_admin_test_build job),
-      // so the admin doesn't have to keep opening Development Monitor
-      // to find out. Uses the SAME foreground-alert path as every other
-      // admin notification above/below — no new UI needed.
-      unawaited(
-          FirebaseMessaging.instance.subscribeToTopic('chitti_dev_builds'),);
-      // NEW (Sep 5 2026 — Nizam: a GitHub password-reset link tapped in
-      // Gmail offered Chrome and the system browser, not this app.)
-      //
-      // The manifest now puts the admin app in that chooser for
-      // github.com links; this is the Dart half that decides what to do
-      // with one when it arrives. It goes to the app's own browser
-      // segment, which already holds the GitHub session — so a reset
-      // finishes in the same place the rest of the work is happening.
+      if (!kIsWeb) {
+        unawaited(
+            FirebaseMessaging.instance.subscribeToTopic('chitti_dev_builds'),);
+      }
       unawaited(_listenForGitHubLinks());
-      // Foreground messages are NOT auto-displayed by Android/FCM (only
-      // background/killed states get that for free from the
-      // `notification` block) — this is the foreground-only path.
       FirebaseMessaging.onMessage.listen((message) {
         final notification = message.notification;
         if (notification == null) return;
@@ -521,31 +428,9 @@ void main() {
         ),);
       });
 
-      // Gate the real-app swap on the video having finished playing (it
-      // almost always has, by now — Hive/Firebase init is the fast side
-      // of this race) so the boot video is never truncated mid-playback.
-      // On a repeat launch videoDone was already completed above (no
-      // video was ever shown), so this resolves instantly and adds no
-      // wait — Firebase init above (a local-session restore, not a fresh
-      // network call in the common case) is the only thing standing
-      // between "app opens" and runApp(AdminApp()) on a repeat launch.
-      await videoDone.future;
+      // Directly mount AdminApp — HTML splash handles pre-engine transition
       runApp(const AdminApp());
-      // NEW (Aug 12 2026 — "Zero-Budget Escape Hatch"): fire-and-forget,
-      // fails open on any error — see MigrationGateService's own header.
-      // Also doubles as the source of truth admin writes migrationUrl
-      // FROM (Admin QR Generator screen), so it's especially important
-      // this app instance always has the listener running.
       MigrationGateService.instance.start();
-
-      // Mark the video as seen only now that it has actually finished
-      // playing (videoDone is only completed by AppSplashVideoScreen's
-      // own onFinished/safety-timer, or immediately above if it was
-      // already skipped) — every launch from here on takes the
-      // "skip video" branch above.
-      if (!hasSeenSplashVideoEver) {
-        unawaited(earlyPrefs.setBool(_kSplashVideoSeenEverKey, true));
-      }
     },
   );
 }
