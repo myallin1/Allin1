@@ -15,7 +15,6 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_navigator.dart';
 import 'config/app_variant.dart';
@@ -134,46 +133,6 @@ void _initAdminFcmAuthListener() {
   });
 }
 
-// FIX (Aug 10 2026 — Nizam's "video every launch is too slow / disturbs
-// repeat users" report, same pattern as main_customer.dart/main_hero.dart/
-// main_seller.dart): gates whether the splash video plays at all. Set
-// (once) only after the video has actually finished playing on a
-// first-ever launch — see the branch in main() below. Every launch after
-// that reads this as true and skips straight past the video AND past any
-// blocking loading screen.
-const String _kSplashVideoSeenEverKey = 'admin_splash_video_seen_ever_v1';
-
-// FIX (Nizam's "video as natural visual buffer" request, task #108, same
-// fix as main_customer.dart/main_hero.dart/main_seller.dart): paint
-// app_splash.mp4 first, before Hive/Firebase even start, so Flutter's
-// first frame fires in milliseconds instead of after a Firebase network
-// round-trip, AND the video itself becomes the boot buffer while Hive/
-// Firebase init in parallel behind it. Previously the video was shown
-// AFTER Firebase, wrapped around AdminApp's StreamBuilder auth gate —
-// moved here and removed there (see AdminApp.build for that change) so
-// it's no longer a second screen stacked after this one.
-// BrandedLoadingScreen is now only a rare fallback frame, shown only if
-// Hive/Firebase init somehow outlasts the video.
-//
-// FIX (Aug 10 2026 — first-launch-only video): this class itself is
-// UNCHANGED — still the video screen described above. What changed is
-// main() no longer runApp()s it unconditionally: it now only does so the
-// very first time this device/browser ever opens the admin app (see
-// _kSplashVideoSeenEverKey above). Every later launch skips this widget
-// entirely and goes straight to AdminApp — see the branch in main() below.
-// UPDATED (Aug 12 2026 — CEO/CTO "nuke the videos"): this used to mount
-// AppSplashVideoScreen, which streamed the 2.1MB app_splash.mp4 before
-// anything else. On web that was 2.1MB of Firebase Hosting bandwidth per
-// visitor for a decorative splash; the pure CSS/SVG route-draw animation
-// now living in web/index.html covers that same pre-engine moment for
-// zero bytes, and it paints even earlier (before main.dart.js is parsed).
-// Native simply goes straight to the branded frame.
-//
-// CRITICAL: onVideoFinished completes the `videoDone` completer that
-// main()'s boot sequence awaits. It MUST still fire exactly once or the
-// app hangs on this screen forever — hence the StatefulWidget + a
-// post-frame callback in initState (fires once per mount) rather than
-// calling it from build(), which can run many times.
 /// Routes an incoming github.com VIEW intent into the admin's own
 /// browser segment.
 ///
@@ -204,33 +163,6 @@ Future<void> _listenForGitHubLinks() async {
     );
   } catch (e) {
     debugPrint('[AdminLinks] init failed: $e');
-  }
-}
-
-class _BootLoadingApp extends StatefulWidget {
-  const _BootLoadingApp({required this.onVideoFinished});
-
-  final VoidCallback onVideoFinished;
-
-  @override
-  State<_BootLoadingApp> createState() => _BootLoadingAppState();
-}
-
-class _BootLoadingAppState extends State<_BootLoadingApp> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      widget.onVideoFinished();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: BrandedLoadingScreen(),
-    );
   }
 }
 
