@@ -138,6 +138,7 @@ class DynamicAppLayoutService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('$_prefsPrefix$sectionKey');
+      await prefs.remove('admin_home_tile_order::$sectionKey');
     } catch (e) {
       debugPrint('[DynamicAppLayoutService] Error resetting order for $sectionKey: $e');
     }
@@ -150,7 +151,7 @@ class DynamicAppLayoutService {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final keys = prefs.getKeys().where((k) => k.startsWith(_prefsPrefix)).toList();
+      final keys = prefs.getKeys().where((k) => k.startsWith(_prefsPrefix) || k.startsWith('admin_home_tile_order::')).toList();
       for (final k in keys) {
         await prefs.remove(k);
       }

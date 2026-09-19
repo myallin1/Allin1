@@ -111,5 +111,33 @@ void main() {
 
       expect(ordered, equals(['tile1', 'tile2', 'tile3']));
     });
+
+    test('backward compatibility reads legacy admin_home_tile_order key', () async {
+      const section = 'legacy_section';
+      const defaults = ['tileA', 'tileB', 'tileC'];
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('admin_home_tile_order::$section', '["tileC","tileA","tileB"]');
+
+      DynamicAppLayoutService.instance.clearMemoryCacheForTesting();
+
+      final ordered = await DynamicAppLayoutService.instance.getOrderedIds(
+        sectionKey: section,
+        defaultIds: defaults,
+      );
+
+      expect(ordered, equals(['tileC', 'tileA', 'tileB']));
+
+      // resetAllSections should clear legacy key as well
+      await DynamicAppLayoutService.instance.resetAllSections();
+      DynamicAppLayoutService.instance.clearMemoryCacheForTesting();
+
+      final resetOrdered = await DynamicAppLayoutService.instance.getOrderedIds(
+        sectionKey: section,
+        defaultIds: defaults,
+      );
+
+      expect(resetOrdered, equals(['tileA', 'tileB', 'tileC']));
+    });
   });
 }
