@@ -23,6 +23,7 @@ import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'update_service.dart';
 
@@ -37,6 +38,49 @@ class AppUpdateChecker {
   final Dio _dio = Dio();
   bool _isDownloading = false;
   bool get isDownloading => _isDownloading;
+
+  /// The applicationId Play Store lists customer/hero/seller under, so
+  /// a Play-installed user who taps "update" can be sent to the actual
+  /// listing rather than handed a raw APK. admin is deliberately absent
+  /// -- it is never on Play Store, distributed by GitHub release only,
+  /// and always reaches this class through downloadAndInstallUrl, not
+  /// this map.
+  static const Map<String, String> _playStorePackageIds = {
+    'customer': 'com.njtech.allin1',
+    'hero': 'com.njtech.heroallin1',
+    'seller': 'com.njtech.allin1.seller',
+  };
+
+  /// AUDIT (Sep 5 2026 — Nizam: "customer,seller,hero app play store la
+  /// poda eligible ah irukkanum check pannu"). This was the one real
+  /// blocker found: downloadAndInstall() unconditionally fetched a raw
+  /// APK and handed it to Android's installer, with no regard for how
+  /// the app was actually installed. For a GitHub-only distribution
+  /// (today's reality) that is exactly right. For a Play Store listing
+  /// it is close to a textbook rejection -- Play requires updates for a
+  /// Play-distributed app to flow through Play's own mechanism, and
+  /// REQUEST_INSTALL_PACKAGES actually being exercised to sideload an
+  /// update is one of its most commonly flagged patterns.
+  ///
+  /// `installerStore` is the OS's own record of which installer put the
+  /// APK there in the first place (`com.android.vending` for Play,
+  /// empty/other for a sideload or this app's own updater) -- not
+  /// something this app declares about itself, so it can't be spoofed
+  /// by a stale flag left over from a previous install method.
+  Future<bool> _isPlayStoreInstall() async {
+    if (kIsWeb) return false;
+    try {
+      final info = await PackageInfo.fromPlatform();
+      return info.installerStore == 'com.android.vending';
+    } catch (e) {
+      // Unknown beats wrong here: if this can't be determined, fall
+      // through to the sideload path exactly as before this fix existed
+      // -- never silently disable updates for everyone over one query
+      // failing.
+      debugPrint('[AppUpdateChecker] installer check failed: $e');
+      return false;
+    }
+  }
 
   /// Best-effort, fail-silent check: compares the installed app's
   /// version against the latest GitHub release tag. Returns true only
@@ -71,11 +115,31 @@ class AppUpdateChecker {
   /// and hands it straight to Android's installer — no browser
   /// download, no manual file-manager hunt. Reuses UpdateService's
   /// already-published GitHub release APK URLs.
-  Future<void> downloadAndInstall({
+  /// Returns true when an APK was actually downloaded and handed to
+  /// Android's installer (the caller's "tap Install next" messaging is
+  /// correct); false when a Play-installed user was redirected to the
+  /// Play Store listing instead (nothing was downloaded, and there is
+  /// no "next screen" in THIS app to install from -- the caller needs
+  /// different words for that case, not the same success message).
+  Future<bool> downloadAndInstall({
     required String appVariant,
     void Function(double progress)? onProgress,
   }) async {
-    if (_isDownloading) return;
+    if (_isDownloading) return false;
+    // A Play-installed customer/hero/seller user gets routed to the
+    // real listing instead -- see _isPlayStoreInstall's header for why
+    // this check exists at all. Outside the try/finally on purpose:
+    // opening a store listing never touches _isDownloading, so a
+    // finally block clearing it here would be clearing a flag that was
+    // never set.
+    final playPackage = _playStorePackageIds[appVariant];
+    if (playPackage != null && await _isPlayStoreInstall()) {
+      await launchUrl(
+        Uri.parse('market://details?id=$playPackage'),
+        mode: LaunchMode.externalApplication,
+      );
+      return false;
+    }
     _isDownloading = true;
     try {
       final apkUrl = UpdateService().fallbackApkUrl(appVariant);
@@ -96,6 +160,7 @@ class AppUpdateChecker {
       );
 
       await OpenFilex.open(filePath);
+      return true;
     } finally {
       _isDownloading = false;
     }
