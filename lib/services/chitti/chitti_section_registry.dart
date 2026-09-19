@@ -31,26 +31,27 @@
 // even built — the model is never shown a section it cannot open.
 import 'package:flutter/widgets.dart';
 
+import '../../screens/admin/admin_ai_dev_studio_screen.dart';
 import '../../screens/admin/admin_ai_settings_screen.dart';
-import '../../screens/admin/chitti_conversations_screen.dart';
-import '../../screens/admin/chitti_debug_logs_screen.dart';
-import '../../screens/admin/chitti_dev_monitor_screen.dart';
-import '../../screens/admin/super_admin_home_screen.dart';
+import '../../screens/admin/admin_dashboard_screen.dart';
 import '../../screens/admin/admin_db_usage_screen.dart';
 import '../../screens/admin/admin_hero_dispatch_screen.dart';
 import '../../screens/admin/admin_new_orders_screen.dart';
 import '../../screens/admin/admin_ride_tracking_screen.dart';
-import '../../screens/admin/chitti_enquiries_screen.dart';
 import '../../screens/admin/admin_seller_approval_screen.dart';
 import '../../screens/admin/admin_sos_kyc_approvals_screen.dart';
 import '../../screens/admin/admin_wallet_approvals_screen.dart';
 import '../../screens/admin/approved_heroes_screen.dart';
 import '../../screens/admin/bug_reports_screen.dart';
+import '../../screens/admin/chitti_conversations_screen.dart';
+import '../../screens/admin/chitti_debug_logs_screen.dart';
+import '../../screens/admin/chitti_dev_monitor_screen.dart';
+import '../../screens/admin/chitti_enquiries_screen.dart';
 import '../../screens/admin/erode_offers_management_screen.dart';
 import '../../screens/admin/fare_management_screen.dart';
 import '../../screens/admin/hero_approvals_screen.dart';
 import '../../screens/admin/payments_received_screen.dart';
-import '../../screens/admin/admin_dashboard_screen.dart';
+import '../../screens/admin/super_admin_home_screen.dart';
 import '../../screens/bike_taxi/hero_earnings_screen.dart';
 import '../../screens/bike_taxi/hero_history_screen.dart';
 import '../../screens/bike_taxi/hero_incomplete_tasks_screen.dart';
@@ -597,6 +598,19 @@ const List<ChittiSection> kChittiSections = <ChittiSection>[
     ],
   ),
   ChittiSection(
+    key: 'admin_ai_dev_studio',
+    label: 'AI Dev Studio (Claude & Gemini)',
+    description: 'The dual-engine AI workspace for Claude Code and Gemini issue reporting and dev tasks.',
+    variants: {'admin'},
+    builder: _adminAiDevStudio,
+    screenType: AdminAiDevStudioScreen,
+    aliases: [
+      'ai studio', 'dev studio', 'claude studio', 'gemini studio',
+      'claude code', 'ai workspace', 'copilot studio', 'ai dev studio',
+      'கிளாட் ஸ்டுடியோ', 'ஜெமினி ஸ்டுடியோ',
+    ],
+  ),
+  ChittiSection(
     key: 'admin_new_orders',
     label: 'New Orders',
     description: 'Incoming orders awaiting admin action.',
@@ -835,3 +849,4 @@ Widget _adminOffers(BuildContext _) => const AdminErodeOffersScreen();
 Widget _adminBugReports(BuildContext _) => const BugReportsScreen();
 Widget _adminDbUsage(BuildContext _) => const AdminDbUsageScreen();
 Widget _adminAiSettings(BuildContext _) => const AdminAiSettingsScreen();
+Widget _adminAiDevStudio(BuildContext _) => const AdminAiDevStudioScreen();

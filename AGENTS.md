@@ -16,6 +16,12 @@
 
 ## 3. Coding & Execution Rules
 
+- **MANDATORY 4-PHASE EXECUTION PROTOCOL (Analyze -> Plan -> Confirm -> Execute):** 
+  - **NO IMMEDIATE CODING / EDITING:** NEVER start writing or modifying code immediately upon receiving a prompt or task.
+  - **Phase 1: Deep Analysis:** Inspect existing code, dependencies, data models, routes, and `AGENTS.md` contracts first.
+  - **Phase 2: Comprehensive Plan:** Formulate an exact step-by-step implementation plan covering potential side effects, state management, and edge cases.
+  - **Phase 3: User Confirmation:** Present the plan clearly to Nizam/Admin for review and approval BEFORE executing.
+  - **Phase 4: Surgical Execution & Self-Audit:** Only after explicit approval, apply surgical patches, run `flutter analyze` & relevant tests, self-audit using grep, and report back.
 - **Surgical Strikes Only:** NEVER rewrite or delete entire files unless explicitly instructed. Apply exact, localized patches to specific widgets or methods.
 - **Zero Breakage:** Ensure new UI features (like buttons or carousels) integrate seamlessly without breaking existing layouts, `SingleChildScrollView` structures, or Stack positions.
 - **No Hallucinations:** Do not invent non-existent third-party packages or dummy assets. Stick strictly to the provided codebase architecture and imports.
@@ -784,5 +790,80 @@ Gemini auditing Claude, either auditing Antigravity).
   work, grep for the pattern you just added/changed to confirm it
   landed exactly where and how you intended, not just that the tool
   call reported success.
+
+## 18. Universal 4-App Error Reporting & Crash Immunity Contracts (Sep 19 2026)
+
+- **Centralized Error Reporting across all 4 apps (Customer, Hero, Seller, Admin)**:
+  - Error pipeline is on-device Hive first (`app_error_log` box, capped at 500 entries, 5-minute deduplication window).
+  - Background throttled sync to Firestore collection `/app_error_reports/{id}` with 15-minute signature throttle to strictly protect free-tier Spark quotas.
+  - Security rules in `firestore.rules`: authenticated users can `create` error reports; admins can `read`, `list`, `update`, and `delete`.
+- **Zero App Crashes / Crash Immunity (`PlatformDispatcher.instance.onError`)**:
+  - `PlatformDispatcher.instance.onError` in all 4 apps (`main_customer.dart`, `main_hero.dart`, `main_seller.dart`, `main_admin.dart`) MUST always return `true`. Returning `false` allows the host OS (Android/iOS) to terminate/force-close the app process.
+  - Calling previous Sentry/crash handlers must be wrapped in `try { ... } catch (_) {}` to guarantee no downstream exception kills the app.
+- **Graceful Widget Fallback (`ErrorWidget.builder`)**:
+  - Configured across all 4 entry points to render an unobtrusive fallback container instead of Flutter's red/grey screen of death, keeping the rest of the app alive and navigable.
+- **Admin Error Log Monitoring & Chitti Integration**:
+  - `admin_app_error_log_screen.dart` supports Cloud (4 Apps) vs Local mode, Status filtering (Active, Resolved, All), App Variant chips (Customer, Hero, Seller, Admin), and Category chips (`crash`, `network`, `permission`, `ui`, `payment`, `location`).
+  - One-tap "Fix with Chitti" exports full context (App variant, error message, stack trace, user auth, and platform) into automated GitHub issue templates for Claude/DeepSeek/Gemini co-pilot pipelines.
+
+## 19. Dynamic UI Layout & Chitti Autonomous Layout Orchestrator Contracts (Sep 19 2026)
+
+- **Universal Dynamic Layout Engine (`DynamicAppLayoutService`)**:
+  - Offline-first in-memory cache backed by SharedPreferences (`app_layout_order::<sectionKey>`).
+  - Backward compatible with legacy `admin_home_tile_order::<sectionKey>`.
+  - Reactive `layoutNotifier` triggers instant UI updates across subscribed widgets (`AdminReorderableTileList`) when Chitti or drag-and-drop reorders tiles.
+  - Graceful append: any new tile added to a section in code automatically appends to the end without breaking the saved layout.
+- **Chitti `rearrange_admin_layout` Tool**:
+  - Registered in `chitti_tool_registry.dart` under `ChittiDomain.admin`, gated with `requiresConfirmation: true`.
+  - Intent engine rules in `chitti_local_intent_engine.dart` map Tamil/Tanglish/English voice commands ("approvals mela kondu va", "reset layout", "dev tools top") with 0 token cost.
+  - Action executor in `chitti_action_executor.dart` executes `moveTilesToFront` or `resetSectionOrder`, providing interactive conversational feedback.
+
+## 20. Strict Multi-Agent & Chitti Mandatory 4-Phase Protocol (Sep 19 2026)
+
+**RULE FOR ALL AGENTS (Antigravity, Gemini, Claude, DeepSeek) AND CHITTI RUNTIME:**
+
+Under NO circumstances may any agent begin writing, editing, or deleting code immediately upon receiving a task or user prompt. Every task MUST adhere strictly to the following 4 phases:
+
+1. **Phase 1: Deep Analysis (ஆராய்ச்சி & ஆய்வு)**:
+   - Read `AGENTS.md` and check all architectural rules and contracts.
+   - Use `grep` and file inspection tools to understand existing wiring, data models, state management, and stream listeners.
+   - Identify existing god nodes, UI wrappers, and potential blast radius.
+2. **Phase 2: Comprehensive Plan (திட்டம் & வரைவு)**:
+   - Outline the exact files to create, modify, or test.
+   - Specify how zero-breakage and free-tier quota protection are guaranteed.
+   - Formulate confirmation questions or clear step-by-step proposals.
+3. **Phase 3: User Approval / Confirmation Gate (பயனர் ஒப்புதல்)**:
+   - Present the plan clearly and concisely to Nizam/Admin (in English / Tamil as appropriate).
+   - In Chitti's runtime voice/chat loop, Chitti must explicitly confirm: *"Boss, neenga sonnathu idhu thaana? Idhai ippo execute pannatuma?"* whenever executing high-impact or structural actions.
+   - Wait for explicit user confirmation BEFORE any modification or execution begins.
+4. **Phase 4: Surgical Execution & Multi-Model Self-Audit (துல்லியமான செயலாக்கம் & சுய தணிக்கை)**:
+   - Apply minimal, surgical diffs.
+   - Run `flutter analyze` and tests (`flutter test`).
+   - Self-audit code with `grep` to verify claims against actual repository HEAD.
+   - Multi-agent collaboration pipeline:
+     - **DeepSeek**: Code scanning, grep-based pattern analysis, bug pinpointing, and issue formulation.
+     - **Claude**: Architectural verification, surgical code fixing, logic consistency, and test authoring.
+     - **Gemini / Antigravity**: System-wide integration audit, build validation, artifact documentation, and delivery.
+
+## 21. Admin AI Dev Studio & Dual-Engine Copilot Contracts (Sep 19 2026)
+
+- **Dedicated AI Dev Studio (`AdminAiDevStudioScreen`)**:
+  - Located in the Admin App Development tab between `dev_monitor` and `in_app_browser`.
+  - Also accessible via Chitti's section registry with key `admin_ai_dev_studio` and voice aliases ("claude studio", "gemini studio", "ai workspace").
+- **Dual-Engine Workspace Architecture**:
+  - **Claude Tab (`@claude`)**: Triggers `claude.yml` GitHub Actions workflow. Ideal for deep refactoring, core logic, and multi-file fixes.
+  - **Gemini Tab (`@gemini`)**: Triggers `gemini_coder.yml` GitHub Actions workflow. Ideal for UI layouts, multimodal visual inspections, and rapid patches.
+  - **Antigravity Tab (`@agy`)**: Autonomous multi-agent pipeline and system verification.
+- **Multimodal Issue Attachment & Cloudinary Upload**:
+  - Admins can snap or attach error screenshots via `ImagePicker`.
+  - Automatically compressed and uploaded to Cloudinary (`dev_issues` folder) and embedded as markdown image links inside GitHub issues.
+- **Plan-First Protocol Toggle**:
+  - Enabled by default to enforce AGENTS.md 4-phase protocol. Tasks opened via `createPlanIssue` ask AI to provide an audit and implementation plan first before generating pull requests.
+- **In-App Browser Integration**:
+  - One-tap quick launchers open Claude, Gemini Studio, and GitHub Issues directly inside `AdminTabbedBrowserScreen` with tab persistence.
+
+
+
+
 
 

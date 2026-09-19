@@ -56,6 +56,7 @@ import '../auth_service.dart';
 import '../chitti_memory_service.dart';
 import '../chitti_order_memory_service.dart';
 import '../chitti_status_lookup_service.dart';
+import '../dynamic_app_layout_service.dart';
 import '../gemini_api_service.dart';
 import '../grocery_ai_notes_service.dart';
 import '../guru_admin_api_service.dart';
@@ -437,6 +438,8 @@ class ChittiActionExecutor {
           return await _getAppErrorLogs(args, isTamil: languageCode == 'ta');
         case 'create_dev_task_from_error':
           return await _createDevTaskFromError(args, isTamil: languageCode == 'ta');
+        case 'rearrange_admin_layout':
+          return await _rearrangeAdminLayout(args, isTamil: languageCode == 'ta');
         case 'open_admin_browser':
           return await _openAdminBrowser(args, isTamil: languageCode == 'ta');
         case 'browse_admin_url':
@@ -2185,6 +2188,103 @@ class ChittiActionExecutor {
       text: isTamil
           ? 'கூகுள் தேடலில் இதற்கான நேரடித் தகவல் கிடைக்கவில்லை பாஸ்.'
           : 'Could not fetch live search results for "$query".',
+    );
+  }
+
+  /// Programmatically rearranges or resets Admin App home screen tiles.
+  static Future<ChittiActionResult> _rearrangeAdminLayout(
+    Map<String, dynamic> args, {
+    bool isTamil = true,
+  }) async {
+    final actionType = (args['action_type'] as String?)?.toLowerCase() ?? 'reorder';
+    final rawSection = (args['section_key'] as String?)?.trim() ?? 'super_admin_home.services';
+    final sectionKey = rawSection.isEmpty ? 'super_admin_home.services' : rawSection;
+
+    final rawPriority = args['priority_tiles'];
+    final priorityTiles = <String>[];
+    if (rawPriority is List) {
+      for (final p in rawPriority) {
+        if (p is String && p.trim().isNotEmpty) {
+          priorityTiles.add(p.trim().toLowerCase());
+        }
+      }
+    } else if (rawPriority is String && rawPriority.trim().isNotEmpty) {
+      priorityTiles.add(rawPriority.trim().toLowerCase());
+    }
+
+    if (actionType == 'reset') {
+      if (sectionKey == 'all') {
+        await DynamicAppLayoutService.instance.resetAllSections();
+      } else {
+        await DynamicAppLayoutService.instance.resetSectionOrder(sectionKey);
+      }
+      return ChittiActionResult(
+        text: isTamil
+            ? 'பாஸ்! அட்மின் ஹோம் லேஅவுட் இயல்பு நிலைக்கு (Default) மாற்றப்பட்டுவிட்டது.'
+            : 'Admin Home layout has been reset to default arrangement, boss.',
+        suggestions: const <String>[
+          'Admin Home',
+          'Pending approvals',
+          "Today's activity",
+        ],
+      );
+    }
+
+    // Default known tiles for admin home sections
+    const defaultServices = [
+      'hero_approvals',
+      'seller_approvals',
+      'live_rides',
+      'service_requests',
+      'call_requests',
+      'radar',
+      'finance',
+    ];
+    const defaultDev = [
+      'chitti_monitor',
+      'app_error_log',
+      'tabbed_browser',
+      'campaigns',
+      'dev_tasks',
+    ];
+
+    final defaultIds = sectionKey.contains('dev') ? defaultDev : defaultServices;
+
+    // Fuzzy map keyword to tile ID
+    final resolvedTileIds = <String>[];
+    for (final p in priorityTiles) {
+      for (final id in [...defaultServices, ...defaultDev]) {
+        if (id.contains(p) ||
+            p.contains(id) ||
+            (p == 'approvals' && id.contains('approval')) ||
+            (p == 'error' && id.contains('error')) ||
+            (p == 'errors' && id.contains('error')) ||
+            (p == 'browser' && id.contains('browser')) ||
+            (p == 'campaign' && id.contains('campaign'))) {
+          if (!resolvedTileIds.contains(id)) {
+            resolvedTileIds.add(id);
+          }
+        }
+      }
+    }
+
+    final targetIds = resolvedTileIds.isNotEmpty ? resolvedTileIds : priorityTiles;
+    await DynamicAppLayoutService.instance.moveTilesToFront(
+      sectionKey: sectionKey,
+      tileIds: targetIds,
+      defaultIds: defaultIds,
+    );
+
+    final readableList = targetIds.join(', ');
+    return ChittiActionResult(
+      text: isTamil
+          ? 'பாஸ்! நீங்கள் கேட்டபடி அட்மின் ஹோம் லேஅவுட் மாற்றி அமைக்கப்பட்டது ($readableList முன்னுரிமைப்படுத்தப்பட்டது).'
+          : 'Admin Home layout updated successfully with prioritized tiles: $readableList.',
+      suggestions: const <String>[
+        'Admin Home',
+        'Reset layout',
+        'Check error log',
+      ],
     );
   }
 }

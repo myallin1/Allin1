@@ -805,6 +805,56 @@ class ChittiLocalIntentEngine {
       ],
     ),
     _IntentRule(
+      action: 'rearrange_admin_layout',
+      variants: {'admin'},
+      slots: {'action_type': 'reset', 'section_key': 'all'},
+      phrases: [
+        'reset layout',
+        'reset admin home',
+        'reset home layout',
+        'default layout',
+        'layout reset pannu',
+        'பழைய லேஅவுட்',
+        'லேஅவுட் ரீசெட்',
+      ],
+      requiresCommandTone: true,
+    ),
+    _IntentRule(
+      action: 'rearrange_admin_layout',
+      variants: {'admin'},
+      slots: {
+        'action_type': 'move_to_top',
+        'section_key': 'super_admin_home.services',
+        'priority_tiles': ['hero_approvals', 'seller_approvals'],
+      },
+      phrases: [
+        'approvals mela kondu va',
+        'approvals top la vei',
+        'move approvals to top',
+        'prioritize approvals',
+        'அப்ரூவல் மேல வை',
+        'அப்ரூவல் முதல்ல காட்டு',
+      ],
+      requiresCommandTone: true,
+    ),
+    _IntentRule(
+      action: 'rearrange_admin_layout',
+      variants: {'admin'},
+      slots: {
+        'action_type': 'move_to_top',
+        'section_key': 'super_admin_home.dev',
+        'priority_tiles': ['app_error_log', 'tabbed_browser', 'chitti_monitor'],
+      },
+      phrases: [
+        'error log mela kondu va',
+        'dev tools mela kondu va',
+        'move dev tools to top',
+        'error monitor top',
+        'எரர் லாக் மேல வை',
+      ],
+      requiresCommandTone: true,
+    ),
+    _IntentRule(
       action: 'admin_open_enquiries',
       variants: {'admin', 'seller'},
       phrases: [

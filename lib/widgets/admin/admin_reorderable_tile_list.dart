@@ -17,10 +17,10 @@
 // order — see _applyOrder. A screen author adds a new tile to their
 // list exactly as before; there is nothing else to wire up.
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../services/dynamic_app_layout_service.dart';
 
 /// One entry in an [AdminReorderableTileList]. [id] is never shown —
 /// it exists only so the saved order can be matched back to the right
@@ -36,9 +36,9 @@ class AdminHomeTile {
 
 class AdminReorderableTileList extends StatefulWidget {
   const AdminReorderableTileList({
-    super.key,
     required this.sectionKey,
     required this.tiles,
+    super.key,
     this.spacing = 10,
   });
 
@@ -54,8 +54,6 @@ class AdminReorderableTileList extends StatefulWidget {
 }
 
 class _AdminReorderableTileListState extends State<AdminReorderableTileList> {
-  static const _prefsPrefix = 'admin_home_tile_order::';
-
   List<AdminHomeTile> _ordered = const [];
   bool _loaded = false;
 
@@ -63,6 +61,18 @@ class _AdminReorderableTileListState extends State<AdminReorderableTileList> {
   void initState() {
     super.initState();
     _ordered = widget.tiles;
+    DynamicAppLayoutService.instance.layoutNotifier.addListener(_onExternalLayoutChanged);
+    unawaited(_restoreOrder());
+  }
+
+  @override
+  void dispose() {
+    DynamicAppLayoutService.instance.layoutNotifier.removeListener(_onExternalLayoutChanged);
+    super.dispose();
+  }
+
+  void _onExternalLayoutChanged() {
+    if (!mounted) return;
     unawaited(_restoreOrder());
   }
 
@@ -75,11 +85,6 @@ class _AdminReorderableTileListState extends State<AdminReorderableTileList> {
       unawaited(_restoreOrder());
       return;
     }
-    // The host screen may rebuild its tile list with fresh instances on
-    // every build (live badge counts via StreamBuilder, for example) —
-    // re-apply the order already in memory to those NEW instances
-    // rather than reloading from disk, so neither a live badge update
-    // nor a parent rebuild ever undoes a drag mid-session.
     setState(() {
       _ordered = _applyOrder(
         widget.tiles,
@@ -89,18 +94,12 @@ class _AdminReorderableTileListState extends State<AdminReorderableTileList> {
   }
 
   Future<void> _restoreOrder() async {
-    List<String> savedIds = const [];
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString('$_prefsPrefix${widget.sectionKey}');
-      if (raw != null) {
-        savedIds = (jsonDecode(raw) as List<dynamic>).cast<String>();
-      }
-    } catch (_) {
-      // Corrupt or unreadable prefs — fall back to the screen's own
-      // hardcoded order, same as a fresh admin with nothing saved yet.
-      savedIds = const [];
-    }
+    final defaultIds = widget.tiles.map((t) => t.id).toList(growable: false);
+    final savedIds = await DynamicAppLayoutService.instance.getOrderedIds(
+      sectionKey: widget.sectionKey,
+      defaultIds: defaultIds,
+    );
+
     if (!mounted) return;
     setState(() {
       _ordered = _applyOrder(widget.tiles, savedIds);
@@ -118,24 +117,16 @@ class _AdminReorderableTileListState extends State<AdminReorderableTileList> {
       final tile = byId.remove(id);
       if (tile != null) result.add(tile);
     }
-    // Anything left — every tile on a section's very first load, and
-    // any tile added to the screen's code since the order was last
-    // saved — is appended in the screen's own original order.
     result.addAll(byId.values);
     return result;
   }
 
   Future<void> _persistOrder() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        '$_prefsPrefix${widget.sectionKey}',
-        jsonEncode(_ordered.map((t) => t.id).toList(growable: false)),
-      );
-    } catch (_) {
-      // Non-fatal: the new order still applies for this session even
-      // if it couldn't be written to disk.
-    }
+    final orderedIds = _ordered.map((t) => t.id).toList(growable: false);
+    await DynamicAppLayoutService.instance.saveSectionOrder(
+      sectionKey: widget.sectionKey,
+      orderedIds: orderedIds,
+    );
   }
 
   @override
@@ -149,6 +140,7 @@ class _AdminReorderableTileListState extends State<AdminReorderableTileList> {
       buildDefaultDragHandles: false,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
+      // ignore: deprecated_member_use
       onReorder: (oldIndex, newIndex) {
         setState(() {
           if (newIndex > oldIndex) newIndex -= 1;

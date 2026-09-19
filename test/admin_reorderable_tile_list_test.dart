@@ -1,3 +1,4 @@
+import 'package:erode_superapp/services/dynamic_app_layout_service.dart';
 import 'package:erode_superapp/widgets/admin/admin_reorderable_tile_list.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    DynamicAppLayoutService.instance.clearMemoryCacheForTesting();
   });
 
   Widget harness(List<AdminHomeTile> tiles, {String sectionKey = 'test.section'}) {
@@ -42,6 +44,7 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'admin_home_tile_order::test.section': '["c","a","b"]',
     });
+    DynamicAppLayoutService.instance.clearMemoryCacheForTesting();
 
     await tester.pumpWidget(harness(threeTiles()));
     await tester.pumpAndSettle();
@@ -58,6 +61,7 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'admin_home_tile_order::test.section': '["b","a"]',
     });
+    DynamicAppLayoutService.instance.clearMemoryCacheForTesting();
 
     final tiles = [
       ...threeTiles(),
@@ -92,7 +96,8 @@ void main() {
     await tester.pumpAndSettle();
 
     final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString('admin_home_tile_order::test.section');
+    final saved = prefs.getString('app_layout_order::test.section') ??
+        prefs.getString('admin_home_tile_order::test.section');
     expect(saved, isNotNull);
     // Tile A should no longer be first.
     expect(saved!.startsWith('["a"'), isFalse);
@@ -103,6 +108,7 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'admin_home_tile_order::section.one': '["c","a","b"]',
     });
+    DynamicAppLayoutService.instance.clearMemoryCacheForTesting();
 
     await tester.pumpWidget(harness(threeTiles(), sectionKey: 'section.two'));
     await tester.pumpAndSettle();

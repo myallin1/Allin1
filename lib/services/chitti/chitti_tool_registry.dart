@@ -922,6 +922,51 @@ const List<ChittiTool> kChittiTools = <ChittiTool>[
     },
   ),
   ChittiTool(
+    name: 'rearrange_admin_layout',
+    domain: ChittiDomain.admin,
+    variants: {'admin'},
+    description:
+        'Rearrange or customize the layout and order of tiles on the Admin '
+        'HomeScreen / Dashboard. Call when the admin asks to move specific '
+        'features to the top, reorder cards, or reset to default layout.',
+    requiresConfirmation: true,
+    keywords: [
+      'layout',
+      'rearrange',
+      'customize',
+      'move to top',
+      'mela kondu va',
+      'order',
+      'align',
+      'reset layout',
+      'change order',
+    ],
+    parameters: <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'section_key': <String, dynamic>{
+          'type': 'string',
+          'description':
+              'Section key to rearrange, e.g., "super_admin_home.services", '
+              '"super_admin_home.dev", "super_admin_home.approvals", or "all".',
+        },
+        'priority_tiles': <String, dynamic>{
+          'type': 'array',
+          'items': <String, dynamic>{'type': 'string'},
+          'description':
+              'Keywords or IDs of tiles to move to the front / top, e.g., '
+              '["approvals", "errors", "campaigns", "finance", "browser"].',
+        },
+        'action_type': <String, dynamic>{
+          'type': 'string',
+          'enum': ['move_to_top', 'reorder', 'reset'],
+          'description': 'Action to perform: move_to_top, reorder, or reset.',
+        },
+      },
+      'required': ['action_type'],
+    },
+  ),
+  ChittiTool(
     name: 'system_perform_action',
     domain: ChittiDomain.admin,
     variants: {'admin'},

@@ -17,6 +17,7 @@ import '../../services/chitti/chitti_dev_monitor_service.dart';
 import '../../services/chitti/chitti_live_call_service.dart';
 import '../../services/chitti_overlay_service.dart';
 import '../../services/db_usage_tracker.dart';
+import '../../services/dynamic_app_layout_service.dart';
 import '../../services/firestore_usage_tracking.dart';
 import '../../services/guru_overlay_service.dart';
 import '../../services/map_simulation_service.dart';
@@ -30,6 +31,7 @@ import '../../widgets/admin_incoming_call_dialog.dart';
 import '../../widgets/download_app_banner.dart';
 import 'admin_affiliate_leads_screen.dart';
 import 'admin_affiliate_qr_screen.dart';
+import 'admin_ai_dev_studio_screen.dart';
 import 'admin_ai_settings_screen.dart';
 import 'admin_app_versions_screen.dart';
 import 'admin_call_services_screen.dart';
@@ -49,6 +51,7 @@ import 'admin_qr_generator_screen.dart';
 import 'admin_seller_payouts_screen.dart';
 import 'admin_service_requests_screen.dart';
 import 'admin_sos_kyc_approvals_screen.dart';
+import 'admin_tabbed_browser_screen.dart';
 import 'admin_taxi_rides_screen.dart';
 import 'admin_ux_audit_screen.dart';
 import 'admin_web_tabs_screen.dart';
@@ -471,14 +474,46 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
-            child: Text(
-              'SERVICES',
-              style: TextStyle(
-                color: _text.withValues(alpha: 0.5),
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'SERVICES',
+                  style: TextStyle(
+                    color: _text.withValues(alpha: 0.5),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                InkWell(
+                  onTap: () async {
+                    await DynamicAppLayoutService.instance.resetSectionOrder('super_admin_home.services');
+                    if (context.mounted) {
+                      _showSnack(context, 'Services layout reset to default');
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.restart_alt, size: 13, color: _text.withValues(alpha: 0.4)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Reset Order',
+                          style: TextStyle(
+                            color: _text.withValues(alpha: 0.4),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -644,14 +679,46 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
-            child: Text(
-              'DEVELOPMENT & AUTOMATION',
-              style: TextStyle(
-                color: _text.withValues(alpha: 0.5),
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'DEVELOPMENT & AUTOMATION',
+                  style: TextStyle(
+                    color: _text.withValues(alpha: 0.5),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                InkWell(
+                  onTap: () async {
+                    await DynamicAppLayoutService.instance.resetSectionOrder('super_admin_home.development');
+                    if (context.mounted) {
+                      _showSnack(context, 'Development layout reset to default');
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.restart_alt, size: 13, color: _text.withValues(alpha: 0.4)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Reset Order',
+                          style: TextStyle(
+                            color: _text.withValues(alpha: 0.4),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -674,6 +741,38 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                       context,
                       MaterialPageRoute<void>(
                           builder: (_) => const ChittiDevMonitorScreen(),),
+                    ),
+                  ),
+                ),
+                AdminHomeTile(
+                  id: 'ai_dev_studio',
+                  // NEW (Sep 19 2026 — Nizam: "namma admin app kulla
+                  // irunthe claude & gemini ah work pannanum... problem image
+                  // anupuna issue podum git la... dev monitor kum browser kum
+                  // between la vei").
+                  child: _ManageTile(
+                    label: 'AI Dev Studio (Claude & Gemini)',
+                    subtitle: 'Dual AI copilot, screenshot issue reporter & tasks',
+                    iconSvg: FluentEmojiFlat.desktop_computer,
+                    color: _purple,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                          builder: (_) => const AdminAiDevStudioScreen(),),
+                    ),
+                  ),
+                ),
+                AdminHomeTile(
+                  id: 'in_app_browser',
+                  child: _ManageTile(
+                    label: 'In-App Browser & Dev Tools',
+                    subtitle: 'Multi-tab developer browser with offline reader',
+                    iconSvg: FluentEmojiFlat.globe_with_meridians,
+                    color: _purple,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                          builder: (_) => const AdminTabbedBrowserScreen(),),
                     ),
                   ),
                 ),
@@ -1765,7 +1864,6 @@ class _ManageTile extends StatelessWidget {
   final String iconSvg;
   final Color color;
   final VoidCallback onTap;
-  final String? requestType;
 
   const _ManageTile({
     required this.label,
@@ -1773,7 +1871,7 @@ class _ManageTile extends StatelessWidget {
     required this.iconSvg,
     required this.color,
     required this.onTap,
-  }) : requestType = null;
+  });
 
   static const Color _text = Color(0xFFEEEEF5);
   static const Color _muted = Color(0xFF9999BB);
@@ -1830,7 +1928,6 @@ class _ManageTile extends StatelessWidget {
               ],
             ),
           ),
-          if (requestType != null) _WaitingBadge(requestType: requestType!),
           const SizedBox(width: 8),
           Icon(Icons.arrow_forward_ios_rounded,
               color: color.withValues(alpha: 0.6), size: 16,),
@@ -1849,7 +1946,6 @@ class _ManageTile extends StatelessWidget {
     properties.add(StringProperty('iconSvg', iconSvg));
     properties.add(ColorProperty('color', color));
     properties.add(ObjectFlagProperty<VoidCallback>.has('onTap', onTap));
-    properties.add(StringProperty('requestType', requestType));
   }
 }
 
@@ -2000,51 +2096,6 @@ class _ServicesAggregateWaitingDot extends StatelessWidget {
   }
 }
 
-// Live "waiting for a hero" count for one requestType — pending +
-// admin_review (no hero has picked it up yet). Split out from
-// _ManageTile so the taxi/settings tiles (no requestType) don't pay
-// for a Firestore listener they don't need.
-class _WaitingBadge extends StatelessWidget {
-  final String requestType;
-  const _WaitingBadge({required this.requestType});
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('service_requests')
-          .where('requestType', isEqualTo: requestType)
-          .where('status', whereIn: ['pending', 'admin_review'])
-          .trackedSnapshots(),
-      builder: (context, snapshot) {
-        final waitingCount = snapshot.data?.docs.length ?? 0;
-        if (waitingCount == 0) return const SizedBox.shrink();
-        return Container(
-          margin: const EdgeInsets.only(left: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFF1744),
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Text(
-            waitingCount > 9 ? '9+ waiting' : '$waitingCount waiting',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  @override
-  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
-    super.debugFillProperties(properties);
-    properties.add(StringProperty('requestType', requestType));
-  }
-}
 
 // ── Admin-visibility gap fix: live count badge for escalated Hero
 // Booking (and other service_requests category) tasks awaiting admin

@@ -63,6 +63,7 @@ void main() {
         'propose_dev_plan',
         'approve_dev_plan',
         'create_dev_task_from_error',
+        'rearrange_admin_layout',
       });
     });
   });

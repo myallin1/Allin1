@@ -68,6 +68,7 @@ void main() {
     'open_admin_browser',
     'check_dev_plan',
     'get_app_error_logs',
+    'rearrange_admin_layout',
   };
 
   /// Tools that legitimately need the model. Listed explicitly so that
@@ -181,6 +182,7 @@ void main() {
       'open_admin_browser': (text: 'open github', variant: 'admin'),
       'check_dev_plan': (text: 'check the plan', variant: 'admin'),
       'get_app_error_logs': (text: 'check error log', variant: 'admin'),
+      'rearrange_admin_layout': (text: 'approvals mela kondu va', variant: 'admin'),
     };
 
     test('no offline-capable tool is left without a phrasing', () {
