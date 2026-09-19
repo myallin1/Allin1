@@ -13,6 +13,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../../services/chitti/chitti_dev_monitor_service.dart';
 import '../../services/chitti/chitti_dev_task_service.dart';
@@ -73,6 +74,11 @@ class _AdminAiDevStudioScreenState extends State<AdminAiDevStudioScreen> {
   String? _statusMessage;
   bool _isStatusError = false;
 
+  // Voice speech-to-text dictation
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _speechAvailable = false;
+  bool _isListening = false;
+
   List<DevTaskIssue> _recentIssues = [];
   bool _loadingIssues = false;
 
@@ -107,13 +113,63 @@ class _AdminAiDevStudioScreenState extends State<AdminAiDevStudioScreen> {
         _appOptions.contains(widget.initialAppVariant)) {
       _selectedApp = widget.initialAppVariant!;
     }
+    _initSpeech();
     _loadRecentIssues();
+  }
+
+  Future<void> _initSpeech() async {
+    try {
+      final available = await _speech.initialize(
+        onError: (err) => debugPrint('[AdminAiDevStudio] STT Error: $err'),
+        onStatus: (status) {
+          if (status == 'done' || status == 'notListening') {
+            if (mounted) setState(() => _isListening = false);
+          }
+        },
+      );
+      if (mounted) setState(() => _speechAvailable = available);
+    } catch (_) {
+      if (mounted) setState(() => _speechAvailable = false);
+    }
+  }
+
+  Future<void> _toggleVoiceInput() async {
+    if (!_speechAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Speech recognition is not available on this device.')),
+      );
+      return;
+    }
+
+    if (_isListening) {
+      await _speech.stop();
+      if (mounted) setState(() => _isListening = false);
+    } else {
+      setState(() => _isListening = true);
+      await _speech.listen(
+        onResult: (result) {
+          if (mounted) {
+            setState(() {
+              final recognized = result.recognizedWords;
+              if (recognized.isNotEmpty) {
+                if (_descCtrl.text.isEmpty) {
+                  _descCtrl.text = recognized;
+                } else if (!_descCtrl.text.endsWith(recognized)) {
+                  _descCtrl.text = '${_descCtrl.text} $recognized';
+                }
+              }
+            });
+          }
+        },
+      );
+    }
   }
 
   @override
   void dispose() {
     _titleCtrl.dispose();
     _descCtrl.dispose();
+    _speech.stop();
     super.dispose();
   }
 
@@ -207,6 +263,21 @@ class _AdminAiDevStudioScreenState extends State<AdminAiDevStudioScreen> {
         ),
       );
       return;
+    }
+
+    // If image is still uploading, wait a moment for completion
+    if (_isUploadingImage) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Image is still uploading... finishing upload first.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      int attempts = 0;
+      while (_isUploadingImage && attempts < 10) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        attempts++;
+      }
     }
 
     setState(() {
@@ -667,8 +738,37 @@ class _AdminAiDevStudioScreenState extends State<AdminAiDevStudioScreen> {
           ),
           const SizedBox(height: 14),
 
-          // Description / Details Input Field
-          Text('Detailed Instructions (Supports Tamil/English)', style: GoogleFonts.outfit(color: _text, fontSize: 12, fontWeight: FontWeight.w600)),
+          // Description / Details Input Field with Voice Dictation Button
+          Row(
+            children: [
+              Text('Detailed Instructions (Tamil/English)', style: GoogleFonts.outfit(color: _text, fontSize: 12, fontWeight: FontWeight.w600)),
+              const Spacer(),
+              if (_speechAvailable)
+                InkWell(
+                  onTap: _toggleVoiceInput,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: _isListening ? _red.withValues(alpha: 0.2) : _purple.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _isListening ? _red : _purple),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(_isListening ? Icons.mic : Icons.mic_none, size: 14, color: _isListening ? _red : _purple),
+                        const SizedBox(width: 4),
+                        Text(
+                          _isListening ? 'Listening...' : 'Voice Input',
+                          style: TextStyle(color: _isListening ? _red : _purple, fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: 6),
           TextField(
             controller: _descCtrl,
