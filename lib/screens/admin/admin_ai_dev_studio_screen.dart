@@ -8,9 +8,9 @@
 //
 // Follows AGENTS.md 4-Phase Protocol (Analyze -> Plan -> Confirm -> Execute).
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -145,18 +145,17 @@ class _AdminAiDevStudioScreenState extends State<AdminAiDevStudioScreen> {
       await _speech.stop();
       if (mounted) setState(() => _isListening = false);
     } else {
+      final baseText = _descCtrl.text.trim();
       setState(() => _isListening = true);
       await _speech.listen(
         onResult: (result) {
           if (mounted) {
             setState(() {
-              final recognized = result.recognizedWords;
+              final recognized = result.recognizedWords.trim();
               if (recognized.isNotEmpty) {
-                if (_descCtrl.text.isEmpty) {
-                  _descCtrl.text = recognized;
-                } else if (!_descCtrl.text.endsWith(recognized)) {
-                  _descCtrl.text = '${_descCtrl.text} $recognized';
-                }
+                final text = baseText.isEmpty ? recognized : '$baseText $recognized';
+                _descCtrl.text = text;
+                _descCtrl.selection = TextSelection.collapsed(offset: text.length);
               }
             });
           }
@@ -416,31 +415,37 @@ class _AdminAiDevStudioScreenState extends State<AdminAiDevStudioScreen> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // 1. Dual Engine Selector (Top Tabs: Claude vs Gemini)
-          _buildEngineSelector(),
-          const SizedBox(height: 16),
+      body: RefreshIndicator(
+        color: _purple,
+        backgroundColor: _card,
+        onRefresh: _loadRecentIssues,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          children: [
+            // 1. Dual Engine Selector (Top Tabs: Claude vs Gemini)
+            _buildEngineSelector(),
+            const SizedBox(height: 16),
 
-          // 2. Engine Info & Quick Launcher Card
-          _buildEngineStatusCard(),
-          const SizedBox(height: 16),
+            // 2. Engine Info & Quick Launcher Card
+            _buildEngineStatusCard(),
+            const SizedBox(height: 16),
 
-          // 3. Task Composer Form
-          _buildTaskComposerCard(),
-          const SizedBox(height: 20),
-
-          // 4. Status / Result Banner (if any)
-          if (_statusMessage != null) ...[
-            _buildStatusBanner(),
+            // 3. Task Composer Form
+            _buildTaskComposerCard(),
             const SizedBox(height: 20),
-          ],
 
-          // 5. Recent Active Dev Tasks Feed
-          _buildRecentTasksSection(),
-          const SizedBox(height: 30),
-        ],
+            // 4. Status / Result Banner (if any)
+            if (_statusMessage != null) ...[
+              _buildStatusBanner(),
+              const SizedBox(height: 20),
+            ],
+
+            // 5. Recent Active Dev Tasks Feed
+            _buildRecentTasksSection(),
+            const SizedBox(height: 30),
+          ],
+        ),
       ),
     );
   }
@@ -1038,7 +1043,9 @@ class _AdminAiDevStudioScreenState extends State<AdminAiDevStudioScreen> {
           ),
           if (!isError && _lastCreatedIssueUrl != null) ...[
             const SizedBox(height: 10),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 ElevatedButton.icon(
                   onPressed: () => _openInAppBrowser(
@@ -1046,10 +1053,29 @@ class _AdminAiDevStudioScreenState extends State<AdminAiDevStudioScreen> {
                     title: 'Issue #${_lastCreatedIssueNumber ?? ''}',
                   ),
                   icon: const Icon(Icons.open_in_new, size: 14),
-                  label: const Text('View Issue in In-App Browser', style: TextStyle(fontSize: 12)),
+                  label: const Text('View in In-App Browser', style: TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _green,
                     foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: _lastCreatedIssueUrl!));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Issue link copied to clipboard!'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 14),
+                  label: const Text('Copy Link', style: TextStyle(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _text,
+                    side: const BorderSide(color: _border),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
