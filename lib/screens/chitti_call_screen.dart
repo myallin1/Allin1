@@ -378,8 +378,24 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
         _endCall(ChittiCallOutcome.endedBySpeech);
         return;
       }
-      _conversation.queuePendingTopic(heard);
-      return;
+      // FIX (Sep 21 2026 — Nizam: "chitti pesurathu thaan kekkuthu, naan
+      // pesuratha purinjukitu chitti answer pannala"). This branch used
+      // to call queuePendingTopic(heard) and RETURN — meaning a genuine
+      // interruption got silently swallowed for the entire turn the
+      // customer actually spoke in. It only resurfaced later, smuggled
+      // as plain history text on whatever turn happened to be processed
+      // next, and never got its own spoken answer. From the customer's
+      // side that looks exactly like "I said something and Chitti just
+      // didn't react" — indistinguishable from a real mic failure, but
+      // it isn't one: the words were heard and recognised correctly,
+      // just never acted on. A real interruption should interrupt: stop
+      // Chitti's current sentence and answer THIS utterance right now,
+      // the same way a human call would.
+      await _tts.stop();
+      _conversation.markSpokenDone();
+      // Falls through to the normal processing below — heard is neither
+      // empty, echo, nor a stop word, so it is a real utterance worth a
+      // real reply.
     }
 
     if (_conversation.isStopRequest(heard)) {
@@ -427,7 +443,7 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
       _fullTranscript.add('Chitti: ${localAnswer.text}');
       if (_activeCallSessionId != null) {
         unawaited(ChittiLiveCallService.instance
-            .appendTranscript(_activeCallSessionId!, 'Chitti: ${localAnswer.text}'));
+            .appendTranscript(_activeCallSessionId!, 'Chitti: ${localAnswer.text}'),);
       }
       _history.add({'role': 'assistant', 'content': localAnswer.text});
       // Same turn-bookkeeping the network path below always does before
