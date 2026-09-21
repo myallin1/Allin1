@@ -188,6 +188,14 @@ class _GuruChatScreenState extends State<GuruChatScreen>
   // customer's explicit yes/no. Cleared once actioned or cancelled.
   Map<String, dynamic>? _pendingAgentAction;
 
+  // NEW (Sep 21 2026 — "image pottu issue potta antha issue udane
+  // trigger aganum"): _pendingImageBytes is cleared the moment the
+  // message ships (see _sendMessage), so by the time a confirmation-
+  // gated tool like create_dev_task actually runs, the image that
+  // prompted it is long gone unless it's saved separately here,
+  // alongside the pending action itself.
+  Uint8List? _pendingActionImageBytes;
+
   // NEW (Chitti AI upgrade, Task 2 — Vision): the screenshot the customer
   // has picked but not yet sent — shown as a small removable preview
   // chip above the input bar, cleared once _sendMessage() ships it.
@@ -461,17 +469,20 @@ class _GuruChatScreenState extends State<GuruChatScreen>
       final pending = _pendingAgentAction!;
       if (decision == VoiceYesNo.yes) {
         _pendingAgentAction = null;
+        final pendingImage = _pendingActionImageBytes;
+        _pendingActionImageBytes = null;
         unawaited(_logGuruAnalyticsEvent(
           eventType: 'intent_resolved',
           action: pending['action'] as String?,
           args: pending,
           resolved: true,
         ),);
-        await _executePendingAction(pending);
+        await _executePendingAction(pending, imageBytes: pendingImage);
         if (mounted) setState(() => _isTyping = false);
         return;
       } else if (decision == VoiceYesNo.no) {
         _pendingAgentAction = null;
+        _pendingActionImageBytes = null;
         unawaited(_logGuruAnalyticsEvent(
           eventType: 'intent_resolved',
           action: pending['action'] as String?,
@@ -493,6 +504,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
       // treat this as a fresh message (the customer likely re-said
       // their request instead of answering yes/no).
       _pendingAgentAction = null;
+      _pendingActionImageBytes = null;
     }
 
     // NEW (CTO mandate — Autonomous Agent, Option 3 w/ human-in-the-loop
@@ -692,7 +704,10 @@ class _GuruChatScreenState extends State<GuruChatScreen>
   // check_and_update_app and analyze_screen_with_vision stay local —
   // the update flow needs this screen's PWA/native branch mid-flight,
   // and vision needs the attached image bytes that only exist here.
-  Future<void> _executePendingAction(Map<String, dynamic> args) async {
+  Future<void> _executePendingAction(
+    Map<String, dynamic> args, {
+    Uint8List? imageBytes,
+  }) async {
     final action = args['action'] as String?;
 
     if (action == 'check_and_update_app') {
@@ -701,7 +716,11 @@ class _GuruChatScreenState extends State<GuruChatScreen>
     }
     if (!mounted) return;
 
-    final result = await ChittiActionExecutor.execute(args, context: context);
+    final result = await ChittiActionExecutor.execute(
+      args,
+      context: context,
+      imageBytes: imageBytes,
+    );
     if (!mounted) return;
 
     if (result.text.isNotEmpty) {
@@ -1684,7 +1703,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
         args: <String, dynamic>{...resolvedArgs, 'source': source},
         resolved: true,
       ),);
-      await _executePendingAction(resolvedArgs);
+      await _executePendingAction(resolvedArgs, imageBytes: imageBytes);
       return true;
     }
 
@@ -1695,6 +1714,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
     // top of _sendMessage).
     if (!mounted) return true;
     _pendingAgentAction = resolvedArgs;
+    _pendingActionImageBytes = imageBytes;
     setState(() {
       _messages.add(
         _GuruMessage(
@@ -1777,7 +1797,7 @@ class _GuruChatScreenState extends State<GuruChatScreen>
       case 'create_dev_task_from_error':
         final errorEngineLabel =
             ChittiDevEngineTag.fromName(args['engine'] as String?).label;
-        return "I found the on-device error log. Shall I ask $errorEngineLabel "
+        return 'I found the on-device error log. Shall I ask $errorEngineLabel '
             'to audit this error and propose a fix on GitHub (no code yet)?';
       default:
         return 'Should I proceed?';

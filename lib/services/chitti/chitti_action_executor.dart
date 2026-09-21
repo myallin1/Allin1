@@ -162,6 +162,11 @@ class ChittiActionExecutor {
   static Future<ChittiActionResult> execute(
     Map<String, dynamic> args, {
     required BuildContext context,
+    // NEW (Sep 21 2026 — "image pottu issue potta antha issue udane
+    // trigger aganum"): only create_dev_task/propose_dev_plan actually
+    // use this today (see below) — every other action ignores it, same
+    // as before this param existed.
+    Uint8List? imageBytes,
   }) async {
     final action = args['action'] as String?;
     // The customer's own language, for anything Chitti says in its own
@@ -425,9 +430,13 @@ class ChittiActionExecutor {
         case 'summarize_last_call':
           return await _summarizeLastCall(isTamil: languageCode == 'ta');
         case 'create_dev_task':
-          return await _createDevTask(args);
+          return await _createDevTask(args, imageBytes: imageBytes);
         case 'propose_dev_plan':
-          return await _proposeDevPlan(args, isTamil: languageCode == 'ta');
+          return await _proposeDevPlan(
+            args,
+            isTamil: languageCode == 'ta',
+            imageBytes: imageBytes,
+          );
         case 'check_dev_plan':
           return await _checkDevPlan(args, isTamil: languageCode == 'ta');
         case 'approve_dev_plan':
@@ -1683,8 +1692,9 @@ class ChittiActionExecutor {
   }
 
   static Future<ChittiActionResult> _createDevTask(
-    Map<String, dynamic> args,
-  ) async {
+    Map<String, dynamic> args, {
+    Uint8List? imageBytes,
+  }) async {
     final title = (args['title'] as String?)?.trim() ?? '';
     final description = (args['description'] as String?)?.trim() ?? '';
     if (title.isEmpty || description.isEmpty) {
@@ -1699,6 +1709,7 @@ class ChittiActionExecutor {
       title: title,
       description: description,
       engine: engine,
+      imageBytes: imageBytes,
     );
 
     if (result.success) {
@@ -1722,6 +1733,7 @@ class ChittiActionExecutor {
   static Future<ChittiActionResult> _proposeDevPlan(
     Map<String, dynamic> args, {
     required bool isTamil,
+    Uint8List? imageBytes,
   }) async {
     final title = (args['title'] as String?)?.trim() ?? '';
     final description = (args['description'] as String?)?.trim() ?? '';
@@ -1739,6 +1751,7 @@ class ChittiActionExecutor {
       title: title,
       description: description,
       engine: engine,
+      imageBytes: imageBytes,
     );
 
     if (result.success) {

@@ -36,6 +36,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../cloudinary_upload_service.dart';
+
 @immutable
 class ChittiDevTaskResult {
   const ChittiDevTaskResult({
@@ -249,10 +251,42 @@ class ChittiDevTaskService {
   /// [ChittiDevTaskResult.success] == false with a human-readable
   /// [ChittiDevTaskResult.error], the same "never let the caller crash
   /// into an exception" contract every other Chitti tool follows.
+  // NEW (Sep 21 2026 — Nizam: "image pottu issue potta antha issue udane
+  // trigger aganum"). Before this, an admin attaching a screenshot and
+  // asking Chitti to file a dev task got the image silently dropped —
+  // imageBytes only ever reached analyze_screen_with_vision (a
+  // describe-it-in-words tool), never create_dev_task/propose_dev_plan,
+  // so the coding engine that picked up the issue had no picture at
+  // all, just whatever text the admin typed alongside it. Uploads
+  // through the same Cloudinary path every other image in this app
+  // uses (KYC docs, menu photos) — free tier, no new credential to add
+  // — and the resulting URL is embedded as a real markdown image, so
+  // it renders inline on the GitHub issue for both a human reviewer and
+  // any coding engine that reads the issue body.
+  static Future<String> _describeAttachedImage(Uint8List? imageBytes) async {
+    if (imageBytes == null) return '';
+    try {
+      final url = await CloudinaryUploadService().uploadImageBytes(
+        imageBytes,
+        fileName:
+            'chitti_dev_task_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        folder: 'chitti_dev_tasks',
+      );
+      return '\n\n**Attached screenshot:**\n![screenshot]($url)';
+    } catch (e) {
+      debugPrint('[ChittiDevTaskService] screenshot upload failed: $e');
+      // Never let an upload hiccup block the whole issue from being
+      // filed — the text description still carries the request; the
+      // admin can attach the image manually on GitHub if this happens.
+      return '\n\n_(A screenshot was attached but failed to upload: $e)_';
+    }
+  }
+
   static Future<ChittiDevTaskResult> createIssue({
     required String title,
     required String description,
     ChittiDevEngine engine = ChittiDevEngine.claude,
+    Uint8List? imageBytes,
   }) async {
     final token = await readToken();
     if (token == null || token.isEmpty) {
@@ -271,7 +305,9 @@ class ChittiDevTaskService {
       );
     }
 
-    final body = '$description\n\n${engine.mention} please implement this.';
+    final imageSection = await _describeAttachedImage(imageBytes);
+    final body =
+        '$description$imageSection\n\n${engine.mention} please implement this.';
 
     try {
       final response = await http
@@ -340,6 +376,7 @@ class ChittiDevTaskService {
     required String title,
     required String description,
     ChittiDevEngine engine = ChittiDevEngine.claude,
+    Uint8List? imageBytes,
   }) async {
     final token = await readToken();
     if (token == null || token.isEmpty) {
@@ -359,7 +396,8 @@ class ChittiDevTaskService {
     }
 
     final mention = engine.mention;
-    final body = '$description\n\n'
+    final imageSection = await _describeAttachedImage(imageBytes);
+    final body = '$description$imageSection\n\n'
         '$mention please review this request. Reply with your audit and a '
         'concrete implementation plan (approach, files likely touched, '
         'risks/tradeoffs) as a comment on this issue. **Do not open a pull '
