@@ -49,6 +49,19 @@ class _AdminIncomingCallDialogState extends State<AdminIncomingCallDialog>
   StreamSubscription<ChittiLiveCallState?>? _sub;
   late ChittiLiveCallState _state;
 
+  // NEW (Sep 21 2026 — reaudit, real double-pop race). _reject() writes
+  // status 'ended' via endCall() and then pops this dialog itself — but
+  // that SAME write is also what this dialog's own watchCall listener
+  // below reacts to (status == 'ended' -> pop). RTDB can deliver that
+  // echo back to the writer's own listener fast enough to race the
+  // explicit pop in _reject(), so both code paths could call
+  // Navigator.pop() on the ROOT navigator for the same dismissal —
+  // the second pop then removes whatever route is now on top once the
+  // dialog is already gone (the admin home screen itself, with nothing
+  // else guarding it). One flag makes "this dialog is closing" a fact
+  // both call sites check before popping, so only the first one wins.
+  bool _closing = false;
+
   @override
   void initState() {
     super.initState();
@@ -61,14 +74,15 @@ class _AdminIncomingCallDialogState extends State<AdminIncomingCallDialog>
     // Auto-cancel notification tray alert since admin is viewing the live dialog
     unawaited(
       AdminAlertNotificationService.cancelAlert(
-          'call_${widget.callState.callId}'),
+          'call_${widget.callState.callId}',),
     );
 
     _sub = ChittiLiveCallService.instance
         .watchCall(widget.callState.callId)
         .listen((updated) {
-      if (!mounted) return;
+      if (!mounted || _closing) return;
       if (updated == null || updated.status == 'ended') {
+        _closing = true;
         Navigator.of(context, rootNavigator: true).pop();
       } else {
         setState(() => _state = updated);
@@ -109,6 +123,8 @@ class _AdminIncomingCallDialogState extends State<AdminIncomingCallDialog>
   }
 
   Future<void> _reject() async {
+    if (_closing) return;
+    _closing = true;
     await ChittiLiveCallService.instance.endCall(_state.callId);
     if (mounted) {
       Navigator.of(context, rootNavigator: true).pop();
@@ -251,7 +267,7 @@ class _AdminIncomingCallDialogState extends State<AdminIncomingCallDialog>
                         color: _card,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.08)),
+                            color: Colors.white.withValues(alpha: 0.08),),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -259,7 +275,7 @@ class _AdminIncomingCallDialogState extends State<AdminIncomingCallDialog>
                           Row(
                             children: [
                               const Icon(Icons.subtitles_rounded,
-                                  size: 16, color: _purple),
+                                  size: 16, color: _purple,),
                               const SizedBox(width: 8),
                               Text(
                                 'Live Dialogue Transcript',
@@ -278,7 +294,7 @@ class _AdminIncomingCallDialogState extends State<AdminIncomingCallDialog>
                                     child: Text(
                                       'Chitti is listening to the customer...',
                                       style: GoogleFonts.outfit(
-                                          color: _muted, fontSize: 13),
+                                          color: _muted, fontSize: 13,),
                                     ),
                                   )
                                 : ListView.builder(
@@ -289,7 +305,7 @@ class _AdminIncomingCallDialogState extends State<AdminIncomingCallDialog>
                                           line.startsWith('Chitti:');
                                       return Padding(
                                         padding: const EdgeInsets.symmetric(
-                                            vertical: 4),
+                                            vertical: 4,),
                                         child: Container(
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 12,
@@ -298,7 +314,7 @@ class _AdminIncomingCallDialogState extends State<AdminIncomingCallDialog>
                                           decoration: BoxDecoration(
                                             color: isChitti
                                                 ? _purple.withValues(
-                                                    alpha: 0.12)
+                                                    alpha: 0.12,)
                                                 : Colors.white
                                                     .withValues(alpha: 0.05),
                                             borderRadius:
