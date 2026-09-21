@@ -104,6 +104,8 @@ class _AdminIncomingCallDialogState extends State<AdminIncomingCallDialog>
       await Future<void>.delayed(const Duration(milliseconds: 300));
       final uri = Uri.parse('tel:${_state.callerPhone}');
       await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      _warnNoPhoneNumber();
     }
   }
 
@@ -119,7 +121,32 @@ class _AdminIncomingCallDialogState extends State<AdminIncomingCallDialog>
       await Future<void>.delayed(const Duration(milliseconds: 300));
       final uri = Uri.parse('tel:${_state.callerPhone}');
       await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      _warnNoPhoneNumber();
     }
+  }
+
+  // NEW (Sep 21 2026 — reaudit). A customer who signed in without a
+  // phone number (Google/email auth, never phone-auth) has an empty
+  // callerPhone, so neither _answerHuman() nor _takeOver() above has
+  // anything to dial — this app has no way to inject audio into a real
+  // call, so a phone number is the ONLY path to actual voice contact
+  // once Chitti steps aside (see chitti_call_screen.dart's own header
+  // for why). Without this, tapping either button silently did nothing
+  // beyond flipping the RTDB status: the admin would be left staring at
+  // a dialog that looks "connected" with no way to actually reach the
+  // customer, and no indication why.
+  void _warnNoPhoneNumber() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'This customer has no phone number on file — Chitti has stepped '
+          'aside, but there is no number to call them on.',
+        ),
+        backgroundColor: _red,
+      ),
+    );
   }
 
   Future<void> _reject() async {
