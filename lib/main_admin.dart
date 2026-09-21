@@ -39,6 +39,7 @@ import 'services/admin_live_alert_service.dart';
 import 'services/app_error_log_service.dart';
 import 'services/chitti/chitti_accessibility_bridge.dart';
 import 'services/chitti/chitti_commitment_alarms.dart';
+import 'services/chitti/chitti_dev_watch_service.dart';
 import 'services/chitti/chitti_followup_service.dart';
 import 'services/chitti/chitti_screen_tracker.dart';
 import 'services/chitti/chitti_screen_vision_helper.dart';
@@ -125,11 +126,17 @@ void _initAdminFcmAuthListener() {
       // listener running for no reason.
       AdminLiveAlertService.instance.stop();
       unawaited(AdminForegroundService.stop());
+      ChittiDevWatchService.instance.stop();
       return;
     }
     unawaited(_syncFcmTokenForAdmin(user.uid));
     AdminLiveAlertService.instance.start();
     unawaited(AdminForegroundService.start());
+    // NEW (Sep 21 2026 — Chitti proactive dev-pipeline watch): same
+    // start/stop lifecycle as the ride/order alert pair above — only
+    // runs while an admin is actually signed in, kept alive by the
+    // same foreground service.
+    ChittiDevWatchService.instance.start();
   });
 }
 

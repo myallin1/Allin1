@@ -33,6 +33,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../app_navigator.dart';
 import '../screens/admin/admin_new_orders_screen.dart';
 import '../screens/admin/admin_taxi_rides_screen.dart';
+import '../screens/admin/chitti_dev_monitor_screen.dart';
 
 @pragma('vm:entry-point')
 void adminAlertResponseBackground(NotificationResponse response) {
@@ -184,6 +185,33 @@ class AdminAlertNotificationService {
         // Return straight to home where SuperAdminHomeScreen's live
         // call listener already presents the AdminIncomingCallDialog.
         navigator.popUntil((route) => route.isFirst);
+        return;
+      }
+
+      // NEW (Sep 21 2026 — Chitti proactive dev-pipeline watch): a PR
+      // going up, a build failing, or a new release being published are
+      // the whole reason ChittiDevWatchService fired this notification
+      // — tapping it should land the admin exactly where they can see
+      // that, not on ride/order screens the alert has nothing to do
+      // with. Same idempotent-route pattern as the ride/order case
+      // below: reuse the existing screen instance if it's already open.
+      if (type == 'chitti_dev_update') {
+        const routeName = '/admin/dev-monitor';
+        var alreadyOpen = false;
+        navigator.popUntil((route) {
+          if (route.settings.name == routeName) alreadyOpen = true;
+          return true;
+        });
+        if (alreadyOpen) {
+          navigator.popUntil((route) => route.settings.name == routeName);
+          return;
+        }
+        await navigator.push(
+          MaterialPageRoute<void>(
+            settings: const RouteSettings(name: routeName),
+            builder: (_) => const ChittiDevMonitorScreen(),
+          ),
+        );
         return;
       }
 
