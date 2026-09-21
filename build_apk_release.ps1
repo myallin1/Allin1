@@ -133,6 +133,26 @@ if ($NoVersionBump) {
     $semver = Step-SemverPatch
 }
 
+# ================================================================
+# REGENERATE THE AI'S APP KNOWLEDGE  (Sep 21 2026 — end-to-end audit)
+# ================================================================
+# deploy_web.ps1 already wires this in for web/PWA deploys; native APK
+# releases (this script) never did, so an admin/hero/customer/seller
+# APK could ship with lib/config/app_knowledge.dart still describing
+# whatever the codebase looked like at the LAST web deploy -- stale by
+# however long it's been since one, if any native-only releases
+# happened in between. Same non-fatal contract as deploy_web.ps1: if
+# dart is missing from PATH, the build still proceeds with whatever
+# app_knowledge.dart already exists rather than blocking a release over
+# the assistant's own context.
+Write-Host "Regenerating AI app knowledge..." -ForegroundColor Cyan
+dart run tools/gen_app_knowledge.dart | Out-Host
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  WARNING: could not regenerate app_knowledge.dart." -ForegroundColor Yellow
+    Write-Host "  Build continues with the existing file (AI knowledge may be stale)." -ForegroundColor Yellow
+}
+Write-Host ""
+
 $releaseDir = 'release_apks'
 if (Test-Path $releaseDir) {
     Remove-Item -Recurse -Force $releaseDir
