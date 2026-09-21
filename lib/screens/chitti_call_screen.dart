@@ -593,7 +593,16 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
     } catch (e) {
       debugPrint('[ChittiCall] speak failed: $e');
     }
-    if (!mounted) return;
+    // FIX (Sep 21 2026 — same reaudit pass as _speakGeneration). The
+    // entry guard above only catches _ended/_disposed becoming true
+    // BEFORE this call started — if admin takeover (_handleAdminTakeover)
+    // or _endCall land WHILE the TTS await above is in flight, only
+    // `mounted` was rechecked here, and mounted can still be true for a
+    // widget that has already logically ended (Navigator.pop() hasn't
+    // completed the frame yet). Without this, afterSpeaking()/_listen()
+    // could reopen the mic after the call already handed off to a real
+    // human phone line or was explicitly ended.
+    if (!mounted || _disposed || _ended) return;
     if (myGeneration != _speakGeneration) {
       // Superseded — an interruption (or a newer _speak() call) already
       // moved the conversation on while this call's TTS was in flight.
