@@ -183,9 +183,22 @@ class AdminAlertNotificationService {
       if (navigator == null) return;
 
       if (type == 'admin_incoming_call') {
-        // Return straight to home where SuperAdminHomeScreen's live
-        // call listener already presents the AdminIncomingCallDialog.
-        navigator.popUntil((route) => route.isFirst);
+        // FIX (Sep 21 2026 — Chitti/admin call-communication audit).
+        // Return straight to home where SuperAdminHomeScreen's live call
+        // listener already presents the AdminIncomingCallDialog — but
+        // that listener fires the instant the call starts ringing,
+        // almost always BEFORE the admin gets around to tapping this
+        // notification, so the dialog is usually already open by then.
+        // popUntil((route) => route.isFirst) doesn't know that: a
+        // dialog is a route too, and is never route.isFirst, so it
+        // would pop the dialog straight back off — the admin's own
+        // "VIEW CALL" tap would silently DISMISS the very call dialog
+        // it exists to open, and dismissing it marks that call as
+        // dismissed (_dismissedIncomingCallIds), so it never
+        // auto-reappears even while the call is still ringing. Stop
+        // popping at the first dialog route too, not just the first
+        // screen route, so an already-open call dialog is left alone.
+        navigator.popUntil((route) => route.isFirst || route is DialogRoute);
         return;
       }
 
