@@ -33,6 +33,7 @@ import 'admin_affiliate_leads_screen.dart';
 import 'admin_affiliate_qr_screen.dart';
 import 'admin_ai_dev_studio_screen.dart';
 import 'admin_ai_settings_screen.dart';
+import 'admin_antigravity_bridge_screen.dart';
 import 'admin_app_versions_screen.dart';
 import 'admin_call_services_screen.dart';
 import 'admin_chitti_lens_screen.dart';
@@ -46,6 +47,7 @@ import 'admin_home_banner_screen.dart';
 import 'admin_map_simulation_screen.dart';
 import 'admin_my_day_screen.dart';
 import 'admin_orders_cleanup_screen.dart';
+import 'admin_partner_agreement_screen.dart';
 import 'admin_payment_reconciliation_screen.dart';
 import 'admin_qr_generator_screen.dart';
 import 'admin_seller_payouts_screen.dart';
@@ -55,6 +57,7 @@ import 'admin_tabbed_browser_screen.dart';
 import 'admin_taxi_rides_screen.dart';
 import 'admin_ux_audit_screen.dart';
 import 'admin_web_tabs_screen.dart';
+import 'admin_whatsapp_studio_screen.dart';
 import 'bug_reports_screen.dart';
 import 'chitti_conversations_screen.dart';
 import 'chitti_debug_logs_screen.dart';
@@ -331,7 +334,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
       _tabIndex = index;
       _visitedTabs.add(index);
     });
-    unawaited(AdminWebViewPower.setActive(active: index == 4));
+    unawaited(AdminWebViewPower.setActive(active: index == 5));
   }
 
   // FIX (per Nizam's request): App Settings / Check for Updates / Logout
@@ -368,7 +371,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
     }
     // NEW (Sep 5 2026): on the Web tab (GitHub/Browser), back walks the
     // active segment's own history first.
-    if (_tabIndex == 4) {
+    if (_tabIndex == 5) {
       unawaited(AdminWebTabsScreen.goBackIfPossible().then((wentBack) {
         if (!wentBack && mounted) _goToTab(0);
       }),);
@@ -428,7 +431,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
             // get to it instantly). Same lazy-mount-once-visited pattern
             // as the old per-type tabs above.
             if (_visitedTabs.contains(2)) const AdminAiSettingsScreen(key: ValueKey('chitti_ai_tab')) else const SizedBox.shrink(),
-            // NEW (per Nizam's request, Sep 1 2026): a 4th tab holding
+            // NEW (Sep 1 2026): a 4th tab holding
             // the two development-automation screens together. Both
             // already existed and were reachable only by scrolling deep
             // inside Chitti AI Configuration ("2 options ah iruku... 4th
@@ -439,6 +442,10 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
             // in AI Settings keep working, so nothing that already
             // depended on them can break.
             _buildDevelopmentTab(context),
+            // NEW (Sep 20 2026 — Nizam: "atha namma bottom la irukka dev
+            // and web ku between la vacharlam"): AI Dev Studio
+            // (Claude, Gemini & Antigravity Copilot) directly on bottom nav.
+            if (_visitedTabs.contains(4)) const AdminAiDevStudioScreen(key: ValueKey('ai_dev_studio_tab')) else const SizedBox.shrink(),
             // NEW (Sep 4 2026 — Nizam: "namma main page bottom la athu
             // oru button ah irukanum apo than admin app kulla yenga
             // poitu vanthalum ... same screen la irukum, app close
@@ -453,7 +460,7 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
             //
             // NEW (Sep 5 2026 — Nizam: in-app browser beside GitHub).
             // AdminWebTabsScreen houses GitHub and Browser side by side.
-            if (_visitedTabs.contains(4)) AdminWebTabsScreen(key: const ValueKey('github_tab'), visible: _tabIndex == 4) else const SizedBox.shrink(),
+            if (_visitedTabs.contains(5)) AdminWebTabsScreen(key: const ValueKey('github_tab'), visible: _tabIndex == 5) else const SizedBox.shrink(),
           ],
         ),
       ),
@@ -777,6 +784,34 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                   ),
                 ),
                 AdminHomeTile(
+                  id: 'whatsapp_studio',
+                  child: _ManageTile(
+                    label: 'WhatsApp AI & Market Studio',
+                    subtitle: 'WhatsApp Web, chat order creator & 2nd hand mobile rates',
+                    iconSvg: FluentEmojiFlat.mobile_phone,
+                    color: _purple,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                          builder: (_) => const AdminWhatsAppStudioScreen(),),
+                    ),
+                  ),
+                ),
+                AdminHomeTile(
+                  id: 'antigravity_bridge',
+                  child: _ManageTile(
+                    label: 'Antigravity IDE Remote Bridge',
+                    subtitle: 'Dispatch voice/text prompts & screenshots to Laptop IDE',
+                    iconSvg: FluentEmojiFlat.laptop,
+                    color: const Color(0xFF00E5FF),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                          builder: (_) => const AdminAntigravityBridgeScreen(),),
+                    ),
+                  ),
+                ),
+                AdminHomeTile(
                   id: 'call_conversations',
                   // NEW (Sep 1 2026): the business-facing half of the
                   // call data — what the caller wanted, in plain words.
@@ -940,6 +975,9 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
       // _buildDevelopmentTab. No badge stream: nothing here is a queue
       // waiting on the admin, so a dot would be noise.
       (icon: '', label: 'Dev', isServicesAggregate: false, materialIcon: Icons.terminal_rounded),
+      // NEW (Sep 20 2026 — Nizam: "atha namma bottom la irukka dev and web ku between la vacharlam"):
+      // AI Dev Studio (Claude, Gemini & Antigravity).
+      (icon: '', label: 'AI Studio', isServicesAggregate: false, materialIcon: Icons.auto_awesome_rounded),
       // NEW (Sep 5 2026): Web (GitHub + Browser), one tap from anywhere.
       (icon: '', label: 'Web', isServicesAggregate: false, materialIcon: Icons.language_rounded),
     ];
@@ -1373,6 +1411,19 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 );
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.handshake_outlined, color: Color(0xFF00E676)),
+              title: const Text('🤝 Partner Shop Onboarding', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Digital agreement & shop onboarding for 5 cities',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const AdminPartnerAgreementScreen()),
+                );
+              },
+            ),
             // NEW (Aug 19 2026 — Nizam's "home page banner offer"
             // request). Separate feature/collection from Erode Offers
             // above — see admin_home_banner_screen.dart.
@@ -1547,6 +1598,19 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute<void>(builder: (_) => const BugReportsScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.bolt_rounded, color: Color(0xFF00E5FF)),
+              title: const Text('Antigravity IDE Remote', style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+              subtitle: Text('Direct bridge to Laptop Antigravity IDE with screenshot upload',
+                  style: TextStyle(color: _text.withValues(alpha: 0.5), fontSize: 11),),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const AdminAntigravityBridgeScreen()),
                 );
               },
             ),
@@ -1856,8 +1920,10 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
 // category reads the same way: icon, label, one-line description of
 // what it does (this is the "clear label" fix for the 3 overlapping
 // admin_review entry points — each tile's subtitle says exactly what
-// it shows), and — when [requestType] is given — a live "waiting for
-// a hero" count badge.
+// it shows). The live "waiting for a hero" count badge moved out to
+// _AdminReviewBadgeWrapper, which wraps this tile from one shared
+// stream instead of each tile opening its own per-requestType
+// Firestore listener — see that widget for the actual badge.
 class _ManageTile extends StatelessWidget {
   final String label;
   final String subtitle;
