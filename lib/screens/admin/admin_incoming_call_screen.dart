@@ -83,6 +83,20 @@ class _AdminIncomingCallScreenState extends State<AdminIncomingCallScreen> {
     await ChittiAccessibilityBridge.instance.answerIncomingCall();
     // _checkState's next tick moves on to AdminInCallScreen once the
     // call actually reports "active" — no need to navigate here too.
+    //
+    // FIX (Sep 21 2026 — reaudit). If the call never actually reaches
+    // "active" (a native/telecom quirk) and also never vanishes to
+    // null, _checkState's polling loop just keeps ticking with neither
+    // branch firing — and _busy, shared by both buttons, stays true
+    // forever, permanently disabling Answer AND Decline with no way
+    // out. A bounded safety net: if this screen is still showing after
+    // a generous window, unlock the buttons again so the admin at
+    // least has Decline as an escape hatch instead of a frozen screen.
+    Future.delayed(const Duration(seconds: 15), () {
+      if (mounted && !_resolved && _busy) {
+        setState(() => _busy = false);
+      }
+    });
   }
 
   Future<void> _decline() async {
@@ -123,7 +137,7 @@ class _AdminIncomingCallScreenState extends State<AdminIncomingCallScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Incoming call — Chitti will answer automatically if you don\'t',
+                "Incoming call — Chitti will answer automatically if you don't",
                 textAlign: TextAlign.center,
                 style: GoogleFonts.outfit(color: _muted, fontSize: 13),
               ),
