@@ -31,6 +31,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../app_navigator.dart';
+import '../screens/admin/admin_app_error_log_screen.dart';
 import '../screens/admin/admin_new_orders_screen.dart';
 import '../screens/admin/admin_taxi_rides_screen.dart';
 import '../screens/admin/chitti_dev_monitor_screen.dart';
@@ -210,6 +211,30 @@ class AdminAlertNotificationService {
           MaterialPageRoute<void>(
             settings: const RouteSettings(name: routeName),
             builder: (_) => const ChittiDevMonitorScreen(),
+          ),
+        );
+        return;
+      }
+
+      // NEW (Sep 21 2026 — Chitti proactive error watch): mirrors the
+      // dev-update case above exactly — opens the actual error log
+      // instead of the ride/order screens this alert has nothing to do
+      // with.
+      if (type == 'chitti_error_alert') {
+        const routeName = '/admin/error-log';
+        var alreadyOpen = false;
+        navigator.popUntil((route) {
+          if (route.settings.name == routeName) alreadyOpen = true;
+          return true;
+        });
+        if (alreadyOpen) {
+          navigator.popUntil((route) => route.settings.name == routeName);
+          return;
+        }
+        await navigator.push(
+          MaterialPageRoute<void>(
+            settings: const RouteSettings(name: routeName),
+            builder: (_) => const AdminAppErrorLogScreen(),
           ),
         );
         return;

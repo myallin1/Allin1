@@ -40,6 +40,7 @@ import 'services/app_error_log_service.dart';
 import 'services/chitti/chitti_accessibility_bridge.dart';
 import 'services/chitti/chitti_commitment_alarms.dart';
 import 'services/chitti/chitti_dev_watch_service.dart';
+import 'services/chitti/chitti_error_watch_service.dart';
 import 'services/chitti/chitti_followup_service.dart';
 import 'services/chitti/chitti_screen_tracker.dart';
 import 'services/chitti/chitti_screen_vision_helper.dart';
@@ -127,6 +128,7 @@ void _initAdminFcmAuthListener() {
       AdminLiveAlertService.instance.stop();
       unawaited(AdminForegroundService.stop());
       ChittiDevWatchService.instance.stop();
+      ChittiErrorWatchService.instance.stop();
       return;
     }
     unawaited(_syncFcmTokenForAdmin(user.uid));
@@ -137,6 +139,8 @@ void _initAdminFcmAuthListener() {
     // runs while an admin is actually signed in, kept alive by the
     // same foreground service.
     ChittiDevWatchService.instance.start();
+    // NEW (Sep 21 2026 — Chitti proactive error watch): same lifecycle.
+    ChittiErrorWatchService.instance.start();
   });
 }
 
