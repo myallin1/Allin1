@@ -552,8 +552,13 @@ class _AdminAiDevStudioScreenState extends State<AdminAiDevStudioScreen> {
     switch (_selectedEngine) {
       case ChittiDevEngine.claude:
         engineColor = _claudeOrange;
-        engineDesc = 'Claude 3.7 Sonnet / Claude Code automated GitHub action workflow. Best for deep refactoring and architectural fixes.';
-        consoleUrl = 'https://claude.ai';
+        engineDesc = 'Claude Sonnet 5 / Claude Code automated GitHub action workflow. Best for deep refactoring and architectural fixes.';
+        // FIX (Sep 21 2026 — Nizam: "claude desktop code... embedded
+        // view la access"): was the generic claude.ai homepage. Points
+        // at Claude's actual code workspace now, opened via the same
+        // embedded in-app tabbed browser as everything else on this
+        // card — not the device's external browser.
+        consoleUrl = 'https://claude.ai/code';
         break;
       case ChittiDevEngine.gemini:
         engineColor = _geminiBlue;

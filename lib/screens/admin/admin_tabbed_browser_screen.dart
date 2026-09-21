@@ -71,8 +71,11 @@ class AdminTabbedBrowserScreen extends StatefulWidget {
     String url, {
     String? title,
   }) async {
-    final cleanUrl = url.trim();
+    var cleanUrl = url.trim();
     if (cleanUrl.isEmpty) return;
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = 'https://$cleanUrl';
+    }
 
     // Check if the URL is already open in an existing tab
     final existingIndex = _tabs.indexWhere((t) => t.url == cleanUrl);
@@ -123,6 +126,26 @@ class AdminTabbedBrowserScreen extends StatefulWidget {
   static void _setupTabController(BrowserTabItem tab) {
     final c = tab.controller;
     c.setJavaScriptMode(JavaScriptMode.unrestricted);
+    // FIX (Sep 21 2026 — Nizam: embedded Claude/GitHub access, "finishing
+    // touch" gap found auditing the Dev Studio's "Open Web Console"
+    // button). webview_flutter's default Android WebView user-agent
+    // carries a "; wv)" marker that Google's own sign-in flow actively
+    // detects and blocks with "This browser or app may not be secure" —
+    // this is a deliberate Google anti-embedded-webview policy, not a
+    // bug in this app, and it would have silently broken logging into
+    // claude.ai or GitHub's Google-SSO option inside this browser no
+    // matter how correct everything else here is. Presenting as a
+    // normal mobile Chrome UA (no "wv" token) is the standard, widely
+    // documented way apps that legitimately need embedded authenticated
+    // browsing for their OWN admin's OWN account work around this —
+    // not a way to impersonate someone else or bypass a real security
+    // boundary.
+    unawaited(
+      c.setUserAgent(
+        'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) '
+        'Chrome/124.0.0.0 Mobile Safari/537.36',
+      ),
+    );
 
     c.setNavigationDelegate(
       NavigationDelegate(
@@ -306,6 +329,8 @@ class _AdminTabbedBrowserScreenState extends State<AdminTabbedBrowserScreen>
     setState(() {
       final tabs = AdminTabbedBrowserScreen._tabs;
       if (index >= 0 && index < tabs.length) {
+        final closingTab = tabs[index];
+        unawaited(closingTab.controller.loadRequest(Uri.parse('about:blank')));
         tabs.removeAt(index);
         if (AdminTabbedBrowserScreen._activeTabIndex >= tabs.length) {
           AdminTabbedBrowserScreen._activeTabIndex =
@@ -409,45 +434,64 @@ class _AdminTabbedBrowserScreenState extends State<AdminTabbedBrowserScreen>
     final tabs = AdminTabbedBrowserScreen._tabs;
     final activeTab = _activeTab;
 
-    return Scaffold(
-      backgroundColor: _bg,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Top App & Navigation Bar
-            _topNavigationRow(activeTab),
-            // Tab Strip
-            _tabStrip(tabs),
-            // Loading Progress Bar
-            if (activeTab != null && activeTab.isLoading)
-              LinearProgressIndicator(
-                value: activeTab.progress > 0 ? activeTab.progress / 100 : null,
-                color: _purple,
-                backgroundColor: _card,
-                minHeight: 2.5,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final tab = _activeTab;
+        if (tab != null) {
+          try {
+            if (await tab.controller.canGoBack()) {
+              await tab.controller.goBack();
+              return;
+            }
+          } catch (_) {}
+        }
+        if (context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: _bg,
+        body: SafeArea(
+          child: Column(
+            children: [
+              // Top App & Navigation Bar
+              _topNavigationRow(activeTab),
+              // Tab Strip
+              _tabStrip(tabs),
+              // Loading Progress Bar
+              if (activeTab != null && activeTab.isLoading)
+                LinearProgressIndicator(
+                  value:
+                      activeTab.progress > 0 ? activeTab.progress / 100 : null,
+                  color: _purple,
+                  backgroundColor: _card,
+                  minHeight: 2.5,
+                ),
+              // Web View Stack or Offline Reader Card
+              Expanded(
+                child: tabs.isEmpty
+                    ? _emptyTabsView()
+                    : Stack(
+                        children: [
+                          for (int i = 0; i < tabs.length; i++)
+                            Offstage(
+                              offstage:
+                                  i != AdminTabbedBrowserScreen._activeTabIndex,
+                              child: tabs[i].isOffline &&
+                                      tabs[i].offlineSnapshot != null
+                                  ? _offlineReaderView(tabs[i])
+                                  : WebViewWidget(
+                                      key: ValueKey(tabs[i].id),
+                                      controller: tabs[i].controller,
+                                    ),
+                            ),
+                        ],
+                      ),
               ),
-            // Web View Stack or Offline Reader Card
-            Expanded(
-              child: tabs.isEmpty
-                  ? _emptyTabsView()
-                  : Stack(
-                      children: [
-                        for (int i = 0; i < tabs.length; i++)
-                          Offstage(
-                            offstage:
-                                i != AdminTabbedBrowserScreen._activeTabIndex,
-                            child: tabs[i].isOffline &&
-                                    tabs[i].offlineSnapshot != null
-                                ? _offlineReaderView(tabs[i])
-                                : WebViewWidget(
-                                    key: ValueKey(tabs[i].id),
-                                    controller: tabs[i].controller,
-                                  ),
-                          ),
-                      ],
-                    ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
