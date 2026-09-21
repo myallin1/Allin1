@@ -1020,22 +1020,36 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     // all of them together — exactly the same "every field must pass"
     // gate as before, just distributed across the step keys instead of
     // one.
-    // NEW (Sep 21 2026 — re-audit gap found): every failure branch below
-    // used to just show a snackbar. On the old single-scroll form that
-    // was enough — the field in question was already somewhere on
-    // screen. In the step wizard, a hero submitting from Review (step
-    // 5) who is missing something on an EARLIER step saw the snackbar
-    // and had no idea which of the 4 other steps to go back to. Every
-    // branch now also jumps to the step that actually owns the
-    // problem, so the snackbar text and the visible step always agree.
-    for (var i = 0; i < _allStepFormKeys.length; i++) {
-      if (_allStepFormKeys[i].currentState?.validate() == false) {
-        _goToStep(i);
-        return;
-      }
+    final firstInvalidStep = _allStepFormKeys
+        .indexWhere((k) => k.currentState?.validate() == false);
+    if (firstInvalidStep != -1) {
+      // FIX (Sep 21 2026 — re-audit): the old single-page form never
+      // needed this — every field's red error text was already on
+      // screen. In the wizard, an invalid EARLIER step at final-submit
+      // time (only reachable if a hero goes Back and clears something
+      // after already having passed Next once) used to just silently
+      // do nothing — no message, no navigation, submit button looked
+      // like it didn't respond at all. Send the hero to the first step
+      // that actually has a problem, where its own red error text is
+      // now visible again.
+      _goToStep(firstInvalidStep);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fix the highlighted field before submitting'),
+          backgroundColor: _red,
+        ),
+      );
+      return;
     }
     final selectedVehicleType = _selectedVehicleType;
     if (selectedVehicleType == null || selectedVehicleType.isEmpty) {
+      // FIX (Sep 21 2026 — re-audit of the step wizard): this check can
+      // only ever fail while sitting on the Review step (step 5), since
+      // _goNextStep already blocks leaving the Category step without a
+      // selection — but a SnackBar alone left the hero staring at the
+      // Review page with no clue WHERE to go fix it. Every check below
+      // now sends the hero back to the exact step that owns the
+      // missing thing, same reasoning throughout.
       _goToStep(1);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1045,16 +1059,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       );
       return;
     }
-    if (_selectedCity == null) {
-      _goToStep(0);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please set your city first — tap the location button or "Choose city manually".'), backgroundColor: _red),
-      );
-      return;
-    }
     if (!_agreedEmergencyResponder) {
-      // Already on Review (step 5), where this checkbox lives — no
-      // _goToStep needed, unlike the other branches above.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -1062,6 +1067,13 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
           ),
           backgroundColor: _red,
         ),
+      );
+      return;
+    }
+    if (_selectedCity == null) {
+      _goToStep(0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please set your city first — tap the location button or "Choose city manually".'), backgroundColor: _red),
       );
       return;
     }
@@ -1088,6 +1100,14 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       if (_selfieBytes == null) 'Live selfie',
     ];
     if (missingDocs.isNotEmpty) {
+      // FIX (Sep 21 2026 — re-audit): the Documents step's own Next
+      // button only validates its TEXT fields (license/aadhaar/pan
+      // numbers) via Form.validate() -- the photo/selfie tiles are not
+      // FormFields, so a hero could tap through Documents with every
+      // number filled but every photo skipped, reach Review, tap
+      // Submit, and land back here with no visible photos to fix on
+      // screen. Send them back to the Documents step (index 2) so the
+      // exact tiles named in the snackbar are the ones now in view.
       _goToStep(2);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
