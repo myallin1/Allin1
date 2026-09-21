@@ -360,6 +360,20 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
   Future<void> _handleFinalResult(String heard) async {
     if (!mounted || !_conversation.isActive) return;
     if (heard.isEmpty) {
+      // FIX (Sep 21 2026 — same reaudit pass as _speakGeneration). A
+      // stale _speech.listen() session from a previous turn can still
+      // deliver an empty finalResult callback after Chitti has already
+      // started speaking again (STT plugins don't guarantee a listen()
+      // session stops delivering results the instant a new one starts).
+      // Only relevant to the EMPTY case — a non-empty result while
+      // speaking is exactly what the echo guard / barge-in block below
+      // exists to handle, and must not be short-circuited here.
+      // Without this, the empty branch would call _listen() itself — a
+      // second concurrent STT session racing the one _speak()'s own
+      // tail will start when it actually finishes. Silently drop it;
+      // the in-flight _speak() call already owns re-opening the mic
+      // next.
+      if (_conversation.isSpeaking) return;
       // Nothing usable — let the controller's own empty-turn counter
       // decide whether that means "walked away" (it never does in call
       // mode, which is the point of call mode) and just listen again.
