@@ -606,9 +606,14 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     );
   }
 
-  // T2: CEO WhatsApp placeholder — replace 91XXXXXXXXXX with real number
-  static const String _adminWhatsApp = '91XXXXXXXXXX';
-  static const String _adminPhone    = '+91XXXXXXXXXX';
+  // FIX (Sep 21 2026 — end-to-end audit, grep for XXXXXXXXXX placeholders):
+  // this was still the literal unfilled placeholder in production, so
+  // the "Trouble uploading? Contact Admin" WhatsApp/Call buttons here
+  // were dead — wa.me/91XXXXXXXXXX and tel:+91XXXXXXXXXX go nowhere.
+  // hero_verification_pending.dart already has the real number
+  // correctly filled in; reused here rather than guessing.
+  static const String _adminWhatsApp = '919597879191';
+  static const String _adminPhone    = '+919597879191';
 
   // NEW (Aug 12 2026 — Nizam: "form submit agalaina data yellame close
   // agi again hero va front page ku kutitu varuthu, ithu too worst"):

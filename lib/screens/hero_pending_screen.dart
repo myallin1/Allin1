@@ -16,17 +16,19 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/firestore_usage_tracking.dart';
 import '../services/hero_onboarding_cache.dart';
 import '../services/theme_service.dart';
 import 'hero_login_screen.dart';
 import 'hero_welcome_screen.dart';
-import '../services/firestore_usage_tracking.dart';
 
 // NEW (Aug 12 2026 — Nizam: "register page la kaatura mariye whatsapp
 // admin to raise ur onboarding reuest nu whatsapp button kaatanum"):
-// same placeholder pattern as hero_register_screen.dart's
-// _adminWhatsApp — replace with the real number before release.
-const String _kAdminWhatsApp = '91XXXXXXXXXX';
+// FIX (Sep 21 2026 — end-to-end audit): this was still the literal
+// unfilled placeholder in production (dead wa.me link). Reused the
+// real number already correctly configured in
+// hero_verification_pending.dart rather than guessing.
+const String _kAdminWhatsApp = '919597879191';
 
 // THEME FIX (merge duplicate registration/status flows): this screen used
 // to be dark theme and only showed a generic hourglass card. It's now the
@@ -313,7 +315,7 @@ class _HeroPendingScreenState extends State<HeroPendingScreen> {
       }
       if (status != 'approved') {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Still pending admin approval. We\'ll auto-open your dashboard the moment it\'s approved.')),
+          const SnackBar(content: Text("Still pending admin approval. We'll auto-open your dashboard the moment it's approved.")),
         );
       }
       // approved/rejected transitions are handled by the live listener
