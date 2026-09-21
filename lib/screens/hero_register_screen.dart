@@ -1020,14 +1020,23 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     // all of them together — exactly the same "every field must pass"
     // gate as before, just distributed across the step keys instead of
     // one.
-    final allValid = _allStepFormKeys
-        .map((k) => k.currentState?.validate() ?? true)
-        .every((ok) => ok);
-    if (!allValid) {
-      return;
+    // NEW (Sep 21 2026 — re-audit gap found): every failure branch below
+    // used to just show a snackbar. On the old single-scroll form that
+    // was enough — the field in question was already somewhere on
+    // screen. In the step wizard, a hero submitting from Review (step
+    // 5) who is missing something on an EARLIER step saw the snackbar
+    // and had no idea which of the 4 other steps to go back to. Every
+    // branch now also jumps to the step that actually owns the
+    // problem, so the snackbar text and the visible step always agree.
+    for (var i = 0; i < _allStepFormKeys.length; i++) {
+      if (_allStepFormKeys[i].currentState?.validate() == false) {
+        _goToStep(i);
+        return;
+      }
     }
     final selectedVehicleType = _selectedVehicleType;
     if (selectedVehicleType == null || selectedVehicleType.isEmpty) {
+      _goToStep(1);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please select your Hero category'),
@@ -1036,7 +1045,16 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       );
       return;
     }
+    if (_selectedCity == null) {
+      _goToStep(0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please set your city first — tap the location button or "Choose city manually".'), backgroundColor: _red),
+      );
+      return;
+    }
     if (!_agreedEmergencyResponder) {
+      // Already on Review (step 5), where this checkbox lives — no
+      // _goToStep needed, unlike the other branches above.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -1044,12 +1062,6 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
           ),
           backgroundColor: _red,
         ),
-      );
-      return;
-    }
-    if (_selectedCity == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please set your city first — tap the location button or "Choose city manually".'), backgroundColor: _red),
       );
       return;
     }
@@ -1076,6 +1088,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
       if (_selfieBytes == null) 'Live selfie',
     ];
     if (missingDocs.isNotEmpty) {
+      _goToStep(2);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Please upload: ${missingDocs.join(', ')}'),
