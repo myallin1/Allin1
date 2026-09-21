@@ -132,6 +132,20 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
 
   bool _speechReady = false;
   bool _ttsReady = false;
+
+  // NEW (Sep 21 2026 — self-audit of the barge-in fix above). Bumped by
+  // every call to _speak() and by the interruption branch in
+  // _handleFinalResult. _speak()'s own tail (afterSpeaking -> _listen())
+  // checks this after its TTS await returns; if some OTHER event bumped
+  // it in the meantime, this _speak() call was superseded — an
+  // interruption stopped its TTS early precisely so a NEWER _speak()
+  // call (for the reply to whatever interrupted it) can own the mic
+  // next, and that newer call's own tail will call _listen() when IT
+  // finishes. Without this guard, both the interrupted call's stale
+  // tail and the new call's tail would each call _listen(), racing two
+  // concurrent STT sessions — which would make "Chitti doesn't hear me"
+  // worse, not better.
+  int _speakGeneration = 0;
   bool _muted = false;
   bool _disposed = false;
   _CallPhase _phase = _CallPhase.connecting;
@@ -393,6 +407,13 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
       // the same way a human call would.
       await _tts.stop();
       _conversation.markSpokenDone();
+      // Invalidates the interrupted _speak() call's own tail (see
+      // _speakGeneration's declaration) — that call's TTS await is about
+      // to return now that we've stopped it, and without this it would
+      // still run afterSpeaking() -> _listen() itself, racing the
+      // _listen() this same turn's own eventual _speak(reply) call will
+      // start once it actually has a reply.
+      _speakGeneration++;
       // Falls through to the normal processing below — heard is neither
       // empty, echo, nor a stop word, so it is a real utterance worth a
       // real reply.
@@ -554,6 +575,7 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
     // any OTHER future caller of _speak() gets this protection too, not
     // just that one call path.
     if (!mounted || _disposed || _ended || text.trim().isEmpty) return;
+    final myGeneration = ++_speakGeneration;
     setState(() => _phase = _CallPhase.speaking);
     _conversation.markSpeaking(text);
     try {
@@ -572,6 +594,13 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
       debugPrint('[ChittiCall] speak failed: $e');
     }
     if (!mounted) return;
+    if (myGeneration != _speakGeneration) {
+      // Superseded — an interruption (or a newer _speak() call) already
+      // moved the conversation on while this call's TTS was in flight.
+      // That newer owner is responsible for its own afterSpeaking() /
+      // _listen() call; this stale tail must not also make one.
+      return;
+    }
     final step = _conversation.afterSpeaking();
     if (step == ChittiConversationStep.listen) {
       unawaited(_listen());
