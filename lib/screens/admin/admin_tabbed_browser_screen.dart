@@ -8,10 +8,12 @@
 // Persists visited pages into local Hive storage (AdminInAppBrowserService)
 // with lightweight text snapshots for offline reading when disconnected.
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
@@ -64,6 +66,78 @@ class AdminTabbedBrowserScreen extends StatefulWidget {
   static int _activeTabIndex = 0;
   static _AdminTabbedBrowserScreenState? _live;
 
+  // NEW (Sep 21 2026 — Nizam: "app close pannitu reopen pannunalum
+  // same stage la irukanum"). _tabs above only survives while the app
+  // PROCESS is alive — a real close (swipe away from recents, or
+  // Android killing a backgrounded process) resets it to empty, and
+  // initState below used to always fall back to a hardcoded GitHub
+  // homepage in that case, silently discarding whatever the admin
+  // actually had open (a Claude Code session, a specific PR, etc.).
+  // This persists just the open tabs' URL + title (not scroll
+  // position/DOM — that genuinely cannot survive a killed WebView, no
+  // different from a real browser losing scroll on a cold-start
+  // restore) so the SAME pages reopen automatically, matching how
+  // every other admin section already restores its own last state.
+  static const String _kPersistedTabsKey = 'admin_browser_persisted_tabs_v1';
+
+  static Future<void> _persistTabs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_tabs.isEmpty) {
+        await prefs.remove(_kPersistedTabsKey);
+        return;
+      }
+      final data = <String, dynamic>{
+        'activeIndex': _activeTabIndex,
+        'tabs': _tabs
+            .map((t) => <String, String>{'url': t.url, 'title': t.title})
+            .toList(),
+      };
+      await prefs.setString(_kPersistedTabsKey, jsonEncode(data));
+    } catch (e) {
+      debugPrint('[AdminTabbedBrowserScreen] persist tabs failed: $e');
+    }
+  }
+
+  /// Recreates every previously-open tab from the last saved session.
+  /// Returns true if anything was restored, so the caller knows not to
+  /// fall back to the default GitHub tab.
+  static Future<bool> _restoreTabs(BuildContext context) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kPersistedTabsKey);
+      if (raw == null || raw.isEmpty) return false;
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      final savedTabs = (data['tabs'] as List<dynamic>?) ?? const [];
+      if (savedTabs.isEmpty) return false;
+
+      for (final entry in savedTabs) {
+        final map = entry as Map<String, dynamic>;
+        final url = map['url'] as String? ?? '';
+        if (url.isEmpty) continue;
+        final tabId = 'tab_${DateTime.now().microsecondsSinceEpoch}';
+        final controller = WebViewController();
+        final tab = BrowserTabItem(
+          id: tabId,
+          url: url,
+          title: (map['title'] as String?) ?? url,
+          controller: controller,
+        );
+        _tabs.add(tab);
+        _setupTabController(tab);
+        unawaited(controller.loadRequest(Uri.parse(url)));
+      }
+      if (_tabs.isEmpty) return false;
+
+      final savedActive = (data['activeIndex'] as num?)?.toInt() ?? 0;
+      _activeTabIndex = savedActive.clamp(0, _tabs.length - 1);
+      return true;
+    } catch (e) {
+      debugPrint('[AdminTabbedBrowserScreen] restore tabs failed: $e');
+      return false;
+    }
+  }
+
   /// Hands a URL to the browser, creating a new tab or selecting an existing
   /// one, and brings AdminTabbedBrowserScreen onto screen.
   static Future<void> openInNewTab(
@@ -81,6 +155,7 @@ class AdminTabbedBrowserScreen extends StatefulWidget {
     final existingIndex = _tabs.indexWhere((t) => t.url == cleanUrl);
     if (existingIndex >= 0) {
       _activeTabIndex = existingIndex;
+      unawaited(_persistTabs());
       if (_live != null && _live!.mounted) {
         _live!._refreshUI();
       } else {
@@ -111,6 +186,7 @@ class AdminTabbedBrowserScreen extends StatefulWidget {
 
     // Load URL
     unawaited(controller.loadRequest(Uri.parse(cleanUrl)));
+    unawaited(_persistTabs());
 
     if (_live != null && _live!.mounted) {
       _live!._refreshUI();
@@ -187,6 +263,7 @@ class AdminTabbedBrowserScreen extends StatefulWidget {
               );
             }
           } catch (_) {}
+          unawaited(_persistTabs());
           _live?._refreshUI();
         },
         onWebResourceError: (error) async {
@@ -274,13 +351,11 @@ class _AdminTabbedBrowserScreenState extends State<AdminTabbedBrowserScreen>
     WidgetsBinding.instance.addObserver(this);
     _syncPower();
 
-    // If no tabs exist yet, open default repo home
+    // If no tabs exist yet (fresh app process — the in-memory _tabs
+    // list doesn't survive a real close), try restoring the last
+    // session before falling back to the GitHub default.
     if (AdminTabbedBrowserScreen._tabs.isEmpty) {
-      AdminTabbedBrowserScreen.openInNewTab(
-        context,
-        'https://github.com/myallin1/Allin1',
-        title: 'Allin1 GitHub',
-      );
+      unawaited(_restoreOrDefault());
     }
   }
 
@@ -296,6 +371,22 @@ class _AdminTabbedBrowserScreenState extends State<AdminTabbedBrowserScreen>
 
   void _syncPower() {
     unawaited(AdminWebViewPower.setActive(active: _foreground));
+  }
+
+  Future<void> _restoreOrDefault() async {
+    final restored = await AdminTabbedBrowserScreen._restoreTabs(context);
+    if (!mounted) return;
+    if (restored) {
+      setState(() {});
+      return;
+    }
+    unawaited(
+      AdminTabbedBrowserScreen.openInNewTab(
+        context,
+        'https://github.com/myallin1/Allin1',
+        title: 'Allin1 GitHub',
+      ),
+    );
   }
 
   @override
@@ -323,6 +414,7 @@ class _AdminTabbedBrowserScreenState extends State<AdminTabbedBrowserScreen>
     setState(() {
       AdminTabbedBrowserScreen._activeTabIndex = index;
     });
+    unawaited(AdminTabbedBrowserScreen._persistTabs());
   }
 
   void _closeTab(int index) {
@@ -336,6 +428,7 @@ class _AdminTabbedBrowserScreenState extends State<AdminTabbedBrowserScreen>
           AdminTabbedBrowserScreen._activeTabIndex =
               tabs.isEmpty ? 0 : tabs.length - 1;
         }
+        unawaited(AdminTabbedBrowserScreen._persistTabs());
       }
     });
 

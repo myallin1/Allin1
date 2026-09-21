@@ -930,6 +930,30 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                     ),
                   ),
                 ),
+                AdminHomeTile(
+                  id: 'claude_desktop',
+                  // NEW (Sep 21 2026 — Nizam: "bottom la new option
+                  // claude desktop embedde view la open pannanum, app
+                  // close pannitu reopen pannunalum same stage la
+                  // irukanum"). Opens straight into claude.ai/code in
+                  // the same embedded tabbed browser as every other
+                  // dev tool here — AdminTabbedBrowserScreen now
+                  // persists its open tabs (see its own header
+                  // comment), so this genuinely reopens where it was
+                  // left, not a blank tab, even after the app is
+                  // fully closed and relaunched.
+                  child: _ManageTile(
+                    label: 'Claude Desktop',
+                    subtitle: 'Claude Code, embedded — stays open across app restarts',
+                    iconSvg: FluentEmojiFlat.desktop_computer,
+                    color: _purple,
+                    onTap: () => AdminTabbedBrowserScreen.openInNewTab(
+                      context,
+                      'https://claude.ai/code',
+                      title: 'Claude Code',
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
