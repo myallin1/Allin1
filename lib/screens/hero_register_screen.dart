@@ -5,7 +5,6 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
@@ -204,7 +203,6 @@ class HeroRegisterScreen extends StatefulWidget {
 }
 
 class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
-  final _formKey = GlobalKey<FormState>();
   final _nameController        = TextEditingController();
   final _phoneController       = TextEditingController();
   final _dobController         = TextEditingController(); // T1: D.O.B
@@ -398,6 +396,170 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
     });
   }
 
+  // NEW (Sep 21 2026 — Nizam: step-by-step onboarding instead of one
+  // long scroll). The form's actual fields, validators and
+  // _submitRegistration() are completely unchanged below — this only
+  // adds a step shell around the SAME widgets. Each step is its own
+  // Form with its own key so "Next" can validate just that step's
+  // fields; _submitRegistration() below now validates all 5 keys
+  // together instead of the old single _formKey, which is the one
+  // line of behavior-preserving surgery this required (see there).
+  final _step1FormKey = GlobalKey<FormState>(); // Personal Information
+  final _step2FormKey = GlobalKey<FormState>(); // Hero Category
+  final _step3FormKey = GlobalKey<FormState>(); // Documents + Selfie
+  final _step4FormKey = GlobalKey<FormState>(); // Payment QR (optional)
+  final _step5FormKey = GlobalKey<FormState>(); // Review + Agreement + Submit
+  final _stepPageController = PageController();
+  int _currentStep = 0;
+  static const int _stepCount = 5;
+
+  List<GlobalKey<FormState>> get _allStepFormKeys => [
+        _step1FormKey,
+        _step2FormKey,
+        _step3FormKey,
+        _step4FormKey,
+        _step5FormKey,
+      ];
+
+  /// Category-specific guidance shown at the top of the Hero Category
+  /// step once a category is picked — per Nizam's request that whatever
+  /// category a hero picks, that page explains what it means for them.
+  String _categoryGuidance(String? key) {
+    switch (key) {
+      case 'bike':
+        return 'Bike Taxi Heroes carry passengers on a two-wheeler. You will need a valid driving license and your own bike.';
+      case 'auto':
+        return 'Auto Rickshaw Heroes drive passengers around the city in their own auto. A valid auto license is required.';
+      case 'car':
+        return 'Cab/Mini Heroes drive customers in a car or mini vehicle. A valid car driving license is required.';
+      case 'parcel':
+        return 'Parcel Delivery Heroes pick up and drop off packages using their own vehicle.';
+      case 'mini_truck':
+        return 'Mini Truck Heroes move goods and shifting loads using their own mini truck.';
+      case 'lorry':
+        return 'Lorry Heroes handle large goods transport using their own lorry.';
+      default:
+        return _isSkillHero
+            ? 'Skill Heroes complete home-service tasks in their trade — no vehicle documents needed, just your skill proof.'
+            : 'Pick the category that matches what you actually do — this decides which documents we ask you for next.';
+    }
+  }
+
+  void _goToStep(int step) {
+    if (step < 0 || step >= _stepCount) return;
+    setState(() => _currentStep = step);
+    _stepPageController.animateToPage(
+      step,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOut,
+    );
+  }
+
+  /// Validates only the CURRENT step's own fields (not the whole form)
+  /// before letting the hero move on — each step's Form only contains
+  /// that step's fields, so this never blocks on a field the hero
+  /// hasn't reached yet.
+  void _goNextStep() {
+    final currentKey = _allStepFormKeys[_currentStep];
+    if (currentKey.currentState?.validate() == false) return;
+    if (_currentStep == 1 &&
+        (_selectedVehicleType == null || _selectedVehicleType!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please pick a category to continue')),
+      );
+      return;
+    }
+    _goToStep(_currentStep + 1);
+  }
+
+  Widget _stepProgressHeader() {
+    final labels = <String>[
+      'Personal',
+      'Category',
+      'Documents',
+      'Payment',
+      'Review',
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: List.generate(_stepCount, (i) {
+              final isDone = i < _currentStep;
+              final isActive = i == _currentStep;
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(right: i == _stepCount - 1 ? 0 : 6),
+                  child: Container(
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDone || isActive
+                          ? _njPink
+                          : _muted.withValues(alpha: 0.25),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Step ${_currentStep + 1} of $_stepCount — ${labels[_currentStep]}',
+            style: GoogleFonts.outfit(
+              color: _muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _stepNavBar({required bool isLastStep}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+      child: Row(
+        children: [
+          if (_currentStep > 0)
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => _goToStep(_currentStep - 1),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _njPink,
+                  side: BorderSide(color: _njPink.withValues(alpha: 0.5)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: Text('Back', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+              ),
+            ),
+          if (_currentStep > 0 && !isLastStep) const SizedBox(width: 12),
+          if (!isLastStep)
+            Expanded(
+              child: ElevatedButton(
+                onPressed: _goNextStep,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _njPink,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: Text('Next', style: GoogleFonts.outfit(fontWeight: FontWeight.w800)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   // T2: CEO WhatsApp placeholder — replace 91XXXXXXXXXX with real number
   static const String _adminWhatsApp = '91XXXXXXXXXX';
   static const String _adminPhone    = '+91XXXXXXXXXX';
@@ -526,6 +688,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
   @override
   void dispose() {
     _draftDebounce?.cancel();
+    _stepPageController.dispose();
     _nameController.dispose();
     _phoneController.dispose();
     _dobController.dispose();
@@ -840,13 +1003,21 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
         debugPrint('[HeroRegister] ${entry.key} upload failed: $e');
         failures.add('${_docLabels[entry.key] ?? entry.key} ($e)');
       }
-    }));
+    }),);
 
     return _DocUploadResult(urls: urls, failures: failures);
   }
 
   Future<void> _submitRegistration() async {
-    if (!_formKey.currentState!.validate()) {
+    // NEW (Sep 21 2026 — step wizard): was a single _formKey covering
+    // every field; the form is now 5 per-step Forms, so this validates
+    // all of them together — exactly the same "every field must pass"
+    // gate as before, just distributed across the step keys instead of
+    // one.
+    final allValid = _allStepFormKeys
+        .map((k) => k.currentState?.validate() ?? true)
+        .every((ok) => ok);
+    if (!allValid) {
       return;
     }
     final selectedVehicleType = _selectedVehicleType;
@@ -1142,7 +1313,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
          'status': 'offline',
          'onboardingMethod': docUrls.isEmpty ? 'manual_whatsapp' : 'in_app_upload',
          'createdAt': FieldValue.serverTimestamp(),
-       }, SetOptions(merge: true));
+       }, SetOptions(merge: true),);
 
        // FIX: main_hero.dart's _HeroSetupGate decides whether to show this
        // registration form again by reading users/{uid}.isSetupComplete —
@@ -1193,7 +1364,7 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
          email: user.email ?? '',
          city: _selectedCity ?? kDefaultCity,
          role: 'hero',
-       ));
+       ),);
 
        // NEW (Aug 12 2026 — Local Cache Strategy): the moment the batch
        // above actually lands, cache 'pending' locally so the NEXT app
@@ -1946,499 +2117,600 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
           style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.bold),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 8),
-              // FIX: the "How to be an Allin1 Hero?" guidance now lives on
-              // its own screen BEFORE this form (see hero_intro_screen.dart)
-              // instead of inline here — Nizam wants it as a proper
-              // graphical intro page a hero sees first, not squeezed above
-              // the form fields.
-              Text(
-                'Fill in all details accurately and upload clear document photos. '
-                'Admin will call you to verify before approving.',
-                style: GoogleFonts.outfit(color: _muted, fontSize: 12),
-              ),
-              const SizedBox(height: 16),
-              _buildHowToRegisterGuide(context),
-              const SizedBox(height: 16),
+      body: Column(
+        children: [
+          _stepProgressHeader(),
+          Expanded(
+            child: PageView(
+              controller: _stepPageController,
+              // Next/Back buttons drive navigation, not a swipe — a
+              // hero mid-typing on step 2 must not accidentally swipe
+              // to step 3 and lose focus/context.
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                _stepPersonalInfo(),
+                _stepCategory(),
+                _stepDocuments(),
+                _stepPayment(),
+                _stepReview(),
+              ],
+            ),
+          ),
+          _stepNavBar(isLastStep: _currentStep == _stepCount - 1),
+        ],
+      ),
+    );
+  }
 
-              // ONBOARDING TUTORIALS (Aug 29 2026). Placed directly
-              // under the written 3-step guide, at the TOP of the form
-              // — a hero who is confused is confused before they start
-              // typing, not after. Renders literally nothing until the
-              // first tutorial_videos document exists, so this is safe
-              // to ship ahead of the videos themselves; see
-              // tutorial_videos_section.dart.
-              const TutorialVideosSection(
-                audience: TutorialAudience.hero,
-                // accentColor omitted — the section already defaults to
-                // this app's pink.
-                heading: 'Watch: how to join as a Hero',
-              ),
-              const SizedBox(height: 20),
+  Widget _stepPersonalInfo() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+      child: Form(
+        key: _step1FormKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // FIX: the "How to be an Allin1 Hero?" guidance now lives on
+            // its own screen BEFORE this form (see hero_intro_screen.dart)
+            // instead of inline here — Nizam wants it as a proper
+            // graphical intro page a hero sees first, not squeezed above
+            // the form fields.
+            Text(
+              'Fill in all details accurately and upload clear document photos. '
+              'Admin will call you to verify before approving.',
+              style: GoogleFonts.outfit(color: _muted, fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+            _buildHowToRegisterGuide(context),
+            const SizedBox(height: 16),
 
-              // ── Personal Information ──────────────────────────
-              _sectionLabel('👤  Personal Information'),
-              const SizedBox(height: 12),
-              _field(
-                controller: _nameController,
-                label: 'Full Name',
-                icon: Icons.person_rounded,
-                validator: (v) => v!.trim().isEmpty ? 'Name is required' : null,
+            // ONBOARDING TUTORIALS (Aug 29 2026). Placed directly
+            // under the written 3-step guide, at the TOP of the form
+            // — a hero who is confused is confused before they start
+            // typing, not after. Renders literally nothing until the
+            // first tutorial_videos document exists, so this is safe
+            // to ship ahead of the videos themselves; see
+            // tutorial_videos_section.dart.
+            const TutorialVideosSection(
+              audience: TutorialAudience.hero,
+              // accentColor omitted — the section already defaults to
+              // this app's pink.
+              heading: 'Watch: how to join as a Hero',
+            ),
+            const SizedBox(height: 20),
+
+            // ── Personal Information ──────────────────────────
+            _sectionLabel('👤  Personal Information'),
+            const SizedBox(height: 12),
+            _field(
+              controller: _nameController,
+              label: 'Full Name',
+              icon: Icons.person_rounded,
+              validator: (v) => v!.trim().isEmpty ? 'Name is required' : null,
+            ),
+            const SizedBox(height: 12),
+            _field(
+              controller: _phoneController,
+              label: 'Contact Number',
+              icon: Icons.phone_rounded,
+              keyboardType: TextInputType.phone,
+              validator: (v) =>
+                  v!.trim().length < 10 ? 'Enter a valid 10-digit number' : null,
+            ),
+            const SizedBox(height: 12),
+            // T1: Date of Birth — text entry (dd/mm/yyyy)
+            _field(
+              controller: _dobController,
+              label: 'Date of Birth (dd/mm/yyyy)',
+              icon: Icons.cake_rounded,
+              keyboardType: TextInputType.datetime,
+              validator: (v) =>
+                  v!.trim().isEmpty ? 'Date of birth is required' : null,
+            ),
+            const SizedBox(height: 12),
+            _field(
+              controller: _addressController,
+              label: 'Full Address',
+              icon: Icons.home_rounded,
+              maxLines: 2,
+              validator: (v) =>
+                  v!.trim().isEmpty ? 'Address is required' : null,
+            ),
+            const SizedBox(height: 12),
+            // Multi-city: which CITY this hero operates in (structured,
+            // filterable — feeds dispatch matching so this hero only
+            // gets pinged for rides/orders in their own city). GPS-
+            // detected via "Use my current location" (mandatory, per
+            // Nizam's request), not manually picked — same pattern as
+            // seller_onboarding_screen.dart. Distinct from the
+            // free-text "Preferred Work Area" field below, which is a
+            // finer-grained area-within-the-city hint.
+            InkWell(
+              onTap: _detectingCity ? null : _detectCity,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: _selectedCity != null ? _njPink.withValues(alpha: 0.12) : _card,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _selectedCity != null ? _njPink : _muted.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    if (_detectingCity) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _njPink)) else Icon(_selectedCity != null ? Icons.check_circle_rounded : Icons.my_location_rounded, color: _njPink, size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _selectedCity != null
+                            ? 'City: ${cityLabelFor(_selectedCity!)}'
+                            : 'Use my current location (required)',
+                        style: GoogleFonts.outfit(color: _text, fontSize: 14, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 12),
-              _field(
-                controller: _phoneController,
-                label: 'Contact Number',
-                icon: Icons.phone_rounded,
-                keyboardType: TextInputType.phone,
-                validator: (v) =>
-                    v!.trim().length < 10 ? 'Enter a valid 10-digit number' : null,
+            ),
+            // FIX (CTO critical-bug mandate): manual fallback, always
+            // visible — a hero doesn't have to wait for GPS to fail
+            // first if they already know location access won't work
+            // (denied earlier, no GPS on this device, restricted PWA
+            // context, etc.).
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _pickCityManually,
+                child: Text(
+                  'Choose city manually',
+                  style: GoogleFonts.outfit(color: _njPink, fontSize: 11, fontWeight: FontWeight.w700),
+                ),
               ),
-              const SizedBox(height: 12),
-              // T1: Date of Birth — text entry (dd/mm/yyyy)
-              _field(
-                controller: _dobController,
-                label: 'Date of Birth (dd/mm/yyyy)',
-                icon: Icons.cake_rounded,
-                keyboardType: TextInputType.datetime,
-                validator: (v) =>
-                    v!.trim().isEmpty ? 'Date of birth is required' : null,
-              ),
-              const SizedBox(height: 12),
-              _field(
-                controller: _addressController,
-                label: 'Full Address',
-                icon: Icons.home_rounded,
-                maxLines: 2,
-                validator: (v) =>
-                    v!.trim().isEmpty ? 'Address is required' : null,
-              ),
-              const SizedBox(height: 12),
-              // Multi-city: which CITY this hero operates in (structured,
-              // filterable — feeds dispatch matching so this hero only
-              // gets pinged for rides/orders in their own city). GPS-
-              // detected via "Use my current location" (mandatory, per
-              // Nizam's request), not manually picked — same pattern as
-              // seller_onboarding_screen.dart. Distinct from the
-              // free-text "Preferred Work Area" field below, which is a
-              // finer-grained area-within-the-city hint.
-              InkWell(
-                onTap: _detectingCity ? null : _detectCity,
+            ),
+            const SizedBox(height: 4),
+            // FIX: work-area interest field, per Nizam's request — lets
+            // a hero say where in Erode they want to work (keywords,
+            // e.g. "Perundurai, Bhavani Road, Erode Town"), shown to
+            // admin alongside customer search-demand data so coverage
+            // gaps are visible. Free text, not mandatory (a hero may
+            // genuinely be open to all areas).
+            _field(
+              controller: _preferredLocationController,
+              label: 'Preferred Work Area (e.g. Perundurai, Bhavani Road)',
+              icon: Icons.location_on_rounded,
+              validator: (_) => null,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Optional — helps admin match you to nearby work first.',
+              style: GoogleFonts.outfit(color: _muted, fontSize: 11),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _stepCategory() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+      child: Form(
+        key: _step2FormKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Hero Category ────────────────────
+            // MOVED ABOVE "Document Numbers" (Aug 29 2026, together
+            // with the skill categories). This picker used to sit near
+            // the bottom of the form, which was harmless while every
+            // hero was asked for the same three documents. It is not
+            // harmless now: the choice made here decides whether a
+            // driving licence is asked for at all, so leaving it below
+            // would show every electrician a mandatory licence field
+            // they cannot fill, and then make it vanish once they
+            // scrolled down and picked their trade. The question that
+            // changes the form belongs before the parts it changes.
+            _sectionLabel('🦸  Hero Category'),
+            const SizedBox(height: 12),
+            // NEW (Sep 21 2026 — step wizard): whichever category the
+            // hero picks, this explains what it means for them —
+            // Nizam's request that the category page itself carries
+            // its own guidance instead of the hero guessing.
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: _njPink.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: _selectedCity != null ? _njPink.withValues(alpha: 0.12) : _card,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _selectedCity != null ? _njPink : _muted.withValues(alpha: 0.3)),
+                border: Border.all(color: _njPink.withValues(alpha: 0.25)),
+              ),
+              child: Text(
+                _categoryGuidance(_selectedVehicleType),
+                style: GoogleFonts.outfit(color: _text, fontSize: 12.5, height: 1.4),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildHeroCategorySelector(),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _stepDocuments() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+      child: Form(
+        key: _step3FormKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Document Numbers ──────────────────────────────
+            _sectionLabel('📄  Document Numbers'),
+            const SizedBox(height: 12),
+            // Hidden for skill heroes — an electrician has no driving
+            // licence, and a required field they cannot fill is a wall
+            // the application never gets past. The submit-time doc
+            // check drops it for them too; see [missingDocs].
+            if (!_isSkillHero) ...[
+              _field(
+                controller: _licenseNumberController,
+                label: 'Driving License Number',
+                icon: Icons.drive_eta_rounded,
+                textCapitalization: TextCapitalization.characters,
+                validator: (v) =>
+                    v!.trim().isEmpty ? 'License number is required' : null,
+              ),
+              const SizedBox(height: 8),
+              _docPhotoTile(
+                label: 'License photo (required)',
+                photo: _licensePhoto,
+                onTap: () => _pickDocPhoto('license'),
+                onClear: () => setState(() => _licensePhoto = null),
+              ),
+              const SizedBox(height: 12),
+              // FIX (Aug 29 2026 — Nizam: "admin ku send pannavendiya
+              // proof and needed column mis aagirukku"). Re-audit found
+              // this field never existed on the form at all: admin's
+              // approval card, full KYC details screen, dispatch
+              // screen, taxi-rides screen and the approved-heroes list
+              // all read `heroes/{uid}.vehicleNumber` and show it as
+              // "Vehicle No." — but nothing anywhere in this app ever
+              // wrote that key, so it showed "N/A" for every hero ever
+              // registered. Skill heroes have no vehicle (same reason
+              // the licence fields above are hidden for them), so this
+              // sits inside the same `if (!_isSkillHero)` block.
+              _field(
+                controller: _vehicleNumberController,
+                label: 'Vehicle Registration Number',
+                icon: Icons.pin_rounded,
+                textCapitalization: TextCapitalization.characters,
+                validator: (v) => v!.trim().isEmpty
+                    ? 'Vehicle number is required'
+                    : null,
+              ),
+              const SizedBox(height: 12),
+            ],
+            _field(
+              controller: _aadhaarController,
+              label: 'Aadhaar Number',
+              icon: Icons.fingerprint_rounded,
+              keyboardType: TextInputType.number,
+              validator: (v) =>
+                  v!.trim().length != 12 ? 'Enter valid 12-digit Aadhaar' : null,
+            ),
+            const SizedBox(height: 8),
+            _docPhotoTile(
+              label: 'Aadhaar photo (required)',
+              photo: _aadhaarPhoto,
+              onTap: () => _pickDocPhoto('aadhaar'),
+              onClear: () => setState(() => _aadhaarPhoto = null),
+            ),
+            const SizedBox(height: 12),
+            _field(
+              controller: _panController,
+              label: 'PAN Number',
+              icon: Icons.credit_card_rounded,
+              textCapitalization: TextCapitalization.characters,
+              validator: (v) =>
+                  v!.trim().length < 10 ? 'Enter valid PAN number' : null,
+            ),
+            const SizedBox(height: 8),
+            _docPhotoTile(
+              label: 'PAN photo (required)',
+              photo: _panPhoto,
+              onTap: () => _pickDocPhoto('pan'),
+              onClear: () => setState(() => _panPhoto = null),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'All 3 photos are required so admin can verify you and '
+              'call to confirm before approving. Having trouble? Use '
+              'WhatsApp / Call below as a backup.',
+              style: GoogleFonts.outfit(color: _muted, fontSize: 11),
+            ),
+            const SizedBox(height: 16),
+
+            // NEW (CTO mandate — Advanced KYC & Facial Verification):
+            // live selfie, required alongside the 3 doc photos above.
+            _sectionLabel('🤳  Live Selfie'),
+            const SizedBox(height: 12),
+            _selfieTile(),
+            const SizedBox(height: 4),
+            Text(
+              'Required — used to confirm your face matches your ID documents. '
+              'Please use your front camera in good lighting, no filters.',
+              style: GoogleFonts.outfit(color: _muted, fontSize: 11),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _stepPayment() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+      child: Form(
+        key: _step4FormKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // NEW (Aug 12 2026 — Nizam's payment QR upload point):
+            // optional, saved locally only. Same "Show your QR to
+            // the customer" popup (see hero_payment_qr_popup.dart)
+            // reads whatever is saved here — a hero who skips this
+            // now can still add it later from Settings.
+            _sectionLabel('💳  Payment QR (optional)'),
+            const SizedBox(height: 12),
+            _paymentQrTile(),
+            const SizedBox(height: 4),
+            Text(
+              'Your UPI/payment QR — shown to customers who pay you '
+              'directly after a ride/task. Cropped to just the QR and '
+              'saved on this device only, never uploaded anywhere. You '
+              'can add or change this later from Settings.',
+              style: GoogleFonts.outfit(color: _muted, fontSize: 11),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _stepReview() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+      child: Form(
+        key: _step5FormKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionLabel('✅  Review & Submit'),
+            const SizedBox(height: 8),
+            Text(
+              'Double-check everything is correct, then submit.',
+              style: GoogleFonts.outfit(color: _muted, fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+            _buildEmergencyResponderAgreement(),
+            const SizedBox(height: 24),
+
+            // ── T2: Step 2 WhatsApp Card ──────────────────────
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                // Solid, not gradient — see the identical fix (and
+                // full explanation) on _HeroCategoryCard's decoration
+                // above. Same CanvasKit crash, same screen; converting
+                // every LinearGradient on this route is what actually
+                // guarantees it can't recur here.
+                color: const Color(0xFF17241A),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: const Color(0xFF25D366).withValues(alpha: 0.5),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF25D366).withValues(alpha: 0.15),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
                   ),
-                  child: Row(
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      if (_detectingCity) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _njPink)) else Icon(_selectedCity != null ? Icons.check_circle_rounded : Icons.my_location_rounded, color: _njPink, size: 18),
-                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF25D366)
+                              .withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text(
+                          '💬',
+                          style: TextStyle(fontSize: 20),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          _selectedCity != null
-                              ? 'City: ${cityLabelFor(_selectedCity!)}'
-                              : 'Use my current location (required)',
-                          style: GoogleFonts.outfit(color: _text, fontSize: 14, fontWeight: FontWeight.w600),
+                          'Trouble uploading? Contact Admin',
+                          style: GoogleFonts.outfit(
+                            color: const Color(0xFF25D366),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-              ),
-              // FIX (CTO critical-bug mandate): manual fallback, always
-              // visible — a hero doesn't have to wait for GPS to fail
-              // first if they already know location access won't work
-              // (denied earlier, no GPS on this device, restricted PWA
-              // context, etc.).
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: _pickCityManually,
-                  child: Text(
-                    'Choose city manually',
-                    style: GoogleFonts.outfit(color: _njPink, fontSize: 11, fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              // FIX: work-area interest field, per Nizam's request — lets
-              // a hero say where in Erode they want to work (keywords,
-              // e.g. "Perundurai, Bhavani Road, Erode Town"), shown to
-              // admin alongside customer search-demand data so coverage
-              // gaps are visible. Free text, not mandatory (a hero may
-              // genuinely be open to all areas).
-              _field(
-                controller: _preferredLocationController,
-                label: 'Preferred Work Area (e.g. Perundurai, Bhavani Road)',
-                icon: Icons.location_on_rounded,
-                validator: (_) => null,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Optional — helps admin match you to nearby work first.',
-                style: GoogleFonts.outfit(color: _muted, fontSize: 11),
-              ),
-              const SizedBox(height: 20),
-
-              // ── Hero Category ────────────────────
-              // MOVED ABOVE "Document Numbers" (Aug 29 2026, together
-              // with the skill categories). This picker used to sit near
-              // the bottom of the form, which was harmless while every
-              // hero was asked for the same three documents. It is not
-              // harmless now: the choice made here decides whether a
-              // driving licence is asked for at all, so leaving it below
-              // would show every electrician a mandatory licence field
-              // they cannot fill, and then make it vanish once they
-              // scrolled down and picked their trade. The question that
-              // changes the form belongs before the parts it changes.
-              _sectionLabel('🦸  Hero Category'),
-              const SizedBox(height: 12),
-              _buildHeroCategorySelector(),
-              const SizedBox(height: 24),
-
-              // ── Document Numbers ──────────────────────────────
-              _sectionLabel('📄  Document Numbers'),
-              const SizedBox(height: 12),
-              // Hidden for skill heroes — an electrician has no driving
-              // licence, and a required field they cannot fill is a wall
-              // the application never gets past. The submit-time doc
-              // check drops it for them too; see [missingDocs].
-              if (!_isSkillHero) ...[
-                _field(
-                  controller: _licenseNumberController,
-                  label: 'Driving License Number',
-                  icon: Icons.drive_eta_rounded,
-                  textCapitalization: TextCapitalization.characters,
-                  validator: (v) =>
-                      v!.trim().isEmpty ? 'License number is required' : null,
-                ),
-                const SizedBox(height: 8),
-                _docPhotoTile(
-                  label: 'License photo (required)',
-                  photo: _licensePhoto,
-                  onTap: () => _pickDocPhoto('license'),
-                  onClear: () => setState(() => _licensePhoto = null),
-                ),
-                const SizedBox(height: 12),
-                // FIX (Aug 29 2026 — Nizam: "admin ku send pannavendiya
-                // proof and needed column mis aagirukku"). Re-audit found
-                // this field never existed on the form at all: admin's
-                // approval card, full KYC details screen, dispatch
-                // screen, taxi-rides screen and the approved-heroes list
-                // all read `heroes/{uid}.vehicleNumber` and show it as
-                // "Vehicle No." — but nothing anywhere in this app ever
-                // wrote that key, so it showed "N/A" for every hero ever
-                // registered. Skill heroes have no vehicle (same reason
-                // the licence fields above are hidden for them), so this
-                // sits inside the same `if (!_isSkillHero)` block.
-                _field(
-                  controller: _vehicleNumberController,
-                  label: 'Vehicle Registration Number',
-                  icon: Icons.pin_rounded,
-                  textCapitalization: TextCapitalization.characters,
-                  validator: (v) => v!.trim().isEmpty
-                      ? 'Vehicle number is required'
-                      : null,
-                ),
-                const SizedBox(height: 12),
-              ],
-              _field(
-                controller: _aadhaarController,
-                label: 'Aadhaar Number',
-                icon: Icons.fingerprint_rounded,
-                keyboardType: TextInputType.number,
-                validator: (v) =>
-                    v!.trim().length != 12 ? 'Enter valid 12-digit Aadhaar' : null,
-              ),
-              const SizedBox(height: 8),
-              _docPhotoTile(
-                label: 'Aadhaar photo (required)',
-                photo: _aadhaarPhoto,
-                onTap: () => _pickDocPhoto('aadhaar'),
-                onClear: () => setState(() => _aadhaarPhoto = null),
-              ),
-              const SizedBox(height: 12),
-              _field(
-                controller: _panController,
-                label: 'PAN Number',
-                icon: Icons.credit_card_rounded,
-                textCapitalization: TextCapitalization.characters,
-                validator: (v) =>
-                    v!.trim().length < 10 ? 'Enter valid PAN number' : null,
-              ),
-              const SizedBox(height: 8),
-              _docPhotoTile(
-                label: 'PAN photo (required)',
-                photo: _panPhoto,
-                onTap: () => _pickDocPhoto('pan'),
-                onClear: () => setState(() => _panPhoto = null),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'All 3 photos are required so admin can verify you and '
-                'call to confirm before approving. Having trouble? Use '
-                'WhatsApp / Call below as a backup.',
-                style: GoogleFonts.outfit(color: _muted, fontSize: 11),
-              ),
-              const SizedBox(height: 16),
-
-              // NEW (CTO mandate — Advanced KYC & Facial Verification):
-              // live selfie, required alongside the 3 doc photos above.
-              _sectionLabel('🤳  Live Selfie'),
-              const SizedBox(height: 12),
-              _selfieTile(),
-              const SizedBox(height: 4),
-              Text(
-                'Required — used to confirm your face matches your ID documents. '
-                'Please use your front camera in good lighting, no filters.',
-                style: GoogleFonts.outfit(color: _muted, fontSize: 11),
-              ),
-              const SizedBox(height: 20),
-
-              // NEW (Aug 12 2026 — Nizam's payment QR upload point):
-              // optional, saved locally only. Same "Show your QR to
-              // the customer" popup (see hero_payment_qr_popup.dart)
-              // reads whatever is saved here — a hero who skips this
-              // now can still add it later from Settings.
-              _sectionLabel('💳  Payment QR (optional)'),
-              const SizedBox(height: 12),
-              _paymentQrTile(),
-              const SizedBox(height: 4),
-              Text(
-                'Your UPI/payment QR — shown to customers who pay you '
-                'directly after a ride/task. Cropped to just the QR and '
-                'saved on this device only, never uploaded anywhere. You '
-                'can add or change this later from Settings.',
-                style: GoogleFonts.outfit(color: _muted, fontSize: 11),
-              ),
-              const SizedBox(height: 20),
-
-              _buildEmergencyResponderAgreement(),
-              const SizedBox(height: 24),
-
-              // ── T2: Step 2 WhatsApp Card ──────────────────────
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  // Solid, not gradient — see the identical fix (and
-                  // full explanation) on _HeroCategoryCard's decoration
-                  // above. Same CanvasKit crash, same screen; converting
-                  // every LinearGradient on this route is what actually
-                  // guarantees it can't recur here.
-                  color: const Color(0xFF17241A),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: const Color(0xFF25D366).withValues(alpha: 0.5),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF25D366).withValues(alpha: 0.15),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Send photos of your Driving License, PAN Card, and Aadhaar Card to our official WhatsApp for profile activation.',
+                    style: GoogleFonts.outfit(
+                      // NOTE: this card keeps a dark green WhatsApp-brand
+                      // background regardless of the surrounding light
+                      // theme, so its text stays an explicit light color
+                      // (not the theme's _text, which is now dark) for
+                      // contrast.
+                      color: const Color(0xFFEFEFEF),
+                      fontSize: 13,
+                      height: 1.55,
                     ),
-                  ],
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _launchWhatsApp,
+                      icon: const Icon(Icons.send_rounded, size: 18),
+                      label: Text(
+                        'Send Documents via WhatsApp',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF25D366),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _launchCall,
+                      icon: const Icon(Icons.call_rounded, size: 16),
+                      label: Text(
+                        'Call Admin for Quick Verification',
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        // T3: was Colors.blue — now NJ Pink
+                        foregroundColor: _njPink,
+                        side: BorderSide(
+                          color: _njPink.withValues(alpha: 0.5),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 28),
+
+            // NEW (Aug 12 2026 — Nizam: "yenga problemo antha section
+            // la error kaatitu red error kaatanum"): persistent,
+            // section-named failure banner. Unlike the old snackbars
+            // it does not disappear on its own, so the hero can read
+            // it, fix the named field, and retry — with everything
+            // they typed still on screen.
+            if (_submitError != null) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: _red.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _red, width: 1.4),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF25D366)
-                                .withValues(alpha: 0.18),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Text(
-                            '💬',
-                            style: TextStyle(fontSize: 20),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
+                        const Icon(Icons.error_outline_rounded, color: _red, size: 18),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Trouble uploading? Contact Admin',
+                            'Problem in: ${_submitErrorSection ?? 'Submission'}',
                             style: GoogleFonts.outfit(
-                              color: const Color(0xFF25D366),
-                              fontSize: 15,
+                              color: _red,
+                              fontSize: 13,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 6),
                     Text(
-                      'Send photos of your Driving License, PAN Card, and Aadhaar Card to our official WhatsApp for profile activation.',
-                      style: GoogleFonts.outfit(
-                        // NOTE: this card keeps a dark green WhatsApp-brand
-                        // background regardless of the surrounding light
-                        // theme, so its text stays an explicit light color
-                        // (not the theme's _text, which is now dark) for
-                        // contrast.
-                        color: const Color(0xFFEFEFEF),
-                        fontSize: 13,
-                        height: 1.55,
-                      ),
+                      _submitError!,
+                      style: GoogleFonts.outfit(color: _text, fontSize: 12, height: 1.45),
                     ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _launchWhatsApp,
-                        icon: const Icon(Icons.send_rounded, size: 18),
-                        label: Text(
-                          'Send Documents via WhatsApp',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF25D366),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _launchCall,
-                        icon: const Icon(Icons.call_rounded, size: 16),
-                        label: Text(
-                          'Call Admin for Quick Verification',
-                          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          // T3: was Colors.blue — now NJ Pink
-                          foregroundColor: _njPink,
-                          side: BorderSide(
-                            color: _njPink.withValues(alpha: 0.5),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                      ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Nothing you typed was lost — fix the item above and tap Submit again.',
+                      style: GoogleFonts.outfit(color: _muted, fontSize: 11),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 28),
-
-              // NEW (Aug 12 2026 — Nizam: "yenga problemo antha section
-              // la error kaatitu red error kaatanum"): persistent,
-              // section-named failure banner. Unlike the old snackbars
-              // it does not disappear on its own, so the hero can read
-              // it, fix the named field, and retry — with everything
-              // they typed still on screen.
-              if (_submitError != null) ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: _red.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _red, width: 1.4),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.error_outline_rounded, color: _red, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Problem in: ${_submitErrorSection ?? 'Submission'}',
-                              style: GoogleFonts.outfit(
-                                color: _red,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        _submitError!,
-                        style: GoogleFonts.outfit(color: _text, fontSize: 12, height: 1.45),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Nothing you typed was lost — fix the item above and tap Submit again.',
-                        style: GoogleFonts.outfit(color: _muted, fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-              ],
-
-              // ── Submit ────────────────────────────────────────
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isSubmitting ? null : _submitRegistration,
-                  style: ElevatedButton.styleFrom(
-                    // T3: was _green — now NJ Pink per brand fix
-                    backgroundColor: _njPink,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    elevation: 6,
-                    shadowColor: _njPink.withValues(alpha: 0.4),
-                  ),
-                  child: _isSubmitting
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2.5, color: Colors.white,),
-                        )
-                      : Text(
-                          'Submit Registration →',
-                          style: GoogleFonts.outfit(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Center(
-                child: Text(
-                  'Your form will be reviewed. Approval typically takes 2–4 hours.',
-                  style: GoogleFonts.outfit(color: _muted, fontSize: 11),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 14),
             ],
-          ),
+
+            // ── Submit ────────────────────────────────────────
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _isSubmitting ? null : _submitRegistration,
+                style: ElevatedButton.styleFrom(
+                  // T3: was _green — now NJ Pink per brand fix
+                  backgroundColor: _njPink,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  elevation: 6,
+                  shadowColor: _njPink.withValues(alpha: 0.4),
+                ),
+                child: _isSubmitting
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2.5, color: Colors.white,),
+                      )
+                    : Text(
+                        'Submit Registration →',
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: Text(
+                'Your form will be reviewed. Approval typically takes 2–4 hours.',
+                style: GoogleFonts.outfit(color: _muted, fontSize: 11),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
         ),
       ),
     );
@@ -2749,4 +3021,3 @@ class _HeroCategoryCard extends StatelessWidget {
     );
   }
 }
-
