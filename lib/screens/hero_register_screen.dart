@@ -448,11 +448,17 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
   void _goToStep(int step) {
     if (step < 0 || step >= _stepCount) return;
     setState(() => _currentStep = step);
-    _stepPageController.animateToPage(
-      step,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOut,
-    );
+    // FIX (Sep 21 2026 — real bug found live-testing this wizard):
+    // animateToPage() is asynchronous. A hero tapping Back/Next twice
+    // quickly (the second tap landing before the first animation
+    // settles) could fire this twice in a row -- the second
+    // animateToPage call interrupts the first mid-flight, and the
+    // PageView could end up NOT on the page _currentStep now claims,
+    // desyncing the "Step N of 5" header text from what's actually on
+    // screen. jumpToPage is synchronous, so _currentStep and the
+    // visible page can never disagree, at the cost of the slide
+    // animation.
+    _stepPageController.jumpToPage(step);
   }
 
   /// Validates only the CURRENT step's own fields (not the whole form)
