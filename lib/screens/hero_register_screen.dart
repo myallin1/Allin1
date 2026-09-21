@@ -468,12 +468,52 @@ class _HeroRegisterScreenState extends State<HeroRegisterScreen> {
   void _goNextStep() {
     final currentKey = _allStepFormKeys[_currentStep];
     if (currentKey.currentState?.validate() == false) return;
+    // FIX (Sep 21 2026 — 2nd re-audit): city is picked via a custom
+    // InkWell button, not a FormField, so step 0's Form.validate()
+    // above never catches a missing city — only the Category step (via
+    // the special-case right below) had an equivalent guard. A hero
+    // could tap Next through Personal Info with no city, sail through
+    // Category/Documents/Payment, and only get bounced back here at
+    // the very last Submit. Catch it at the same point category is
+    // caught, not four steps later.
+    if (_currentStep == 0 && _selectedCity == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please set your city first — tap the location button or "Choose city manually".'),
+        ),
+      );
+      return;
+    }
     if (_currentStep == 1 &&
         (_selectedVehicleType == null || _selectedVehicleType!.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please pick a category to continue')),
       );
       return;
+    }
+    // FIX (Sep 21 2026 — 2nd re-audit): same reasoning as the city
+    // check above — the photo/selfie tiles on the Documents step
+    // aren't FormFields, so Form.validate() above only ever catches
+    // the text fields (license/aadhaar/pan numbers), not the photos
+    // sitting right next to them. A hero could tap Next with every
+    // number filled and every photo skipped, then only get bounced
+    // back here from Submit two steps later. _submitRegistration()
+    // keeps its own copy of this exact check (the authoritative gate —
+    // this one is purely so the hero hits it immediately instead of
+    // after Payment + Review).
+    if (_currentStep == 2) {
+      final missingDocs = <String>[
+        if (!_isSkillHero && _licensePhoto == null) 'License photo',
+        if (_aadhaarPhoto == null) 'Aadhaar photo',
+        if (_panPhoto == null) 'PAN photo',
+        if (_selfieBytes == null) 'Live selfie',
+      ];
+      if (missingDocs.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Please upload: ${missingDocs.join(', ')}')),
+        );
+        return;
+      }
     }
     _goToStep(_currentStep + 1);
   }
