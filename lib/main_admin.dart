@@ -19,7 +19,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app_navigator.dart';
 import 'config/app_variant.dart';
 import 'config/web_push_config.dart';
+import 'core/tester_banner.dart';
 import 'firebase_options.dart';
+import 'screens/admin/admin_app_error_log_screen.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 import 'screens/admin/admin_dialer_screen.dart';
 import 'screens/admin/admin_in_call_screen.dart';
@@ -44,6 +46,7 @@ import 'services/chitti/chitti_error_watch_service.dart';
 import 'services/chitti/chitti_followup_service.dart';
 import 'services/chitti/chitti_screen_tracker.dart';
 import 'services/chitti/chitti_screen_vision_helper.dart';
+import 'services/chitti_wakeword_service.dart';
 import 'services/db_usage_tracker.dart';
 import 'services/guru_overlay_service.dart';
 import 'services/localization_service.dart';
@@ -129,6 +132,7 @@ void _initAdminFcmAuthListener() {
       unawaited(AdminForegroundService.stop());
       ChittiDevWatchService.instance.stop();
       ChittiErrorWatchService.instance.stop();
+      unawaited(ChittiWakeWordService.instance.stop());
       return;
     }
     unawaited(_syncFcmTokenForAdmin(user.uid));
@@ -141,6 +145,17 @@ void _initAdminFcmAuthListener() {
     ChittiDevWatchService.instance.start();
     // NEW (Sep 21 2026 — Chitti proactive error watch): same lifecycle.
     ChittiErrorWatchService.instance.start();
+    // NEW (Sep 22 2026 — "Hey Chitti" background wake-word). Unlike
+    // the services above, this one is opt-in (admin_ai_settings_screen
+    // .dart's toggle, default OFF) — only auto-resume it on sign-in if
+    // the admin had it on in a previous session, never start listening
+    // for a phrase nobody asked for.
+    unawaited(() async {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('kChittiWakeWordEnabled') ?? false) {
+        await ChittiWakeWordService.instance.start();
+      }
+    }());
   });
 }
 
@@ -714,16 +729,33 @@ class AdminApp extends StatelessWidget {
         // ChittiScreenVisionHelper.captureScreen() has something real
         // to capture when Chitti's normal resolution comes up empty —
         // see guru_overlay_service.dart's sendMessage for the trigger.
-        builder: (context, child) => MigrationGate(
-          child: Stack(
-            children: [
-              if (child != null)
-                RepaintBoundary(
-                  key: ChittiScreenVisionHelper.screenCaptureKey,
-                  child: child,
-                ),
-              const GlobalGuruFab(),
-            ],
+        builder: (context, child) => TesterBanner(
+          extraMenuItems: (ctx) => <Widget>[
+            ListTile(
+              leading: const Icon(Icons.bug_report_outlined),
+              title: const Text('Error Log'),
+              subtitle: const Text('4-app crash/error monitor'),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AdminAppErrorLogScreen(),
+                  ),
+                );
+              },
+            ),
+          ],
+          child: MigrationGate(
+            child: Stack(
+              children: [
+                if (child != null)
+                  RepaintBoundary(
+                    key: ChittiScreenVisionHelper.screenCaptureKey,
+                    child: child,
+                  ),
+                const GlobalGuruFab(),
+              ],
+            ),
           ),
         ),
         routes: {

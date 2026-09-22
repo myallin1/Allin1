@@ -33,6 +33,7 @@ import '../../services/chitti/chitti_accessibility_bridge.dart';
 import '../../services/chitti/chitti_model_provider.dart';
 import '../../services/chitti/chitti_summarizer.dart';
 import '../../services/chitti/chitti_voice_service.dart';
+import '../../services/chitti_wakeword_service.dart';
 import '../../services/cloudinary_upload_service.dart';
 import '../../services/firestore_usage_tracking.dart';
 import 'chitti_debug_logs_screen.dart';
@@ -196,6 +197,11 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
   // real feature); switching it off is a diagnostic step.
   static const String _kCallRecordingEnabledKey = 'kChittiCallRecordingEnabled';
   bool _callRecordingEnabled = true;
+  // NEW (Sep 22 2026 — "Hey Chitti" background wake-word). Defaults to
+  // OFF: an always-listening microphone must be an explicit opt-in,
+  // never something that silently starts after an app update.
+  static const String _kWakeWordEnabledKey = 'kChittiWakeWordEnabled';
+  bool _wakeWordEnabled = false;
 
   // NEW (Aug 12 2026 — per-key model selection): each provider's
   // currently-selected model, defaulting to that provider's first
@@ -332,6 +338,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
           prefs.getString(_kCallAnsweringModeKey) ?? 'quick_record';
       _callAudioRoute = prefs.getString(_kCallAudioRouteKey) ?? 'speaker';
       _callRecordingEnabled = prefs.getBool(_kCallRecordingEnabledKey) ?? true;
+      _wakeWordEnabled = prefs.getBool(_kWakeWordEnabledKey) ?? false;
     });
 
     final statuses =
@@ -849,6 +856,44 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
             setState(() => _callRecordingEnabled = val);
             final prefs = await SharedPreferences.getInstance();
             await prefs.setBool(_kCallRecordingEnabledKey, val);
+          },
+        ),
+        const SizedBox(height: 12),
+        // NEW (Sep 22 2026 — "Hey Chitti" background wake-word). Off by
+        // default (see _wakeWordEnabled's own declaration) — this is
+        // the one switch in this whole screen that turns on an
+        // always-listening microphone, so it gets its own explicit
+        // battery-cost callout right in the subtitle, not just a
+        // generic on/off label.
+        SwitchListTile(
+          title: Text(
+            '"Hey Chitti" wake word (background)',
+            style: GoogleFonts.outfit(
+                color: _text, fontSize: 13, fontWeight: FontWeight.w600,),
+          ),
+          subtitle: Text(
+            _wakeWordEnabled
+                ? 'On — always listening for "Hey Chitti", even in the background. Uses extra battery.'
+                : 'Off — say nothing, mic stays fully idle until you tap the assistant yourself.',
+            style: GoogleFonts.outfit(
+              color: _wakeWordEnabled ? _amberWarn : _muted,
+              fontSize: 11,
+            ),
+          ),
+          value: _wakeWordEnabled,
+          activeThumbColor: _red,
+          activeTrackColor: _red.withValues(alpha: 0.3),
+          inactiveThumbColor: _muted,
+          contentPadding: EdgeInsets.zero,
+          onChanged: (val) async {
+            setState(() => _wakeWordEnabled = val);
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool(_kWakeWordEnabledKey, val);
+            if (val) {
+              await ChittiWakeWordService.instance.start();
+            } else {
+              await ChittiWakeWordService.instance.stop();
+            }
           },
         ),
         const SizedBox(height: 12),

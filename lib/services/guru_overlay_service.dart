@@ -379,6 +379,23 @@ class GuruOverlayService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // NEW (Sep 22 2026 — "Hey Chitti" background wake-word). Opens the
+  // overlay, speaks [greeting] ("Sollunga boss, enna pannanum?" /
+  // English equivalent), and only THEN starts the mic — deliberately
+  // sequential rather than opening with autoStartMic:true and speaking
+  // in parallel, so the mic is never live while Chitti's own greeting
+  // is playing (the exact echo the conversation controller's
+  // isSelfEcho() guard exists to filter, but simplest to just never
+  // create in the first place here, since unlike a mid-conversation
+  // turn there is no urgency to start listening a beat early).
+  Future<void> wakeAndGreet(String greeting) async {
+    show();
+    await _speak(greeting);
+    if (_entry == null) return; // dismissed while the greeting was playing
+    _autoStartMicOnOpen = true;
+    notifyListeners();
+  }
+
   /// Inserts the single global overlay entry. Safe to call repeatedly —
   /// a second call while already showing just brings it back from
   /// minimized instead of inserting a duplicate entry.

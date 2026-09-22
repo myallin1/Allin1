@@ -117,6 +117,16 @@ dependencies:
   # Dart QR rendering with no native platform code  used only by
   # admin_qr_generator_screen.dart so the poster/flex QR's target URL has
   # a single source of truth in-repo instead of being hand-made externally.
+  # NEW (Sep 22 2026  "Hey Chitti" background wake-word, admin app
+  # only). Picovoice's official Flutter plugin, purpose-built for
+  # always-on, extremely low-power keyword spotting (~1-2mW) -- the
+  # only sane way to listen for one phrase continuously in the
+  # background without the battery cost of running full speech_to_text
+  # non-stop. Needs a real AccessKey + a custom-trained "Hey Chitti"
+  # .ppn model file per platform from Picovoice Console
+  # (console.picovoice.ai, free tier) -- see chitti_wakeword_service
+  # .dart's header for what Nizam still has to supply himself.
+  porcupine_flutter: ^3.0.5
   qr_flutter: ^4.1.0
   # NEW (Aug 12 2026  Admin QR Generator "Share to WhatsApp" follow-up):
   # verified publisher (fluttercommunity.dev, Flutter Favorite), 3.15M
@@ -261,6 +271,7 @@ flutter:
     - assets/videos/
     - assets/sounds/
     - assets/gifs/
+    - assets/wakeword/
     # Written by CI (see "Generate changelog for this build"). Kept in
     # the bundle so the "what's new" popup works with no network.
     - assets/release_notes/
