@@ -19,10 +19,12 @@ import '../config/city_config.dart';
 import '../config/hero_service_access.dart';
 import '../config/hero_skill_catalog.dart';
 import '../models/service_request_model.dart';
+import '../models/tracking_snapshot.dart';
 import './firestore_usage_tracking.dart';
 import 'city_service.dart';
 import 'hero_usage_accumulator_service.dart';
 import 'hero_wallet_service.dart';
+import 'order_tracking_notification_controller.dart';
 import 'usage_tracking_service.dart';
 
 /// Canonical status enum — the single source of truth for lifecycle state.
@@ -332,6 +334,27 @@ class ServiceRequestService {
         }),
       );
     }
+
+    // FIX (live-order-tracking-notification, Phase 2, Sep 2026 — feature/
+    // live-order-tracking-notification branch): starts the customer-facing
+    // ongoing notification the MOMENT the order is placed (status is
+    // already 'pending' above), matching the explicit "battery-friendly,
+    // Blinkit-style, starts the instant an order/booking is made" ask.
+    // Single chokepoint on purpose — every food/grocery/hero-booking/
+    // electronics-service order in the app flows through this one
+    // function, so wiring it here (rather than at each of the many
+    // calling screens) can't be missed by a future new order type.
+    // Fire-and-forget + best-effort: OrderTrackingNotificationController
+    // and OrderTrackingForegroundService are both already fully
+    // exception-guarded internally, but a failure here must still never
+    // be able to block the order itself from being created.
+    unawaited(
+      OrderTrackingNotificationController.instance
+          .trackOrder(requestId, TrackingCollection.serviceRequests)
+          .catchError((Object e) {
+        debugPrint('[ServiceRequestService] order-tracking notification start failed (non-fatal): $e');
+      }),
+    );
 
     return requestId;
   }

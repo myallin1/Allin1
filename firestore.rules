@@ -225,6 +225,49 @@ service cloud.firestore {
       allow read, list, update, delete: if isAdminAny();
     }
 
+    // Tester allowlist gate for the error-report sync above: every app
+    // variant reads this (client-side, throttle-cached) to decide whether
+    // ITS OWN error just got logged for an opted-in tester before syncing it
+    // to app_error_reports; only admin may add/remove testers.
+    match /app_config/testers {
+      allow read: if isAuth();
+      allow write: if isAdminAny();
+    }
+
+    // Laptop presence + remote-sleep control (Sep 22 2026). The laptop-side
+    // agent (backend-admin/laptop_agent/presence_agent.js) writes via the
+    // Admin SDK (bypasses rules entirely), so this block only governs the
+    // Admin app's own read (status) and write (setting sleepRequested).
+    match /laptop_control/{deviceId} {
+      allow read: if isAdminAny();
+      allow update: if isAdminAny() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['sleepRequested', 'sleepRequestedAt', 'sleepRequestedBy']);
+      // Covers the edge case where an admin taps Sleep before the laptop
+      // agent has ever run once (so the doc doesn't exist yet) - without
+      // this, that first write is silently denied (no matching `create`
+      // rule = deny by default), and the admin sees nothing happen.
+      allow create: if isAdminAny() &&
+        request.resource.data.keys()
+          .hasOnly(['sleepRequested', 'sleepRequestedAt', 'sleepRequestedBy']);
+    }
+
+    // Laptop live screen-share WebRTC signaling (Sep 22 2026 - Phase B).
+    // Offer/answer/ICE candidates ONLY - actual video is peer-to-peer,
+    // never touches Firestore/our servers. Both the laptop-side host page
+    // (host.html, opened locally by Nizam, signed in with his own admin
+    // account) and the Admin app's viewer are admins, so one rule covers
+    // both sides symmetrically.
+    match /laptop_screen_share/{sessionId} {
+      allow read, create, update, delete: if isAdminAny();
+      match /offerCandidates/{candidateId} {
+        allow read, create: if isAdminAny();
+      }
+      match /answerCandidates/{candidateId} {
+        allow read, create: if isAdminAny();
+      }
+    }
+
     // ==============================================================
     // AFFILIATE_CODES COLLECTION (Aug 12 2026 — Affiliate QR Generator)
     // ==============================================================

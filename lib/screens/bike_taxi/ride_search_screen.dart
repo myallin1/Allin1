@@ -14,9 +14,11 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../config/city_config.dart';
 import '../../config/hero_service_access.dart';
 import '../../models/ride_model.dart';
+import '../../models/tracking_snapshot.dart';
 // Phone lookups consolidated here (Aug 11 2026) — single source of truth.
 import '../../services/auth_service.dart';
 import '../../services/city_service.dart';
+import '../../services/order_tracking_notification_controller.dart';
 import '../../utils/otp_utils.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../../widgets/cancellation_reason_sheet.dart';
@@ -560,6 +562,25 @@ class _RideSearchScreenState extends State<RideSearchScreen>
           'customerPhone': customerPhone,
           'customerName': user.displayName ?? 'Customer',
         });
+        // FIX (live-order-tracking-notification, Phase 2 rides wiring,
+        // Sep 2026 — feature/live-order-tracking-notification branch):
+        // single chokepoint for both bike AND car taxi (this screen
+        // handles both, distinguished only by `category`) — starts the
+        // ongoing tracking notification the moment the ride doc is
+        // created (status is already 'searching' above), matching the
+        // same "starts the instant the order is placed" behavior
+        // already wired into ServiceRequestService.createServiceRequest
+        // for food/grocery/hero-booking. Fire-and-forget + best-effort,
+        // same reasoning as that call site — both the controller and
+        // the foreground-service wrapper are already fully
+        // exception-guarded internally.
+        unawaited(
+          OrderTrackingNotificationController.instance
+              .trackOrder(_rideDocId, TrackingCollection.rides)
+              .catchError((Object e) {
+            debugPrint('[RideSearchScreen] order-tracking notification start failed (non-fatal): $e');
+          }),
+        );
       }
 
       final ref = FirebaseDatabase.instance.ref('active_ride_requests').push();

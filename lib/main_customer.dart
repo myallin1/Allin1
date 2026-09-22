@@ -26,6 +26,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import './services/firestore_usage_tracking.dart';
 import 'app_navigator.dart';
+import 'core/tester_banner.dart';
 import 'config/api_config.dart';
 import 'config/app_variant.dart';
 import 'config/web_push_config.dart';
@@ -68,6 +69,8 @@ import 'services/localization_service.dart';
 import 'services/map_service.dart';
 import 'services/map_simulation_service.dart';
 import 'services/migration_gate_service.dart';
+import 'services/order_tracking_foreground_service.dart';
+import 'services/order_tracking_notification_controller.dart';
 import 'services/route_breadcrumb_observer.dart';
 // receive_sharing_intent is Android/iOS only and has no web
 // implementation, so importing it unconditionally broke `flutter build
@@ -591,6 +594,29 @@ Future<void> _warmCustomerServices() async {
     _warmMapStack(),
   ]);
   _syncCustomerFcmToken();
+  // NEW (live-order-tracking-notification, Phase 2, Sep 2026 — feature/
+  // live-order-tracking-notification branch): registers the Android
+  // notification channel (cheap, idempotent, shows nothing yet — see
+  // OrderTrackingForegroundService.initialize's own header) and resumes
+  // tracking whatever order was already active if the app was killed
+  // and reopened mid-delivery. New orders start their own tracking
+  // directly from ServiceRequestService.createServiceRequest() — this
+  // is only the "app was closed, now reopened" recovery path.
+  OrderTrackingForegroundService.initialize();
+  _resumeOrderTrackingIfActive();
+}
+
+StreamSubscription<User?>? _orderTrackingAuthSub;
+
+void _resumeOrderTrackingIfActive() {
+  _orderTrackingAuthSub?.cancel();
+  _orderTrackingAuthSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+    if (user == null) {
+      unawaited(OrderTrackingNotificationController.instance.stopTracking());
+      return;
+    }
+    unawaited(OrderTrackingNotificationController.instance.resumeIfActive(user.uid));
+  });
 }
 
 StreamSubscription<User?>? _customerFcmAuthSub;
@@ -957,13 +983,16 @@ class CustomerApp extends StatelessWidget {
           // that happens before a user gesture and this build ships as
           // a PWA. It passes every pointer straight through and removes
           // itself once the greeting has run.
-          builder: (context, child) => ChittiFirstTouchGreeter(
-            child: MigrationGate(
-              child: Stack(
-                children: [
-                  if (child != null) child,
-                  const GlobalGuruFab(),
-                ],
+          builder: (context, child) => TesterBanner(
+            // Staging-only overlay; const-folded to a passthrough in prod.
+            child: ChittiFirstTouchGreeter(
+              child: MigrationGate(
+                child: Stack(
+                  children: [
+                    if (child != null) child,
+                    const GlobalGuruFab(),
+                  ],
+                ),
               ),
             ),
           ),
