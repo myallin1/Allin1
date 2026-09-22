@@ -64,6 +64,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
+import '../services/app_error_log_service.dart';
 import '../services/chitti/chitti_call_service_log.dart';
 import '../services/chitti/chitti_conversation_controller.dart';
 import '../services/chitti/chitti_live_call_service.dart';
@@ -263,6 +264,18 @@ class _ChittiCallScreenState extends State<ChittiCallScreen>
             },
             onError: (error) {
               debugPrint('[ChittiCall] speech error: ${error.errorMsg}');
+              // NEW (Sep 22 2026 reaudit — Nizam's "yella error ume
+              // venum" request: every surface where Chitti mishears,
+              // not just the text-chat screen). See guru_chat_screen
+              // .dart's identical hook for the full rationale.
+              unawaited(
+                AppErrorLogService.logError(
+                  message: 'Speech recognition: ${error.errorMsg}',
+                  severity: 'WARNING',
+                  category: 'chitti_communication',
+                  screen: 'chitti_call_screen',
+                ),
+              );
             },
           )
           .timeout(ChittiCallScreen.initTimeout, onTimeout: () => false);

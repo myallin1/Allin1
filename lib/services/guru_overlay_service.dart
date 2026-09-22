@@ -60,6 +60,7 @@ import '../widgets/chitti_history_sheet.dart';
 import '../widgets/chitti_model_picker_sheet.dart';
 import '../widgets/chitti_typewriter_text.dart';
 import 'ai_activation_service.dart';
+import 'app_error_log_service.dart';
 import 'chitti/chitti_action_executor.dart';
 import 'chitti/chitti_buddy.dart';
 import 'chitti/chitti_chat_intents.dart';
@@ -1577,6 +1578,18 @@ class _GuruOverlayPanelState extends State<_GuruOverlayPanel> {
         },
         onError: (error) {
           debugPrint('[GuruOverlayService] speech error: $error');
+          // NEW (Sep 22 2026 reaudit — Nizam's "yella error ume venum"
+          // request: every surface where Chitti mishears, not just the
+          // text-chat screen). See guru_chat_screen.dart's identical
+          // hook for the full rationale.
+          unawaited(
+            AppErrorLogService.logError(
+              message: 'Speech recognition: ${error.errorMsg}',
+              severity: 'WARNING',
+              category: 'chitti_communication',
+              screen: 'guru_overlay_service',
+            ),
+          );
           final msg = error.errorMsg.toLowerCase();
           final isRecoverable = msg.contains('no_match') ||
               msg.contains('timeout') ||
