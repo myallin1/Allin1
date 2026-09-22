@@ -19,6 +19,7 @@ import 'package:provider/provider.dart';
 import 'package:scratcher/scratcher.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../config/category_shortcuts.dart';
 import '../config/city_config.dart';
 import '../models/mobile_models.dart' show youtubeVideoId;
 import '../services/app_minimizer_service.dart';
@@ -41,6 +42,7 @@ import '../services/local_sync_service.dart';
 import '../services/localization_service.dart';
 import '../services/location_service.dart';
 import '../services/migration_gate_service.dart';
+import '../services/pinned_shortcuts_service.dart';
 import '../services/prefs_cache.dart';
 import '../services/pwa_cache_platform_stub.dart'
     if (dart.library.html) '../services/pwa_cache_platform_web.dart';
@@ -2729,6 +2731,12 @@ class _HomeTab extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
+          // NEW (Sep 22 2026 — long-press-to-pin shortcuts). Placed right
+          // under the search bar, above every promo/carousel, since a
+          // shortcut the customer chose themselves is more relevant to
+          // THEM than anything the app is promoting that day. Renders
+          // nothing at all when empty — see _MyShortcutsBar's own header.
+          _MyShortcutsBar(onTileTap: onTileTap),
           // NEW (Aug 13 2026 — Erode "₹50,000 கோடி பொருளாதாரப் புரட்சி"
           // campaign). Deliberately its OWN static card rather than a slide
           // inside _CategorySlidingBanner below: that carousel auto-rotates
@@ -7702,6 +7710,26 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
     }
   }
 
+  Future<void> _togglePin(
+    BuildContext context,
+    _CategorySlideData slide,
+  ) async {
+    HapticFeedback.mediumImpact();
+    final nowPinned = await PinnedShortcutsService.instance.toggle(slide.tapId);
+    if (!context.mounted) return;
+    final label = kCategoryShortcuts[slide.tapId]?.label ?? slide.title;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          nowPinned
+              ? '$label pinned to My Shortcuts'
+              : '$label removed from My Shortcuts',
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -7738,6 +7766,11 @@ class _CategorySlidingBannerState extends State<_CategorySlidingBanner> {
               final slide = slides[i];
               return GestureDetector(
                 onTap: () => _handleTap(context, slide.tapId),
+                // NEW (Sep 22 2026 — Nizam's "long-press to pin a
+                // shortcut" request). Pure opt-in add-on: the existing
+                // tap-to-navigate behavior above is completely
+                // untouched, this only reacts to a DIFFERENT gesture.
+                onLongPress: () => unawaited(_togglePin(context, slide)),
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 4),
                   decoration: BoxDecoration(
@@ -7898,6 +7931,152 @@ class _CategorySlideData {
     required this.pinkCategory,
     required this.tapId,
   });
+}
+
+// NEW (Sep 22 2026 — Nizam: "ovvoru feature and option-um shortcut app
+// mari veliya vaikka option venum... user kum disturb irukkatha fully
+// user customisable and friendly"). Renders the customer's own
+// long-press-pinned categories (see _CategorySlidingBannerState's
+// onLongPress above and PinnedShortcutsService) as a compact row of
+// quick-access chips. Deliberately renders NOTHING — not even a gap —
+// until the customer has pinned at least one shortcut themselves:
+// this is an opt-in convenience layered on top of the existing home
+// screen, never a change to what every customer sees by default.
+class _MyShortcutsBar extends StatefulWidget {
+  final void Function(String) onTileTap;
+  const _MyShortcutsBar({required this.onTileTap});
+
+  @override
+  State<_MyShortcutsBar> createState() => _MyShortcutsBarState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(
+        ObjectFlagProperty<void Function(String)>.has('onTileTap', onTileTap),);
+  }
+}
+
+class _MyShortcutsBarState extends State<_MyShortcutsBar> {
+  @override
+  void initState() {
+    super.initState();
+    // Safe to call even if some other entry point already loaded this —
+    // see PinnedShortcutsService.load()'s own doc comment. Not awaited:
+    // the AnimatedBuilder below rebuilds itself the instant the load
+    // completes and calls notifyListeners(), so there's nothing useful
+    // to gate the first frame on.
+    if (!PinnedShortcutsService.instance.isLoaded) {
+      unawaited(PinnedShortcutsService.instance.load());
+    }
+  }
+
+  // Same 4 real-screen routes _CategorySlidingBannerState._handleTap
+  // handles locally, everything else deferred to the shared onTileTap
+  // callback — deliberately kept in sync with that switch rather than
+  // calling it directly, since it lives on a private sibling State
+  // class this widget has no instance of.
+  void _open(BuildContext context, String tapId) {
+    switch (tapId) {
+      case 'route:eseva':
+        Navigator.push<void>(
+          context,
+          MaterialPageRoute(builder: (_) => const EsevaServiceScreen()),
+        );
+        break;
+      case 'route:printing':
+        Navigator.push<void>(
+          context,
+          MaterialPageRoute(builder: (_) => const PrintingServiceScreen()),
+        );
+        break;
+      case 'route:electronics':
+        Navigator.push<void>(
+          context,
+          MaterialPageRoute(builder: (_) => const NJTechStoreScreen()),
+        );
+        break;
+      case 'route:hero':
+        Navigator.push<void>(
+          context,
+          MaterialPageRoute(builder: (_) => const HeroBookingScreen()),
+        );
+        break;
+      default:
+        widget.onTileTap(tapId);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: PinnedShortcutsService.instance,
+      builder: (context, _) {
+        final ids = PinnedShortcutsService.instance.pinnedIds;
+        if (ids.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: SizedBox(
+            height: 88,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: ids.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 14),
+              itemBuilder: (context, i) {
+                final id = ids[i];
+                final meta = kCategoryShortcuts[id];
+                // A pinned id this build no longer recognises (a
+                // category renamed/removed after the pin was made) is
+                // simply skipped, never a crash over a stale local pin.
+                if (meta == null) return const SizedBox.shrink();
+                return GestureDetector(
+                  onTap: () => _open(context, id),
+                  onLongPress: () {
+                    HapticFeedback.mediumImpact();
+                    unawaited(PinnedShortcutsService.instance.toggle(id));
+                  },
+                  child: SizedBox(
+                    width: 64,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 52,
+                          height: 52,
+                          padding: const EdgeInsets.all(11),
+                          decoration: BoxDecoration(
+                            color: kPink.withValues(alpha: 0.10),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: kPink.withValues(alpha: 0.25),
+                            ),
+                          ),
+                          child: SvgPicture.string(meta.icon),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          meta.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.outfit(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: kText,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _IconMarquee extends StatefulWidget {
