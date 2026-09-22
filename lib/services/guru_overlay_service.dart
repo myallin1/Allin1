@@ -429,6 +429,17 @@ class GuruOverlayService extends ChangeNotifier {
       return;
     }
     overlay.insert(_entry!);
+    // FIX (Sep 22 2026 reaudit — real gap found for the new "Hey
+    // Chitti" wake-word's mic-contention guard, ChittiWakeWordService.
+    // _onOverlayVisibilityChanged()): this fresh-open branch never
+    // called notifyListeners() at all, only the "already open" branch
+    // a few lines up and _forceClose() did. Nothing needed it before —
+    // this service manages its own OverlayEntry imperatively rather
+    // than through a Consumer/watch() — but any listener added via
+    // addListener() to react to isShowing (as the wake-word service
+    // now does) would silently never fire for the single most common
+    // case, a fresh open.
+    notifyListeners();
     // Offer to pick up where they left off (Aug 28 2026 — Nizam:
     // "admin kum continue & new chat option kudu").
     //

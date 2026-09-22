@@ -57,8 +57,43 @@ class ChittiWakeWordService {
 
   PorcupineManager? _manager;
   bool _starting = false;
+  // NEW (Sep 22 2026 reaudit — real mic-contention bug). Porcupine's
+  // VoiceProcessor and speech_to_text (which GuruOverlayService's own
+  // panel uses once it's actually open and listening) cannot both hold
+  // the device microphone at once — mobile OSes give exactly one app
+  // audio-input stream. Without this, a customer opening the overlay
+  // via the FAB (or the wake-word's own greeting handing off to it)
+  // while Porcupine kept listening in the background would race two
+  // simultaneous recorders for the same mic, and one of them would
+  // fail. Listens to GuruOverlayService's own isShowing state and
+  // pauses/resumes the ALREADY-CREATED manager around it — cheap
+  // (just stop()/start() on the same instance), unlike the full
+  // create/delete cycle the public start()/stop() below do for the
+  // on/off toggle.
+  bool _pausedForOverlay = false;
 
   bool get isActive => _manager != null;
+
+  void _onOverlayVisibilityChanged() {
+    final showing = GuruOverlayService.instance.isShowing;
+    final manager = _manager;
+    if (manager == null) return;
+    if (showing && !_pausedForOverlay) {
+      _pausedForOverlay = true;
+      unawaited(
+        manager.stop().catchError((Object e) {
+          debugPrint('[ChittiWakeWordService] pause-for-overlay failed: $e');
+        }),
+      );
+    } else if (!showing && _pausedForOverlay) {
+      _pausedForOverlay = false;
+      unawaited(
+        manager.start().catchError((Object e) {
+          debugPrint('[ChittiWakeWordService] resume-after-overlay failed: $e');
+        }),
+      );
+    }
+  }
 
   /// Non-fatal by design, same contract as every other Chitti
   /// background service in this app (ChittiDevWatchService,
@@ -87,7 +122,17 @@ class ChittiWakeWordService {
           debugPrint('[ChittiWakeWordService] runtime error: ${error.message}');
         },
       );
-      await _manager!.start();
+      // FIX (Sep 22 2026 reaudit — real mic-contention bug): if the
+      // overlay already happens to be open (e.g. the toggle was
+      // flipped on mid-conversation), start already paused instead of
+      // grabbing the mic out from under GuruOverlayService's own STT.
+      // _onOverlayVisibilityChanged() takes over from here for every
+      // future open/close.
+      _pausedForOverlay = GuruOverlayService.instance.isShowing;
+      if (!_pausedForOverlay) {
+        await _manager!.start();
+      }
+      GuruOverlayService.instance.addListener(_onOverlayVisibilityChanged);
       debugPrint('[ChittiWakeWordService] Listening for Hey Chitti.');
     } catch (e) {
       // Covers: invalid/expired AccessKey, missing or corrupt .ppn
@@ -105,6 +150,8 @@ class ChittiWakeWordService {
     final manager = _manager;
     _manager = null;
     if (manager == null) return;
+    GuruOverlayService.instance.removeListener(_onOverlayVisibilityChanged);
+    _pausedForOverlay = false;
     try {
       await manager.stop();
       await manager.delete();
