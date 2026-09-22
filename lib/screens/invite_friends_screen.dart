@@ -136,8 +136,8 @@ class _InviteFriendsScreenState extends State<InviteFriendsScreen> {
   /// the person receiving it is being asked to earn, not to order.
   String get _message => widget.mode == InviteMode.hero
       ? 'Naan MyAllin1-la Hero-va work panren — bike taxi, food and parcel '
-          'delivery, Erode-la. 100% delivery income Hero-kku thaan, 0% '
-          'commission. Neengalum join pannunga:\n$_link'
+          'delivery, Erode-la. Small usage fee (3.3%) mattum, mithi delivery '
+          'income Hero-kku thaan. Neengalum join pannunga:\n$_link'
       : 'Hey! I use MyAllin1 for bike taxi, food, parcel and local services '
           'in Erode — try it, it works right in your browser:\n$_link';
 

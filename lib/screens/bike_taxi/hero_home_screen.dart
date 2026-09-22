@@ -3568,7 +3568,13 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     if (mounted) setState(() => _accepting = false);
   }
 
-  // Complete a ride — 0% Commission Promotion: Hero keeps 100% of fare
+  // Complete a ride — separate path from CaptainRideScreen's own
+  // completion flow (hero_ride_screen.dart), see the isAvailable
+  // comment further down for why both exist. Credits the hero's
+  // earnings wallet with the full fare here; the 3.3%/₹2-floor usage
+  // fee (Sep 22 2026) is charged separately, from the SEPARATE prepaid
+  // hero_wallets balance, once payment is actually collected — see
+  // HeroWalletService.flushUsageCost().
   /// Best-effort online-period log for the Earnings & Online Time
   /// monitor. Never throws to the caller — a logging failure must
   /// never affect the offline-toggle flow it's fired from.
@@ -3624,8 +3630,19 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       return;
     }
 
-    final heroEarning = fare; // 100% to hero — zero commission promotion
-    const double adminCommission = 0;
+    // Hero is still credited the FULL fare here — the usage fee is a
+    // separate wallet debit (HeroWalletService.flushUsageCost()), never
+    // a cut taken out of this earnings credit. `adminCommission` below
+    // is purely an admin-reporting estimate of that upcoming debit
+    // (same 3.3%/₹2-floor formula, referenced rather than duplicated so
+    // it can never drift from the real charge) — it does not itself
+    // move any money.
+    final heroEarning = fare;
+    final estimatedCommission = fare <= 0
+        ? 0.0
+        : (fare * HeroWalletService.usageFeeRate > HeroWalletService.usageFeeMinimum
+            ? fare * HeroWalletService.usageFeeRate
+            : HeroWalletService.usageFeeMinimum);
 
     final batch = db.batch()
       ..update(db.collection('rides').doc(_activeRideId), {
@@ -3633,8 +3650,8 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
         'completedAt': FieldValue.serverTimestamp(),
         'paymentStatus': 'pending_collection',
         'heroEarning': heroEarning,
-        'adminCommission': adminCommission,
-        'isZeroCommission': true,
+        'adminCommission': estimatedCommission,
+        'isZeroCommission': false,
         'finalFare': fare,
         'actualFare': actualFare,
         'tipAmount': tipAmount,
@@ -3674,7 +3691,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     await batch.commit();
     debugPrint(
       'Hero complete: fare=$fare, heroEarning=$heroEarning, '
-      'commission=$adminCommission, ride=$_activeRideId',
+      'commission=$estimatedCommission, ride=$_activeRideId',
     );
 
     // Clean up RTDB live location

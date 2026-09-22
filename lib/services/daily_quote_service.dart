@@ -493,8 +493,8 @@ class DailyQuoteService {
   static const List<DailyQuote> _heroQuotes = <DailyQuote>[
     DailyQuote('Every ride today is money in your pocket.',
         'இன்றைய ஒவ்வொரு ரைடும் உன் பையில் பணம்.',),
-    DailyQuote('100% of what you earn stays yours.',
-        'நீ சம்பாதிப்பதில் 100% உனக்கே.',),
+    DailyQuote('Almost everything you earn stays yours.',
+        'நீ சம்பாதிப்பதில் பெரும்பாலானது உனக்கே.',),
     DailyQuote('A polite hello earns the next booking.',
         'ஒரு அன்பான வணக்கம் அடுத்த புக்கிங்கைத் தரும்.',),
     DailyQuote('Helmet on. Your family is waiting.',

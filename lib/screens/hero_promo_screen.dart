@@ -73,8 +73,8 @@ class HeroPromoScreen extends StatelessWidget {
 
             const _BenefitPoint(
               icon: Icons.account_balance_wallet_rounded,
-              title: '100% வருமானமும் உங்களுக்கே!',
-              subtitle: 'உழைப்பவருக்கே முழு வருமானம்.',
+              title: 'உங்க வருமானம் உங்களுக்கே!',
+              subtitle: 'சின்ன usage fee (3.3%) மட்டும், மீதி எல்லாம் உங்களுக்கே.',
             ),
             const _BenefitPoint(
               icon: Icons.local_taxi_rounded,

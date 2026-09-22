@@ -877,10 +877,23 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       final fare = finalFare;
       // Definitive fare for this completed trip
 
-      // Zero-Commission Promotion: Hero keeps 100% of fare
-      const double commission = 0;
+      // Hero is still credited the FULL fare here — the usage fee is a
+      // separate wallet debit (HeroWalletService.flushUsageCost(),
+      // triggered later in _markPaymentReceived once payment is
+      // actually collected), never a cut taken out of this earnings
+      // credit. `adminCommission`/`commission` below are purely an
+      // admin-reporting estimate of that upcoming debit (same
+      // 3.3%/₹2-floor formula, referenced rather than duplicated so it
+      // can never drift from the real charge) — writing them here does
+      // not itself move any money.
       final double netEarnings = fare;
-      const double adminCommission = 0;
+      final double estimatedCommission = fare <= 0
+          ? 0.0
+          : (fare * HeroWalletService.usageFeeRate > HeroWalletService.usageFeeMinimum
+              ? fare * HeroWalletService.usageFeeRate
+              : HeroWalletService.usageFeeMinimum);
+      final double commission = estimatedCommission;
+      final double adminCommission = estimatedCommission;
 
       // FIX (Phase 4a): arrivedAt/startedAt now live only in RTDB's
       // active_rides/{rideDocId} node (see _arriveTrip()/_startTrip()
@@ -922,7 +935,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
         'netEarnings': netEarnings,
         'heroEarning': netEarnings,
         'adminCommission': adminCommission,
-        'isZeroCommission': true,
+        'isZeroCommission': false,
         'actualFare': fareBeforeTip,
         'finalFare': finalFare,
         'tipAmount': tipAmount,
@@ -1136,10 +1149,20 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       final double tipAmount =
           ((rideData['tipAmount'] ?? _tipAmount) as num).toDouble();
       final double fare = rideFare + tipAmount;
-      const double commission = 0;
-      // ZERO Commission for launch
+      // Hero is still credited the FULL fare here — the usage fee is a
+      // separate wallet debit (HeroWalletService.flushUsageCost(),
+      // triggered further down for the 'self' path), never a cut taken
+      // out of this earnings credit. `commission` below is purely an
+      // admin/hero-facing ledger estimate of that debit (same
+      // 3.3%/₹2-floor formula as flushUsageCost() itself, referenced
+      // rather than duplicated so it can never drift from the real
+      // charge).
+      final double commission = fare <= 0
+          ? 0.0
+          : (fare * HeroWalletService.usageFeeRate > HeroWalletService.usageFeeMinimum
+              ? fare * HeroWalletService.usageFeeRate
+              : HeroWalletService.usageFeeMinimum);
       final double netEarnings = fare;
-      // Hero keeps 100% of the fare (only credited for the 'self' path)
 
       await rideRef.update({
         'status': 'paid',
