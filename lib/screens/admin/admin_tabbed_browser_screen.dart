@@ -58,13 +58,33 @@ class BrowserTabItem {
 }
 
 class AdminTabbedBrowserScreen extends StatefulWidget {
-  const AdminTabbedBrowserScreen({super.key});
+  const AdminTabbedBrowserScreen({
+    super.key,
+    this.defaultUrl = 'https://github.com/myallin1/Allin1',
+    this.defaultTitle = 'Allin1 GitHub',
+  });
+
+  // NEW (Sep 22 2026 — embedding this browser directly as the "Claude"
+  // bottom-nav segment, not just behind a tap-to-open tile). The tabs
+  // list is shared/static across EVERY place this screen is used, so a
+  // fresh install landing here first (before ever tapping the Dev tab's
+  // "Claude Desktop" tile) still needs a sensible first tab — Claude,
+  // not the generic GitHub default every other entry point wants.
+  // Purely additive: every existing call site that doesn't pass these
+  // gets the exact same GitHub default as before.
+  final String defaultUrl;
+  final String defaultTitle;
 
   /// The active tabs preserved in memory so existing tabs, scroll
   /// positions, and DOM states survive navigation.
   static final List<BrowserTabItem> _tabs = [];
   static int _activeTabIndex = 0;
   static _AdminTabbedBrowserScreenState? _live;
+
+  /// Whether any tab (restored or opened this session) currently exists
+  /// — lets a caller decide whether to proactively open one rather than
+  /// relying on this screen's own default-on-empty fallback.
+  static bool get hasTabs => _tabs.isNotEmpty;
 
   // NEW (Sep 21 2026 — Nizam: "app close pannitu reopen pannunalum
   // same stage la irukanum"). _tabs above only survives while the app
@@ -383,8 +403,8 @@ class _AdminTabbedBrowserScreenState extends State<AdminTabbedBrowserScreen>
     unawaited(
       AdminTabbedBrowserScreen.openInNewTab(
         context,
-        'https://github.com/myallin1/Allin1',
-        title: 'Allin1 GitHub',
+        widget.defaultUrl,
+        title: widget.defaultTitle,
       ),
     );
   }

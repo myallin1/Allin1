@@ -37,6 +37,7 @@ import 'admin_antigravity_bridge_screen.dart';
 import 'admin_app_versions_screen.dart';
 import 'admin_call_services_screen.dart';
 import 'admin_chitti_lens_screen.dart';
+import 'admin_claude_dev_tabs_screen.dart';
 import 'admin_cloudinary_dashboard_screen.dart';
 import 'admin_cm_presentation_screen.dart';
 import 'admin_dashboard_screen.dart';
@@ -461,6 +462,11 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
             // NEW (Sep 5 2026 — Nizam: in-app browser beside GitHub).
             // AdminWebTabsScreen houses GitHub and Browser side by side.
             if (_visitedTabs.contains(5)) AdminWebTabsScreen(key: const ValueKey('github_tab'), visible: _tabIndex == 5) else const SizedBox.shrink(),
+            // NEW (Sep 22 2026 — Nizam: 7th bottom tab, "Claude" split
+            // into an embedded Claude Code session + development
+            // activity monitor, same segment pattern as the Web tab
+            // above. See admin_claude_dev_tabs_screen.dart's header.
+            if (_visitedTabs.contains(6)) const AdminClaudeDevTabsScreen(key: ValueKey('claude_tab')) else const SizedBox.shrink(),
           ],
         ),
       ),
@@ -1004,6 +1010,14 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
       (icon: '', label: 'AI Studio', isServicesAggregate: false, materialIcon: Icons.auto_awesome_rounded),
       // NEW (Sep 5 2026): Web (GitHub + Browser), one tap from anywhere.
       (icon: '', label: 'Web', isServicesAggregate: false, materialIcon: Icons.language_rounded),
+      // NEW (Sep 22 2026 — Nizam: "claude ku poganum new va claude
+      // create pannu 7th optiona"). Distinct from "AI Studio" above —
+      // that tab is the dual Claude/Gemini/Antigravity chat workspace
+      // (admin_ai_dev_studio_screen.dart); THIS tab is the embedded
+      // Claude Code browser session (same one the Dev tab's "Claude
+      // Desktop" tile opens) split alongside the dev-activity monitor
+      // — see admin_claude_dev_tabs_screen.dart's own header.
+      (icon: '', label: 'Claude', isServicesAggregate: false, materialIcon: Icons.smart_toy_outlined),
     ];
     return DecoratedBox(
       decoration: BoxDecoration(
