@@ -44,6 +44,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../services/admin_shell_nav.dart';
 import 'admin_tabbed_browser_screen.dart';
 import 'chitti_dev_monitor_screen.dart';
 
@@ -173,4 +174,45 @@ class _AdminClaudeDevTabsScreenState extends State<AdminClaudeDevTabsScreen> {
       ),
     );
   }
+}
+
+/// Opens [url] in the shared Claude/dev-tools embedded browser AND
+/// brings the admin to where they can actually see it -- the shell's
+/// Claude bottom tab, on its Claude segment (not Dev Activity).
+///
+/// FIX (Sep 22 2026 reaudit — real wiring collision). Every existing
+/// caller of AdminTabbedBrowserScreen.openInNewTab() (admin_ai_dev_
+/// studio_screen.dart's "Open Web Console", chitti_dev_monitor_screen
+/// .dart's two GitHub-link openers) was written when that screen was
+/// ONLY ever reached by pushing a new route — openInNewTab()'s own
+/// "already live, just refresh" branch was harmless because the live
+/// instance WAS the one on screen. Now that the Claude bottom tab
+/// embeds a PERMANENT instance in the shell's IndexedStack (never
+/// disposed once visited), `_live` points there forever once that tab
+/// has been opened even once — so those same callers, invoked from a
+/// DIFFERENT bottom tab (AI Studio) or from the CO-LOCATED but
+/// currently-hidden Dev Activity segment, would silently refresh an
+/// instance the admin cannot see instead of navigating to it. Mirrors
+/// admin_web_tabs_screen.dart's own openInAdminBrowser()/
+/// openGitHubIssueInAdminTab() free functions for the identical
+/// problem: switch both the outer bottom tab and the inner segment
+/// BEFORE handing off to the tab-management call, so the result is
+/// always the tab the admin is actually looking at.
+Future<void> openInClaudeBrowserTab(
+  BuildContext context,
+  String url, {
+  String? title,
+}) async {
+  AdminClaudeDevTabsScreen._segment = 0;
+  AdminShellNav.openTab(AdminShellNav.claudeTabIndex);
+  await AdminTabbedBrowserScreen.openInNewTab(context, url, title: title);
+}
+
+/// Brings the admin to the Claude segment showing whatever it already
+/// has open, without forcing any particular URL — for entry points
+/// (like the Dev tab's "In-App Browser & Dev Tools" tile) that mean
+/// "show me the browser", not "open this specific page".
+void switchToClaudeBrowserSegment() {
+  AdminClaudeDevTabsScreen._segment = 0;
+  AdminShellNav.openTab(AdminShellNav.claudeTabIndex);
 }

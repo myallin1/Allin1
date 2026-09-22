@@ -19,7 +19,7 @@ import '../../services/chitti/chitti_dev_monitor_service.dart';
 import '../../services/chitti/chitti_dev_task_service.dart';
 import '../../services/cloudinary_upload_service.dart';
 import 'admin_app_error_log_screen.dart';
-import 'admin_tabbed_browser_screen.dart';
+import 'admin_claude_dev_tabs_screen.dart';
 import 'chitti_dev_monitor_screen.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
@@ -346,9 +346,16 @@ class _AdminAiDevStudioScreenState extends State<AdminAiDevStudioScreen> {
     });
   }
 
+  // FIX (Sep 22 2026 reaudit — real wiring collision, see
+  // admin_claude_dev_tabs_screen.dart's openInClaudeBrowserTab() for
+  // the full explanation): this used to call AdminTabbedBrowserScreen.
+  // openInNewTab() directly, which is correct about WHICH tab/url to
+  // show but not about bringing the admin (currently on the AI Studio
+  // tab) to where that browser actually lives now — the dedicated
+  // Claude bottom tab.
   void _openInAppBrowser(String url, {String? title}) {
     unawaited(
-      AdminTabbedBrowserScreen.openInNewTab(
+      openInClaudeBrowserTab(
         context,
         url,
         title: title ?? 'AI Dev Workspace',

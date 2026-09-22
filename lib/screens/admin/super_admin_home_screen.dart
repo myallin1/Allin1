@@ -45,6 +45,7 @@ import 'admin_dialer_screen.dart';
 import 'admin_food_orders_screen.dart';
 import 'admin_gift_coupons_screen.dart';
 import 'admin_home_banner_screen.dart';
+import 'admin_laptop_control_screen.dart';
 import 'admin_map_simulation_screen.dart';
 import 'admin_my_day_screen.dart';
 import 'admin_orders_cleanup_screen.dart';
@@ -54,7 +55,6 @@ import 'admin_qr_generator_screen.dart';
 import 'admin_seller_payouts_screen.dart';
 import 'admin_service_requests_screen.dart';
 import 'admin_sos_kyc_approvals_screen.dart';
-import 'admin_tabbed_browser_screen.dart';
 import 'admin_taxi_rides_screen.dart';
 import 'admin_ux_audit_screen.dart';
 import 'admin_web_tabs_screen.dart';
@@ -777,16 +777,29 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                 ),
                 AdminHomeTile(
                   id: 'in_app_browser',
+                  // FIX (Sep 22 2026 reaudit — real wiring collision).
+                  // This used to Navigator.push() a brand-new
+                  // AdminTabbedBrowserScreen instance directly. That
+                  // screen's `_live` is a single static pointer meant
+                  // for exactly ONE live instance at a time — fine when
+                  // this tile's push-and-pop was the only way to reach
+                  // it, but the dedicated Claude bottom tab (index 6)
+                  // now embeds its OWN instance permanently in the
+                  // shell's IndexedStack (never disposed once visited).
+                  // A raw second push here would steal `_live` away
+                  // from that permanent instance (breaking ITS own
+                  // reactivity — title/loading-spinner updates would
+                  // start targeting the wrong screen), while this
+                  // pushed copy shows the exact same shared _tabs state
+                  // anyway. Routing through the same tab instead of
+                  // pushing a second instance is strictly better: one
+                  // canonical place, no stolen singleton.
                   child: _ManageTile(
                     label: 'In-App Browser & Dev Tools',
                     subtitle: 'Multi-tab developer browser with offline reader',
                     iconSvg: FluentEmojiFlat.globe_with_meridians,
                     color: _purple,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                          builder: (_) => const AdminTabbedBrowserScreen(),),
-                    ),
+                    onTap: switchToClaudeBrowserSegment,
                   ),
                 ),
                 AdminHomeTile(
@@ -814,6 +827,24 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                       context,
                       MaterialPageRoute<void>(
                           builder: (_) => const AdminAntigravityBridgeScreen(),),
+                    ),
+                  ),
+                ),
+                // NEW (Sep 22 2026): laptop presence + remote-sleep, so
+                // Nizam can check if the laptop is on and put it to sleep
+                // from outside without walking back to it. No remote wake
+                // here on purpose - see AdminLaptopControlScreen's header.
+                AdminHomeTile(
+                  id: 'laptop_control',
+                  child: _ManageTile(
+                    label: 'Laptop Control',
+                    subtitle: 'Online/asleep status & remote sleep',
+                    iconSvg: FluentEmojiFlat.laptop,
+                    color: const Color(0xFF4ADE80),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                          builder: (_) => const AdminLaptopControlScreen(),),
                     ),
                   ),
                 ),
@@ -948,12 +979,32 @@ class _SuperAdminHomeScreenState extends State<SuperAdminHomeScreen> {
                   // comment), so this genuinely reopens where it was
                   // left, not a blank tab, even after the app is
                   // fully closed and relaunched.
+                  //
+                  // FIX (Sep 22 2026 reaudit — real wiring collision).
+                  // The dedicated "Claude" bottom tab (index 6, see
+                  // admin_claude_dev_tabs_screen.dart) embeds its OWN
+                  // AdminTabbedBrowserScreen instance directly in the
+                  // shell's IndexedStack, which per this shell's own
+                  // established pattern never disposes once visited —
+                  // so the moment that tab is visited even once,
+                  // AdminTabbedBrowserScreen._live permanently points
+                  // at THAT off-screen instance. This tile's old
+                  // openInNewTab() call would then find `_live` already
+                  // set and just silently refresh that invisible
+                  // instance instead of navigating anywhere — from the
+                  // admin's side, indistinguishable from the tap doing
+                  // nothing. Routing through AdminShellNav (the exact
+                  // mechanism openInAdminBrowser() already uses for the
+                  // same "bring the admin to the tab that owns this
+                  // screen" problem) switches the BOTTOM TAB itself,
+                  // which is the one thing that actually makes the
+                  // already-live Claude session visible again.
                   child: _ManageTile(
                     label: 'Claude Desktop',
                     subtitle: 'Claude Code, embedded — stays open across app restarts',
                     iconSvg: FluentEmojiFlat.desktop_computer,
                     color: _purple,
-                    onTap: () => AdminTabbedBrowserScreen.openInNewTab(
+                    onTap: () => openInClaudeBrowserTab(
                       context,
                       'https://claude.ai/code',
                       title: 'Claude Code',

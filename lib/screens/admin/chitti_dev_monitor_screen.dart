@@ -30,7 +30,7 @@ import '../../services/chitti/chitti_dev_task_service.dart';
 import '../../widgets/admin_apk_download_progress_sheet.dart';
 import 'admin_app_error_log_screen.dart';
 import 'admin_app_versions_screen.dart';
-import 'admin_tabbed_browser_screen.dart';
+import 'admin_claude_dev_tabs_screen.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _card = Color(0xFF141420);
@@ -146,7 +146,14 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
       return;
     }
     if (!context.mounted) return;
-    await AdminTabbedBrowserScreen.openInNewTab(
+    // FIX (Sep 22 2026 reaudit — real wiring collision, see
+    // admin_claude_dev_tabs_screen.dart's openInClaudeBrowserTab() for
+    // the full explanation): this screen is now itself embedded as the
+    // Dev Activity SEGMENT inside the Claude bottom tab, hidden behind
+    // Offstage whenever the Claude segment is the one showing — a
+    // plain openInNewTab() would silently update the co-located but
+    // currently-invisible Claude segment instead of switching to it.
+    await openInClaudeBrowserTab(
       context,
       url,
       title: title,
@@ -201,7 +208,7 @@ class _ChittiDevMonitorScreenState extends State<ChittiDevMonitorScreen> {
             icon: const Icon(Icons.open_in_new_rounded, color: _text),
             tooltip: 'Open in-app browser',
             onPressed: () => unawaited(
-              AdminTabbedBrowserScreen.openInNewTab(
+              openInClaudeBrowserTab(
                 context,
                 'https://github.com/myallin1/Allin1/pulls',
                 title: 'GitHub PRs',

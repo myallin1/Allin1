@@ -31,6 +31,10 @@ class AdminShellNav {
   /// Index of the GitHub/Browser tab in the admin shell's IndexedStack.
   static const int webTabIndex = 5;
 
+  /// Index of the Claude/Dev-Activity tab in the admin shell's
+  /// IndexedStack (Sep 22 2026).
+  static const int claudeTabIndex = 6;
+
   static void Function(int index)? _switcher;
 
   /// Called by the shell's State in initState, and cleared in dispose so
