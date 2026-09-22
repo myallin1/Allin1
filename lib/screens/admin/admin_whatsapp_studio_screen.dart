@@ -13,7 +13,7 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import '../../services/whatsapp/mobile_market_intelligence_service.dart';
 import '../../services/whatsapp/whatsapp_broadcast_service.dart';
-import 'admin_tabbed_browser_screen.dart';
+import 'admin_claude_dev_tabs_screen.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _card = Color(0xFF141420);
@@ -410,7 +410,15 @@ class _AdminWhatsAppStudioScreenState extends State<AdminWhatsAppStudioScreen>
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
-                onPressed: () => unawaited(AdminTabbedBrowserScreen.openInNewTab(
+                // FIX (Sep 22 2026 reaudit — real wiring collision, see
+                // admin_claude_dev_tabs_screen.dart's
+                // openInClaudeBrowserTab() for the full explanation):
+                // this used to call AdminTabbedBrowserScreen.
+                // openInNewTab() directly from the WhatsApp Studio tab,
+                // which would silently refresh the Claude bottom tab's
+                // permanent, currently-invisible instance instead of
+                // bringing the admin to see it.
+                onPressed: () => unawaited(openInClaudeBrowserTab(
                   context,
                   'https://web.whatsapp.com',
                   title: 'WhatsApp Web',
