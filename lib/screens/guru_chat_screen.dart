@@ -50,6 +50,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config/app_variant.dart';
 // GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
 import '../services/ai_activation_service.dart';
+import '../services/app_error_log_service.dart';
 import '../services/chitti/chitti_action_executor.dart';
 import '../services/chitti/chitti_backup_service.dart';
 import '../services/chitti/chitti_buddy.dart';
@@ -80,6 +81,7 @@ import '../services/theme_context_extensions.dart';
 import '../services/voice_booking_intent_service.dart';
 import '../services/web_version_checker.dart';
 import '../widgets/ai_loading_dialog.dart';
+import '../widgets/chitti_error_log_sheet.dart';
 import '../widgets/chitti_history_sheet.dart';
 import '../widgets/chitti_model_picker_sheet.dart';
 import '../widgets/chitti_typewriter_text.dart';
@@ -1044,6 +1046,20 @@ class _GuruChatScreenState extends State<GuruChatScreen>
   }
 
   /// Opens the past-chats sheet and, if one is picked, makes it live.
+  Future<void> _openChittiErrorLog(BuildContext context) async {
+    final report = await showChittiErrorLogSheet(context);
+    if (!mounted || report == null || report.isEmpty) return;
+    // Prefills the message box only — the admin still has to hit Send,
+    // which is what routes it through Chitti's own create_dev_task tool
+    // (with its own confirmation gate), same as any other typed report.
+    setState(() {
+      _inputController.text = report;
+      _inputController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _inputController.text.length),
+      );
+    });
+  }
+
   Future<void> _openHistory() async {
     final picked = await showChittiHistorySheet(context);
     if (!mounted || picked == null || picked.isEmpty) return;
@@ -1139,6 +1155,21 @@ class _GuruChatScreenState extends State<GuruChatScreen>
         },
         onError: (error) {
           debugPrint('[GuruChatScreen] speech error: $error');
+          // NEW (Sep 22 2026 — Nizam's Chitti error-log request): every
+          // "couldn't understand what you said" moment logged as its
+          // own category, distinct from Chitti's own logic/API errors
+          // (see AppErrorLogService.inferCategory's chitti_behavior
+          // branch) — this is the "communication" side of the split he
+          // asked for. Fire-and-forget; a logging failure must never
+          // affect the voice loop it's observing.
+          unawaited(
+            AppErrorLogService.logError(
+              message: 'Speech recognition: ${error.errorMsg}',
+              severity: 'WARNING',
+              category: 'chitti_communication',
+              screen: 'guru_chat_screen',
+            ),
+          );
           final msg = error.errorMsg.toLowerCase();
           final isRecoverable = msg.contains('no_match') ||
               msg.contains('timeout') ||
@@ -2018,6 +2049,19 @@ class _GuruChatScreenState extends State<GuruChatScreen>
               _autoSpeak ? Icons.volume_up_rounded : Icons.volume_off_rounded,
               color: muted,
             ),
+          ),
+          // NEW (Sep 22 2026 — Nizam: "chitti chat box la oru error log
+          // vaikalm ithu chitti namma soldratha purinjukavum and chitti
+          // soldrathula iruka namma pesuratha purinjukavum besta
+          // irukum"). Shows what Chitti recently misheard
+          // (chitti_communication) alongside its own logic/API errors
+          // (chitti_behavior) — see AppErrorLogService.inferCategory's
+          // new branch and the STT onError hook above for where these
+          // get recorded.
+          IconButton(
+            onPressed: () => _openChittiErrorLog(context),
+            tooltip: 'Chitti error log',
+            icon: Icon(Icons.bug_report_outlined, color: muted),
           ),
           // Sits next to New chat on purpose: New chat is what files a
           // conversation away, so this is where someone looks for it.

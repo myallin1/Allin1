@@ -111,7 +111,79 @@ class AppErrorLogService {
   static final Map<String, DateTime> _lastRemoteSyncedAt = {};
   static const Duration remoteSyncThrottle = Duration(minutes: 15);
 
+  // Tester allowlist gate: only errors from an opted-in tester's email are
+  // synced to the shared `app_error_reports` collection, so the admin cloud
+  // monitor stays limited to test devices instead of filling up with every
+  // production customer's crashes. Cached for `_testerAllowlistTtl` so this
+  // never turns into a read on every logged error — same throttle pattern as
+  // `remoteSyncThrottle` above.
+  static Set<String>? _testerEmailsCache;
+  static DateTime? _testerEmailsFetchedAt;
+  static const Duration _testerAllowlistTtl = Duration(minutes: 15);
+  static const String testerConfigDocPath = 'app_config/testers';
+
   static String? _cachedVersion;
+
+  /// Fetches (and caches) the tester email allowlist from
+  /// `app_config/testers` (field `emails`, lower-cased on read/write).
+  static Future<Set<String>> _getTesterEmails() async {
+    final now = DateTime.now();
+    if (_testerEmailsCache != null &&
+        _testerEmailsFetchedAt != null &&
+        now.difference(_testerEmailsFetchedAt!) < _testerAllowlistTtl) {
+      return _testerEmailsCache!;
+    }
+    try {
+      final doc = await FirebaseFirestore.instance
+          .doc(testerConfigDocPath)
+          .get();
+      final raw = (doc.data()?['emails'] as List<dynamic>?) ?? const [];
+      final emails = raw
+          .map((e) => e.toString().trim().toLowerCase())
+          .where((e) => e.isNotEmpty)
+          .toSet();
+      _testerEmailsCache = emails;
+      _testerEmailsFetchedAt = now;
+      return emails;
+    } catch (e) {
+      debugPrint('[AppErrorLogService] tester allowlist fetch failed: $e');
+      // Keep serving the last known-good cache rather than treating a
+      // transient read failure as "no testers configured".
+      return _testerEmailsCache ?? <String>{};
+    }
+  }
+
+  /// Adds an email to the tester allowlist (one on-demand write).
+  static Future<void> addTesterEmail(String email) async {
+    final clean = email.trim().toLowerCase();
+    if (clean.isEmpty) return;
+    await FirebaseFirestore.instance.doc(testerConfigDocPath).set(
+      {
+        'emails': FieldValue.arrayUnion([clean]),
+      },
+      SetOptions(merge: true),
+    );
+    _testerEmailsCache = null; // force a fresh read next time
+  }
+
+  /// Removes an email from the tester allowlist (one on-demand write).
+  static Future<void> removeTesterEmail(String email) async {
+    final clean = email.trim().toLowerCase();
+    await FirebaseFirestore.instance.doc(testerConfigDocPath).set(
+      {
+        'emails': FieldValue.arrayRemove([clean]),
+      },
+      SetOptions(merge: true),
+    );
+    _testerEmailsCache = null;
+  }
+
+  /// Returns the current tester allowlist, bypassing the cache (admin UI
+  /// "manage testers" screen calls this on open, not on every rebuild).
+  static Future<Set<String>> getTesterEmails() async {
+    _testerEmailsFetchedAt = null;
+    return _getTesterEmails();
+  }
 
   static String _resolvePlatform() {
     if (kIsWeb) return 'web';
@@ -128,6 +200,23 @@ class AppErrorLogService {
     String severity = 'ERROR',
   }) {
     final combined = '${message.toLowerCase()} ${(stack ?? '').toLowerCase()}';
+    // NEW (Sep 22 2026 — Nizam's Chitti error-log request): an
+    // uncaught throw from anywhere in Chitti's own send/tool-call path
+    // already reaches this method via the global FlutterError.onError/
+    // PlatformDispatcher.onError handlers (see main_admin.dart etc.) —
+    // no new call sites needed, just teach the EXISTING classifier to
+    // recognise Chitti's own code by stack frame, same as the
+    // network/location/payment checks below already do for theirs.
+    // 'chitti_behavior' (not just 'crash') is what lets the new
+    // in-chat error-log viewer filter to Chitti-specific issues.
+    if (combined.contains('guruapiservice') ||
+        combined.contains('guru_api_service') ||
+        combined.contains('chitti_action_executor') ||
+        combined.contains('chitti_local_intent_engine') ||
+        combined.contains('guru_chat_screen') ||
+        combined.contains('guru_overlay_service')) {
+      return 'chitti_behavior';
+    }
     if (combined.contains('socketexception') ||
         combined.contains('timeoutexception') ||
         combined.contains('connection refused') ||
@@ -241,6 +330,11 @@ class AppErrorLogService {
       unawaited(
         Future<void>(() async {
           try {
+            final email = entry.authEmail?.trim().toLowerCase();
+            if (email == null || email.isEmpty) return;
+            final allowlist = await _getTesterEmails();
+            if (!allowlist.contains(email)) return;
+
             final col =
                 FirebaseFirestore.instance.collection('app_error_reports');
             await col.doc(entry.id).set({

@@ -344,6 +344,17 @@ void main() {
         AppErrorLogService.inferCategory(message: 'Unhandled Exception: Null check operator used on null value'),
         'crash',
       );
+      // NEW (Sep 22 2026 — Chitti error-log split): an uncaught error
+      // whose stack trace names Chitti's own code should be tagged
+      // 'chitti_behavior', not fall through to the generic 'crash'
+      // bucket, so the in-chat error-log viewer can find it.
+      expect(
+        AppErrorLogService.inferCategory(
+          message: 'FormatException: Unexpected character',
+          stack: '#0 GuruApiService.sendMessage (guru_api_service.dart:300)',
+        ),
+        'chitti_behavior',
+      );
     });
 
     test('logError records custom appVariant and category into local store', () async {
