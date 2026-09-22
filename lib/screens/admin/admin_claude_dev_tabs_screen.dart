@@ -69,9 +69,24 @@ class AdminClaudeDevTabsScreen extends StatefulWidget {
 class _AdminClaudeDevTabsScreenState extends State<AdminClaudeDevTabsScreen> {
   int get _segment => AdminClaudeDevTabsScreen._segment;
 
+  // FIX (Sep 22 2026 reaudit — grep-based). ChittiDevMonitorScreen's
+  // initState() fires two GitHub API calls immediately (fetch() +
+  // fetchLatestTestBuild()) — unconditionally building it below meant
+  // every visit to the Claude tab cost those two calls even if the
+  // admin only wanted Claude and never tapped "Dev Activity" at all.
+  // Same class of "eager IndexedStack mount = unwanted reads" bug this
+  // codebase has hunted down before (see _SuperAdminHomeScreenState's
+  // own _visitedTabs comment) and exactly the lazy-build discipline
+  // AdminWebTabsScreen already applies to its own Browser segment
+  // (_browserEverShown) — mirrored here instead of reinvented.
+  bool _devMonitorEverShown = false;
+
   void _select(int index) {
     if (_segment == index) return;
-    setState(() => AdminClaudeDevTabsScreen._segment = index);
+    setState(() {
+      AdminClaudeDevTabsScreen._segment = index;
+      if (index == 1) _devMonitorEverShown = true;
+    });
   }
 
   @override
@@ -94,12 +109,13 @@ class _AdminClaudeDevTabsScreenState extends State<AdminClaudeDevTabsScreen> {
                       defaultTitle: 'Claude Code',
                     ),
                   ),
-                  Offstage(
-                    offstage: _segment != 1,
-                    child: const ChittiDevMonitorScreen(
-                      key: ValueKey('claude_dev_monitor_tab'),
+                  if (_devMonitorEverShown)
+                    Offstage(
+                      offstage: _segment != 1,
+                      child: const ChittiDevMonitorScreen(
+                        key: ValueKey('claude_dev_monitor_tab'),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
