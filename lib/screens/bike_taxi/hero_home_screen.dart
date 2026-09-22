@@ -1460,26 +1460,26 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           // gets reset on every mid-session flush above.
           final trueSessionStart =
               HeroUsageAccumulatorService().trueSessionStartedAt;
-          final activeMinutes =
-              HeroUsageAccumulatorService().consumeBillableMinutes();
-          final ridesHandled =
-              HeroUsageAccumulatorService().consumeRidesHandled();
-          // FIX (Dynamic Micro-Billing, Aug 11 2026): safety-net flush —
-          // ride/task completions normally flush immediately at their
-          // own payment point, so this is usually 0, but if a hero goes
-          // Offline with any un-flushed activity still pending, its
-          // distance (if any) must come along too so it bills
-          // dynamically instead of silently falling back to flat.
-          final rideDistancesKm =
-              HeroUsageAccumulatorService().consumeRideDistances();
+          HeroUsageAccumulatorService().consumeBillableMinutes();
+          HeroUsageAccumulatorService().consumeRidesHandled();
+          // FIX (Sep 22 2026 — usage-fee model change): safety-net
+          // flush — ride/task completions normally flush immediately at
+          // their own payment point (see hero_ride_screen.dart /
+          // service_request_service.dart), so this is usually empty,
+          // but if a hero goes Offline with any un-flushed order still
+          // pending, its amount (accumulated at the moment that order
+          // actually completed — see HeroUsageAccumulatorService.
+          // recordRideHandled(orderAmount: ...)) must come along here so
+          // it still bills 3.3%/₹2-floor correctly instead of silently
+          // billing ₹0.
+          final orderAmounts =
+              HeroUsageAccumulatorService().consumeOrderAmounts();
           HeroUsageAccumulatorService().endSession();
           unawaited(
             HeroWalletService()
                 .flushUsageCost(
                   heroId: _user!.uid,
-                  activeMinutes: activeMinutes,
-                  ridesHandled: ridesHandled,
-                  rideDistancesKm: rideDistancesKm,
+                  orderAmounts: orderAmounts,
                   heroName: _captainName,
                 )
                 .catchError((Object e) {

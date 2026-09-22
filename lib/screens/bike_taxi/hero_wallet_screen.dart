@@ -233,10 +233,10 @@ class _HeroWalletScreenState extends State<HeroWalletScreen> {
   //
   // A hero staring at "− ₹47" has only half the picture, and it is the
   // discouraging half. The number that matters is the RATIO: what they
-  // earned through the app against what the app cost them. On this
-  // codebase's own published position — 0% commission, 100% of delivery
-  // income to the hero — that ratio is overwhelming, and showing it is
-  // simply showing the truth.
+  // earned through the app against what the app cost them. Even under
+  // the 3.3%-of-order usage fee (Sep 22 2026), that ratio is still
+  // overwhelmingly in the hero's favor — they keep 96.7%+ of every
+  // order — and showing it is simply showing the truth.
   //
   // Read cost: ONE aggregate count-style read of this hero's own
   // earnings rows, and only while this screen is open. Deliberately not
@@ -319,9 +319,8 @@ class _HeroWalletScreenState extends State<HeroWalletScreen> {
               ],
               const SizedBox(height: 8),
               Text(
-                'We take 0% commission on your rides — every rupee a '
-                'customer pays you is yours. This small usage fee is only '
-                'for running the app.',
+                'A small usage fee (3.3% of each order, minimum ₹2) helps '
+                'keep the app running — you still keep the rest.',
                 style: GoogleFonts.outfit(
                     fontSize: 11.5, height: 1.4, color: Colors.black54,),
               ),

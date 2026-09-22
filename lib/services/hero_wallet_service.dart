@@ -1,31 +1,36 @@
 // ================================================================
-// HeroWalletService — App Infra Cost Recovery Wallet (Allin1 Super App)
+// HeroWalletService — Usage Fee Wallet (Allin1 Super App)
 // ================================================================
-// REPLACED per Nizam's explicit instruction: this is NOT a percentage
-// commission on hero earnings anymore. We provide a free earning
-// portal and charge only a minimal, usage-proportional fee for
-// server/database maintenance -- computed from a hero's own real
-// activity (minutes spent Online, rides handled), never a cut of what
-// they earn. Heroes recharge a prepaid balance (auto-credited
-// immediately on submission, verified by admin afterward -- "Auto-
-// Credit + Post-Verify / Claw-back"), and infra usage fees are debited
-// from that same balance. A hero whose balance drops below
-// [HeroWalletModel.lowBalanceThreshold] stops receiving new trip
-// requests until they recharge again.
+// REPLACED AGAIN (Sep 22 2026, per Nizam's explicit instruction) — this
+// file previously recorded an Aug 11 2026 decision that this was NOT a
+// percentage commission, deliberately computed from a hero's own real
+// activity (minutes Online, rides handled) instead of a cut of their
+// earnings. Nizam has now explicitly reversed that: the fee is 3.3% of
+// each order/ride's amount, with a ₹2 floor per order (see
+// [usageFeeRate]/[usageFeeMinimum] on flushUsageCost() below) — a real
+// commission on hero earnings, chosen because a flat/activity-based fee
+// put a hard ceiling on revenue from large orders regardless of their
+// value, which works against the business scaling.
+//
+// Heroes recharge a prepaid balance (auto-credited immediately on
+// submission, verified by admin afterward -- "Auto-Credit + Post-Verify
+// / Claw-back"), and usage fees are debited from that same balance. A
+// hero whose balance drops below [HeroWalletModel.lowBalanceThreshold]
+// stops receiving new trip requests until they recharge again.
 //
 // "Zero Usage = Zero Cost" is structural, not a special case: if a hero
-// never opens the app / never goes Online, HeroUsageAccumulatorService
-// never starts a session, flushUsageCost() is simply never called, and
-// no infra_usage_fee entries are ever written for that hero. There is
-// no recurring daily fee anywhere in this design.
+// never completes an order, flushUsageCost() is simply never called
+// with anything to bill, and no infra_usage_fee entries are ever
+// written for that hero. There is no recurring daily fee anywhere in
+// this design.
 //
 // "Batched Background Deductions" (cost optimization, per Nizam):
 // this method is intentionally NOT called every minute. It is called
-// exactly twice per ride lifecycle at most -- once when a ride
-// completes, once when the hero goes Offline -- with the accumulated
-// minutes/rides handed in by the caller (see
-// HeroUsageAccumulatorService.consumeActiveMinutes() /
-// consumeRidesHandled()). This keeps OUR OWN Firestore write costs
+// exactly twice per ride lifecycle at most -- once when a ride/order
+// completes, once when the hero goes Offline -- with the completed
+// orders' amounts accumulated by the caller (see
+// HeroUsageAccumulatorService.recordRideHandled(orderAmount: ...) /
+// consumeOrderAmounts()). This keeps OUR OWN Firestore write costs
 // bounded by hero activity, not by wall-clock time.
 //
 // STRICT constraint (explicit, from Nizam): NO Cloud Functions — Spark
@@ -214,32 +219,22 @@ class HeroWalletService {
   // Small rides land around ₹2, long rides around ₹5, and no two rides
   // bill the same amount unless they were genuinely identical.
   //
-  // IMPORTANT: ratePerActiveMinute is now applied to BILLABLE minutes
-  // (time spent on an accepted job), not online minutes. A hero waiting
-  // for work is billed nothing — see HeroUsageAccumulatorService's
-  // startBillableWork/stopBillableWork.
-  static const double ratePerActiveMinute = 0.02; // ₹ per minute ON A JOB
-  // FIX (Dynamic Micro-Billing, Aug 11 2026, per Nizam — "switch to a
-  // dynamic, fractional model based on the service scope"): this flat
-  // rate now applies ONLY to completed activity with no distance
-  // concept — service_requests (Hero Booking, Custom Order, Custom
-  // Food Order, Grocery Order). Actual rides bill via
-  // [ratePerRideBase]/[ratePerKm]/[maxFeePerRide] below instead — see
-  // the per-ride loop in flushUsageCost(). Kept as the fallback for any
-  // ride whose distance wasn't passed in, so nothing silently bills
-  // ₹0.
-  // Distance-less tasks (Hero Booking, Custom/Grocery/Food orders).
-  // Lowered from a flat ₹2 so it is not the single most expensive line
-  // on a hero's bill; the billable-minutes term now carries the "how
-  // much work was this" signal instead, which is what makes these vary.
-  static const double ratePerRideHandled = 1.20; // ₹ per completed task
-  static const double ratePerRideBase = 0.90; // ₹ base fee per actual ride
-  static const double ratePerKm = 0.22; // ₹ per km travelled
-  // Raised from ₹3.00: the old cap sat BELOW the ₹5 long-ride target, so
-  // every long ride would have flattened to exactly ₹3.00 — producing
-  // precisely the "flat rate" outcome that was asked to be avoided. The
-  // cap now only catches genuine outliers (a 40km+ trip).
-  static const double maxFeePerRide = 6.50;
+  // REPLACED (Sep 22 2026, per Nizam's explicit instruction — reversing
+  // the Aug 11 2026 "NOT a percentage commission" decision recorded
+  // above). The old activity-based model (minutes online + per-ride
+  // distance, capped at ₹6.50/ride) put a hard ceiling on revenue from
+  // large orders regardless of their value — a ₹1000 courier job billed
+  // the same ₹6.50 as a middling ride. Nizam's growth goal ("namma than
+  // king ah irukanum") needs revenue that scales WITH the business, not
+  // a fee that's capped independent of it. New model: 3.3% of the
+  // order/ride amount, with a ₹2 floor so even a tiny order still
+  // covers real infra cost.
+  //   ₹40 order  -> max(1.32, 2.00)  = ₹2.00 (floor applies)
+  //   ₹100 order -> max(3.30, 2.00)  = ₹3.30
+  //   ₹250 order -> max(8.25, 2.00)  = ₹8.25
+  //   ₹1000 order -> max(33.00, 2.00) = ₹33.00 (no cap — see above)
+  static const double usageFeeRate = 0.033; // 3.3% of the order amount
+  static const double usageFeeMinimum = 2; // ₹ floor per order
 
   // ================================================================
   // TOP-UP REMINDER FAN-OUT (Aug 17 2026)
@@ -283,9 +278,9 @@ class HeroWalletService {
         'userId': heroId,
         'title': 'Wallet top-up reminder',
         'message':
-            'Your app usage so far is ₹${owed.toStringAsFixed(2)}. '
+            'Your app usage fee so far is ₹${owed.toStringAsFixed(2)}. '
                 'You can keep working as usual — please top up your wallet '
-                'when convenient. We take 0% commission on your rides.',
+                'when convenient.',
         'type': 'wallet_topup',
         'amountOwed': owed,
         'read': false,
@@ -297,18 +292,19 @@ class HeroWalletService {
     return targets.length;
   }
 
-  /// Called by the Hero App at two batched points ONLY -- a ride
-  /// completing, or the hero going Offline (see
-  /// hero_ride_screen.dart / hero_home_screen.dart) -- with the minutes/
-  /// rides accumulated in memory since the last flush (see
-  /// HeroUsageAccumulatorService). This is intentionally NOT called
-  /// every minute in real time, per Nizam's explicit cost-optimization
-  /// instruction: batching keeps OUR OWN Firestore write costs bounded
-  /// by hero activity rather than by elapsed wall-clock time.
+  /// Called by the Hero App at two batched points ONLY -- a ride/order
+  /// completing, or the hero going Offline (see hero_ride_screen.dart /
+  /// hero_home_screen.dart / service_request_service.dart) -- with the
+  /// completed orders' amounts accumulated in memory since the last
+  /// flush (see HeroUsageAccumulatorService.consumeOrderAmounts()).
+  /// This is intentionally NOT called every minute in real time, per
+  /// Nizam's explicit cost-optimization instruction: batching keeps OUR
+  /// OWN Firestore write costs bounded by hero activity rather than by
+  /// elapsed wall-clock time.
   ///
-  /// "Zero Usage = Zero Cost": if both [activeMinutes] and
-  /// [ridesHandled] are (approximately) zero, this returns immediately
-  /// without writing anything at all -- no entry, no wallet touch.
+  /// "Zero Usage = Zero Cost": if [orderAmounts] is empty, this returns
+  /// immediately without writing anything at all -- no entry, no wallet
+  /// touch.
   ///
   /// This is intentionally SEPARATE from `heroes/{uid}.walletBalance` /
   /// `wallet_transactions` (the hero's own collected-cash earnings
@@ -320,18 +316,12 @@ class HeroWalletService {
   /// this in try/catch and just log on failure.
   Future<void> flushUsageCost({
     required String heroId,
-    required double activeMinutes,
-    required int ridesHandled,
-    // FIX (Dynamic Micro-Billing, Aug 11 2026): distance (km) of each
-    // ACTUAL ride included in [ridesHandled] since the last flush —
-    // see HeroUsageAccumulatorService.consumeRideDistances(). Every
-    // entry here bills at base+per-km (capped), instead of the flat
-    // rate. `ridesHandled - rideDistancesKm.length` is the remaining
-    // count with no distance (service_requests), which still bills at
-    // the unchanged flat ratePerRideHandled. Purely additive — omit it
-    // (default empty) and every ride in [ridesHandled] bills flat,
-    // exactly as before this change.
-    List<double> rideDistancesKm = const [],
+    // One entry per completed order/ride since the last flush (see
+    // HeroUsageAccumulatorService.recordRideHandled(orderAmount: ...)).
+    // Each order bills independently at max(amount * usageFeeRate,
+    // usageFeeMinimum) so a mix of a ₹40 order and a ₹500 order in the
+    // same flush charges correctly for each, not an average of both.
+    required List<double> orderAmounts,
     // FIX (Aug 11 2026 — Admin usage-fee ledger, Phase 2): optional,
     // denormalized onto the written transaction so the admin ledger
     // screen can render a hero name per row without an extra read per
@@ -340,27 +330,13 @@ class HeroWalletService {
     // pass this keeps working exactly as before.
     String? heroName,
   }) async {
-    if (activeMinutes <= 0 && ridesHandled <= 0) return;
+    if (orderAmounts.isEmpty) return;
 
-    // Distance-based component: base fee + per-km, capped per ride —
-    // e.g. a 5km ride bills ₹0.90 + (5 × ₹0.22) = ₹2.00 before the
-    // billable-minutes term is added on top. The cap only bites on a
-    // genuine outlier (~25km+), so ordinary long rides still land on a
-    // computed paise amount rather than flattening to the cap.
-    var rideComponent = 0.0;
-    for (final km in rideDistancesKm) {
-      final perRide = ratePerRideBase + (km * ratePerKm);
-      rideComponent += perRide > maxFeePerRide ? maxFeePerRide : perRide;
+    var rawCost = 0.0;
+    for (final amount in orderAmounts) {
+      final perOrder = amount * usageFeeRate;
+      rawCost += perOrder > usageFeeMinimum ? perOrder : usageFeeMinimum;
     }
-    // Whatever's left in ridesHandled after the distance-billed rides
-    // are accounted for is flat-rate activity (service_requests, or a
-    // ride whose distance genuinely wasn't available).
-    final flatCount = ridesHandled - rideDistancesKm.length;
-    final flatComponent =
-        (flatCount > 0 ? flatCount : 0) * ratePerRideHandled;
-
-    final rawCost =
-        (activeMinutes * ratePerActiveMinute) + rideComponent + flatComponent;
     // Round to paise -- avoids writing values like 0.0500000001 forever.
     final usageCost = (rawCost * 100).roundToDouble() / 100;
     if (usageCost <= 0) return;
@@ -393,9 +369,10 @@ class HeroWalletService {
         {
           'balance': newBalance,
           // Field name kept as lifetimeCommissionPaid for storage
-          // continuity with the (now-obsolete) commission model this
-          // replaced -- semantically it's lifetime infra usage fees
-          // paid. Renaming would just be churn for a single number.
+          // continuity -- it is now, literally, lifetime commission
+          // paid again (3.3% of order value), so the name that once
+          // needed a "kept for continuity" excuse now just describes
+          // the field correctly.
           'lifetimeCommissionPaid': currentPaid + usageCost,
           'lowBalanceThreshold': threshold,
           'isEligibleForRequests': newBalance >= threshold,
@@ -412,8 +389,7 @@ class HeroWalletService {
           type: HeroWalletTxnType.infraUsageFee,
           amount: -usageCost,
           balanceAfter: newBalance,
-          activeMinutes: activeMinutes,
-          ridesHandled: ridesHandled,
+          ridesHandled: orderAmounts.length,
           heroName: heroName,
         ).toFirestore(),
       );

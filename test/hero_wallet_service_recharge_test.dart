@@ -130,12 +130,40 @@ void main() {
     );
     await service.flushUsageCost(
       heroId: heroId,
-      activeMinutes: 30,
-      ridesHandled: 1,
+      orderAmounts: [100],
     );
 
     final wallet =
         await firestore.collection('hero_wallets').doc(heroId).get();
     expect(wallet.data()!['balance'], lessThan(100));
+  });
+
+  // NEW (Sep 22 2026 — usage-fee model change: 3.3% of order amount,
+  // ₹2 floor per order, replacing the old activity-based calculation).
+  test('flushUsageCost bills 3.3% of order amount with a ₹2 floor',
+      () async {
+    final firestore = FakeFirebaseFirestore();
+    final service = HeroWalletService.test(firestore);
+
+    // ₹40 order: 3.3% = ₹1.32, below the ₹2 floor -> floor applies.
+    await service.flushUsageCost(heroId: heroId, orderAmounts: [40]);
+    var wallet = await firestore.collection('hero_wallets').doc(heroId).get();
+    expect(wallet.data()!['balance'], -2.0);
+
+    // ₹1000 order: 3.3% = ₹33, well above the floor -> percentage applies.
+    await service.flushUsageCost(heroId: heroId, orderAmounts: [1000]);
+    wallet = await firestore.collection('hero_wallets').doc(heroId).get();
+    expect(wallet.data()!['balance'], -35.0);
+  });
+
+  test('flushUsageCost with an empty order list writes nothing', () async {
+    final firestore = FakeFirebaseFirestore();
+    final service = HeroWalletService.test(firestore);
+
+    await service.flushUsageCost(heroId: heroId, orderAmounts: const []);
+
+    final wallet =
+        await firestore.collection('hero_wallets').doc(heroId).get();
+    expect(wallet.exists, isFalse);
   });
 }

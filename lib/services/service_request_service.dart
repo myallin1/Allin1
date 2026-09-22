@@ -1355,20 +1355,26 @@ class ServiceRequestService {
       if (heroId != null && heroId.isNotEmpty) {
         final heroName = (data?['assignedHeroName'] as String?) ??
             (data?['acceptedHeroName'] as String?);
-        HeroUsageAccumulatorService().recordRideHandled();
-        // Close the billable-work clock before consuming it — the task
-        // is finished, so the meter must stop here and not keep running
-        // into the hero's idle waiting time (Aug 17 2026 billing fix).
+        // FIX (Sep 22 2026 — usage-fee model change): same
+        // "what the customer actually handed over" resolution the
+        // transaction above used for `collected` — that variable is
+        // scoped to that transaction's closure, not visible here, so
+        // it's recomputed from this method's own freshly-read `data`.
+        final orderAmount = (data?['finalAmount'] as num?)?.toDouble() ??
+            (data?['estimatedAmount'] as num?)?.toDouble() ??
+            0.0;
+        HeroUsageAccumulatorService().recordRideHandled(orderAmount: orderAmount);
+        // Close the billable-work clock (still tracked for the hero's
+        // own "online time" stat, no longer read by billing).
         HeroUsageAccumulatorService().stopBillableWork();
-        final activeMinutes =
-            HeroUsageAccumulatorService().consumeBillableMinutes();
-        final ridesHandled =
-            HeroUsageAccumulatorService().consumeRidesHandled();
+        HeroUsageAccumulatorService().consumeBillableMinutes();
+        HeroUsageAccumulatorService().consumeRidesHandled();
+        final orderAmounts =
+            HeroUsageAccumulatorService().consumeOrderAmounts();
         await HeroWalletService().flushUsageCost(
           heroId: heroId,
           heroName: heroName,
-          activeMinutes: activeMinutes,
-          ridesHandled: ridesHandled,
+          orderAmounts: orderAmounts,
         );
       } else {
         debugPrint(

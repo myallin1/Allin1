@@ -1258,22 +1258,26 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
               _actualDistanceKm,
           (rideData['routeDistanceKm'] as num?)?.toDouble() ?? 0.0,
         );
-        HeroUsageAccumulatorService().recordRideHandled(distanceKm: billedDistanceKm);
-        // Ride is over — stop the billable meter before consuming it so
-        // it cannot keep running into the hero's idle time.
+        // FIX (Sep 22 2026 — usage-fee model change): orderAmount is
+        // what flushUsageCost() now bills 3.3% (min ₹2) of — `fare`
+        // above already includes the tip, same total the customer
+        // actually paid.
+        HeroUsageAccumulatorService().recordRideHandled(
+          distanceKm: billedDistanceKm,
+          orderAmount: fare,
+        );
+        // Ride is over — stop the billable meter (still tracked for the
+        // hero's own "online time" stat, no longer read by billing).
         HeroUsageAccumulatorService().stopBillableWork();
-        final activeMinutes =
-            HeroUsageAccumulatorService().consumeBillableMinutes();
-        final ridesHandled =
-            HeroUsageAccumulatorService().consumeRidesHandled();
-        final rideDistancesKm =
-            HeroUsageAccumulatorService().consumeRideDistances();
+        HeroUsageAccumulatorService().consumeBillableMinutes();
+        HeroUsageAccumulatorService().consumeRideDistances();
+        HeroUsageAccumulatorService().consumeRidesHandled();
+        final orderAmounts =
+            HeroUsageAccumulatorService().consumeOrderAmounts();
         await HeroWalletService().flushUsageCost(
           heroId: user.uid,
           heroName: widget.ride.heroName,
-          activeMinutes: activeMinutes,
-          ridesHandled: ridesHandled,
-          rideDistancesKm: rideDistancesKm,
+          orderAmounts: orderAmounts,
         );
         final walletSnap = await FirebaseFirestore.instance
             .collection('hero_wallets')

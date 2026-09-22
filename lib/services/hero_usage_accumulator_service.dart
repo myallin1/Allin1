@@ -52,6 +52,17 @@ class HeroUsageAccumulatorService {
   // flushUsageCost() correctly isolates the flat-rate (task) portion.
   final List<double> _rideDistancesSinceFlush = [];
 
+  // NEW (Sep 22 2026, per Nizam's usage-fee model change — 3.3% of order
+  // amount instead of activity-based billing). One entry per completed
+  // order/ride since the last flush, same accumulate-now/consume-later
+  // pattern as _rideDistancesSinceFlush above. This is what makes the
+  // "hero goes Offline with unflushed activity" safety-net flush in
+  // hero_home_screen.dart still bill correctly under the new model: that
+  // flush has no order/ride object of its own to read a fare from, so
+  // the amount has to have been captured here at the moment each order
+  // actually completed.
+  final List<double> _orderAmountsSinceFlush = [];
+
   /// Call when the hero flips Online (or the app resumes an already-Online
   /// session). Idempotent -- calling it again while a session is already
   /// running does NOT reset the clock, so a lifecycle-resume re-confirming
@@ -129,16 +140,24 @@ class HeroUsageAccumulatorService {
   /// the per-ride/per-task component of the token formula in
   /// HeroWalletService.
   ///
-  /// [distanceKm] — pass the ride's billed distance for actual rides
-  /// (hero_ride_screen.dart already computes this for the customer's
-  /// fare — reuse the same number). Leave it null/omitted for
-  /// service_requests (Hero Booking, Custom Order, etc.), which have no
-  /// distance concept and should keep billing at the flat per-task
-  /// rate.
-  void recordRideHandled({double? distanceKm}) {
+  /// [distanceKm] — kept for any other caller that still wants a ride's
+  /// billed distance recorded (e.g. non-billing analytics); no longer
+  /// read by HeroWalletService.flushUsageCost(), which now bills off
+  /// [orderAmount] instead — see HeroWalletService's header for why.
+  ///
+  /// [orderAmount] — pass the completed order/ride's final amount. This
+  /// is what flushUsageCost() actually bills 3.3% (min ₹2) of; omit it
+  /// only if the amount genuinely isn't available yet (the order will
+  /// then contribute to [consumeRidesHandled]'s count but nothing to
+  /// [consumeOrderAmounts], so it bills for ₹0 — callers should avoid
+  /// this and pass the real amount whenever it's known).
+  void recordRideHandled({double? distanceKm, double? orderAmount}) {
     _ridesHandledSinceFlush++;
     if (distanceKm != null) {
       _rideDistancesSinceFlush.add(distanceKm < 0 ? 0 : distanceKm);
+    }
+    if (orderAmount != null) {
+      _orderAmountsSinceFlush.add(orderAmount < 0 ? 0 : orderAmount);
     }
   }
 
@@ -184,6 +203,15 @@ class HeroUsageAccumulatorService {
   List<double> consumeRideDistances() {
     final list = List<double>.from(_rideDistancesSinceFlush);
     _rideDistancesSinceFlush.clear();
+    return list;
+  }
+
+  /// Returns the order/ride amounts handled since the last flush, and
+  /// clears the list. This is what HeroWalletService.flushUsageCost()
+  /// now bills 3.3% (min ₹2 per order) of.
+  List<double> consumeOrderAmounts() {
+    final list = List<double>.from(_orderAmountsSinceFlush);
+    _orderAmountsSinceFlush.clear();
     return list;
   }
 
